@@ -1,0 +1,90 @@
+"use client";
+
+import { motion } from "framer-motion";
+import { Star } from "lucide-react";
+import type { ClientMatch } from "@/lib/api";
+import { TeamAvatar } from "./team-avatar";
+import { OddsGroup } from "./match-card";
+import { formatKickoff, teamHue } from "@/lib/format";
+
+/** Match à la une V5 — scoreboard immersif avec cotes incrustées. */
+export function FeaturedMatch({ match }: { match: ClientMatch }) {
+  const hueH = teamHue(match.homeTeam);
+  const hueA = teamHue(match.awayTeam);
+  const isLive = match.status === "live";
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+      className="glass-card relative mt-4 overflow-hidden rounded-[20px]"
+    >
+      {/* Halos aux couleurs des équipes */}
+      <div
+        aria-hidden
+        className="breathe pointer-events-none absolute -left-16 -top-20 h-56 w-56 rounded-full"
+        style={{
+          background: `radial-gradient(closest-side, hsl(${hueH} 75% 50% / 0.26), transparent)`,
+        }}
+      />
+      <div
+        aria-hidden
+        className="breathe pointer-events-none absolute -bottom-20 -right-16 h-56 w-56 rounded-full"
+        style={{
+          background: `radial-gradient(closest-side, hsl(${hueA} 75% 50% / 0.24), transparent)`,
+          animationDelay: "-2.5s",
+        }}
+      />
+
+      <div className="relative p-3.5 pb-0">
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-lime px-2 py-1 font-display text-[9px] font-black tracking-[0.18em] text-ink">
+            <Star className="h-3 w-3 fill-ink" strokeWidth={0} />
+            À LA UNE
+          </span>
+          <span className="text-[10.5px] font-medium text-mist">{match.league}</span>
+        </div>
+
+        <div className="mb-3.5 mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-1">
+          <TeamCol name={match.homeTeam} />
+          <div className="flex flex-col items-center px-2">
+            {isLive ? (
+              <>
+                <span className="glow-lime font-display text-[32px] font-bold leading-none tabular-nums text-lime">
+                  {match.homeScore}–{match.awayScore}
+                </span>
+                <span className="mt-2 inline-flex items-center gap-1.5 font-display text-[10px] font-black italic tracking-wide text-live">
+                  <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
+                  LIVE {match.minute}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="ghost-num font-display text-[30px] font-bold leading-none">VS</span>
+                <span className="mt-2 text-[10px] font-semibold text-mist">
+                  {formatKickoff(match.startsAt)}
+                </span>
+              </>
+            )}
+          </div>
+          <TeamCol name={match.awayTeam} />
+        </div>
+      </div>
+
+      {/* Cotes incrustées */}
+      <div className="relative">
+        <OddsGroup match={match} />
+      </div>
+    </motion.section>
+  );
+}
+
+function TeamCol({ name }: { name: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 text-center">
+      <TeamAvatar name={name} size="lg" />
+      <span className="font-display text-[12.5px] font-semibold leading-tight">{name}</span>
+    </div>
+  );
+}
