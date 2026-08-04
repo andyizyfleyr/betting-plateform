@@ -70,6 +70,22 @@ export const simState = pgTable("sim_state", {
   lastTick: timestamp("last_tick", { mode: "date" }).notNull().defaultNow(),
 });
 
+/**
+ * Historique des parties du jeu Tap Win (profil joueur + santé du système).
+ */
+export const tapHistory = pgTable("tap_history", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().default(1),
+  betAmount: doublePrecision("bet_amount").notNull(),
+  targetMultiplier: doublePrecision("target_multiplier").notNull(),
+  crashMultiplier: doublePrecision("crash_multiplier").notNull(),
+  win: boolean("win").notNull(),
+  balanceAfter: doublePrecision("balance_after").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
+export type TapHistoryRow = typeof tapHistory.$inferSelect;

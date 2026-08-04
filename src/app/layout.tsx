@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { Inter, Montserrat, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { AppHeader } from "@/components/app-header";
@@ -15,6 +15,12 @@ const grotesk = Space_Grotesk({
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+});
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  variable: "--font-montserrat",
+  weight: ["500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -32,7 +38,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="fr" className={`${grotesk.variable} ${inter.variable}`}>
+    <html lang="fr" className={`${grotesk.variable} ${inter.variable} ${montserrat.variable}`}>
       <body className="bg-[#030507] text-white antialiased">
         <div className="ambient" aria-hidden />
         <Providers>

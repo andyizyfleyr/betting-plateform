@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Ticket, Zap } from "lucide-react";
+import { Gamepad2, Ticket, Zap } from "lucide-react";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
 import { eur } from "@/lib/format";
@@ -25,6 +25,14 @@ export function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-1.5">
+          <Link
+            href="/tap"
+            className="glass-pill grid h-8 w-8 place-items-center rounded-lg transition-transform active:scale-90"
+            aria-label="Jeu Tap Win"
+          >
+            <Gamepad2 className="h-4 w-4 text-mist" strokeWidth={2} />
+          </Link>
+
           <Link
             href="/paris"
             className="glass-pill relative grid h-8 w-8 place-items-center rounded-lg transition-transform active:scale-90"
