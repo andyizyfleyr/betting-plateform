@@ -177,6 +177,16 @@ export default function AcceleratorPage() {
       const gL = labelsRef.current;
       if (gT) {
         gT.innerHTML = "";
+        const STROKE_COLOR: Record<string, string> = {
+          major: "#e2e8f0",
+          minor: "#94a3b8",
+          micro: "#475569",
+        };
+        const STROKE_WIDTH: Record<string, string> = {
+          major: "2",
+          minor: "1.2",
+          micro: "0.8",
+        };
         for (let v = V_MIN; v <= V_MAX + 1e-9; v += 0.1) {
           const th = vToTheta(v);
           const c = clsFor(v);
@@ -189,7 +199,9 @@ export default function AcceleratorPage() {
               y1: p1.y.toFixed(2),
               x2: p2.x.toFixed(2),
               y2: p2.y.toFixed(2),
-              class: "tick tick--" + c,
+              stroke: STROKE_COLOR[c],
+              "stroke-width": STROKE_WIDTH[c],
+              "stroke-linecap": "round",
             })
           );
         }
@@ -202,7 +214,12 @@ export default function AcceleratorPage() {
           const tx = el("text", {
             x: p.x.toFixed(2),
             y: p.y.toFixed(2),
-            class: "label",
+            fill: "#ffffff",
+            "font-size": "9",
+            "font-weight": "800",
+            "font-family": "Montserrat, sans-serif",
+            "text-anchor": "middle",
+            "dominant-baseline": "middle",
           });
           tx.textContent = `×${v.toFixed(2)}`;
           gL.appendChild(tx);
