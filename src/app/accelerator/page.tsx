@@ -34,7 +34,7 @@ const GX = 100;
 const GY = 100;
 const GR = 72;
 const GSTROKE = 14;
-const G_LABEL_R = GR + GSTROKE / 2 + 6;
+const G_LABEL_R = GR + 17;
 
 function vToTheta(v: number): number {
   const t = (Math.max(V_MIN, Math.min(V_MAX, v)) - V_MIN) / (V_MAX - V_MIN);
@@ -73,10 +73,20 @@ const MAJORS = [1.01, 1.5, 2];
 const EPS = 1e-6;
 const approxEq = (a: number, b: number) => Math.abs(a - b) < EPS;
 
+/** Graduations affichées : pas de ×0.10 de 1.01 à 2.00. */
+function graduationValues(): number[] {
+  const out: number[] = [];
+  for (let v = V_MIN; v < V_MAX - 1e-9; v += 0.1) {
+    out.push(Math.round(v * 100) / 100);
+  }
+  out.push(V_MAX);
+  return out;
+}
+
+/** Traits à l'extérieur de l'anneau coloré (le rail occupe r 65 → 79). */
 function endsFor(c: string) {
-  if (c === "major") return { in: GR - 5.5, out: GR + 5.5 };
-  if (c === "minor") return { in: GR - 3.5, out: GR + 3.5 };
-  return { in: GR - 2.2, out: GR + 2.2 };
+  if (c === "major") return { in: 78, out: 84.5 };
+  return { in: 79.5, out: 84 };
 }
 
 function clsFor(v: number): string {
@@ -187,7 +197,7 @@ export default function AcceleratorPage() {
           minor: "1.2",
           micro: "0.8",
         };
-        for (let v = V_MIN; v <= V_MAX + 1e-9; v += 0.1) {
+        for (const v of graduationValues()) {
           const th = vToTheta(v);
           const c = clsFor(v);
           const { in: ri, out: ro } = endsFor(c);
@@ -208,15 +218,16 @@ export default function AcceleratorPage() {
       }
       if (gL) {
         gL.innerHTML = "";
-        for (const v of MAJORS) {
+        for (const v of graduationValues()) {
           const th = vToTheta(v);
           const p = polar(th, G_LABEL_R);
+          const major = MAJORS.some((m) => approxEq(m, v));
           const tx = el("text", {
             x: p.x.toFixed(2),
             y: p.y.toFixed(2),
-            fill: "#ffffff",
-            "font-size": "9",
-            "font-weight": "800",
+            fill: major ? "#ffffff" : "#94a3b8",
+            "font-size": major ? "9" : "6.5",
+            "font-weight": major ? "800" : "500",
             "font-family": "Montserrat, sans-serif",
             "text-anchor": "middle",
             "dominant-baseline": "middle",
@@ -387,9 +398,24 @@ export default function AcceleratorPage() {
     [playCrashSound]
   );
 
+  // ---------- Boucle de maintien ----------
+  const cleanupGameLoop = useCallback(() => {
+    holdingRef.current = false;
+    stopHoldSound();
+    if (pingTimerRef.current) {
+      clearInterval(pingTimerRef.current);
+      pingTimerRef.current = null;
+    }
+    if (animIdRef.current) {
+      cancelAnimationFrame(animIdRef.current);
+      animIdRef.current = 0;
+    }
+  }, [stopHoldSound]);
+
   // ---------- Fin de manche (cash ou crash) ----------
   const handleEnd = useCallback(
     (j: Record<string, unknown>) => {
+      cleanupGameLoop();
       const mult = typeof j.multiplier === "number" ? j.multiplier : displayVRef.current;
       displayVRef.current = mult;
       gaugeApi.current?.updateGauge(mult);
@@ -417,24 +443,10 @@ export default function AcceleratorPage() {
       setMode("start");
       roundIdRef.current = null;
     },
-    [playWinSound, resetPayoutLine, setBalFlashSoon, triggerCrashAnimation]
+    [cleanupGameLoop, playWinSound, resetPayoutLine, setBalFlashSoon, triggerCrashAnimation]
   );
 
   endRef.current = handleEnd;
-
-  // ---------- Boucle de maintien ----------
-  const cleanupGameLoop = useCallback(() => {
-    holdingRef.current = false;
-    stopHoldSound();
-    if (pingTimerRef.current) {
-      clearInterval(pingTimerRef.current);
-      pingTimerRef.current = null;
-    }
-    if (animIdRef.current) {
-      cancelAnimationFrame(animIdRef.current);
-      animIdRef.current = 0;
-    }
-  }, [stopHoldSound]);
 
   const pingTap = useCallback(async () => {
     if (!roundIdRef.current) return;
