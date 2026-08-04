@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Eye, EyeOff, HandCoins, Play, Trophy } from "lucide-react";
 import { cn } from "@/lib/format";
@@ -56,6 +57,7 @@ function fmt(n: number): string {
 }
 
 export default function TapPage() {
+  const [mount, setMount] = useState(false);
   const [bal, setBal] = useState(0);
   const [balanceHidden, setBalanceHidden] = useState(false);
   const [balFlash, setBalFlash] = useState(false);
@@ -381,6 +383,7 @@ export default function TapPage() {
 
   // Chargement initial + préférence visibilité du solde
   useEffect(() => {
+    setMount(true);
     fetch("/api/tap")
       .then((r) => r.json())
       .then((d) => {
@@ -450,7 +453,9 @@ export default function TapPage() {
   const balText = balanceHidden ? "******" : fmt(bal).replace(SYM, "").trim();
   const btnText = playing ? " ENCAISSER" : " JOUER";
 
-  return (
+  if (!mount) return null;
+
+  return createPortal(
     <div className={s.tap}>
       <header className={s.header}>
         <div className={s.logo}>
@@ -588,7 +593,8 @@ export default function TapPage() {
           +1
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
 
