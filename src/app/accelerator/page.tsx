@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { CircleHelp, Eye, EyeOff, Hand, Play, Trophy } from "lucide-react";
+import { NetworkBadge, OfflineBanner } from "@/components/network-badge";
+import { fetchWithTimeout, postJson } from "@/lib/network-manager";
 import s from "./accelerator-game.module.css";
 
 const SYM = "$";
@@ -116,6 +118,7 @@ export default function AcceleratorPage() {
     mult: "",
   });
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [cashingOut, setCashingOut] = useState(false);
 
   // Refs SVG
   const railRef = useRef<SVGPathElement | null>(null);
@@ -354,20 +357,19 @@ export default function AcceleratorPage() {
   }, [stopHoldSound]);
 
   // ---------- API ----------
-  const post = useCallback(async (body: Record<string, unknown>) => {
-    try {
-      const r = await fetch("/api/accelerator", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+  // POST résilient : timeout (un réseau lent ne bloque jamais) + retries optionnels
+  // pour les actions critiques. Les erreurs réseau (status 0) sont remontées en douceur.
+  const post = useCallback(
+    async (body: Record<string, unknown>, opts?: { retries?: number; timeoutMs?: number }) => {
+      const res = await postJson<Record<string, unknown>>("/api/accelerator", body, {
+        retries: opts?.retries ?? 0,
+        timeoutMs: opts?.timeoutMs,
       });
-      const ct = (r.headers.get("content-type") || "").toLowerCase();
-      if (ct.includes("application/json")) return await r.json();
-      return { status: "error", message: "Réponse non-JSON du serveur" };
-    } catch {
-      return { status: "error", message: "Erreur réseau" };
-    }
-  }, []);
+      if (res.data) return res.data;
+      return { status: "error", message: res.status === 0 ? "Erreur réseau" : "Erreur serveur" };
+    },
+    []
+  );
 
   // ---------- UI helpers ----------
   const setBalFlashSoon = useCallback((n: number) => {
@@ -450,7 +452,8 @@ export default function AcceleratorPage() {
 
   const pingTap = useCallback(async () => {
     if (!roundIdRef.current) return;
-    if (pingInFlightRef.current && Date.now() - lastPingAtRef.current <= 250) return;
+    // Au plus un ping en vol : sur réseau lent, on évite l'empilement des requêtes.
+    if (pingInFlightRef.current) return;
     pingInFlightRef.current = true;
     lastPingAtRef.current = Date.now();
     const j = await post({ action: "tap" });
@@ -504,8 +507,6 @@ export default function AcceleratorPage() {
     pingTimerRef.current = setInterval(pingTap, PING_PERIOD_MS);
   }, [pingTap, playHoldSound, unlockAudio]);
 
-  const tapFinal = useCallback(async () => post({ action: "tap_final" }), [post]);
-
   const stopHoldLoop = useCallback(
     async (skipCashout: boolean) => {
       if (releaseLockRef.current) return;
@@ -522,21 +523,24 @@ export default function AcceleratorPage() {
       }
       isCashingOutRef.current = true;
       cleanupGameLoop();
+      setCashingOut(true);
       try {
-        const jf = await tapFinal();
-        if (jf && (jf.status === "crashed" || jf.status === "cashed" || jf.status === "postcrashed")) {
-          endRef.current(jf);
-          return;
-        }
-        const j = await post({ action: "cashout" });
+        // Cashout en une seule requête résiliente : timeout + retries (le serveur
+        // rejoue idempotemment si la réponse a été perdue) + compensation de latence
+        // (le multiplicateur affiché au relâchement est envoyé au serveur).
+        const j = await post(
+          { action: "cashout", client_multiplier: displayVRef.current },
+          { retries: 4, timeoutMs: 3000 }
+        );
         if (j) endRef.current(j);
         else setError("Erreur réseau");
       } finally {
+        setCashingOut(false);
         isCashingOutRef.current = false;
         releaseLockRef.current = false;
       }
     },
-    [cleanupGameLoop, post, tapFinal]
+    [cleanupGameLoop, post]
   );
 
   animateLoopRef.current = animateLoop;
@@ -556,9 +560,9 @@ export default function AcceleratorPage() {
         setError("Mise invalide");
         return;
       }
-      const j = await post({ action: "start_game", bet });
+      const j = await post({ action: "start_game", bet }, { retries: 1, timeoutMs: 5000 });
       if (j.status === "success") {
-        roundIdRef.current = j.round_id ?? null;
+        roundIdRef.current = typeof j.round_id === "number" ? j.round_id : null;
         setBalFlashSoon(Number(j.new_balance));
         gBaseRef.current = typeof j.g_base === "number" && j.g_base > 0 ? j.g_base : gBaseRef.current;
         mMaxRef.current = typeof j.m_max === "number" && j.m_max > 0 ? j.m_max : mMaxRef.current;
@@ -662,15 +666,13 @@ export default function AcceleratorPage() {
   // ---------- Chargement initial ----------
   useEffect(() => {
     setMount(true);
-    fetch("/api/accelerator")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.status === "success") {
-          setBal(d.balance);
-          setStake(Math.min(MIN_BET, d.balance).toFixed(DEC));
-        }
-      })
-      .catch(() => undefined);
+    fetchWithTimeout<Record<string, unknown>>(5000, "/api/accelerator").then((res) => {
+      const d = res.data;
+      if (res.ok && d && d.status === "success") {
+        setBal(Number(d.balance));
+        setStake(Math.min(MIN_BET, Number(d.balance)).toFixed(DEC));
+      }
+    });
     setBalanceHidden(localStorage.getItem("acc_balance_hidden") === "true");
   }, []);
 
@@ -723,6 +725,7 @@ export default function AcceleratorPage() {
               {balanceHidden ? <EyeOff className="h-4 w-4" strokeWidth={2} /> : <Eye className="h-4 w-4" strokeWidth={2} />}
             </button>
           </div>
+          <NetworkBadge />
           <button className={s.btnIcon} onClick={() => setRulesOpen(true)} aria-label="Règles du jeu">
             <CircleHelp className="h-4 w-4" strokeWidth={2} />
           </button>
@@ -731,6 +734,8 @@ export default function AcceleratorPage() {
           </Link>
         </div>
       </header>
+
+      <OfflineBanner />
 
       <div className={s.layout}>
         <div className={s.colCenter}>
@@ -825,7 +830,7 @@ export default function AcceleratorPage() {
                 >
                   {isHold ? (
                     <>
-                      <Hand className="h-5 w-5" strokeWidth={2.4} /> MAINTENIR
+                      <Hand className="h-5 w-5" strokeWidth={2.4} /> {cashingOut ? "ENCAISSEMENT…" : "MAINTENIR"}
                     </>
                   ) : (
                     <>
@@ -897,7 +902,7 @@ export default function AcceleratorPage() {
             >
               {isHold ? (
                 <>
-                  <Hand className="h-5 w-5" strokeWidth={2.4} /> MAINTENIR
+                  <Hand className="h-5 w-5" strokeWidth={2.4} /> {cashingOut ? "ENCAISSEMENT…" : "MAINTENIR"}
                 </>
               ) : (
                 <>

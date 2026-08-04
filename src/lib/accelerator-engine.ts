@@ -18,6 +18,9 @@ export const ACCEL_CONFIG = {
   COOLDOWN_MS: 0,
   CURRENCY_SYMBOL: "$",
   DECIMALS: 2,
+  /** Fenêtre (en points de multiplicateur) pour honorer le multiplicateur affiché
+   * côté client au relâchement malgré la latence réseau. */
+  CASHOUT_LATENCY_WINDOW: 0.5,
 } as const;
 
 /** Arrondi homogène à 2 décimales (half-up) — r2() du PHP. */
@@ -64,6 +67,8 @@ async function getLatestRound(uid: number) {
   return rows[0] ?? null;
 }
 
+export { getLatestRound };
+
 async function setRoundStatus(rid: number, status: string, extra?: Partial<AcceleratorRoundRow>) {
   await db
     .update(acceleratorRounds)
@@ -79,6 +84,8 @@ export interface StartResult {
   gBase: number;
   mMax: number;
   seedHash: string;
+  /** true si une manche fraîche déjà active a été reprise (réseau faible). */
+  resumed?: boolean;
 }
 
 export interface AdvanceResult {
@@ -107,7 +114,20 @@ export async function startRound(uid: number, betInput: number): Promise<StartRe
   const latest = await getLatestRound(uid);
   if (latest && latest.status === "active") {
     const stale = nowMs() - Number(latest.lastMs) > ACCEL_CONFIG.TTL_MS;
-    if (!stale) return { status: "error", message: "Une manche est déjà en cours" };
+    if (!stale) {
+      // Manche fraîche déjà active (ex. réponse de start_game perdue sur un
+      // réseau faible) : on reprend sans redébiter la mise.
+      return {
+        status: "success",
+        roundId: latest.id,
+        newBalance: await getUserBalance(uid),
+        multiplier: Number(latest.currentMultiplier),
+        gBase: Number(latest.gBase),
+        mMax: Number(latest.mMax),
+        seedHash: latest.seedHash ?? "",
+        resumed: true,
+      };
+    }
     await setRoundStatus(latest.id, "crashed");
   }
 
@@ -180,8 +200,10 @@ export async function advanceRound(row: AcceleratorRoundRow, reason: "tap" | "ta
   return { status: reason === "tap" ? "ok" : "synced", multiplier: cur, roundId: rid };
 }
 
-/** Encaissement : avance l'état, vérifie le crash, puis paie (jackpot si ×2.00). */
-export async function cashoutRound(row: AcceleratorRoundRow): Promise<CashoutResult> {
+/** Encaissement : avance l'état, vérifie le crash, puis paie (jackpot si ×2.00).
+ * `clientMult` = multiplicateur affiché côté client au relâchement ; il permet de
+ * créditer le joueur malgré la latence réseau (crédité = min(client, serveur)). */
+export async function cashoutRound(row: AcceleratorRoundRow, clientMult?: number | null): Promise<CashoutResult> {
   const uid = row.userId;
   const rid = row.id;
   const now = nowMs();
@@ -205,15 +227,29 @@ export async function cashoutRound(row: AcceleratorRoundRow): Promise<CashoutRes
 
   const crash = Number(row.crashPoint);
 
-  if (cur >= crash) {
+  // Compensation de latence : on honore le multiplicateur relevé au relâchement,
+  // borné par l'état serveur et une fenêtre anti-triche (valeurs absurdes ignorées).
+  let eff = cur;
+  const cm = clientMult ?? null;
+  if (
+    cm != null &&
+    cm >= ACCEL_CONFIG.M_MIN - 1e-9 &&
+    cm <= ACCEL_CONFIG.M_MAX + 1e-9 &&
+    cm >= cur - ACCEL_CONFIG.CASHOUT_LATENCY_WINDOW
+  ) {
+    eff = Math.min(cm, cur);
+  }
+  eff = r2(eff);
+
+  if (eff >= crash) {
     await setRoundStatus(rid, "postcrashed", { currentMultiplier: r2(crash) });
     const bal = await getUserBalance(uid);
     return { status: "postcrashed", multiplier: r2(crash), newBalance: bal, winAmount: 0, roundId: rid, jackpot: false };
   }
 
   const mMax = Number(row.mMax);
-  const jackpot = cur >= mMax - 1e-9;
-  const mult = jackpot ? mMax : cur;
+  const jackpot = eff >= mMax - 1e-9;
+  const mult = jackpot ? mMax : eff;
   const win = r2(Number(row.betAmount) * mult);
 
   const balance = await getUserBalance(uid);
