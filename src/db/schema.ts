@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   doublePrecision,
   integer,
@@ -85,7 +86,31 @@ export const tapHistory = pgTable("tap_history", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+/**
+ * Manches du jeu Accelerator Pro.
+ * status: "active" | "autocashed" | "cashed" | "crashed" | "postcrashed"
+ */
+export const acceleratorRounds = pgTable("accelerator_rounds", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().default(1),
+  betAmount: doublePrecision("bet_amount").notNull(),
+  gBase: doublePrecision("g_base").notNull(),
+  mMax: doublePrecision("m_max").notNull().default(2.0),
+  autoTarget: doublePrecision("auto_target"),
+  startedAt: timestamp("started_at", { mode: "date" }).notNull(),
+  lastMs: bigint("last_ms", { mode: "number" }).notNull(),
+  currentMultiplier: doublePrecision("current_multiplier").notNull().default(1.01),
+  crashPoint: doublePrecision("crash_point").notNull(),
+  cashoutMultiplier: doublePrecision("cashout_multiplier"),
+  status: text("status").notNull().default("active"),
+  serverSeed: text("server_seed"),
+  seedHash: text("seed_hash"),
+  endedAt: timestamp("ended_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;
+export type AcceleratorRoundRow = typeof acceleratorRounds.$inferSelect;
