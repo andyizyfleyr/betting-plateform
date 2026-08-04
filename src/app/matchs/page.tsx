@@ -11,14 +11,12 @@ import { SportIcon } from "@/components/sport-icon";
 import { useApp } from "@/components/providers";
 import { cn, todayLabel } from "@/lib/format";
 
-type Filter = "all" | "live" | "football" | "basketball" | "tennis";
+type Filter = "all" | "live" | "football";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "Tous" },
   { key: "live", label: "Direct" },
   { key: "football", label: "Foot" },
-  { key: "basketball", label: "Basket" },
-  { key: "tennis", label: "Tennis" },
 ];
 
 export default function MatchsPage() {
@@ -128,7 +126,7 @@ export default function MatchsPage() {
 
       {/* Filtres segmentés */}
       <div className="sticky top-12 z-30 -mx-3 bg-ink/90 px-3 pb-1 pt-3 backdrop-blur-xl">
-        <div className="grid grid-cols-5 gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] p-1">
+        <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] p-1">
           {FILTERS.map(({ key, label }) => {
             const active = filter === key;
             return (
@@ -152,9 +150,7 @@ export default function MatchsPage() {
                   {key === "live" && (
                     <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-ink" : "bg-live live-dot")} />
                   )}
-                  {["football", "basketball", "tennis"].includes(key) && (
-                    <SportIcon sport={key} className="h-3 w-3" />
-                  )}
+                  {key === "football" && <SportIcon sport="football" className="h-3 w-3" />}
                   <span className={cn("font-display text-[11.5px]", active ? "font-bold" : "font-medium")}>
                     {label}
                   </span>

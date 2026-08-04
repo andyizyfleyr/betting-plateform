@@ -7,19 +7,6 @@ export function matchProgress(sport: string, minute: string | null): number {
     if (Number.isNaN(m)) return 0;
     return Math.min(m / 90, 0.97);
   }
-  if (sport === "basketball") {
-    const match = /^Q(\d)\s*·\s*(\d{1,2}):(\d{2})/.exec(minute);
-    if (!match) return 0;
-    const q = parseInt(match[1], 10);
-    const left = parseInt(match[2], 10) * 60 + parseInt(match[3], 10);
-    const fracQ = 1 - Math.max(0, Math.min(left, 720)) / 720;
-    return Math.min(((q - 1) + fracQ) / 4, 0.97);
-  }
-  if (sport === "tennis") {
-    const match = /^Set\s*(\d)/.exec(minute);
-    if (!match) return 0;
-    return Math.min(parseInt(match[1], 10) / 5, 0.97);
-  }
   return 0;
 }
 

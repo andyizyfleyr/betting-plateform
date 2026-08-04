@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * Matchs sportifs (football, basketball, tennis)
+ * Matchs de football.
  * status: "live" | "upcoming" | "finished"
  */
 export const matches = pgTable("matches", {

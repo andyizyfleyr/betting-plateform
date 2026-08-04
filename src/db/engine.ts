@@ -42,9 +42,7 @@ export async function runLiveEngine() {
   for (let t = 0; t < ticks; t++) {
     for (const m of live) {
       if (m.status !== "live") continue;
-      if (m.sport === "football") advanceFootball(m);
-      else if (m.sport === "basketball") advanceBasketball(m);
-      else advanceTennis(m);
+      advanceFootball(m);
       driftOdds(m);
       if ((m.status as string) === "finished") justFinished.push(m);
     }
@@ -83,18 +81,16 @@ async function promoteUpcoming() {
     .where(eq(matches.status, "upcoming"))
     .orderBy(asc(matches.startsAt));
 
-  for (const sport of ["football", "basketball", "tennis"]) {
-    if (live.some((m) => m.sport === sport)) continue;
-    const next = upcoming.find((m) => m.sport === sport);
-    if (!next) continue;
+  if (!live.some((m) => m.sport === "football")) {
+    const next = upcoming.find((m) => m.sport === "football");
+    if (!next) return;
     await db
       .update(matches)
       .set({
         status: "live",
         homeScore: 0,
         awayScore: 0,
-        minute:
-          sport === "football" ? "1'" : sport === "basketball" ? "Q1 · 12:00" : "Set 1 · 0-0",
+        minute: "1'",
       })
       .where(eq(matches.id, next.id));
   }
@@ -122,86 +118,6 @@ function advanceFootball(m: MatchRow) {
     next = 90;
   }
   if (m.status === "live") m.minute = `${next}'`;
-}
-
-function advanceBasketball(m: MatchRow) {
-  const parsed = /^Q(\d)\s*·\s*(\d{1,2}):(\d{2})/.exec(m.minute ?? "");
-  let quarter = parsed ? parseInt(parsed[1], 10) : 1;
-  let secondsLeft = parsed ? parseInt(parsed[2], 10) * 60 + parseInt(parsed[3], 10) : 720;
-
-  secondsLeft -= 15 + Math.floor(Math.random() * 25);
-
-  // Possession : une équipe marque souvent
-  if (Math.random() < 0.62) {
-    const pts = Math.random() < 0.18 ? 3 : 2;
-    if (weightedSide(m) === "home") m.homeScore = (m.homeScore ?? 0) + pts;
-    else m.awayScore = (m.awayScore ?? 0) + pts;
-  }
-
-  if (secondsLeft <= 0) {
-    quarter += 1;
-    secondsLeft = 720;
-  }
-
-  if (quarter > 4) {
-    // Évite le nul en fin de match
-    if ((m.homeScore ?? 0) === (m.awayScore ?? 0)) {
-      if (Math.random() < 0.5) m.homeScore = (m.homeScore ?? 0) + 2;
-      else m.awayScore = (m.awayScore ?? 0) + 2;
-    }
-    m.status = "finished";
-    m.minute = "Terminé";
-    return;
-  }
-
-  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
-  const ss = String(secondsLeft % 60).padStart(2, "0");
-  m.minute = `Q${quarter} · ${mm}:${ss}`;
-}
-
-const TENNIS_POINTS = [
-  "0-0",
-  "15-0",
-  "0-15",
-  "30-0",
-  "15-15",
-  "0-30",
-  "30-15",
-  "15-30",
-  "40-0",
-  "30-30",
-  "15-40",
-  "40-15",
-  "40-15",
-  "30-40",
-  "40-30",
-  "40-40",
-];
-
-function advanceTennis(m: MatchRow) {
-  const parsed = /^Set\s*(\d)\s*·\s*(.+)$/.exec(m.minute ?? "");
-  const setNum = parsed ? parseInt(parsed[1], 10) : 1;
-  const points = parsed ? parsed[2] : "0-0";
-  const idx = TENNIS_POINTS.indexOf(points);
-
-  const gamePoint = points.startsWith("40");
-  const gameWon = gamePoint && Math.random() < 0.38;
-
-  if (gameWon || idx === -1 && Math.random() < 0.3) {
-    if (weightedSide(m) === "home") m.homeScore = (m.homeScore ?? 0) + 1;
-    else m.awayScore = (m.awayScore ?? 0) + 1;
-
-    if ((m.homeScore ?? 0) >= 3 || (m.awayScore ?? 0) >= 3) {
-      m.status = "finished";
-      m.minute = "Terminé";
-      return;
-    }
-    m.minute = `Set ${setNum + 1} · 0-0`;
-    return;
-  }
-
-  const nextIdx = Math.min(idx + (Math.random() < 0.75 ? 1 : 0), TENNIS_POINTS.length - 1);
-  m.minute = `Set ${setNum} · ${TENNIS_POINTS[nextIdx]}`;
 }
 
 // ---------------- Dérive des cotes ----------------

@@ -1,8 +1,7 @@
 /**
- * Vrais logos officiels des clubs.
- * Football : CDN API-Sports · Basketball : CDN ESPN.
+ * Vrais logos officiels des clubs de football (CDN API-Sports).
  * Chaque URL a été vérifiée (HTTP 200, image/png).
- * Les joueurs de tennis retournent null → avatar monogramme.
+ * Les équipes absentes retournent null → avatar monogramme.
  */
 const LOGO_BY_TEAM: Record<string, string> = {
   // Ligue 1
@@ -28,15 +27,6 @@ const LOGO_BY_TEAM: Record<string, string> = {
   // Serie A
   "Inter Milan": "https://media.api-sports.io/football/teams/505.png",
   Juventus: "https://media.api-sports.io/football/teams/496.png",
-  // NBA
-  "LA Lakers": "https://a.espncdn.com/i/teamlogos/nba/500/lal.png",
-  "Boston Celtics": "https://a.espncdn.com/i/teamlogos/nba/500/bos.png",
-  "Golden State": "https://a.espncdn.com/i/teamlogos/nba/500/gs.png",
-  "Denver Nuggets": "https://a.espncdn.com/i/teamlogos/nba/500/den.png",
-  "Miami Heat": "https://a.espncdn.com/i/teamlogos/nba/500/mia.png",
-  "Milwaukee Bucks": "https://a.espncdn.com/i/teamlogos/nba/500/mil.png",
-  "New York Knicks": "https://a.espncdn.com/i/teamlogos/nba/500/nyk.png",
-  "Phoenix Suns": "https://a.espncdn.com/i/teamlogos/nba/500/phx.png",
 };
 
 export function teamLogo(teamName: string): string | null {

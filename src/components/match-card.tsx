@@ -33,7 +33,7 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
         <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
         <span className="truncate text-[10.5px] font-medium text-mist">{match.league}</span>
         {isLive ? (
-          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 font-display text-[10px] font-black italic tracking-wide text-live">
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 font-display text-[10px] font-black tracking-wide text-live">
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
             LIVE {match.minute}
           </span>

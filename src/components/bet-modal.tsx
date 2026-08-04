@@ -140,7 +140,7 @@ export function BetModal() {
                     </p>
                     <p className="mt-0.5 truncate text-[10.5px] font-medium text-mist">
                       {target.match.status === "live" ? (
-                        <span className="inline-flex items-center gap-1 font-bold italic text-live">
+                        <span className="inline-flex items-center gap-1 font-bold text-live">
                           <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
                           LIVE {target.match.minute}
                         </span>
