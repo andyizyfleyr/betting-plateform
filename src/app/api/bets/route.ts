@@ -135,6 +135,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ce match est terminé" }, { status: 400 });
   }
 
+  // Délai de validation de pari pour les matchs en direct (sécurité bookmaker pro)
+  if (match.status === "live") {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
+    if (!freshMatch || freshMatch.status === "finished" || freshMatch.suspended) {
+      return NextResponse.json(
+        { error: "Pari rejeté : marché suspendu ou événement en cours lors de la validation" },
+        { status: 400 }
+      );
+    }
+  }
+
   const odds = marketOddsFor(market, selection, match.homeTeam, match.awayTeam);
   const selectionLabel = marketLabelFor(market, selection, match.homeTeam, match.awayTeam);
   if (odds == null || selectionLabel == null) {

@@ -120,6 +120,40 @@ export function oddsFor(home: string, away: string) {
   };
 }
 
+export function liveOddsFor(
+  home: string,
+  away: string,
+  currentHomeScore: number,
+  currentAwayScore: number,
+  minute: number
+) {
+  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
+  const remainingFraction = Math.max(0.05, (90 - minute) / 90);
+  const scoreDiff = currentHomeScore - currentAwayScore;
+
+  const adjHome = Math.max(0.05, lambdaHome * remainingFraction + (scoreDiff < 0 ? 0.35 * Math.abs(scoreDiff) : -0.12 * scoreDiff));
+  const adjAway = Math.max(0.05, lambdaAway * remainingFraction + (scoreDiff > 0 ? 0.35 * scoreDiff : -0.12 * Math.abs(scoreDiff)));
+
+  const p = winProbabilities(adjHome, adjAway);
+  let pH = p.home;
+  let pD = p.draw;
+  let pA = p.away;
+
+  if (scoreDiff > 0) {
+    pH = Math.min(0.99, p.home + 0.18 * scoreDiff * (1 - remainingFraction));
+    pA = Math.max(0.001, 1 - pH - pD);
+  } else if (scoreDiff < 0) {
+    pA = Math.min(0.99, p.away + 0.18 * Math.abs(scoreDiff) * (1 - remainingFraction));
+    pH = Math.max(0.001, 1 - pA - pD);
+  }
+
+  return {
+    oddsHome: round2(clamp(1 / (pH * MARGIN), 1.01, 100)),
+    oddsDraw: round2(clamp(1 / (pD * MARGIN), 1.01, 100)),
+    oddsAway: round2(clamp(1 / (pA * MARGIN), 1.01, 100)),
+  };
+}
+
 function hashString(s: string): number {
   let h = 5381;
   for (let i = 0; i < s.length; i++) {

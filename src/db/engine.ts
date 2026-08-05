@@ -6,6 +6,7 @@ import {
   ALL_PAIRS,
   ROUND_MS,
   VIRTUAL_LEAGUE,
+  liveOddsFor,
   livePairIndex,
   oddsFor,
   scoreAt,
@@ -81,7 +82,7 @@ export async function runLiveEngine() {
     }
   }
 
-  // 3) Mise à jour score / minute du match live.
+  // 3) Mise à jour score / minute / cotes dynamiques / suspension du match live.
   const liveMatch = await db
     .select()
     .from(matches)
@@ -91,6 +92,10 @@ export async function runLiveEngine() {
 
   if (liveMatch) {
     const score = scoreAt(liveIdx, gameMinute, liveMatch.homeTeam, liveMatch.awayTeam);
+    const goalScored = score.home !== (liveMatch.homeScore ?? 0) || score.away !== (liveMatch.awayScore ?? 0);
+    const suspended = isOver || gameMinute >= 88 || goalScored;
+    const dynamicOdds = liveOddsFor(liveMatch.homeTeam, liveMatch.awayTeam, score.home, score.away, gameMinute);
+
     await db
       .update(matches)
       .set({
@@ -98,6 +103,10 @@ export async function runLiveEngine() {
         awayScore: score.away,
         minute: isOver ? "Terminé" : `${gameMinute}'`,
         status: isOver ? "finished" : "live",
+        oddsHome: dynamicOdds.oddsHome,
+        oddsDraw: dynamicOdds.oddsDraw,
+        oddsAway: dynamicOdds.oddsAway,
+        suspended,
       })
       .where(eq(matches.id, liveMatch.id));
   }

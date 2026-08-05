@@ -27,6 +27,7 @@ export const matches = pgTable("matches", {
   oddsHome: doublePrecision("odds_home").notNull(),
   oddsDraw: doublePrecision("odds_draw"),
   oddsAway: doublePrecision("odds_away").notNull(),
+  suspended: boolean("suspended").notNull().default(false),
 });
 
 /**
