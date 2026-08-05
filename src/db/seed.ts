@@ -205,6 +205,7 @@ export async function ensureSeeded() {
 
     await db.insert(bets).values([
       {
+        userId: 1,
         matchId: idOf("Paris SG"),
         sport: "football",
         league: "Ligue 1 · France",
@@ -219,6 +220,7 @@ export async function ensureSeeded() {
         placedAt: new Date(now - 70 * 60 * 1000),
       },
       {
+        userId: 1,
         matchId: idOf("Real Madrid"),
         sport: "football",
         league: "LaLiga · Espagne",
@@ -233,6 +235,7 @@ export async function ensureSeeded() {
         placedAt: new Date(now - 2 * 60 * 60 * 1000),
       },
       {
+        userId: 1,
         matchId: idOf("Manchester City"),
         sport: "football",
         league: "Premier League · Angleterre",
@@ -247,6 +250,7 @@ export async function ensureSeeded() {
         placedAt: new Date(now - 26 * 60 * 60 * 1000),
       },
       {
+        userId: 1,
         matchId: idOf("Toulouse"),
         sport: "football",
         league: "Ligue 1 · France",

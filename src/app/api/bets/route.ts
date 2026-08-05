@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -15,13 +15,13 @@ const SELECTION_LABELS: Record<string, (m: typeof matches.$inferSelect) => strin
   away: (m) => `Victoire ${m.awayTeam}`,
 };
 
-/** Règle les paris en cours dont le match est terminé (déterministe, basé sur le score). */
+/** Règle les paris en cours du joueur dont le match est terminé (déterministe, basé sur le score). */
 async function settleFinishedBets(uid: number) {
   const pending = await db
     .select({ bet: bets, match: matches })
     .from(bets)
     .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(eq(bets.status, "pending"));
+    .where(and(eq(bets.status, "pending"), eq(bets.userId, uid)));
 
   for (const { bet, match } of pending) {
     if (!match || match.status !== "finished") continue;
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
     .select({ bet: bets, match: matches })
     .from(bets)
     .leftJoin(matches, eq(bets.matchId, matches.id))
+    .where(eq(bets.userId, uid))
     .orderBy(desc(bets.placedAt));
 
   const [user] = await db
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest) {
   const [bet] = await db
     .insert(bets)
     .values({
+      userId: uid,
       matchId: match.id,
       sport: match.sport,
       league: match.league,

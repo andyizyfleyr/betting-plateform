@@ -35,6 +35,7 @@ export const matches = pgTable("matches", {
  */
 export const bets = pgTable("bets", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().default(1),
   matchId: integer("match_id").references(() => matches.id),
   sport: text("sport").notNull(),
   league: text("league").notNull(),

@@ -1,10 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { appUser, bets, matches } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
+import { getAuthUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   await ensureSeeded();
   await runLiveEngine();
+  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { betId?: number };
   try {
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
     .select({ bet: bets, match: matches })
     .from(bets)
     .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(eq(bets.id, betId));
+    .where(and(eq(bets.id, betId), eq(bets.userId, uid)));
 
   if (!row || !row.bet) {
     return NextResponse.json({ error: "Pari introuvable" }, { status: 404 });
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
   const [updatedUser] = await db
     .update(appUser)
     .set({ balance: sql`${appUser.balance} + ${value}` })
-    .where(eq(appUser.id, 1))
+    .where(eq(appUser.id, uid))
     .returning({ balance: appUser.balance });
 
   return NextResponse.json({ balance: updatedUser.balance, value });
