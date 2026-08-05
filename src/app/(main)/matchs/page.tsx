@@ -33,14 +33,6 @@ export default function MatchsPage() {
         for (const m of list) {
           const p = prev.get(m.id);
           if (!p) continue;
-          const goal =
-            (m.homeScore ?? 0) + (m.awayScore ?? 0) > (p.homeScore ?? 0) + (p.awayScore ?? 0);
-          if (p.status === "live" && m.status === "live" && goal)
-            toast({
-              kind: "info",
-              title: "BUT !",
-              description: `${m.homeTeam} ${m.homeScore}–${m.awayScore} ${m.awayTeam}`,
-            });
           if (m.status === "finished" && p.status !== "finished")
             toast({
               kind: "info",
