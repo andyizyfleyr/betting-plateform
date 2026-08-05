@@ -189,46 +189,42 @@ function AccordionItem({
         </motion.span>
       </button>
 
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            {group.rows ? (
-              <div className="space-y-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2">
-                {group.rows.map((row) => (
-                  <div key={row.label} className="flex items-center gap-1.5">
-                    <span className="w-10 shrink-0 text-right font-display text-[12px] font-bold tabular-nums text-mist">
-                      {row.label}
-                    </span>
-                    <div className="grid flex-1 grid-cols-2 gap-1.5">
-                      {row.outcomes.map((o) => (
-                        <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  "grid gap-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2",
-                  twoCols ? "grid-cols-2" : "grid-cols-3"
-                )}
-              >
-                {group.outcomes.map((o) => (
-                  <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
-                ))}
-              </div>
-            )}
-          </motion.div>
+      <div
+        className={cn(
+          "market-body overflow-hidden transition-[max-height,opacity,margin,padding] duration-300 ease-in-out",
+          open
+            ? "max-h-[2000px] opacity-100"
+            : "max-h-0 opacity-0 border-0 m-0 p-0",
         )}
-      </AnimatePresence>
+      >
+        {group.rows ? (
+          <div className="space-y-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2">
+            {group.rows.map((row) => (
+              <div key={row.label} className="flex items-center gap-1.5">
+                <span className="w-10 shrink-0 text-right font-display text-[12px] font-bold tabular-nums text-mist">
+                  {row.label}
+                </span>
+                <div className="grid flex-1 grid-cols-2 gap-1.5">
+                  {row.outcomes.map((o) => (
+                    <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "grid gap-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2",
+              twoCols ? "grid-cols-2" : "grid-cols-3"
+            )}
+          >
+            {group.outcomes.map((o) => (
+              <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
