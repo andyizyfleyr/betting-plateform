@@ -15,6 +15,7 @@ import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { api, type ClientMatch, type ClientUser } from "@/lib/api";
 import { cn } from "@/lib/format";
 import { BetModal } from "./bet-modal";
+import { MarketSheet } from "./market-sheet";
 
 export interface BetTarget {
   match: ClientMatch;
@@ -41,6 +42,9 @@ interface AppContextValue {
   target: BetTarget | null;
   openBet: (t: BetTarget) => void;
   closeBet: () => void;
+  marketMatch: ClientMatch | null;
+  openMarkets: (m: ClientMatch) => void;
+  closeMarkets: () => void;
   toast: (t: Omit<Toast, "id">) => void;
   betsVersion: number;
   bumpBets: () => void;
@@ -60,6 +64,7 @@ let toastId = 0;
 export function Providers({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<ClientUser | null>(null);
   const [target, setTarget] = useState<BetTarget | null>(null);
+  const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
@@ -101,17 +106,21 @@ export function Providers({ children }: { children: ReactNode }) {
       target,
       openBet: (t) => setTarget(t),
       closeBet: () => setTarget(null),
+      marketMatch,
+      openMarkets: (m) => setMarketMatch(m),
+      closeMarkets: () => setMarketMatch(null),
       toast,
       betsVersion,
       bumpBets: () => setBetsVersion((v) => v + 1),
       pendingCount,
     }),
-    [user, target, toast, betsVersion, pendingCount]
+    [user, target, marketMatch, toast, betsVersion, pendingCount]
   );
 
   return (
     <AppContext.Provider value={value}>
       {children}
+      <MarketSheet />
       <BetModal />
       <Toasts toasts={toasts} />
     </AppContext.Provider>

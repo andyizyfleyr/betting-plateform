@@ -2,15 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, LayoutGrid } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
-/** Carte de match V5 — format scoreboard avec cotes incrustées en pied. */
+/** Carte de match V5 — scoreboard + cotes 1/N/2 rapides ; un tap ouvre les marchés. */
 export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: number }) {
+  const { openMarkets } = useApp();
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
 
@@ -19,7 +20,8 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.35), ease: [0.22, 1, 0.36, 1] }}
-      className="glass-card relative overflow-hidden rounded-[18px]"
+      onClick={() => !isFinished && openMarkets(match)}
+      className="glass-card relative cursor-pointer overflow-hidden rounded-[18px] active:bg-elev"
     >
       {isLive && (
         <span
@@ -60,8 +62,19 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
         />
       </div>
 
-      {/* Cotes des marchés */}
-      {!isFinished && <MarketOdds match={match} />}
+      {/* Cotes 1/N/2 rapides */}
+      {!isFinished && <ResultOdds match={match} />}
+
+      {/* Invite à ouvrir les marchés */}
+      {!isFinished && (
+        <div className="flex items-center justify-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] py-1.5">
+          <LayoutGrid className="h-3 w-3 text-lime" strokeWidth={2.4} />
+          <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
+            TOUS LES MARCHÉS
+          </span>
+          <ChevronDown className="h-3 w-3 text-dim" strokeWidth={2.4} />
+        </div>
+      )}
     </motion.article>
   );
 }
@@ -122,78 +135,61 @@ function useOddsFlash(odds: number) {
   return flash;
 }
 
-/** Sélecteur de marchés + grille de cotes pour une affiche. */
-export function MarketOdds({ match }: { match: ClientMatch }) {
+/** Rangée de cotes 1 / N / 2 (marché résultat) en pied de carte. */
+export function ResultOdds({ match }: { match: ClientMatch }) {
   const { openBet } = useApp();
-  const [marketKey, setMarketKey] = useState("result");
 
-  const groups = match.markets ?? [];
-  const group = groups.find((g) => g.key === marketKey) ?? groups[0];
-  const activeKey = group?.key ?? "result";
+  const cells: { key: string; tag: string; odds: number; label: string }[] = [
+    { key: "home", tag: "1", odds: match.oddsHome, label: `Victoire ${match.homeTeam}` },
+    ...(match.oddsDraw != null
+      ? [{ key: "draw" as const, tag: "N", odds: match.oddsDraw, label: "Match nul" }]
+      : []),
+    { key: "away", tag: "2", odds: match.oddsAway, label: `Victoire ${match.awayTeam}` },
+  ];
 
   return (
-    <div className="relative">
-      {/* Onglets marchés défilants */}
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto border-t border-white/[0.06] bg-white/[0.02] px-2 py-2">
-        {groups.map((g) => {
-          const active = g.key === activeKey;
-          return (
-            <button
-              key={g.key}
-              onClick={() => setMarketKey(g.key)}
-              className={cn(
-                "shrink-0 rounded-full border px-2.5 py-1 font-display text-[10px] font-bold tracking-wide transition-colors",
-                active
-                  ? "border-lime bg-lime text-ink"
-                  : "border-white/[0.08] bg-white/[0.03] text-mist active:border-lime/40 active:text-white"
-              )}
-            >
-              {g.short}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Cotes de l'issue sélectionnée */}
-      {group && (
-        <div className="relative grid grid-cols-3 border-t border-white/[0.06] bg-white/[0.02]">
-          {group.outcomes.map((o, i) => (
-            <MarketCell
-              key={`${group.key}-${o.key}`}
-              short={o.short}
-              odds={o.odds}
-              isLive={match.status === "live"}
-              borderLeft={i > 0}
-              onPick={() =>
-                openBet({
-                  match,
-                  selection: o.key,
-                  odds: o.odds,
-                  label: o.label,
-                  market: group.key,
-                  marketLabel: group.label,
-                })
-              }
-            />
-          ))}
-        </div>
+    <div
+      className={cn(
+        "relative grid border-t border-white/[0.06] bg-white/[0.02]",
+        cells.length === 3 ? "grid-cols-3" : "grid-cols-2"
       )}
+    >
+      {cells.map((c, i) => (
+        <OddsCell
+          key={c.key}
+          tag={c.tag}
+          odds={c.odds}
+          isLive={match.status === "live"}
+          borderLeft={i > 0}
+          onPick={(e) => {
+            e.stopPropagation();
+            openBet({
+              match,
+              selection: c.key,
+              odds: c.odds,
+              label: c.label,
+              market: "result",
+              marketLabel: "Résultat du match",
+            });
+          }}
+        />
+      ))}
     </div>
   );
 }
 
-function MarketCell({
-  short,
+function OddsCell({
+  tag,
   odds,
   isLive,
   borderLeft,
   onPick,
 }: {
-  short: string;
+  tag: string;
   odds: number;
   isLive: boolean;
   borderLeft: boolean;
-  onPick: () => void;
+  onPick: (e: React.MouseEvent) => void;
 }) {
   const { oddsFormat } = useApp();
   const flash = useOddsFlash(odds);
@@ -209,9 +205,7 @@ function MarketCell({
         flash === "down" && "bg-live/[0.13]"
       )}
     >
-      <span className="max-w-[95%] truncate text-[8.5px] font-semibold tracking-[0.08em] text-dim">
-        {short}
-      </span>
+      <span className="text-[8.5px] font-semibold tracking-[0.2em] text-dim">{tag}</span>
       <span className="flex items-center gap-1">
         <span
           className={cn(

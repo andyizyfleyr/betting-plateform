@@ -1,13 +1,16 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Star } from "lucide-react";
+import { ChevronDown, LayoutGrid, Star } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
+import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
-import { MarketOdds } from "./match-card";import { formatKickoff, teamHue } from "@/lib/format";
+import { ResultOdds } from "./match-card";
+import { formatKickoff, teamHue } from "@/lib/format";
 
-/** Match à la une V5 — scoreboard immersif avec cotes incrustées. */
+/** Match à la une V5 — scoreboard immersif + cotes 1/N/2 ; un tap ouvre les marchés. */
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
+  const { openMarkets } = useApp();
   const hueH = teamHue(match.homeTeam);
   const hueA = teamHue(match.awayTeam);
   const isLive = match.status === "live";
@@ -17,7 +20,8 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-      className="glass-card relative mt-4 overflow-hidden rounded-[20px]"
+      onClick={() => openMarkets(match)}
+      className="glass-card relative mt-4 cursor-pointer overflow-hidden rounded-[20px] active:bg-elev"
     >
       {/* Halos aux couleurs des équipes */}
       <div
@@ -71,9 +75,16 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
         </div>
       </div>
 
-      {/* Cotes incrustées */}
+      {/* Cotes 1/N/2 rapides + invite à ouvrir les marchés */}
       <div className="relative">
-        <MarketOdds match={match} />
+        <ResultOdds match={match} />
+        <div className="flex items-center justify-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] py-1.5">
+          <LayoutGrid className="h-3 w-3 text-lime" strokeWidth={2.4} />
+          <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
+            TOUS LES MARCHÉS
+          </span>
+          <ChevronDown className="h-3 w-3 text-dim" strokeWidth={2.4} />
+        </div>
       </div>
     </motion.section>
   );
