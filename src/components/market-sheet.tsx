@@ -168,63 +168,60 @@ function AccordionItem({
   return (
     <div
       className={cn(
-        "market-box overflow-hidden rounded-[14px] border border-white/[0.06] bg-white/[0.02] transition-colors duration-200",
+        "rounded-2xl border border-white/[0.07] bg-white/[0.02] p-2.5 transition-colors duration-200",
         open && "border-lime/20 bg-white/[0.04]",
       )}
     >
       <button
         onClick={onToggle}
         aria-expanded={open}
-        className="market-head flex w-full items-center gap-2 px-3 py-2.5 text-left active:bg-white/[0.03]"
+        className="relative mb-1.5 flex w-full items-center pr-[30px] text-left"
       >
-        <span className="flex-1 font-display text-[13px] font-bold leading-tight tracking-tight text-white">
+        <span className="text-[11px] font-bold leading-tight tracking-tight text-white">
           {group.label}
         </span>
-        <motion.span
-          animate={{ rotate: open ? 0 : -90 }}
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
-          className={cn("shrink-0", open ? "text-lime" : "text-dim")}
-        >
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </motion.span>
+        <ChevronDown
+          className={cn(
+            "absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 transition-transform duration-300",
+            open ? "text-lime" : "-rotate-90 text-dim",
+          )}
+          strokeWidth={2.5}
+        />
       </button>
 
-      <div
-        className={cn(
-          "market-body overflow-hidden transition-[max-height,opacity,margin,padding] duration-300 ease-in-out",
-          open
-            ? "max-h-[2000px] opacity-100"
-            : "max-h-0 opacity-0 border-0 m-0 p-0",
-        )}
-      >
-        {group.rows ? (
-          <div className="space-y-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2">
-            {group.rows.map((row) => (
-              <div key={row.label} className="flex items-center gap-1.5">
-                <span className="w-10 shrink-0 text-right font-display text-[12px] font-bold tabular-nums text-mist">
-                  {row.label}
-                </span>
-                <div className="grid flex-1 grid-cols-2 gap-1.5">
-                  {row.outcomes.map((o) => (
-                    <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
-                  ))}
-                </div>
+      {group.rows ? (
+        <div
+          className={cn(
+            "flex flex-col gap-[5px] overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
+            open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0",
+          )}
+        >
+          {group.rows.map((row) => (
+            <div key={row.label} className="flex items-center gap-1.5">
+              <span className="w-10 shrink-0 text-right font-display text-[9.5px] font-bold tabular-nums text-mist">
+                {row.label}
+              </span>
+              <div className="grid flex-1 grid-cols-2 gap-[5px]">
+                {row.outcomes.map((o) => (
+                  <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div
-            className={cn(
-              "grid gap-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2",
-              twoCols ? "grid-cols-2" : "grid-cols-3"
-            )}
-          >
-            {group.outcomes.map((o) => (
-              <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "grid gap-[5px] overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
+            open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0",
+            twoCols ? "grid-cols-2" : "grid-cols-3",
+          )}
+        >
+          {group.outcomes.map((o) => (
+            <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -244,14 +241,14 @@ function OutcomeCell({
     <motion.button
       whileTap={{ scale: 0.97 }}
       onClick={onPick}
-      className="flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-1.5 transition-colors active:border-lime/60 active:bg-lime/[0.14]"
+      className="flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-lime/60 active:bg-lime/[0.14]"
     >
-      <span className="max-w-full truncate text-[11px] font-bold uppercase tracking-wide text-dim">
+      <span className="max-w-full truncate text-[9.5px] font-semibold uppercase tracking-wider text-dim">
         {o.short}
       </span>
       <span
         className={cn(
-          "font-display text-[14px] font-extrabold tabular-nums leading-none",
+          "font-display text-[13px] font-extrabold tabular-nums leading-none",
           isLive ? "text-lime" : "text-white"
         )}
       >
