@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Flame, LayoutGrid } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
@@ -8,7 +8,6 @@ import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
 import { LiveTicker } from "@/components/live-ticker";
 import { SportIcon } from "@/components/sport-icon";
-import { useApp } from "@/components/providers";
 import { cn, todayLabel } from "@/lib/format";
 
 type Filter = "all" | "live" | "football";
@@ -20,38 +19,13 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 export default function MatchsPage() {
-  const { toast } = useApp();
   const [filter, setFilter] = useState<Filter>("all");
   const [matches, setMatches] = useState<ClientMatch[] | null>(null);
-  const prevMatches = useRef<Map<number, ClientMatch> | null>(null);
 
-  // Applique les nouvelles données et notifie buts / coups d'envoi / fins de match
-  const applyMatches = useCallback(
-    (list: ClientMatch[]) => {
-      const prev = prevMatches.current;
-      if (prev) {
-        for (const m of list) {
-          const p = prev.get(m.id);
-          if (!p) continue;
-          if (m.status === "finished" && p.status !== "finished")
-            toast({
-              kind: "info",
-              title: "Coup de sifflet final",
-              description: `${m.homeTeam} ${m.homeScore}–${m.awayScore} ${m.awayTeam}`,
-            });
-          if (m.status === "live" && p.status === "upcoming")
-            toast({
-              kind: "info",
-              title: "Coup d'envoi",
-              description: `${m.homeTeam} – ${m.awayTeam}`,
-            });
-        }
-      }
-      prevMatches.current = new Map(list.map((m) => [m.id, m]));
-      setMatches(list);
-    },
-    [toast]
-  );
+  // Applique les nouvelles données sans notification (buts / coups d'envoi / fins de match)
+  const applyMatches = useCallback((list: ClientMatch[]) => {
+    setMatches(list);
+  }, []);
 
   useEffect(() => {
     api
