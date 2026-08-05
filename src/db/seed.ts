@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { appUser, bets, matches } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
 import {
+  ALL_PAIRS,
   ROUND_MS,
   ROUNDS,
   VIRTUAL_LEAGUE,
@@ -32,8 +33,8 @@ export async function ensureSeeded() {
   if (count === 0) {
     const now = Date.now();
 
-    const livePairs = pairingsForRound(0);
-    const upcomingPairs = pairingsForRound(1);
+    const livePair = ALL_PAIRS[0];
+    const upcomingPair = ALL_PAIRS[1];
 
     // Deux affiches terminées aux résultats opposés (victoire domicile / non-victoire)
     // pour rendre crédibles les paris démo gagné / perdu.
@@ -58,41 +59,34 @@ export async function ensureSeeded() {
     }
 
     const seedMatches = [
-      ...livePairs.map((p) => {
-        const s = scoreAt(0, 1, p.home, p.away);
-        const o = oddsFor(p.home, p.away);
-        return {
-          sport: "football",
-          league: VIRTUAL_LEAGUE,
-          homeTeam: p.home,
-          awayTeam: p.away,
-          homeScore: s.home,
-          awayScore: s.away,
-          status: "live" as const,
-          minute: "1'",
-          startsAt: new Date(now),
-          oddsHome: o.oddsHome,
-          oddsDraw: o.oddsDraw,
-          oddsAway: o.oddsAway,
-        };
-      }),
-      ...upcomingPairs.map((p) => {
-        const o = oddsFor(p.home, p.away);
-        return {
-          sport: "football",
-          league: VIRTUAL_LEAGUE,
-          homeTeam: p.home,
-          awayTeam: p.away,
-          homeScore: null,
-          awayScore: null,
-          status: "upcoming" as const,
-          minute: null,
-          startsAt: new Date(now + ROUND_MS),
-          oddsHome: o.oddsHome,
-          oddsDraw: o.oddsDraw,
-          oddsAway: o.oddsAway,
-        };
-      }),
+      {
+        sport: "football",
+        league: VIRTUAL_LEAGUE,
+        homeTeam: livePair.home,
+        awayTeam: livePair.away,
+        homeScore: scoreAt(0, 1, livePair.home, livePair.away).home,
+        awayScore: scoreAt(0, 1, livePair.home, livePair.away).away,
+        status: "live" as const,
+        minute: "1'",
+        startsAt: new Date(now),
+        oddsHome: oddsFor(livePair.home, livePair.away).oddsHome,
+        oddsDraw: oddsFor(livePair.home, livePair.away).oddsDraw,
+        oddsAway: oddsFor(livePair.home, livePair.away).oddsAway,
+      },
+      {
+        sport: "football",
+        league: VIRTUAL_LEAGUE,
+        homeTeam: upcomingPair.home,
+        awayTeam: upcomingPair.away,
+        homeScore: null,
+        awayScore: null,
+        status: "upcoming" as const,
+        minute: null,
+        startsAt: new Date(now + ROUND_MS),
+        oddsHome: oddsFor(upcomingPair.home, upcomingPair.away).oddsHome,
+        oddsDraw: oddsFor(upcomingPair.home, upcomingPair.away).oddsDraw,
+        oddsAway: oddsFor(upcomingPair.home, upcomingPair.away).oddsAway,
+      },
       ...finishedSeed.map((f, i) => {
         const s = scoreAt(f.round, 90, f.home, f.away);
         const o = oddsFor(f.home, f.away);

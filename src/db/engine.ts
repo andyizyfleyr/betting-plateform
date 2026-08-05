@@ -3,18 +3,22 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser, bets, matches, simState, type MatchRow } from "@/db/schema";
 import {
-  ROUNDS,
+  ALL_PAIRS,
   ROUND_MS,
   VIRTUAL_LEAGUE,
+  livePairIndex,
   oddsFor,
-  pairingsForRound,
-  roundIndexOf,
   scoreAt,
 } from "@/db/fixtures";
 
+/** Index dans ALL_PAIRS (0-44) pour une affiche donnée. */
+function pairIndex(home: string, away: string): number {
+  return ALL_PAIRS.findIndex((p) => p.home === home && p.away === away);
+}
+
 /**
- * Tournoi virtuel : une journée toutes les 60 s (ROUND_MS), 5 affiches en direct,
- * 5 affiches à venir, boucle infinie sur les 9 journées du round-robin.
+ * Tournoi virtuel : un match à la fois, 5 minutes par affiche (ROUND_MS).
+ * Les 45 affiches défilent en séquence linéaire et repartent en boucle.
  * Scores déterministes tirés du modèle Poisson de fixtures.ts.
  */
 export async function runLiveEngine() {
@@ -35,62 +39,58 @@ export async function runLiveEngine() {
   }
 
   const epoch = state.lastTick.getTime();
-  const totalRounds = Math.max(0, Math.floor((now - epoch) / ROUND_MS));
-  const roundIndex = totalRounds % ROUNDS.length;
-  const roundStart = epoch + totalRounds * ROUND_MS;
-  const elapsed = Math.min(now - roundStart, ROUND_MS);
+  const totalMatches = Math.max(0, Math.floor((now - epoch) / ROUND_MS));
+  const liveIdx = livePairIndex(totalMatches);
+  const matchStart = epoch + totalMatches * ROUND_MS;
+  const elapsed = Math.min(now - matchStart, ROUND_MS);
   const isOver = elapsed >= ROUND_MS;
   const gameMinute = isOver ? 90 : Math.max(1, Math.floor((elapsed / ROUND_MS) * 90));
-  const nextRoundIndex = (roundIndex + 1) % ROUNDS.length;
 
-  const livePairs = pairingsForRound(roundIndex);
-  const upcomingPairs = pairingsForRound(nextRoundIndex);
-  const isLivePair = (m: { homeTeam: string; awayTeam: string }) =>
-    livePairs.some((p) => p.home === m.homeTeam && p.away === m.awayTeam);
-  const isUpcomingPair = (m: { homeTeam: string; awayTeam: string }) =>
-    upcomingPairs.some((p) => p.home === m.homeTeam && p.away === m.awayTeam);
+  const nextIdx = livePairIndex(totalMatches + 1);
+  const livePair = ALL_PAIRS[liveIdx];
+  const upcomingPair = ALL_PAIRS[nextIdx];
 
   const all = await db.select().from(matches);
 
-  // 1) Clôture des matchs en direct d'une journée antérieure (cycle sauté ou avance).
+  // 1) Clôture des anciens matchs « live » qui ne sont plus le match courant.
   for (const m of all) {
-    if (m.status === "live" && !isLivePair(m)) {
+    if (m.status === "live" && !(m.homeTeam === livePair.home && m.awayTeam === livePair.away)) {
       await finishMatch(m);
     }
   }
 
-  // 2) Coup d'envoi de la journée courante : promotion des "à venir", insertion sinon.
+  // 2) Coup d'envoi du match courant (promotion upcoming → live ou insertion).
   if (!isOver) {
-    const byKey = new Map(
-      all
-        .filter((m) => m.status !== "finished")
-        .map((m) => [`${m.homeTeam}|${m.awayTeam}`, m])
+    const existingLive = all.find(
+      (m) => m.homeTeam === livePair.home && m.awayTeam === livePair.away && m.status !== "finished"
     );
-    for (const p of livePairs) {
-      const key = `${p.home}|${p.away}`;
-      const existing = byKey.get(key);
-      if (existing?.status === "upcoming") {
-        const score = scoreAt(roundIndex, 1, p.home, p.away);
-        await db
-          .update(matches)
-          .set({
-            status: "live",
-            minute: "1'",
-            homeScore: score.home,
-            awayScore: score.away,
-            startsAt: new Date(roundStart),
-          })
-          .where(eq(matches.id, existing.id));
-      } else if (!existing) {
-        await insertMatch(p.home, p.away, "live", roundStart, roundIndex);
-      }
+    if (!existingLive) {
+      await insertMatch(livePair.home, livePair.away, "live", matchStart, liveIdx);
+    } else if (existingLive.status === "upcoming") {
+      const s = scoreAt(liveIdx, 1, livePair.home, livePair.away);
+      await db
+        .update(matches)
+        .set({
+          status: "live",
+          minute: "1'",
+          homeScore: s.home,
+          awayScore: s.away,
+          startsAt: new Date(matchStart),
+        })
+        .where(eq(matches.id, existingLive.id));
     }
   }
 
-  // 3) Score / minute des matchs en direct de la journée courante.
-  const liveMatches = await db.select().from(matches).where(eq(matches.status, "live"));
-  for (const m of liveMatches) {
-    const score = scoreAt(roundIndex, gameMinute, m.homeTeam, m.awayTeam);
+  // 3) Mise à jour score / minute du match live.
+  const liveMatch = await db
+    .select()
+    .from(matches)
+    .where(eq(matches.status, "live"))
+    .limit(1)
+    .then((r) => r[0] ?? null);
+
+  if (liveMatch) {
+    const score = scoreAt(liveIdx, gameMinute, liveMatch.homeTeam, liveMatch.awayTeam);
     await db
       .update(matches)
       .set({
@@ -98,29 +98,41 @@ export async function runLiveEngine() {
         awayScore: score.away,
         minute: isOver ? "Terminé" : `${gameMinute}'`,
         status: isOver ? "finished" : "live",
-        startsAt: new Date(roundStart),
       })
-      .where(eq(matches.id, m.id));
+      .where(eq(matches.id, liveMatch.id));
   }
 
-  // 4) Journée suivante : préparation des affiches "à venir".
-  const upcomingMatches = await db.select().from(matches).where(eq(matches.status, "upcoming"));
-  const hasNext = upcomingMatches.some((m) => isUpcomingPair(m));
-  for (const m of upcomingMatches) {
-    if (isUpcomingPair(m)) {
-      if (m.startsAt.getTime() !== roundStart + ROUND_MS) {
-        await db
-          .update(matches)
-          .set({ startsAt: new Date(roundStart + ROUND_MS) })
-          .where(eq(matches.id, m.id));
-      }
-    } else {
-      await finishMatch(m);
+  // 4) Prochain match : s'assurer qu'il existe en « upcoming ».
+  const nextStart = matchStart + ROUND_MS;
+  const upcomingExists = all.some(
+    (m) =>
+      m.homeTeam === upcomingPair.home &&
+      m.awayTeam === upcomingPair.away &&
+      (m.status === "upcoming" || m.status === "live")
+  );
+  if (!upcomingExists) {
+    await insertMatch(upcomingPair.home, upcomingPair.away, "upcoming", nextStart, nextIdx);
+  } else {
+    const um = all.find(
+      (m) =>
+        m.homeTeam === upcomingPair.home &&
+        m.awayTeam === upcomingPair.away &&
+        m.status === "upcoming"
+    );
+    if (um && um.startsAt.getTime() !== nextStart) {
+      await db
+        .update(matches)
+        .set({ startsAt: new Date(nextStart) })
+        .where(eq(matches.id, um.id));
     }
   }
-  if (!hasNext) {
-    for (const p of upcomingPairs) {
-      await insertMatch(p.home, p.away, "upcoming", roundStart + ROUND_MS, nextRoundIndex);
+
+  // 5) Nettoie les « upcoming » orphelins d'anciennes paires.
+  for (const m of all) {
+    const isCurrent = m.homeTeam === livePair.home && m.awayTeam === livePair.away;
+    const isNext = m.homeTeam === upcomingPair.home && m.awayTeam === upcomingPair.away;
+    if (m.status === "upcoming" && !isCurrent && !isNext) {
+      await finishMatch(m);
     }
   }
 
@@ -153,15 +165,15 @@ async function insertMatch(
 }
 
 async function finishMatch(m: MatchRow) {
-  const round = roundIndexOf(m.homeTeam, m.awayTeam);
-  const score = scoreAt(round, 90, m.homeTeam, m.awayTeam);
+  const idx = pairIndex(m.homeTeam, m.awayTeam);
+  const score = idx >= 0 ? scoreAt(idx, 90, m.homeTeam, m.awayTeam) : { home: 0, away: 0 };
   await db
     .update(matches)
     .set({ status: "finished", minute: "Terminé", homeScore: score.home, awayScore: score.away })
     .where(eq(matches.id, m.id));
 }
 
-/** Nettoie les vieux matchs terminés, sans toucher à ceux référencés par un pari. */
+/** Nettoie les vieux matchs terminés. */
 async function pruneFinished(now: number) {
   const cutoff = now - 3 * ROUND_MS;
   const finished = await db.select().from(matches).where(eq(matches.status, "finished"));

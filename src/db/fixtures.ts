@@ -1,5 +1,5 @@
 export const VIRTUAL_LEAGUE = "Ligue des Champions · Europe";
-export const ROUND_MS = 60_000;
+export const ROUND_MS = 300_000; // 5 minutes
 
 const BASE = 1.35;
 const HOME_ADV = 1.12;
@@ -52,6 +52,14 @@ export const ROUNDS: Pair[][] = buildRounds();
 export function pairingsForRound(round: number): Pair[] {
   const n = ROUNDS.length;
   return ROUNDS[((round % n) + n) % n];
+}
+
+/** Toutes les affiches en séquence linéaire (45 matchs, 5 par journée × 9 journées). */
+export const ALL_PAIRS: Pair[] = ROUNDS.flat();
+
+/** Index du match en live. Un seul match à la fois. */
+export function livePairIndex(total: number): number {
+  return ((total % ALL_PAIRS.length) + ALL_PAIRS.length) % ALL_PAIRS.length;
 }
 
 export function roundIndexOf(home: string, away: string): number {
