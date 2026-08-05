@@ -2,15 +2,25 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
-
-const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
+import {
+  ROUND_MS,
+  ROUNDS,
+  VIRTUAL_LEAGUE,
+  oddsFor,
+  pairingsForRound,
+  scoreAt,
+} from "@/db/fixtures";
 
 let seededOnce = false;
 
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
 /**
  * Seed idempotent : ne fait rien si des matchs existent déjà.
- * Appelé paresseusement depuis les routes API.
+ * Tournoi virtuel : journée 0 en direct, journée 1 à venir, deux affiches terminées
+ * cohérentes avec les paris démo (1 gagné / 1 perdu). Appelé paresseusement depuis les routes API.
  */
 export async function ensureSeeded() {
   if (seededOnce) return;
@@ -21,260 +31,186 @@ export async function ensureSeeded() {
 
   if (count === 0) {
     const now = Date.now();
+
+    const livePairs = pairingsForRound(0);
+    const upcomingPairs = pairingsForRound(1);
+
+    // Deux affiches terminées aux résultats opposés (victoire domicile / non-victoire)
+    // pour rendre crédibles les paris démo gagné / perdu.
+    const finishedSeed: { home: string; away: string; round: number; homeWin: boolean }[] = [];
+    const usedTeams = new Set<string>();
+    for (let r = ROUNDS.length - 1; r >= 0 && finishedSeed.length < 2; r--) {
+      for (const p of pairingsForRound(r)) {
+        if (usedTeams.has(p.home) || usedTeams.has(p.away)) continue;
+        const s = scoreAt(r, 90, p.home, p.away);
+        const homeWin = s.home > s.away;
+        if (homeWin && !finishedSeed.some((f) => f.homeWin)) {
+          usedTeams.add(p.home);
+          usedTeams.add(p.away);
+          finishedSeed.push({ ...p, round: r, homeWin });
+        } else if (!homeWin && !finishedSeed.some((f) => !f.homeWin)) {
+          usedTeams.add(p.home);
+          usedTeams.add(p.away);
+          finishedSeed.push({ ...p, round: r, homeWin });
+        }
+        if (finishedSeed.length >= 2) break;
+      }
+    }
+
     const seedMatches = [
-      // ------- LIVE -------
-      {
-        sport: "football",
-        league: "Ligue 1 · France",
-        homeTeam: "Paris SG",
-        awayTeam: "Marseille",
-        homeScore: 2,
-        awayScore: 1,
-        status: "live",
-        minute: "67'",
-        startsAt: new Date(now - 67 * 60 * 1000),
-        oddsHome: 1.62,
-        oddsDraw: 4.2,
-        oddsAway: 5.1,
-      },
-      {
-        sport: "football",
-        league: "Premier League · Angleterre",
-        homeTeam: "Arsenal",
-        awayTeam: "Chelsea",
-        homeScore: 0,
-        awayScore: 0,
-        status: "live",
-        minute: "24'",
-        startsAt: new Date(now - 24 * 60 * 1000),
-        oddsHome: 2.05,
-        oddsDraw: 3.4,
-        oddsAway: 3.6,
-      },
-      {
-        sport: "football",
-        league: "Ligue 1 · France",
-        homeTeam: "Lyon",
-        awayTeam: "Monaco",
-        homeScore: 1,
-        awayScore: 2,
-        status: "live",
-        minute: "53'",
-        startsAt: new Date(now - 53 * 60 * 1000),
-        oddsHome: 2.75,
-        oddsDraw: 3.3,
-        oddsAway: 2.5,
-      },
-      // ------- À VENIR -------
-      {
-        sport: "football",
-        league: "LaLiga · Espagne",
-        homeTeam: "Real Madrid",
-        awayTeam: "FC Barcelone",
-        homeScore: null,
-        awayScore: null,
-        status: "upcoming",
-        minute: null,
-        startsAt: new Date(now + 4 * HOUR),
-        oddsHome: 2.3,
-        oddsDraw: 3.45,
-        oddsAway: 2.95,
-      },
-      {
-        sport: "football",
-        league: "Bundesliga · Allemagne",
-        homeTeam: "Bayern Munich",
-        awayTeam: "Dortmund",
-        homeScore: null,
-        awayScore: null,
-        status: "upcoming",
-        minute: null,
-        startsAt: new Date(now + 7 * HOUR),
-        oddsHome: 1.72,
-        oddsDraw: 4.05,
-        oddsAway: 4.4,
-      },
-      {
-        sport: "football",
-        league: "Serie A · Italie",
-        homeTeam: "Inter Milan",
-        awayTeam: "Juventus",
-        homeScore: null,
-        awayScore: null,
-        status: "upcoming",
-        minute: null,
-        startsAt: new Date(now + DAY + 2 * HOUR),
-        oddsHome: 2.1,
-        oddsDraw: 3.25,
-        oddsAway: 3.55,
-      },
-      {
-        sport: "football",
-        league: "Premier League · Angleterre",
-        homeTeam: "Liverpool",
-        awayTeam: "Tottenham",
-        homeScore: null,
-        awayScore: null,
-        status: "upcoming",
-        minute: null,
-        startsAt: new Date(now + 9 * HOUR),
-        oddsHome: 1.9,
-        oddsDraw: 3.7,
-        oddsAway: 3.95,
-      },
-      {
-        sport: "football",
-        league: "LaLiga · Espagne",
-        homeTeam: "Atlético Madrid",
-        awayTeam: "FC Séville",
-        homeScore: null,
-        awayScore: null,
-        status: "upcoming",
-        minute: null,
-        startsAt: new Date(now + 12 * HOUR),
-        oddsHome: 2.15,
-        oddsDraw: 3.1,
-        oddsAway: 3.5,
-      },
-      {
-        sport: "football",
-        league: "Ligue 1 · France",
-        homeTeam: "Nice",
-        awayTeam: "Toulouse",
-        homeScore: null,
-        awayScore: null,
-        status: "upcoming",
-        minute: null,
-        startsAt: new Date(now + DAY + 6 * HOUR),
-        oddsHome: 1.95,
-        oddsDraw: 3.4,
-        oddsAway: 3.85,
-      },
-      // ------- TERMINÉS -------
-      {
-        sport: "football",
-        league: "Premier League · Angleterre",
-        homeTeam: "Manchester City",
-        awayTeam: "Liverpool",
-        homeScore: 3,
-        awayScore: 1,
-        status: "finished",
-        minute: "Terminé",
-        startsAt: new Date(now - DAY),
-        oddsHome: 1.95,
-        oddsDraw: 3.6,
-        oddsAway: 3.8,
-      },
-      {
-        sport: "football",
-        league: "LaLiga · Espagne",
-        homeTeam: "FC Séville",
-        awayTeam: "Atlético Madrid",
-        homeScore: 0,
-        awayScore: 2,
-        status: "finished",
-        minute: "Terminé",
-        startsAt: new Date(now - DAY - 3 * HOUR),
-        oddsHome: 2.15,
-        oddsDraw: 3.1,
-        oddsAway: 3.5,
-      },
-      {
-        sport: "football",
-        league: "Ligue 1 · France",
-        homeTeam: "Toulouse",
-        awayTeam: "Nice",
-        homeScore: 1,
-        awayScore: 1,
-        status: "finished",
-        minute: "Terminé",
-        startsAt: new Date(now - 2 * DAY),
-        oddsHome: 2.2,
-        oddsDraw: 3.2,
-        oddsAway: 3.3,
-      },
+      ...livePairs.map((p) => {
+        const s = scoreAt(0, 1, p.home, p.away);
+        const o = oddsFor(p.home, p.away);
+        return {
+          sport: "football",
+          league: VIRTUAL_LEAGUE,
+          homeTeam: p.home,
+          awayTeam: p.away,
+          homeScore: s.home,
+          awayScore: s.away,
+          status: "live" as const,
+          minute: "1'",
+          startsAt: new Date(now),
+          oddsHome: o.oddsHome,
+          oddsDraw: o.oddsDraw,
+          oddsAway: o.oddsAway,
+        };
+      }),
+      ...upcomingPairs.map((p) => {
+        const o = oddsFor(p.home, p.away);
+        return {
+          sport: "football",
+          league: VIRTUAL_LEAGUE,
+          homeTeam: p.home,
+          awayTeam: p.away,
+          homeScore: null,
+          awayScore: null,
+          status: "upcoming" as const,
+          minute: null,
+          startsAt: new Date(now + ROUND_MS),
+          oddsHome: o.oddsHome,
+          oddsDraw: o.oddsDraw,
+          oddsAway: o.oddsAway,
+        };
+      }),
+      ...finishedSeed.map((f, i) => {
+        const s = scoreAt(f.round, 90, f.home, f.away);
+        const o = oddsFor(f.home, f.away);
+        return {
+          sport: "football",
+          league: VIRTUAL_LEAGUE,
+          homeTeam: f.home,
+          awayTeam: f.away,
+          homeScore: s.home,
+          awayScore: s.away,
+          status: "finished" as const,
+          minute: "Terminé",
+          startsAt: new Date(now - (i + 1) * ROUND_MS),
+          oddsHome: o.oddsHome,
+          oddsDraw: o.oddsDraw,
+          oddsAway: o.oddsAway,
+        };
+      }),
     ];
 
     const inserted = await db
       .insert(matches)
       .values(seedMatches)
-      .returning({ id: matches.id, homeTeam: matches.homeTeam });
+      .returning();
 
-    const idOf = (team: string) =>
-      inserted.find((m) => m.homeTeam === team)?.id ?? null;
+    const liveMatches = inserted.filter((m) => m.status === "live");
+    const upcomingMatches = inserted.filter((m) => m.status === "upcoming");
+    const finishedMatches = inserted.filter((m) => m.status === "finished");
 
-    await db.insert(bets).values([
+    const wonMatch =
+      finishedMatches.find((m) => (m.homeScore ?? 0) > (m.awayScore ?? 0)) ?? finishedMatches[0];
+    const lostMatch =
+      finishedMatches.find((m) => (m.homeScore ?? 0) <= (m.awayScore ?? 0)) ?? finishedMatches[1];
+
+    const betsSeed = [
       {
         userId: 1,
-        matchId: idOf("Paris SG"),
+        matchId: liveMatches[0].id,
         sport: "football",
-        league: "Ligue 1 · France",
-        homeTeam: "Paris SG",
-        awayTeam: "Marseille",
+        league: VIRTUAL_LEAGUE,
+        homeTeam: liveMatches[0].homeTeam,
+        awayTeam: liveMatches[0].awayTeam,
         selection: "home",
-        selectionLabel: "Victoire Paris SG",
-        odds: 1.62,
+        selectionLabel: `Victoire ${liveMatches[0].homeTeam}`,
+        odds: liveMatches[0].oddsHome,
         stake: 25,
-        potentialWin: 40.5,
+        potentialWin: round2(25 * liveMatches[0].oddsHome),
         status: "pending",
-        placedAt: new Date(now - 70 * 60 * 1000),
+        placedAt: new Date(now - 2 * 60 * 1000),
       },
       {
         userId: 1,
-        matchId: idOf("Real Madrid"),
+        matchId: upcomingMatches[0].id,
         sport: "football",
-        league: "LaLiga · Espagne",
-        homeTeam: "Real Madrid",
-        awayTeam: "FC Barcelone",
+        league: VIRTUAL_LEAGUE,
+        homeTeam: upcomingMatches[0].homeTeam,
+        awayTeam: upcomingMatches[0].awayTeam,
         selection: "away",
-        selectionLabel: "Victoire FC Barcelone",
-        odds: 2.95,
+        selectionLabel: `Victoire ${upcomingMatches[0].awayTeam}`,
+        odds: upcomingMatches[0].oddsAway,
         stake: 10,
-        potentialWin: 29.5,
+        potentialWin: round2(10 * upcomingMatches[0].oddsAway),
         status: "pending",
-        placedAt: new Date(now - 2 * 60 * 60 * 1000),
+        placedAt: new Date(now - 60 * 1000),
       },
       {
         userId: 1,
-        matchId: idOf("Manchester City"),
+        matchId: wonMatch.id,
         sport: "football",
-        league: "Premier League · Angleterre",
-        homeTeam: "Manchester City",
-        awayTeam: "Liverpool",
+        league: VIRTUAL_LEAGUE,
+        homeTeam: wonMatch.homeTeam,
+        awayTeam: wonMatch.awayTeam,
         selection: "home",
-        selectionLabel: "Victoire Manchester City",
-        odds: 1.95,
+        selectionLabel: `Victoire ${wonMatch.homeTeam}`,
+        odds: wonMatch.oddsHome,
         stake: 30,
-        potentialWin: 58.5,
+        potentialWin: round2(30 * wonMatch.oddsHome),
         status: "won",
-        placedAt: new Date(now - 26 * 60 * 60 * 1000),
+        placedAt: new Date(now - 3 * ROUND_MS),
       },
       {
         userId: 1,
-        matchId: idOf("Toulouse"),
+        matchId: lostMatch.id,
         sport: "football",
-        league: "Ligue 1 · France",
-        homeTeam: "Toulouse",
-        awayTeam: "Nice",
+        league: VIRTUAL_LEAGUE,
+        homeTeam: lostMatch.homeTeam,
+        awayTeam: lostMatch.awayTeam,
         selection: "home",
-        selectionLabel: "Victoire Toulouse",
-        odds: 2.2,
+        selectionLabel: `Victoire ${lostMatch.homeTeam}`,
+        odds: lostMatch.oddsHome,
         stake: 15,
-        potentialWin: 33,
+        potentialWin: round2(15 * lostMatch.oddsHome),
         status: "lost",
-        placedAt: new Date(now - 2 * 24 * 60 * 60 * 1000 - 5 * HOUR),
+        placedAt: new Date(now - 4 * ROUND_MS),
       },
-    ]);
+    ];
+
+    await db.insert(bets).values(betsSeed);
+
+    const totalStake = betsSeed.reduce((s, b) => s + b.stake, 0);
+    const totalWon = betsSeed
+      .filter((b) => b.status === "won")
+      .reduce((s, b) => s + b.potentialWin, 0);
+
+    const [user] = await db.select().from(appUser).limit(1);
+    if (!user) {
+      await db.insert(appUser).values({ id: 1 });
+      // Le solde reflète les paris déjà engagés / gagnés du seed.
+      await db
+        .update(appUser)
+        .set({ balance: 250 - totalStake + totalWon })
+        .where(sql`id = 1`);
+    }
   }
 
   const [user] = await db.select().from(appUser).limit(1);
   if (!user) {
     await db.insert(appUser).values({ id: 1 });
-    // Le solde reflète les paris déjà engagés / gagnés du seed.
-    await db
-      .update(appUser)
-      .set({ balance: 250 - 25 - 10 - 30 - 15 + 58.5 })
-      .where(sql`id = 1`);
   }
 
   // Avance la séquence de la clé primaire : user 1 a été inséré avec un id explicite,

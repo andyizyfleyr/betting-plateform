@@ -71,7 +71,7 @@ export default function MatchsPage() {
         .matches()
         .then((r) => applyMatches(r.matches))
         .catch(() => undefined);
-    }, 15_000);
+    }, 5_000);
     return () => clearInterval(id);
   }, [applyMatches]);
 

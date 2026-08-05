@@ -68,7 +68,7 @@ export default function ParisPage() {
   }, [load, betsVersion]);
 
   useEffect(() => {
-    const id = setInterval(() => load(true), 15_000);
+    const id = setInterval(() => load(true), 5_000);
     return () => clearInterval(id);
   }, [load]);
 
