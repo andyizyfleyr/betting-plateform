@@ -111,36 +111,39 @@ export async function runLiveEngine() {
       .where(eq(matches.id, liveMatch.id));
   }
 
-  // 4) Prochain match : s'assurer qu'il existe en « upcoming ».
-  const nextStart = matchStart + ROUND_MS;
-  const upcomingExists = all.some(
-    (m) =>
-      m.homeTeam === upcomingPair.home &&
-      m.awayTeam === upcomingPair.away &&
-      (m.status === "upcoming" || m.status === "live")
-  );
-  if (!upcomingExists) {
-    await insertMatch(upcomingPair.home, upcomingPair.away, "upcoming", nextStart, nextIdx);
-  } else {
-    const um = all.find(
-      (m) =>
-        m.homeTeam === upcomingPair.home &&
-        m.awayTeam === upcomingPair.away &&
-        m.status === "upcoming"
+  // 4) Maintenir une fenêtre de 6 matchs « upcoming ».
+  const activeKeys = new Set<string>();
+  activeKeys.add(`${livePair.home}|${livePair.away}`);
+
+  for (let i = 1; i <= 6; i++) {
+    const nextIdx = livePairIndex(totalMatches + i);
+    const p = ALL_PAIRS[nextIdx];
+    const key = `${p.home}|${p.away}`;
+    activeKeys.add(key);
+    const upcomingStart = matchStart + i * ROUND_MS;
+
+    const existing = all.find(
+      (m) => m.homeTeam === p.home && m.awayTeam === p.away && m.status === "upcoming"
     );
-    if (um && um.startsAt.getTime() !== nextStart) {
-      await db
-        .update(matches)
-        .set({ startsAt: new Date(nextStart) })
-        .where(eq(matches.id, um.id));
+    if (!existing) {
+      const finishedOrOther = all.find((m) => m.homeTeam === p.home && m.awayTeam === p.away);
+      if (!finishedOrOther) {
+        await insertMatch(p.home, p.away, "upcoming", upcomingStart, nextIdx);
+      }
+    } else {
+      if (existing.startsAt.getTime() !== upcomingStart) {
+        await db
+          .update(matches)
+          .set({ startsAt: new Date(upcomingStart) })
+          .where(eq(matches.id, existing.id));
+      }
     }
   }
 
-  // 5) Nettoie les « upcoming » orphelins d'anciennes paires.
+  // 5) Nettoyer les upcoming hors de la fenêtre active.
   for (const m of all) {
-    const isCurrent = m.homeTeam === livePair.home && m.awayTeam === livePair.away;
-    const isNext = m.homeTeam === upcomingPair.home && m.awayTeam === upcomingPair.away;
-    if (m.status === "upcoming" && !isCurrent && !isNext) {
+    const key = `${m.homeTeam}|${m.awayTeam}`;
+    if (m.status === "upcoming" && !activeKeys.has(key)) {
       await finishMatch(m);
     }
   }
