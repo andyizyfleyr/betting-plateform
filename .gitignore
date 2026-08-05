@@ -31,3 +31,6 @@ dev.err.log
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# drizzle-kit generated folder (schema managed via scripts/migrate-*.ts)
+/drizzle/
