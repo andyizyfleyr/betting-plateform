@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureSeeded } from "@/db/seed";
+import { getAuthUserId } from "@/lib/session";
 import { getLatestRound, getUserBalance } from "@/lib/accelerator-engine";
 import {
   ACCEL_CONFIG,
@@ -12,7 +13,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const USER_ID = 1;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function json(data: unknown, status = 200) {
@@ -20,8 +20,8 @@ function json(data: unknown, status = 200) {
 }
 
 /** Réponse de l'état terminal de la dernière manche (cashed ou crashed). */
-async function lastRoundState() {
-  const last = await getLatestRound(USER_ID);
+async function lastRoundState(uid: number) {
+  const last = await getLatestRound(uid);
   if (!last) return null;
   const mult =
     Number(last.cashoutMultiplier) || Number(last.currentMultiplier) || ACCEL_CONFIG.M_MIN;
@@ -29,7 +29,7 @@ async function lastRoundState() {
     return {
       status: "cashed",
       multiplier: mult,
-      new_balance: await getUserBalance(USER_ID),
+      new_balance: await getUserBalance(uid),
       win_amount: round2(Number(last.betAmount) * mult),
       round_id: last.id,
       jackpot: mult >= Number(last.mMax) - 1e-9,
@@ -41,11 +41,12 @@ async function lastRoundState() {
   return null;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await ensureSeeded();
+  const uid = (await getAuthUserId(req)) ?? 1;
   return json({
     status: "success",
-    balance: await getUserBalance(USER_ID),
+    balance: await getUserBalance(uid),
     symbol: ACCEL_CONFIG.CURRENCY_SYMBOL,
     decimals: ACCEL_CONFIG.DECIMALS,
     min_display: ACCEL_CONFIG.BET_MIN_USD,
@@ -55,6 +56,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
+  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { action?: string; bet?: number; client_multiplier?: number };
   try {
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
         400
       );
     }
-    const r = await startRound(USER_ID, bet);
+    const r = await startRound(uid, bet);
     if (r.status !== "success") {
       return json({ status: "error", message: r.message }, 400);
     }
@@ -90,7 +92,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (act === "hold_start") {
-    const r = await holdStartRound(USER_ID);
+    const r = await holdStartRound(uid);
     if (r.status === "crashed") {
       return json({ status: "crashed", multiplier: r.multiplier, round_id: r.roundId });
     }
@@ -101,11 +103,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (act === "tap" || act === "tap_final") {
-    const row = await getActiveRound(USER_ID);
+    const row = await getActiveRound(uid);
     if (!row) {
       // Manche terminée (TTL ou crash) : on renvoie l'état terminal au lieu d'un 400
       // pour que le client affiche un résultat propre après une coupure réseau.
-      const term = await lastRoundState();
+      const term = await lastRoundState(uid);
       if (term) return json(term);
       return json({ status: "error", message: "Aucune partie en cours" }, 400);
     }
@@ -117,11 +119,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (act === "cashout") {
-    const row = await getActiveRound(USER_ID);
+    const row = await getActiveRound(uid);
     if (!row) {
       // Rejeu idempotent : si la manche a déjà été encaissée (réponse perdue sur un
       // réseau faible), on renvoie le même résultat au lieu de dire "aucune partie".
-      const term = await lastRoundState();
+      const term = await lastRoundState(uid);
       if (term) return json(term);
       return json({ status: "error", message: "Aucune partie en cours" }, 400);
     }

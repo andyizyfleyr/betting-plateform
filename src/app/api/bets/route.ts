@@ -5,6 +5,7 @@ import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { appUser, bets, matches } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
+import { getAuthUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ const SELECTION_LABELS: Record<string, (m: typeof matches.$inferSelect) => strin
 };
 
 /** Règle les paris en cours dont le match est terminé (déterministe, basé sur le score). */
-async function settleFinishedBets() {
+async function settleFinishedBets(uid: number) {
   const pending = await db
     .select({ bet: bets, match: matches })
     .from(bets)
@@ -38,7 +39,7 @@ async function settleFinishedBets() {
       await db
         .update(appUser)
         .set({ balance: sql`${appUser.balance} + ${bet.potentialWin}` })
-        .where(eq(appUser.id, 1));
+        .where(eq(appUser.id, uid));
     }
   }
 }
@@ -46,7 +47,8 @@ async function settleFinishedBets() {
 export async function GET(req: NextRequest) {
   await ensureSeeded();
   await runLiveEngine();
-  await settleFinishedBets();
+  const uid = (await getAuthUserId(req)) ?? 1;
+  await settleFinishedBets(uid);
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
 
@@ -59,7 +61,7 @@ export async function GET(req: NextRequest) {
   const [user] = await db
     .select({ balance: appUser.balance })
     .from(appUser)
-    .where(eq(appUser.id, 1));
+    .where(eq(appUser.id, uid));
 
   const mapped = rows.map(({ bet, match }) => {
     const livePending = bet.status === "pending" && match?.status === "live";
@@ -109,6 +111,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
+  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { matchId?: number; selection?: string; stake?: number };
   try {
@@ -140,7 +143,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cote indisponible" }, { status: 400 });
   }
 
-  const [user] = await db.select().from(appUser).where(eq(appUser.id, 1));
+  const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
   if (!user || user.balance < stake) {
     return NextResponse.json({ error: "Solde insuffisant" }, { status: 400 });
   }
@@ -168,7 +171,7 @@ export async function POST(req: NextRequest) {
   const [updatedUser] = await db
     .update(appUser)
     .set({ balance: sql`${appUser.balance} - ${roundedStake}` })
-    .where(eq(appUser.id, 1))
+    .where(eq(appUser.id, uid))
     .returning({ balance: appUser.balance });
 
   return NextResponse.json({ bet, balance: updatedUser.balance });

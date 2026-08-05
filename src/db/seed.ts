@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches } from "@/db/schema";
+import { hashPassword } from "@/lib/auth";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -270,6 +271,23 @@ export async function ensureSeeded() {
       .update(appUser)
       .set({ balance: 250 - 25 - 10 - 30 - 15 + 58.5 })
       .where(sql`id = 1`);
+  }
+
+  // Avance la séquence de la clé primaire : user 1 a été inséré avec un id explicite,
+  // sinon le prochain `serial` repartirait à 1 (collision à l'inscription).
+  await db.execute(sql`
+    SELECT setval(
+      pg_get_serial_sequence('app_user', 'id'),
+      GREATEST((SELECT COALESCE(MAX(id), 1) FROM app_user), 1)
+    )
+  `);
+
+  // Compte démo (idempotent) : crédentiels par défaut si jamais définis.
+  if (user && !user.email) {
+    await db
+      .update(appUser)
+      .set({ email: "demo@pulse.app", passwordHash: hashPassword("demo1234") })
+      .where(eq(appUser.id, user.id));
   }
 
   seededOnce = true;

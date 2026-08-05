@@ -7,7 +7,7 @@ import { AnimatedNumber } from "./animated-number";
 import { eur } from "@/lib/format";
 
 export function AppHeader() {
-  const { balance, pendingCount } = useApp();
+  const { balance, pendingCount, user } = useApp();
 
   return (
     <header className="sticky top-0 z-40 bg-ink/80 backdrop-blur-xl">
@@ -54,18 +54,27 @@ export function AppHeader() {
             )}
           </Link>
 
-          <Link
-            href="/parametres"
-            className="glass-pill flex h-8 items-center gap-2 rounded-lg px-2.5 transition-transform active:scale-95"
-            aria-label="Solde et réglages"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_rgba(201,247,58,0.9)]" />
-            <AnimatedNumber
-              value={balance}
-              format={eur}
-              className="font-display text-[12.5px] font-bold tabular-nums tracking-tight text-white"
-            />
-          </Link>
+          {user ? (
+            <Link
+              href="/parametres"
+              className="glass-pill flex h-8 items-center gap-2 rounded-lg px-2.5 transition-transform active:scale-95"
+              aria-label="Solde et réglages"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-lime shadow-[0_0_8px_rgba(201,247,58,0.9)]" />
+              <AnimatedNumber
+                value={balance}
+                format={eur}
+                className="font-display text-[12.5px] font-bold tabular-nums tracking-tight text-white"
+              />
+            </Link>
+          ) : (
+            <Link
+              href="/auth"
+              className="flex h-8 items-center rounded-lg bg-lime px-3 font-display text-[12.5px] font-bold tracking-tight text-ink transition-transform active:scale-95"
+            >
+              Connexion
+            </Link>
+          )}
         </div>
       </div>
       <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />

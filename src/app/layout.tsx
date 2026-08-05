@@ -3,8 +3,6 @@ import type { ReactNode } from "react";
 import { Inter, Montserrat, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { AppHeader } from "@/components/app-header";
-import { BottomNav } from "@/components/bottom-nav";
 
 const grotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -43,9 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="ambient" aria-hidden />
         <Providers>
           <div className="app-shell relative z-10 mx-auto flex min-h-dvh w-full max-w-[27.5rem] flex-col bg-ink sm:border-x sm:border-edge/50">
-            <AppHeader />
-            <main className="flex-1">{children}</main>
-            <BottomNav />
+            {children}
           </div>
         </Providers>
       </body>

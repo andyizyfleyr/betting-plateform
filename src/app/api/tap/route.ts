@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
+import { getAuthUserId } from "@/lib/session";
 import {
   analyzePlayerProfile,
   calcMultSafe,
-  clearSession,
   finalizeRound,
   getSession,
   getSmartCrashValue,
@@ -18,33 +18,37 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const USER_ID = 1;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-async function getUserBalance(): Promise<number> {
-  const [u] = await db.select({ balance: appUser.balance }).from(appUser).where(eq(appUser.id, USER_ID));
+async function getUserBalance(uid: number): Promise<number> {
+  const [u] = await db
+    .select({ balance: appUser.balance })
+    .from(appUser)
+    .where(eq(appUser.id, uid));
   return u?.balance ?? 0;
 }
 
-async function setUserBalance(balance: number) {
+async function setUserBalance(uid: number, balance: number) {
   await db
     .update(appUser)
     .set({ balance: round2(balance) })
-    .where(eq(appUser.id, USER_ID));
+    .where(eq(appUser.id, uid));
 }
 
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await ensureSeeded();
-  const balance = await getUserBalance();
+  const uid = (await getAuthUserId(req)) ?? 1;
+  const balance = await getUserBalance(uid);
   return json({ status: "success", balance });
 }
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
+  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { action?: string; bet?: number; count?: number };
   try {
@@ -65,15 +69,15 @@ export async function POST(req: NextRequest) {
       );
     }
     const betUsd = Math.min(TAP_CONFIG.BET_MAX_USD, betInput);
-    const balance = await getUserBalance();
+    const balance = await getUserBalance(uid);
     if (betUsd > balance) {
       return json({ message: "Solde insuffisant" }, 400);
     }
 
-    await setUserBalance(balance - betUsd);
+    await setUserBalance(uid, balance - betUsd);
 
     const systemHealth = await getSystemHealthModifier();
-    const profile = await analyzePlayerProfile(USER_ID, betUsd);
+    const profile = await analyzePlayerProfile(uid, betUsd);
     const crashPoint = getSmartCrashValue(betUsd, profile, systemHealth);
 
     const session: TapSession = {
@@ -87,7 +91,7 @@ export async function POST(req: NextRequest) {
       mFactor: TAP_CONFIG.GROWTH_FACTOR,
       riskType: profile.type,
     };
-    setSession(USER_ID, session);
+    setSession(uid, session);
 
     return json({
       status: "success",
@@ -99,7 +103,7 @@ export async function POST(req: NextRequest) {
 
   // ---- tap_batch : avance les clics, vérifie crash / auto-win ----
   if (act === "tap_batch") {
-    const s = getSession(USER_ID);
+    const s = getSession(uid);
     if (!s || !s.active) return json({ status: "error" }, 400);
 
     const count = Math.max(1, Math.floor(Number(body.count) || 0));
@@ -108,16 +112,16 @@ export async function POST(req: NextRequest) {
 
     if (mult >= s.crashPoint) {
       s.multiplier = s.crashPoint;
-      const balance = await getUserBalance();
-      const r = await finalizeRound(USER_ID, s, false, "Crash", balance);
-      await setUserBalance(r.bal);
+      const balance = await getUserBalance(uid);
+      const r = await finalizeRound(uid, s, false, "Crash", balance);
+      await setUserBalance(uid, r.bal);
       return json({ status: "crashed", multiplier: s.crashPoint, new_balance: r.bal });
     }
     if (mult >= s.mMax) {
       s.multiplier = s.mMax;
-      const balance = await getUserBalance();
-      const r = await finalizeRound(USER_ID, s, true, "Auto Win", balance);
-      await setUserBalance(r.bal);
+      const balance = await getUserBalance(uid);
+      const r = await finalizeRound(uid, s, true, "Auto Win", balance);
+      await setUserBalance(uid, r.bal);
       return json({
         status: "autocashout",
         multiplier: s.mMax,
@@ -128,24 +132,24 @@ export async function POST(req: NextRequest) {
 
     s.clicks = total;
     s.multiplier = mult;
-    setSession(USER_ID, s);
+    setSession(uid, s);
     return json({ status: "ok", multiplier: mult });
   }
 
   // ---- cashout : encaisse le multiplicateur courant ----
   if (act === "cashout") {
-    const s = getSession(USER_ID);
+    const s = getSession(uid);
     if (!s || !s.active) return json({ message: "Jeu inactif" }, 400);
 
-    const balance = await getUserBalance();
-    const r = await finalizeRound(USER_ID, s, true, "Cashout", balance);
-    await setUserBalance(r.bal);
+    const balance = await getUserBalance(uid);
+    const r = await finalizeRound(uid, s, true, "Cashout", balance);
+    await setUserBalance(uid, r.bal);
     return json({ status: "success", win_amount: r.win, new_balance: r.bal });
   }
 
   // ---- fetch_balance ----
   if (act === "fetch_balance") {
-    const balance = await getUserBalance();
+    const balance = await getUserBalance(uid);
     return json({ status: "success", balance });
   }
 

@@ -52,6 +52,8 @@ export interface ClientUser {
   oddsFormat: "decimal" | "fractional";
   language: string;
   liveSim: boolean;
+  email?: string | null;
+  createdAt?: string | null;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -87,4 +89,20 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }),
+  auth: {
+    login: (payload: { email: string; password: string }) =>
+      request<{ user: ClientUser }>("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    register: (payload: { name: string; email: string; password: string }) =>
+      request<{ user: ClientUser }>("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+    me: () => request<{ user: ClientUser }>("/api/auth/me"),
+  },
 };

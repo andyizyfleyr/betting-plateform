@@ -3,17 +3,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
+import { publicUser } from "@/lib/auth";
+import { getAuthUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await ensureSeeded();
-  const [user] = await db.select().from(appUser).where(eq(appUser.id, 1));
-  return NextResponse.json({ user });
+  const uid = (await getAuthUserId(req)) ?? 1;
+  const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
+  if (!user) return NextResponse.json({ user: null }, { status: 404 });
+  return NextResponse.json({ user: publicUser(user) });
 }
 
 export async function PATCH(req: NextRequest) {
   await ensureSeeded();
+  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: Record<string, unknown>;
   try {
@@ -31,9 +36,9 @@ export async function PATCH(req: NextRequest) {
     const [user] = await db
       .update(appUser)
       .set({ balance: sql`${appUser.balance} + ${amount}` })
-      .where(eq(appUser.id, 1))
+      .where(eq(appUser.id, uid))
       .returning();
-    return NextResponse.json({ user });
+    return NextResponse.json({ user: publicUser(user) });
   }
 
   const patch: Partial<typeof appUser.$inferInsert> = {};
@@ -53,8 +58,8 @@ export async function PATCH(req: NextRequest) {
   const [user] = await db
     .update(appUser)
     .set(patch)
-    .where(eq(appUser.id, 1))
+    .where(eq(appUser.id, uid))
     .returning();
 
-  return NextResponse.json({ user });
+  return NextResponse.json({ user: publicUser(user) });
 }

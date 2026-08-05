@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   BadgeCheck,
@@ -12,6 +13,7 @@ import {
   HelpCircle,
   History,
   Languages,
+  LogOut,
   Plus,
   Radio,
   ScrollText,
@@ -35,6 +37,7 @@ const listAnim = {
 
 export default function ParametresPage() {
   const { user, applyUser, toast } = useApp();
+  const router = useRouter();
   const [depositing, setDepositing] = useState(false);
   const [bets, setBets] = useState<ClientBet[] | null>(null);
 
@@ -86,6 +89,16 @@ export default function ParametresPage() {
 
   const soon = (label: string) => () =>
     toast({ kind: "info", title: label, description: "Bientôt disponible dans PULSE" });
+
+  const logout = async () => {
+    try {
+      await api.auth.logout();
+    } catch {
+      // même en cas d'échec réseau, on revient à l'écran de connexion
+    }
+    router.push("/auth");
+    router.refresh();
+  };
 
   const hue = teamHue(user?.name ?? "Pulse");
 
@@ -299,8 +312,22 @@ export default function ParametresPage() {
           Icon={<History className="h-4 w-4" strokeWidth={2.2} />}
           label="Historique des transactions"
           onClick={soon("Historique")}
-          last
         />
+        <motion.button
+          whileTap={{ scale: 0.985 }}
+          onClick={logout}
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-red-500/10"
+        >
+          <span className="glass-pill grid h-9 w-9 shrink-0 place-items-center rounded-full bg-red-500/15 text-red-400">
+            <LogOut className="h-4 w-4" strokeWidth={2.2} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-[13.5px] font-semibold text-red-400">
+              Se déconnecter
+            </p>
+            <p className="truncate text-[11px] text-dim">Quitter votre session PULSE</p>
+          </div>
+        </motion.button>
       </Group>
 
       {/* Support */}
