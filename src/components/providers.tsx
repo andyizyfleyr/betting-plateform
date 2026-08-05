@@ -12,15 +12,17 @@ import {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { api, type ClientMatch, type ClientUser, type Selection } from "@/lib/api";
+import { api, type ClientMatch, type ClientUser } from "@/lib/api";
 import { cn } from "@/lib/format";
 import { BetModal } from "./bet-modal";
 
 export interface BetTarget {
   match: ClientMatch;
-  selection: Selection;
+  selection: string;
   odds: number;
   label: string;
+  market: string;
+  marketLabel: string;
 }
 
 interface Toast {

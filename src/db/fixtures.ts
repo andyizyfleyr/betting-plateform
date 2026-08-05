@@ -82,7 +82,7 @@ export function expectedGoals(home: string, away: string): { lambdaHome: number;
   };
 }
 
-function poissonPmf(k: number, lambda: number): number {
+export function poissonPmf(k: number, lambda: number): number {
   let fact = 1;
   for (let i = 2; i <= k; i++) fact *= i;
   return (Math.exp(-lambda) * Math.pow(lambda, k)) / fact;

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import type { ClientMatch, Selection } from "@/lib/api";
+import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
@@ -60,8 +60,8 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
         />
       </div>
 
-      {/* Cotes incrustées */}
-      {!isFinished && <OddsGroup match={match} />}
+      {/* Cotes des marchés */}
+      {!isFinished && <MarketOdds match={match} />}
     </motion.article>
   );
 }
@@ -122,51 +122,81 @@ function useOddsFlash(odds: number) {
   return flash;
 }
 
-/** Rangée de cotes 1 / N / 2 incrustée en pied de carte. */
-export function OddsGroup({ match }: { match: ClientMatch }) {
+/** Sélecteur de marchés + grille de cotes pour une affiche. */
+export function MarketOdds({ match }: { match: ClientMatch }) {
   const { openBet } = useApp();
+  const [marketKey, setMarketKey] = useState("result");
 
-  const cells: { tag: string; odds: number; sel: Selection; label: string }[] = [
-    { tag: "1", odds: match.oddsHome, sel: "home", label: `Victoire ${match.homeTeam}` },
-    ...(match.oddsDraw != null
-      ? [{ tag: "N", odds: match.oddsDraw, sel: "draw" as Selection, label: "Match nul" }]
-      : []),
-    { tag: "2", odds: match.oddsAway, sel: "away", label: `Victoire ${match.awayTeam}` },
-  ];
+  const groups = match.markets ?? [];
+  const group = groups.find((g) => g.key === marketKey) ?? groups[0];
+  const activeKey = group?.key ?? "result";
 
   return (
-    <div
-      className={cn(
-        "relative grid border-t border-white/[0.06] bg-white/[0.02]",
-        cells.length === 3 ? "grid-cols-3" : "grid-cols-2"
+    <div className="relative">
+      {/* Onglets marchés défilants */}
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto border-t border-white/[0.06] bg-white/[0.02] px-2 py-2">
+        {groups.map((g) => {
+          const active = g.key === activeKey;
+          return (
+            <button
+              key={g.key}
+              onClick={() => setMarketKey(g.key)}
+              className={cn(
+                "shrink-0 rounded-full border px-2.5 py-1 font-display text-[10px] font-bold tracking-wide transition-colors",
+                active
+                  ? "border-lime bg-lime text-ink"
+                  : "border-white/[0.08] bg-white/[0.03] text-mist active:border-lime/40 active:text-white"
+              )}
+            >
+              {g.short}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Cotes de l'issue sélectionnée */}
+      {group && (
+        <div className="relative grid grid-cols-3 border-t border-white/[0.06] bg-white/[0.02]">
+          {group.outcomes.map((o, i) => (
+            <MarketCell
+              key={`${group.key}-${o.key}`}
+              short={o.short}
+              odds={o.odds}
+              isLive={match.status === "live"}
+              borderLeft={i > 0}
+              onPick={() =>
+                openBet({
+                  match,
+                  selection: o.key,
+                  odds: o.odds,
+                  label: o.label,
+                  market: group.key,
+                  marketLabel: group.label,
+                })
+              }
+            />
+          ))}
+        </div>
       )}
-    >
-      {cells.map((c, i) => (
-        <OddsCell
-          key={c.tag}
-          cell={c}
-          isLive={match.status === "live"}
-          borderLeft={i > 0}
-          onPick={() => openBet({ match, selection: c.sel, odds: c.odds, label: c.label })}
-        />
-      ))}
     </div>
   );
 }
 
-function OddsCell({
-  cell,
+function MarketCell({
+  short,
+  odds,
   isLive,
   borderLeft,
   onPick,
 }: {
-  cell: { tag: string; odds: number };
+  short: string;
+  odds: number;
   isLive: boolean;
   borderLeft: boolean;
   onPick: () => void;
 }) {
   const { oddsFormat } = useApp();
-  const flash = useOddsFlash(cell.odds);
+  const flash = useOddsFlash(odds);
 
   return (
     <motion.button
@@ -179,7 +209,9 @@ function OddsCell({
         flash === "down" && "bg-live/[0.13]"
       )}
     >
-      <span className="text-[8.5px] font-semibold tracking-[0.2em] text-dim">{cell.tag}</span>
+      <span className="max-w-[95%] truncate text-[8.5px] font-semibold tracking-[0.08em] text-dim">
+        {short}
+      </span>
       <span className="flex items-center gap-1">
         <span
           className={cn(
@@ -187,7 +219,7 @@ function OddsCell({
             isLive ? "text-lime" : "text-white"
           )}
         >
-          {formatOdds(cell.odds, oddsFormat)}
+          {formatOdds(odds, oddsFormat)}
         </span>
         {flash === "up" && <ChevronUp className="h-3 w-3 text-lime" strokeWidth={3} />}
         {flash === "down" && <ChevronDown className="h-3 w-3 text-live" strokeWidth={3} />}

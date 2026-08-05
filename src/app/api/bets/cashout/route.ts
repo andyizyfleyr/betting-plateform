@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  if (bet.market !== "result") {
+    return NextResponse.json(
+      { error: "Le cash-out n'est pas disponible pour ce marché" },
+      { status: 400 }
+    );
+  }
 
   const value = computeCashOut({
     stake: bet.stake,

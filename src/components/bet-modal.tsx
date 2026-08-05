@@ -57,6 +57,7 @@ export function BetModal() {
       const res = await api.placeBet({
         matchId: target.match.id,
         selection: target.selection,
+        market: target.market,
         stake,
       });
       setBalance(res.balance);
@@ -146,6 +147,10 @@ export function BetModal() {
                         </span>
                       ) : (
                         target.match.league
+                      )}
+                      <span className="text-dim"> · </span>
+                      {target.market !== "result" && (
+                        <span className="text-mist">{target.marketLabel}</span>
                       )}
                       <span className="text-dim"> · </span>
                       <span className="text-lime">{target.label}</span>

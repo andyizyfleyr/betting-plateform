@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
+import { buildMarkets } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +24,10 @@ export async function GET() {
       desc(matches.id)
     );
 
-  return NextResponse.json({ matches: rows });
+  const withMarkets = rows.map((m) => ({
+    ...m,
+    markets: buildMarkets(m.homeTeam, m.awayTeam),
+  }));
+
+  return NextResponse.json({ matches: withMarkets });
 }

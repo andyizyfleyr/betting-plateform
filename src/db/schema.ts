@@ -41,7 +41,8 @@ export const bets = pgTable("bets", {
   league: text("league").notNull(),
   homeTeam: text("home_team").notNull(),
   awayTeam: text("away_team").notNull(),
-  selection: text("selection").notNull(), // "home" | "draw" | "away"
+  market: text("market").notNull().default("result"), // clé du marché (résultat, O/U, BTTS, …)
+  selection: text("selection").notNull(), // "home" | "draw" | "away" | clé d'issue du marché
   selectionLabel: text("selection_label").notNull(),
   odds: doublePrecision("odds").notNull(),
   stake: doublePrecision("stake").notNull(),

@@ -5,15 +5,10 @@ import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { appUser, bets, matches } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
+import { isKnownMarket, marketLabelFor, marketOddsFor, marketWin } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
-
-const SELECTION_LABELS: Record<string, (m: typeof matches.$inferSelect) => string> = {
-  home: (m) => `Victoire ${m.homeTeam}`,
-  draw: () => "Match nul",
-  away: (m) => `Victoire ${m.awayTeam}`,
-};
 
 /** Règle les paris en cours du joueur dont le match est terminé (déterministe, basé sur le score). */
 async function settleFinishedBets(uid: number) {
@@ -27,8 +22,7 @@ async function settleFinishedBets(uid: number) {
     if (!match || match.status !== "finished") continue;
     const home = match.homeScore ?? 0;
     const away = match.awayScore ?? 0;
-    const winner = home > away ? "home" : away > home ? "away" : "draw";
-    const won = bet.selection === winner;
+    const won = marketWin(bet.market, bet.selection, home, away);
 
     await db
       .update(bets)
@@ -73,6 +67,7 @@ export async function GET(req: NextRequest) {
       league: bet.league,
       homeTeam: bet.homeTeam,
       awayTeam: bet.awayTeam,
+      market: bet.market,
       selection: bet.selection,
       selectionLabel: bet.selectionLabel,
       odds: bet.odds,
@@ -80,17 +75,18 @@ export async function GET(req: NextRequest) {
       potentialWin: bet.potentialWin,
       status: bet.status,
       cashOutAmount: bet.cashOutAmount ?? null,
-      cashOut: livePending
-        ? computeCashOut({
-            stake: bet.stake,
-            odds: bet.odds,
-            sport: bet.sport,
-            minute: match?.minute ?? null,
-            selection: bet.selection,
-            homeScore: match?.homeScore ?? null,
-            awayScore: match?.awayScore ?? null,
-          })
-        : null,
+      cashOut:
+        livePending && bet.market === "result"
+          ? computeCashOut({
+              stake: bet.stake,
+              odds: bet.odds,
+              sport: bet.sport,
+              minute: match?.minute ?? null,
+              selection: bet.selection,
+              homeScore: match?.homeScore ?? null,
+              awayScore: match?.awayScore ?? null,
+            })
+          : null,
       placedAt: bet.placedAt,
       matchStatus: match?.status ?? null,
       matchHomeScore: match?.homeScore ?? null,
@@ -114,7 +110,7 @@ export async function POST(req: NextRequest) {
   await ensureSeeded();
   const uid = (await getAuthUserId(req)) ?? 1;
 
-  let body: { matchId?: number; selection?: string; stake?: number };
+  let body: { matchId?: number; selection?: string; market?: string; stake?: number };
   try {
     body = await req.json();
   } catch {
@@ -122,12 +118,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { matchId, selection, stake } = body;
+  const market = body.market ?? "result";
 
   if (!matchId || !selection || !stake || stake <= 0) {
     return NextResponse.json({ error: "Données du pari incomplètes" }, { status: 400 });
   }
-  if (!["home", "draw", "away"].includes(selection)) {
-    return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
+  if (!isKnownMarket(market)) {
+    return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
   }
 
   const [match] = await db.select().from(matches).where(eq(matches.id, matchId));
@@ -138,10 +135,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ce match est terminé" }, { status: 400 });
   }
 
-  const odds =
-    selection === "home" ? match.oddsHome : selection === "away" ? match.oddsAway : match.oddsDraw;
-  if (!odds) {
-    return NextResponse.json({ error: "Cote indisponible" }, { status: 400 });
+  const odds = marketOddsFor(market, selection, match.homeTeam, match.awayTeam);
+  const selectionLabel = marketLabelFor(market, selection, match.homeTeam, match.awayTeam);
+  if (odds == null || selectionLabel == null) {
+    return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
   }
 
   const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
@@ -161,8 +158,9 @@ export async function POST(req: NextRequest) {
       league: match.league,
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
+      market,
       selection,
-      selectionLabel: SELECTION_LABELS[selection](match),
+      selectionLabel,
       odds,
       stake: roundedStake,
       potentialWin,

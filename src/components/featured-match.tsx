@@ -4,8 +4,7 @@ import { motion } from "framer-motion";
 import { Star } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { TeamAvatar } from "./team-avatar";
-import { OddsGroup } from "./match-card";
-import { formatKickoff, teamHue } from "@/lib/format";
+import { MarketOdds } from "./match-card";import { formatKickoff, teamHue } from "@/lib/format";
 
 /** Match à la une V5 — scoreboard immersif avec cotes incrustées. */
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
@@ -74,7 +73,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
 
       {/* Cotes incrustées */}
       <div className="relative">
-        <OddsGroup match={match} />
+        <MarketOdds match={match} />
       </div>
     </motion.section>
   );

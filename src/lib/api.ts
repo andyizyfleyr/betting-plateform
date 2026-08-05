@@ -2,6 +2,20 @@ export type MatchStatus = "live" | "upcoming" | "finished";
 export type BetStatus = "pending" | "won" | "lost" | "cashed";
 export type Selection = "home" | "draw" | "away";
 
+export interface MarketOutcome {
+  key: string;
+  label: string;
+  short: string;
+  odds: number;
+}
+
+export interface MarketGroup {
+  key: string;
+  label: string;
+  short: string;
+  outcomes: MarketOutcome[];
+}
+
 export interface ClientMatch {
   id: number;
   sport: string;
@@ -16,6 +30,7 @@ export interface ClientMatch {
   oddsHome: number;
   oddsDraw: number | null;
   oddsAway: number;
+  markets: MarketGroup[];
 }
 
 export interface ClientBet {
@@ -25,6 +40,7 @@ export interface ClientBet {
   league: string;
   homeTeam: string;
   awayTeam: string;
+  market: string;
   selection: Selection;
   selectionLabel: string;
   odds: number;
@@ -70,7 +86,12 @@ export const api = {
   bets: (filter: "ongoing" | "finished") =>
     request<{ bets: ClientBet[] }>(`/api/bets?filter=${filter}`),
   allBets: () => request<{ bets: ClientBet[] }>("/api/bets?filter=all"),
-  placeBet: (payload: { matchId: number; selection: Selection; stake: number }) =>
+  placeBet: (payload: {
+    matchId: number;
+    selection: string;
+    market?: string;
+    stake: number;
+  }) =>
     request<{ bet: ClientBet; balance: number }>("/api/bets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
