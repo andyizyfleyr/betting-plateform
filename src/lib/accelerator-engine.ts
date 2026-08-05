@@ -21,6 +21,8 @@ export const ACCEL_CONFIG = {
   /** Fenêtre (en points de multiplicateur) pour honorer le multiplicateur affiché
    * côté client au relâchement malgré la latence réseau. */
   CASHOUT_LATENCY_WINDOW: 0.5,
+  /** Marge de la maison (~2 %) pour le calcul provably fair du crash. */
+  CRASH_HOUSE: 0.98,
 } as const;
 
 /** Arrondi homogène à 2 décimales (half-up) — r2() du PHP. */
@@ -42,7 +44,10 @@ export function pfCrashFromSeed(seedHex: string, roundId: number): number {
   const slice = hmac.slice(0, 13);
   const int = parseInt(slice, 16);
   const ratio = int / Math.pow(16, 13);
-  const val = 0.7 / (1.0 - ratio);
+  // Formule provably fair standard : house / (1 - ratio), plafonnée à [M_MIN, M_MAX].
+  // L'original (0.7 / (1-ratio)) donnait ~30 % de crash instantané à ×1.01, rendant le
+  // jeu injouable. Avec ~0.98 : ~3 % de crash immédiat, ~49 % atteignent ×2.00.
+  const val = ACCEL_CONFIG.CRASH_HOUSE / (1.0 - ratio);
   return r2(Math.max(ACCEL_CONFIG.M_MIN, Math.min(ACCEL_CONFIG.M_MAX, val)));
 }
 
@@ -168,6 +173,43 @@ export async function startRound(uid: number, betInput: number): Promise<StartRe
   };
 }
 
+export interface HoldStartResult {
+  status: "ok" | "crashed" | "error";
+  multiplier?: number;
+  roundId?: number;
+  message?: string;
+}
+
+/**
+ * Début du maintien : gèle le chrono (la montée ne commence qu'au maintien, pas au
+ * placement de la mise) et renvoie le multiplicateur autoritaire pour resynchroniser
+ * le client. Les manches dont le crash est à M_MIN crashent ici, proprement.
+ *
+ * IMPORTANT : le temps écoulé entre la mise et le maintien ne fait PAS crasher la
+ * manche. Sur un réseau/DB lent, start_game + reprise peuvent prendre plus de
+ * TTL_MS ; écraser la manche ici rendrait le jeu injouable (crash systématique au
+ * clic sur MAINTENIR). Le nettoyage des manches abandonnées est déjà assuré par
+ * startRound. Le chrono est simplement réinitialisé au maintien.
+ */
+export async function holdStartRound(uid: number): Promise<HoldStartResult> {
+  const row = await getActiveRound(uid);
+  if (!row) return { status: "error", message: "Aucune partie en cours" };
+
+  const now = nowMs();
+  const crash = Number(row.crashPoint);
+  if (ACCEL_CONFIG.M_MIN >= crash - 1e-9) {
+    await setRoundStatus(row.id, "crashed", { currentMultiplier: r2(crash) });
+    return { status: "crashed", multiplier: r2(crash), roundId: row.id };
+  }
+
+  await db
+    .update(acceleratorRounds)
+    .set({ lastMs: now, currentMultiplier: ACCEL_CONFIG.M_MIN })
+    .where(and(eq(acceleratorRounds.id, row.id), eq(acceleratorRounds.status, "active")));
+
+  return { status: "ok", multiplier: ACCEL_CONFIG.M_MIN, roundId: row.id };
+}
+
 /** Avance le multiplicateur en fonction du temps réel écoulé. Retourne "crashed" si dépassé. */
 export async function advanceRound(row: AcceleratorRoundRow, reason: "tap" | "tap_final"): Promise<AdvanceResult> {
   const rid = row.id;
@@ -252,13 +294,29 @@ export async function cashoutRound(row: AcceleratorRoundRow, clientMult?: number
   const mult = jackpot ? mMax : eff;
   const win = r2(Number(row.betAmount) * mult);
 
-  const balance = await getUserBalance(uid);
-  await setUserBalance(uid, balance + win);
-
-  await db
+  // Bascule atomique active → cashed AVANT de créditer : les retries client
+  // (réseau faible) ne peuvent plus encaisser deux fois la même manche. Si un
+  // autre cashout a déjà gagné la course (rowCount === 0), on ne crédite pas.
+  const flipped = await db
     .update(acceleratorRounds)
     .set({ cashoutMultiplier: mult, status: "cashed", endedAt: new Date(), currentMultiplier: mult })
     .where(and(eq(acceleratorRounds.id, rid), eq(acceleratorRounds.status, "active")));
+
+  if ((flipped.rowCount ?? 0) === 0) {
+    const state = await db
+      .select({ status: acceleratorRounds.status })
+      .from(acceleratorRounds)
+      .where(eq(acceleratorRounds.id, rid))
+      .limit(1);
+    const bal = await getUserBalance(uid);
+    if (state[0]?.status === "cashed") {
+      return { status: "cashed", multiplier: mult, newBalance: bal, winAmount: win, roundId: rid, jackpot };
+    }
+    return { status: "postcrashed", multiplier: r2(crash), newBalance: bal, winAmount: 0, roundId: rid, jackpot: false };
+  }
+
+  const balance = await getUserBalance(uid);
+  await setUserBalance(uid, balance + win);
 
   return {
     status: "cashed",

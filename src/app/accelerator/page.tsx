@@ -13,6 +13,7 @@ const DEC = 2;
 const MIN_BET = 1;
 const MAX_BET = 50;
 const PING_PERIOD_MS = 500;
+const MIN_HOLD_MS = 350;
 
 const V_MIN = 1.01;
 const V_MAX = 2.0;
@@ -148,6 +149,7 @@ export default function AcceleratorPage() {
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastFrameTsRef = useRef<number | null>(null);
   const crashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdStartedAtRef = useRef(0);
   const audioUnlockedRef = useRef(false);
   const sndHoldRef = useRef<HTMLAudioElement | null>(null);
   const sndCrashRef = useRef<HTMLAudioElement | null>(null);
@@ -456,7 +458,7 @@ export default function AcceleratorPage() {
     if (pingInFlightRef.current) return;
     pingInFlightRef.current = true;
     lastPingAtRef.current = Date.now();
-    const j = await post({ action: "tap" });
+    const j = await post({ action: "tap" }, { timeoutMs: 10000 });
     pingInFlightRef.current = false;
     if (!j) return;
     if (j.status === "ok" && typeof j.multiplier === "number") {
@@ -496,16 +498,49 @@ export default function AcceleratorPage() {
   }, []);
 
   const startHoldLoop = useCallback(async () => {
-    await unlockAudio().catch(() => undefined);
     if (holdingRef.current) return;
     holdingRef.current = true;
     lastFrameTsRef.current = null;
     releaseLockRef.current = false;
+
+    // Le maintien est marqué actif immédiatement : si l'utilisateur relâche pendant
+    // la synchro réseau (audio/network), releaseHold() coupe la boucle proprement.
+    await unlockAudio().catch(() => undefined);
+    if (!holdingRef.current) return;
+
+    // Gèle le chrono serveur (la montée ne commence qu'au maintien, pas au
+    // placement de la mise) et resynchronise le multiplicateur autoritaire.
+    const hs = await post({ action: "hold_start" }, { timeoutMs: 10000, retries: 1 });
+    if (!holdingRef.current) return; // relâché pendant la synchronisation
+    if (hs && (hs.status === "crashed" || hs.status === "postcrashed")) {
+      cleanupGameLoop();
+      endRef.current(hs);
+      return;
+    }
+    if (hs && hs.status === "ok" && typeof hs.multiplier === "number") {
+      displayVRef.current = hs.multiplier;
+      gaugeApi.current?.updateGauge(hs.multiplier);
+    }
+
     playHoldSound();
     animIdRef.current = requestAnimationFrame(animateLoopRef.current);
     if (pingTimerRef.current) clearInterval(pingTimerRef.current);
     pingTimerRef.current = setInterval(pingTap, PING_PERIOD_MS);
-  }, [pingTap, playHoldSound, unlockAudio]);
+  }, [cleanupGameLoop, endRef, pingTap, playHoldSound, post, unlockAudio]);
+
+  // Relâchement avec anti-clic : un simple tap (ou un relâche trop rapide) ne doit
+  // pas encaisser/crash instantanément — il faut maintenir réellement. La boucle
+  // est quand même coupée : un tap ne laisse pas la jauge monter sans personne.
+  const releaseHold = useCallback(
+    (force = false) => {
+      if (!force && Date.now() - holdStartedAtRef.current < MIN_HOLD_MS) {
+        cleanupGameLoop();
+        return;
+      }
+      void stopHoldLoopRef.current(false);
+    },
+    [cleanupGameLoop]
+  );
 
   const stopHoldLoop = useCallback(
     async (skipCashout: boolean) => {
@@ -530,7 +565,7 @@ export default function AcceleratorPage() {
         // (le multiplicateur affiché au relâchement est envoyé au serveur).
         const j = await post(
           { action: "cashout", client_multiplier: displayVRef.current },
-          { retries: 4, timeoutMs: 3000 }
+          { retries: 4, timeoutMs: 10000 }
         );
         if (j) endRef.current(j);
         else setError("Erreur réseau");
@@ -560,7 +595,7 @@ export default function AcceleratorPage() {
         setError("Mise invalide");
         return;
       }
-      const j = await post({ action: "start_game", bet }, { retries: 1, timeoutMs: 5000 });
+      const j = await post({ action: "start_game", bet }, { timeoutMs: 10000 });
       if (j.status === "success") {
         roundIdRef.current = typeof j.round_id === "number" ? j.round_id : null;
         setBalFlashSoon(Number(j.new_balance));
@@ -630,23 +665,24 @@ export default function AcceleratorPage() {
       }
       if (e.code === "Space" && modeRef.current === "hold") {
         e.preventDefault();
+        holdStartedAtRef.current = Date.now();
         unlockAudio().then(() => startHoldLoop());
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === "Space" && modeRef.current === "hold") {
         e.preventDefault();
-        stopHoldLoop(false);
+        releaseHold();
       }
     };
     const onVisibility = () => {
       if (document.hidden) stopHoldSound();
       if (document.hidden && modeRef.current === "hold" && roundIdRef.current) {
-        stopHoldLoop(false);
+        void stopHoldLoop(false);
       }
     };
     const onPointerUp = () => {
-      if (holdingRef.current) stopHoldLoop(false);
+      if (holdingRef.current) releaseHold();
     };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -658,7 +694,7 @@ export default function AcceleratorPage() {
       window.removeEventListener("pointerup", onPointerUp);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [startGame, startHoldLoop, stopHoldLoop, stopHoldSound, unlockAudio]);
+  }, [releaseHold, startGame, startHoldLoop, stopHoldLoop, stopHoldSound, unlockAudio]);
 
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -691,18 +727,19 @@ export default function AcceleratorPage() {
       if (!isHold) return;
       e.preventDefault();
       (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+      holdStartedAtRef.current = Date.now();
       unlockAudio().then(() => startHoldLoop());
     },
     onPointerUp: (e: React.PointerEvent) => {
       if (isHold) {
         e.preventDefault();
-        stopHoldLoop(false);
+        releaseHold();
       }
     },
     onPointerCancel: (e: React.PointerEvent) => {
       if (isHold) {
         e.preventDefault();
-        stopHoldLoop(false);
+        releaseHold();
       }
     },
   };

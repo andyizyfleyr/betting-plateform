@@ -6,6 +6,7 @@ import {
   advanceRound,
   cashoutRound,
   getActiveRound,
+  holdStartRound,
   startRound,
 } from "@/lib/accelerator-engine";
 
@@ -86,6 +87,17 @@ export async function POST(req: NextRequest) {
       m_max: r.mMax,
       seed_hash: r.seedHash,
     });
+  }
+
+  if (act === "hold_start") {
+    const r = await holdStartRound(USER_ID);
+    if (r.status === "crashed") {
+      return json({ status: "crashed", multiplier: r.multiplier, round_id: r.roundId });
+    }
+    if (r.status === "error") {
+      return json({ status: "error", message: r.message }, 400);
+    }
+    return json({ status: "ok", multiplier: r.multiplier });
   }
 
   if (act === "tap" || act === "tap_final") {
