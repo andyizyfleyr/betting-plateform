@@ -9,11 +9,17 @@ export interface MarketOutcome {
   odds: number;
 }
 
+export interface MarketRow {
+  label: string;
+  outcomes: MarketOutcome[];
+}
+
 export interface MarketGroup {
   key: string;
   label: string;
   short: string;
   outcomes: MarketOutcome[];
+  rows?: MarketRow[];
 }
 
 export interface ClientMatch {

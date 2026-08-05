@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, X } from "lucide-react";
-import type { ClientMatch, MarketGroup } from "@/lib/api";
+import type { ClientMatch, MarketGroup, MarketOutcome } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
-/** Liste des marchés d'un match façon 1xbet : accordéon, une ligne par marché. */
+/** Feuille des marchés façon 1xbet : accordéon, un marché par ligne, options regroupées. */
 export function MarketSheet() {
   const { marketMatch, closeMarkets, openBet, oddsFormat } = useApp();
   const [openKey, setOpenKey] = useState("result");
@@ -68,7 +68,12 @@ export function MarketSheet() {
             <div className="shrink-0 border-b border-white/[0.07] px-4 pb-3 pt-1">
               <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-elev" />
               <div className="mt-2 flex items-center justify-between">
-                <p className="font-display text-[15px] font-bold tracking-tight">Marchés</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-display text-[15px] font-bold tracking-tight">Marchés</p>
+                  <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 font-display text-[9.5px] font-bold text-mist">
+                    {groups.length}
+                  </span>
+                </div>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
                   onClick={closeMarkets}
@@ -106,10 +111,11 @@ export function MarketSheet() {
             </div>
 
             {/* Accordéon des marchés */}
-            <div className="no-scrollbar flex-1 overflow-y-auto px-3 pb-6 pt-2">
-              {groups.map((g) => (
+            <div className="no-scrollbar flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 pb-6 pt-2.5">
+              {groups.map((g, i) => (
                 <AccordionItem
                   key={g.key}
+                  index={i + 1}
                   group={g}
                   isLive={isLive}
                   open={openKey === g.key}
@@ -140,34 +146,43 @@ export function MarketSheet() {
 
 function AccordionItem({
   group,
+  index,
   isLive,
   open,
   onToggle,
   onPick,
 }: {
   group: MarketGroup;
+  index: number;
   isLive: boolean;
   open: boolean;
   onToggle: () => void;
   onPick: (o: MarketGroup["outcomes"][number]) => void;
 }) {
-  const { oddsFormat } = useApp();
-  const twoCols = group.outcomes.length === 2 || group.outcomes.length === 4;
+  const twoCols = !group.rows && (group.outcomes.length === 2 || group.outcomes.length === 4);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border transition-colors duration-200",
+        open ? "border-lime/25 bg-white/[0.04]" : "border-white/[0.07] bg-white/[0.02]"
+      )}
+    >
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 px-3.5 py-3 text-left active:bg-white/[0.03]"
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-white/[0.03]"
       >
-        <span className="flex items-center gap-2">
-          <span
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              open ? "bg-lime" : "bg-white/[0.12]"
-            )}
-          />
-          <span className="font-display text-[12.5px] font-semibold text-white">{group.label}</span>
+        <span
+          className={cn(
+            "grid h-6 w-6 shrink-0 place-items-center rounded-lg font-display text-[10px] font-bold transition-colors",
+            open ? "bg-lime text-ink" : "bg-white/[0.06] text-dim"
+          )}
+        >
+          {index}
+        </span>
+        <span className="flex-1 font-display text-[13px] font-semibold leading-tight text-white">
+          {group.label}
         </span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}
@@ -188,35 +203,68 @@ function AccordionItem({
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className={cn("grid gap-1.5 border-t border-white/[0.06] px-2.5 py-2.5", twoCols ? "grid-cols-2" : "grid-cols-3")}>
-              {group.outcomes.map((o) => (
-                <motion.button
-                  key={o.key}
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => onPick(o)}
-                  className={cn(
-                    "flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-colors",
-                    "border-white/[0.08] bg-white/[0.03]",
-                    "active:border-lime/50 active:bg-lime/[0.12]"
-                  )}
-                >
-                  <span className="max-w-full truncate text-[9.5px] font-semibold leading-tight text-dim">
-                    {o.short}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-display text-[14.5px] font-bold tabular-nums",
-                      isLive ? "text-lime" : "text-white"
-                    )}
-                  >
-                    {formatOdds(o.odds, oddsFormat)}
-                  </span>
-                </motion.button>
-              ))}
-            </div>
+            {group.rows ? (
+              <div className="space-y-2 border-t border-white/[0.06] px-2.5 py-2.5">
+                {group.rows.map((row) => (
+                  <div key={row.label} className="flex items-center gap-2">
+                    <span className="w-10 shrink-0 text-right font-display text-[12px] font-bold tabular-nums text-mist">
+                      {row.label}
+                    </span>
+                    <div className="grid flex-1 grid-cols-2 gap-1.5">
+                      {row.outcomes.map((o) => (
+                        <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "grid gap-1.5 border-t border-white/[0.06] px-2.5 py-2.5",
+                  twoCols ? "grid-cols-2" : "grid-cols-3"
+                )}
+              >
+                {group.outcomes.map((o) => (
+                  <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function OutcomeCell({
+  o,
+  isLive,
+  onPick,
+}: {
+  o: MarketOutcome;
+  isLive: boolean;
+  onPick: () => void;
+}) {
+  const { oddsFormat } = useApp();
+
+  return (
+    <motion.button
+      whileTap={{ scale: 0.96 }}
+      onClick={onPick}
+      className="flex flex-col items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-2 py-2 transition-colors active:border-lime/60 active:bg-lime/[0.14]"
+    >
+      <span className="max-w-full truncate text-[9px] font-bold uppercase tracking-wider text-dim">
+        {o.short}
+      </span>
+      <span
+        className={cn(
+          "font-display text-[14.5px] font-bold tabular-nums leading-none",
+          isLive ? "text-lime" : "text-white"
+        )}
+      >
+        {formatOdds(o.odds, oddsFormat)}
+      </span>
+    </motion.button>
   );
 }
