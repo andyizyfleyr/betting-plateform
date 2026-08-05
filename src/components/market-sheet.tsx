@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ChevronDown, X } from "lucide-react";
 import type { ClientMatch, MarketGroup, MarketOutcome } from "@/lib/api";
 import { useApp } from "./providers";
@@ -11,7 +11,8 @@ import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
 /** Feuille des marchés façon 1xbet : accordéon, un marché par ligne, options regroupées. */
 export function MarketSheet() {
-  const { marketMatch, closeMarkets, openBet, oddsFormat } = useApp();
+  const { marketMatch, closeMarkets, openBet, oddsFormat, target } = useApp();
+  const dragControls = useDragControls();
   const [openKey, setOpenKey] = useState("result");
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
   const match = marketMatch;
@@ -25,11 +26,11 @@ export function MarketSheet() {
   }
 
   useEffect(() => {
-    document.body.style.overflow = match ? "hidden" : "";
+    document.body.style.overflow = match || target ? "hidden" : "";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = target ? "hidden" : "";
     };
-  }, [match]);
+  }, [match, target]);
 
   if (!match) return null;
 
@@ -55,6 +56,8 @@ export function MarketSheet() {
             exit={{ y: "102%" }}
             transition={{ type: "spring", stiffness: 340, damping: 34 }}
             drag="y"
+            dragListener={false}
+            dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.55 }}
             onDragEnd={(_, info) => {
@@ -64,8 +67,11 @@ export function MarketSheet() {
           >
             <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-lime/70 to-transparent" />
 
-            {/* En-tête match, collant */}
-            <div className="shrink-0 border-b border-white/[0.07] px-4 pb-3 pt-1">
+            {/* En-tête match, collant — zone de drag pour mobile */}
+            <div
+              onPointerDown={(e) => dragControls.start(e)}
+              className="shrink-0 cursor-grab border-b border-white/[0.07] px-4 pb-3 pt-1 active:cursor-grabbing"
+            >
               <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-elev" />
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">

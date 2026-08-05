@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Delete, Loader2, Ticket, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp } from "./providers";
@@ -14,7 +14,8 @@ const CHIP_AMOUNTS = [5, 10, 25, 50];
 
 export function BetModal() {
   const router = useRouter();
-  const { target, closeBet, balance, setBalance, bumpBets, oddsFormat, toast } = useApp();
+  const { target, closeBet, balance, setBalance, bumpBets, oddsFormat, toast, marketMatch } = useApp();
+  const dragControls = useDragControls();
   const [cents, setCents] = useState(2500);
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
@@ -30,11 +31,11 @@ export function BetModal() {
   }, [target]);
 
   useEffect(() => {
-    document.body.style.overflow = target ? "hidden" : "";
+    document.body.style.overflow = target || marketMatch ? "hidden" : "";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = marketMatch ? "hidden" : "";
     };
-  }, [target]);
+  }, [target, marketMatch]);
 
   const stake = cents / 100;
   const overBalance = stake > balance;
@@ -95,6 +96,8 @@ export function BetModal() {
             exit={{ y: "102%" }}
             transition={{ type: "spring", stiffness: 340, damping: 34 }}
             drag={phase === "input" ? "y" : false}
+            dragListener={false}
+            dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.55 }}
             onDragEnd={(_, info) => {
@@ -114,7 +117,10 @@ export function BetModal() {
               />
             ) : (
               <div className="no-scrollbar overflow-y-auto px-4 pb-4 pb-safe">
-                <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-elev" />
+                <div
+                  onPointerDown={phase === "input" ? (e) => dragControls.start(e) : undefined}
+                  className="mx-auto mt-2 h-1 w-10 cursor-grab rounded-full bg-elev active:cursor-grabbing"
+                />
 
                 {/* Titre */}
                 <div className="flex items-center justify-between pt-2.5">
