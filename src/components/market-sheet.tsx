@@ -9,20 +9,21 @@ import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
-/** Feuille des marchés façon 1xbet : accordéon, un marché par ligne, options regroupées. */
+/** Feuille des marchés façon 1xbet : accordéon mobile avec market-box / market-head / odd-btn. */
 export function MarketSheet() {
   const { marketMatch, closeMarkets, openBet, oddsFormat, target } = useApp();
   const dragControls = useDragControls();
-  const [openKey, setOpenKey] = useState("result");
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
   const match = marketMatch;
 
-  // Nouveau match → l'accordéon se réinitialise sur "Résultat du match".
   if (match && match.id !== prevMatchId) {
     setPrevMatchId(match.id);
-    setOpenKey("result");
+    const groups = match.markets ?? [];
+    setOpenKey(groups.length > 0 ? groups[0].key : "result");
   } else if (!match && prevMatchId !== null) {
     setPrevMatchId(null);
+    setOpenKey(null);
   }
 
   useEffect(() => {
@@ -116,16 +117,15 @@ export function MarketSheet() {
               </div>
             </div>
 
-            {/* Accordéon des marchés */}
-            <div className="no-scrollbar flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 pb-6 pt-2.5">
+            {/* Accordéon des marchés – style market-box */}
+            <div className="no-scrollbar flex flex-1 flex-col gap-2.5 overflow-y-auto px-2.5 pb-4 pt-2.5">
               {groups.map((g, i) => (
                 <AccordionItem
                   key={g.key}
-                  index={i + 1}
                   group={g}
                   isLive={isLive}
                   open={openKey === g.key}
-                  onToggle={() => setOpenKey((k) => (k === g.key ? "none" : g.key))}
+                  onToggle={() => setOpenKey((k) => (k === g.key ? null : g.key))}
                   onPick={(outcome) =>
                     openBet({
                       match,
@@ -140,7 +140,7 @@ export function MarketSheet() {
               ))}
             </div>
 
-            <p className="shrink-0 border-t border-white/[0.06] px-4 py-2.5 text-center text-[10px] text-dim">
+            <p className="shrink-0 border-t border-white/[0.06] px-4 py-2 text-center text-[9.5px] text-dim">
               Cotes fournies à titre indicatif · 18+ · Jouez de manière responsable.
             </p>
           </motion.div>
@@ -152,14 +152,12 @@ export function MarketSheet() {
 
 function AccordionItem({
   group,
-  index,
   isLive,
   open,
   onToggle,
   onPick,
 }: {
   group: MarketGroup;
-  index: number;
   isLive: boolean;
   open: boolean;
   onToggle: () => void;
@@ -170,75 +168,61 @@ function AccordionItem({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-2xl border transition-colors duration-200",
-        open ? "border-lime/25 bg-white/[0.04]" : "border-white/[0.07] bg-white/[0.02]"
+        "market-box overflow-hidden rounded-[14px] border border-white/[0.06] bg-white/[0.02] transition-colors duration-200",
+        open && "border-lime/20 bg-white/[0.04]",
       )}
     >
       <button
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-white/[0.03]"
+        className="market-head flex w-full items-center gap-2 px-3 py-2.5 text-left active:bg-white/[0.03]"
       >
-        <span
-          className={cn(
-            "grid h-6 w-6 shrink-0 place-items-center rounded-lg font-display text-[10px] font-bold transition-colors",
-            open ? "bg-lime text-ink" : "bg-white/[0.06] text-dim"
-          )}
-        >
-          {index}
-        </span>
-        <span className="flex-1 font-display text-[14px] font-semibold leading-tight text-white">
+        <span className="flex-1 font-display text-[13px] font-bold leading-tight tracking-tight text-white">
           {group.label}
         </span>
         <motion.span
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ type: "spring", stiffness: 500, damping: 34 }}
+          animate={{ rotate: open ? 0 : -90 }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
           className={cn("shrink-0", open ? "text-lime" : "text-dim")}
         >
-          <ChevronDown className="h-4 w-4" strokeWidth={2.4} />
+          <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
         </motion.span>
       </button>
 
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            {group.rows ? (
-              <div className="space-y-2 border-t border-white/[0.06] px-2.5 py-2.5">
-                {group.rows.map((row) => (
-                  <div key={row.label} className="flex items-center gap-2">
-                    <span className="w-10 shrink-0 text-right font-display text-[13px] font-bold tabular-nums text-mist">
-                      {row.label}
-                    </span>
-                    <div className="grid flex-1 grid-cols-2 gap-1.5">
-                      {row.outcomes.map((o) => (
-                        <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+      <motion.div
+        initial={false}
+        animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        className="overflow-hidden"
+      >
+        {group.rows ? (
+          <div className="space-y-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2">
+            {group.rows.map((row) => (
+              <div key={row.label} className="flex items-center gap-1.5">
+                <span className="w-10 shrink-0 text-right font-display text-[12px] font-bold tabular-nums text-mist">
+                  {row.label}
+                </span>
+                <div className="grid flex-1 grid-cols-2 gap-1.5">
+                  {row.outcomes.map((o) => (
+                    <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+                  ))}
+                </div>
               </div>
-            ) : (
-              <div
-                className={cn(
-                  "grid gap-1.5 border-t border-white/[0.06] px-2.5 py-2.5",
-                  twoCols ? "grid-cols-2" : "grid-cols-3"
-                )}
-              >
-                {group.outcomes.map((o) => (
-                  <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
-                ))}
-              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "grid gap-1.5 border-t border-white/[0.06] px-2.5 pb-2.5 pt-2",
+              twoCols ? "grid-cols-2" : "grid-cols-3"
             )}
-          </motion.div>
+          >
+            {group.outcomes.map((o) => (
+              <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+            ))}
+          </div>
         )}
-      </AnimatePresence>
+      </motion.div>
     </div>
   );
 }
@@ -256,16 +240,16 @@ function OutcomeCell({
 
   return (
     <motion.button
-      whileTap={{ scale: 0.96 }}
+      whileTap={{ scale: 0.97 }}
       onClick={onPick}
-      className="flex flex-col items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 transition-colors active:border-lime/60 active:bg-lime/[0.14]"
+      className="flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-1.5 transition-colors active:border-lime/60 active:bg-lime/[0.14]"
     >
-      <span className="max-w-full truncate text-[10px] font-bold uppercase tracking-wider text-dim">
+      <span className="max-w-full truncate text-[11px] font-bold uppercase tracking-wide text-dim">
         {o.short}
       </span>
       <span
         className={cn(
-          "font-display text-[15px] font-bold tabular-nums leading-none",
+          "font-display text-[14px] font-extrabold tabular-nums leading-none",
           isLive ? "text-lime" : "text-white"
         )}
       >
