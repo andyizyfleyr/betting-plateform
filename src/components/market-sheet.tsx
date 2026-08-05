@@ -75,7 +75,7 @@ export function MarketSheet() {
               <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-elev" />
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <p className="font-display text-[15px] font-bold tracking-tight">Marchés</p>
+                  <p className="font-display text-[16px] font-bold tracking-tight">Marchés</p>
                   <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 font-display text-[9.5px] font-bold text-mist">
                     {groups.length}
                   </span>
@@ -140,7 +140,7 @@ export function MarketSheet() {
               ))}
             </div>
 
-            <p className="shrink-0 border-t border-white/[0.06] px-4 py-2.5 text-center text-[9.5px] text-dim">
+            <p className="shrink-0 border-t border-white/[0.06] px-4 py-2.5 text-center text-[10px] text-dim">
               Cotes fournies à titre indicatif · 18+ · Jouez de manière responsable.
             </p>
           </motion.div>
@@ -187,7 +187,7 @@ function AccordionItem({
         >
           {index}
         </span>
-        <span className="flex-1 font-display text-[13px] font-semibold leading-tight text-white">
+        <span className="flex-1 font-display text-[14px] font-semibold leading-tight text-white">
           {group.label}
         </span>
         <motion.span
@@ -213,7 +213,7 @@ function AccordionItem({
               <div className="space-y-2 border-t border-white/[0.06] px-2.5 py-2.5">
                 {group.rows.map((row) => (
                   <div key={row.label} className="flex items-center gap-2">
-                    <span className="w-10 shrink-0 text-right font-display text-[12px] font-bold tabular-nums text-mist">
+                    <span className="w-10 shrink-0 text-right font-display text-[13px] font-bold tabular-nums text-mist">
                       {row.label}
                     </span>
                     <div className="grid flex-1 grid-cols-2 gap-1.5">
@@ -258,14 +258,14 @@ function OutcomeCell({
     <motion.button
       whileTap={{ scale: 0.96 }}
       onClick={onPick}
-      className="flex flex-col items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-2 py-2 transition-colors active:border-lime/60 active:bg-lime/[0.14]"
+      className="flex flex-col items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 transition-colors active:border-lime/60 active:bg-lime/[0.14]"
     >
-      <span className="max-w-full truncate text-[9px] font-bold uppercase tracking-wider text-dim">
+      <span className="max-w-full truncate text-[10px] font-bold uppercase tracking-wider text-dim">
         {o.short}
       </span>
       <span
         className={cn(
-          "font-display text-[14.5px] font-bold tabular-nums leading-none",
+          "font-display text-[15px] font-bold tabular-nums leading-none",
           isLive ? "text-lime" : "text-white"
         )}
       >
