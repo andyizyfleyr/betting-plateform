@@ -9,7 +9,9 @@ import {
   liveOddsFor,
   livePairIndex,
   oddsFor,
+  roundIndexOf,
   scoreAt,
+  asianHandicapLine,
 } from "@/db/fixtures";
 
 /** Index dans ALL_PAIRS (0-44) pour une affiche donnée. */
@@ -69,9 +71,11 @@ export async function runLiveEngine() {
       (m) => m.homeTeam === livePair.home && m.awayTeam === livePair.away && m.status !== "finished"
     );
     if (!existingLive) {
-      await insertMatch(livePair.home, livePair.away, "live", matchStart, liveIdx);
+      const round = roundIndexOf(livePair.home, livePair.away);
+      await insertMatch(livePair.home, livePair.away, "live", matchStart, round);
     } else if (existingLive.status === "upcoming") {
-      const s = scoreAt(liveIdx, 1, livePair.home, livePair.away);
+      const round = roundIndexOf(livePair.home, livePair.away);
+      const s = scoreAt(round, 1, livePair.home, livePair.away);
       await db
         .update(matches)
         .set({
@@ -95,8 +99,11 @@ export async function runLiveEngine() {
     .then((r) => r[0] ?? null);
 
   if (liveMatch) {
-    const score = scoreAt(liveIdx, gameMinute, liveMatch.homeTeam, liveMatch.awayTeam);
+    const round = roundIndexOf(liveMatch.homeTeam, liveMatch.awayTeam);
+    const score = scoreAt(round, gameMinute, liveMatch.homeTeam, liveMatch.awayTeam);
     const goalScored = score.home !== (liveMatch.homeScore ?? 0) || score.away !== (liveMatch.awayScore ?? 0);
+    const homeGoalScored = score.home > (liveMatch.homeScore ?? 0);
+    const awayGoalScored = score.away > (liveMatch.awayScore ?? 0);
     // Marché suspendu 3 s en temps réel après un but, puis réouverture avec des
     // cotes ajustées en faveur du meneur (comme sur les plateformes pro).
     const lastGoalAt = goalScored ? new Date() : (liveMatch.lastGoalAt ?? null);
@@ -116,6 +123,60 @@ export async function runLiveEngine() {
       }
     );
 
+    // Build events array with new goals
+    const events = [...(liveMatch.events ?? [])];
+    if (homeGoalScored) {
+      events.push({ type: "goal", team: "home", minute: gameMinute });
+    }
+    if (awayGoalScored) {
+      events.push({ type: "goal", team: "away", minute: gameMinute });
+    }
+
+    // Build tickHistory with odds movements
+    const tickHistory = [...(liveMatch.tickHistory ?? [])];
+    if (dynamicOdds.oddsHome !== liveMatch.oddsHome) {
+      tickHistory.push({
+        minute: gameMinute,
+        market: "result",
+        selection: "home",
+        from: liveMatch.oddsHome,
+        to: dynamicOdds.oddsHome,
+      });
+    }
+    if (dynamicOdds.oddsDraw !== liveMatch.oddsDraw && liveMatch.oddsDraw != null) {
+      tickHistory.push({
+        minute: gameMinute,
+        market: "result",
+        selection: "draw",
+        from: liveMatch.oddsDraw,
+        to: dynamicOdds.oddsDraw,
+      });
+    }
+    if (dynamicOdds.oddsAway !== liveMatch.oddsAway) {
+      tickHistory.push({
+        minute: gameMinute,
+        market: "result",
+        selection: "away",
+        from: liveMatch.oddsAway,
+        to: dynamicOdds.oddsAway,
+      });
+    }
+
+    // Simple regime calculation based on total goals rate
+    const totalGoals = score.home + score.away;
+    const expectedRate = gameMinute > 0 ? (totalGoals / gameMinute) * 90 : 0;
+    let regime = liveMatch.regime ?? "balanced";
+    if (expectedRate > 3.2) regime = "open";
+    else if (expectedRate < 1.8) regime = "closed";
+
+    // Recalculate Asian handicap line live
+    const handicapLine = asianHandicapLine(liveMatch.homeTeam, liveMatch.awayTeam, {
+      homeForm: liveMatch.homeForm ?? 1,
+      awayForm: liveMatch.awayForm ?? 1,
+      redHome: liveMatch.redHome ?? 0,
+      redAway: liveMatch.redAway ?? 0,
+    });
+
     await db
       .update(matches)
       .set({
@@ -128,6 +189,11 @@ export async function runLiveEngine() {
         oddsAway: dynamicOdds.oddsAway,
         lastGoalAt,
         suspended,
+        events,
+        tickHistory,
+        regime,
+        asianHandicapLine: handicapLine,
+        ...(isOver ? { finishedAt: new Date() } : {}),
       })
       .where(eq(matches.id, liveMatch.id));
   }
@@ -149,7 +215,8 @@ export async function runLiveEngine() {
     if (!existing) {
       const finishedOrOther = all.find((m) => m.homeTeam === p.home && m.awayTeam === p.away);
       if (!finishedOrOther) {
-        await insertMatch(p.home, p.away, "upcoming", upcomingStart, nextIdx);
+        const round = roundIndexOf(p.home, p.away);
+        await insertMatch(p.home, p.away, "upcoming", upcomingStart, round);
       }
     } else {
       if (existing.startsAt.getTime() !== upcomingStart) {
@@ -180,6 +247,7 @@ async function insertMatch(
   round: number
 ) {
   const odds = oddsFor(home, away);
+  const handicapLine = asianHandicapLine(home, away);
   const score = status === "live" ? scoreAt(round, 1, home, away) : { home: null, away: null };
   await db.insert(matches).values({
     sport: "football",
@@ -194,15 +262,24 @@ async function insertMatch(
     oddsHome: odds.oddsHome,
     oddsDraw: odds.oddsDraw,
     oddsAway: odds.oddsAway,
+    redHome: 0,
+    redAway: 0,
+    events: [],
+    tickHistory: [],
+    regime: "balanced",
+    homeForm: 1,
+    awayForm: 1,
+    asianHandicapLine: handicapLine,
   });
 }
 
 async function finishMatch(m: MatchRow) {
-  const idx = pairIndex(m.homeTeam, m.awayTeam);
-  const score = idx >= 0 ? scoreAt(idx, 90, m.homeTeam, m.awayTeam) : { home: 0, away: 0 };
+  const round = roundIndexOf(m.homeTeam, m.awayTeam);
+  const score = round >= 0 ? scoreAt(round, 90, m.homeTeam, m.awayTeam) : { home: 0, away: 0 };
+  const finishedAt = new Date();
   await db
     .update(matches)
-    .set({ status: "finished", minute: "Terminé", homeScore: score.home, awayScore: score.away })
+    .set({ status: "finished", minute: "Terminé", homeScore: score.home, awayScore: score.away, finishedAt })
     .where(eq(matches.id, m.id));
 }
 
@@ -217,7 +294,8 @@ async function pruneFinished(now: number) {
 
   for (const m of finished) {
     if (protectedIds.has(m.id)) continue;
-    if (m.startsAt.getTime() < cutoff) {
+    const finishedAtTime = m.finishedAt?.getTime() ?? m.startsAt.getTime();
+    if (finishedAtTime < cutoff) {
       await db.delete(matches).where(eq(matches.id, m.id));
     }
   }

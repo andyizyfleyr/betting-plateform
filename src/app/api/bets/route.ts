@@ -17,13 +17,13 @@ const BET_COOLDOWN_MS = 700;
 /** Délai de validation des paris en direct (recotation serveur + état du marché). */
 const LIVE_VALIDATION_MS = 2500;
 
-/** Règle les paris en cours du joueur dont le match est terminé (déterministe, basé sur le score). */
-async function settleFinishedBets(uid: number) {
+/** Règle tous les paris en cours dont le match est terminé (déterministe, basé sur le score). */
+async function settleFinishedBets() {
   const pending = await db
     .select({ bet: bets, match: matches })
     .from(bets)
     .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(and(eq(bets.status, "pending"), eq(bets.userId, uid)));
+    .where(and(eq(bets.status, "pending"), eq(matches.status, "finished")));
 
   for (const { bet, match } of pending) {
     if (!match || match.status !== "finished") continue;
@@ -31,16 +31,22 @@ async function settleFinishedBets(uid: number) {
     const away = match.awayScore ?? 0;
     const won = marketWin(bet.market, bet.selection, home, away);
 
+    const payoutMultiplier = bet.payoutMultiplier ?? 1;
+    const stakeReturned = bet.stakeReturned ?? 0;
+    const payout = won
+      ? Math.round((bet.stake * bet.odds * payoutMultiplier + stakeReturned) * 100) / 100
+      : 0;
+
     await db
       .update(bets)
       .set({ status: won ? "won" : "lost" })
       .where(eq(bets.id, bet.id));
 
-    if (won) {
+    if (payout > 0) {
       await db
         .update(appUser)
-        .set({ balance: sql`${appUser.balance} + ${bet.potentialWin}` })
-        .where(eq(appUser.id, uid));
+        .set({ balance: sql`${appUser.balance} + ${payout}` })
+        .where(eq(appUser.id, bet.userId));
     }
   }
 }
@@ -49,7 +55,7 @@ export async function GET(req: NextRequest) {
   await ensureSeeded();
   await runLiveEngine();
   const uid = (await getAuthUserId(req)) ?? 1;
-  await settleFinishedBets(uid);
+  await settleFinishedBets();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
 
@@ -159,6 +165,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ce match est terminé" }, { status: 400 });
   }
 
+  // Capture initial state for race condition detection
+  const initialHomeScore = match.homeScore ?? 0;
+  const initialAwayScore = match.awayScore ?? 0;
+  const initialMinute = match.minute;
+  const initialSuspended = match.suspended;
+
   // Délai de validation des paris en direct : on recote AU MOMENT de la validation
   // (marché suspendu, score/minutes à jour) — la cote envoyée par le client n'est
   // jamais utilisée, c'est le serveur qui fixe le prix.
@@ -172,6 +184,18 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    // Race condition check: if score changed during wait, reject
+    if (
+      (freshMatch.homeScore ?? 0) !== initialHomeScore ||
+      (freshMatch.awayScore ?? 0) !== initialAwayScore ||
+      freshMatch.minute !== initialMinute ||
+      freshMatch.suspended !== initialSuspended
+    ) {
+      return NextResponse.json(
+        { error: "Événement survenu pendant la validation — réessayez" },
+        { status: 409 }
+      );
+    }
     pricedMatch = freshMatch;
   }
 
@@ -180,7 +204,8 @@ export async function POST(req: NextRequest) {
 
   // Anti-triche : interdiction de parier sur une issue déjà décidée (gagnée ou
   // devenue impossible) — ex. « Plus de 2,5 » avec 3 buts inscrits, « 0-0 » à 1-0, etc.
-  if (pricedMatch.status === "live" && marketOutcomeSettled(market, selection, homeScore, awayScore)) {
+  const minute = minuteNumber(pricedMatch.minute);
+  if (pricedMatch.status === "live" && marketOutcomeSettled(market, selection, homeScore, awayScore, minute)) {
     return NextResponse.json({ error: "Ce marché est déjà décidé" }, { status: 400 });
   }
 
@@ -194,7 +219,13 @@ export async function POST(req: NextRequest) {
           pricedMatch.awayTeam,
           homeScore,
           awayScore,
-          minuteNumber(pricedMatch.minute)
+          minuteNumber(pricedMatch.minute),
+          {
+            homeForm: pricedMatch.homeForm ?? 1,
+            awayForm: pricedMatch.awayForm ?? 1,
+            redHome: pricedMatch.redHome ?? 0,
+            redAway: pricedMatch.redAway ?? 0,
+          }
         )
       : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
   const selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
@@ -210,30 +241,35 @@ export async function POST(req: NextRequest) {
   const roundedStake = Math.round(stake * 100) / 100;
   const potentialWin = Math.round(roundedStake * odds * 100) / 100;
 
-  const [bet] = await db
-    .insert(bets)
-    .values({
-      userId: uid,
-      matchId: pricedMatch.id,
-      sport: pricedMatch.sport,
-      league: pricedMatch.league,
-      homeTeam: pricedMatch.homeTeam,
-      awayTeam: pricedMatch.awayTeam,
-      market,
-      selection,
-      selectionLabel,
-      odds,
-      stake: roundedStake,
-      potentialWin,
-      status: "pending",
-    })
-    .returning();
+  // Transaction pour atomicité : pari + débit solde
+  const result = await db.transaction(async (tx) => {
+    const [bet] = await tx
+      .insert(bets)
+      .values({
+        userId: uid,
+        matchId: pricedMatch.id,
+        sport: pricedMatch.sport,
+        league: pricedMatch.league,
+        homeTeam: pricedMatch.homeTeam,
+        awayTeam: pricedMatch.awayTeam,
+        market,
+        selection,
+        selectionLabel,
+        odds,
+        stake: roundedStake,
+        potentialWin,
+        status: "pending",
+      })
+      .returning();
 
-  const [updatedUser] = await db
-    .update(appUser)
-    .set({ balance: sql`${appUser.balance} - ${roundedStake}` })
-    .where(eq(appUser.id, uid))
-    .returning({ balance: appUser.balance });
+    const [updatedUser] = await tx
+      .update(appUser)
+      .set({ balance: sql`${appUser.balance} - ${roundedStake}` })
+      .where(eq(appUser.id, uid))
+      .returning({ balance: appUser.balance });
 
-  return NextResponse.json({ bet, balance: updatedUser.balance });
+    return { bet, balance: updatedUser.balance };
+  });
+
+  return NextResponse.json(result);
 }

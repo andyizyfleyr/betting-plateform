@@ -489,12 +489,38 @@ export function marketOutcomeSettled(
   market: string,
   outcome: string,
   homeScore: number,
-  awayScore: number
+  awayScore: number,
+  minute: number = 90
 ): boolean {
   const total = homeScore + awayScore;
+  const diff = homeScore - awayScore;
+  const remaining = Math.max(0, 90 - minute);
+
+  // Si match fini (minute >= 90), tout est décidé
+  if (minute >= 90) {
+    switch (market) {
+      case "result":
+        return (outcome === "home" && diff <= 0) || (outcome === "draw" && diff !== 0) || (outcome === "away" && diff >= 0);
+      case "double_chance":
+        return (outcome === "1X" && diff < 0) || (outcome === "12" && diff === 0) || (outcome === "X2" && diff > 0);
+      case "odd_even":
+        return false; // pair/impair jamais décidé avant la fin
+    }
+  }
+
+  // En live : marché décidé si l'issue est mathématiquement impossible
+  // Ex: 1X impossible si away mène de > remaining goals
   switch (market) {
     case "result":
+      if (outcome === "home" && diff < -remaining) return true; // home ne peut plus rattraper
+      if (outcome === "away" && diff > remaining) return true; // away ne peut plus rattraper
+      if (outcome === "draw" && Math.abs(diff) > remaining) return true; // plus possible d'égaliser
+      return false;
     case "double_chance":
+      if (outcome === "1X" && diff < -remaining) return true; // home ne peut plus gagner ni faire nul
+      if (outcome === "X2" && diff > remaining) return true; // away ne peut plus gagner ni faire nul
+      if (outcome === "12" && diff === 0 && remaining === 0) return true; // 12 impossible si match nul à la fin
+      return false;
     case "odd_even":
       return false;
     case "total_ou": {
@@ -561,7 +587,7 @@ export function buildLiveMarkets(
   return MARKETS.map((m): MarketGroup | null => {
     const open = m
       .outcomes(home, away)
-      .filter((o) => !marketOutcomeSettled(m.key, o.key, homeScore, awayScore));
+      .filter((o) => !marketOutcomeSettled(m.key, o.key, homeScore, awayScore, minute));
     if (open.length === 0) return null;
 
     const priced: MarketOutcome[] = open.map((o) => {
@@ -607,7 +633,7 @@ export function liveMarketOddsFor(
 ): number | null {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
-  if (marketOutcomeSettled(market, outcome, homeScore, awayScore)) return null;
+  if (marketOutcomeSettled(market, outcome, homeScore, awayScore, minute)) return null;
   const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
   if (idx < 0) return null;
 
@@ -621,9 +647,10 @@ export function liveMarketOddsFor(
   return oddsFromProb(p, margin);
 }
 
-/** Minute numérique depuis le libellé du moteur (« 37' » → 37, null → 1). */
+/** Minute numérique depuis le libellé du moteur (« 37' » → 37, null → 0). */
 export function minuteNumber(minute: string | null): number {
-  const m = minute ? /^\d+/.exec(minute) : null;
-  const n = m ? parseInt(m[0], 10) : 1;
-  return Math.max(1, Math.min(90, n));
+  if (!minute) return 0;
+  const m = /^\d+/.exec(minute);
+  const n = m ? parseInt(m[0], 10) : 0;
+  return Math.max(0, Math.min(90, n));
 }

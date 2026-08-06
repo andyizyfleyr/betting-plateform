@@ -95,14 +95,57 @@ export function expectedGoals(home: string, away: string): { lambdaHome: number;
   };
 }
 
+/** Calcule la ligne de handicap asiatique basée sur la différence de buts attendus. */
+export function asianHandicapLine(
+  home: string,
+  away: string,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+): number {
+  let { lambdaHome, lambdaAway } = expectedGoals(home, away);
+
+  const hf = opts?.homeForm ?? 1;
+  const af = opts?.awayForm ?? 1;
+  lambdaHome *= hf;
+  lambdaAway *= af;
+
+  const rh = opts?.redHome ?? 0;
+  const ra = opts?.redAway ?? 0;
+  lambdaHome *= Math.pow(0.7, rh);
+  lambdaAway *= Math.pow(0.7, ra);
+  lambdaHome *= 1 + 0.15 * ra;
+  lambdaAway *= 1 + 0.15 * rh;
+
+  const diff = lambdaHome - lambdaAway;
+  // Arrondir au quart de but le plus proche (0, 0.25, 0.5, 0.75, 1, etc.)
+  const line = Math.round(diff * 4) / 4;
+  return clamp(line, -3, 3);
+}
+
 export function poissonPmf(k: number, lambda: number): number {
   let fact = 1;
   for (let i = 2; i <= k; i++) fact *= i;
   return (Math.exp(-lambda) * Math.pow(lambda, k)) / fact;
 }
 
-export function oddsFor(home: string, away: string) {
-  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
+export function oddsFor(
+  home: string,
+  away: string,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+) {
+  let { lambdaHome, lambdaAway } = expectedGoals(home, away);
+
+  const hf = opts?.homeForm ?? 1;
+  const af = opts?.awayForm ?? 1;
+  lambdaHome *= hf;
+  lambdaAway *= af;
+
+  const rh = opts?.redHome ?? 0;
+  const ra = opts?.redAway ?? 0;
+  lambdaHome *= Math.pow(0.7, rh);
+  lambdaAway *= Math.pow(0.7, ra);
+  lambdaHome *= 1 + 0.15 * ra;
+  lambdaAway *= 1 + 0.15 * rh;
+
   const p = winProbabilities(lambdaHome, lambdaAway);
   return {
     oddsHome: round2(clamp(1 / (p.home * MARGIN), 1.01, 50)),

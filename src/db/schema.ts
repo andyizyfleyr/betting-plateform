@@ -32,6 +32,8 @@ export const matches = pgTable("matches", {
   suspended: boolean("suspended").notNull().default(false),
   /** Horodatage réel du dernier but : blocage du marché 3 s après un but. */
   lastGoalAt: timestamp("last_goal_at", { mode: "date" }),
+  /** Horodatage de fin du match (pour le nettoyage). */
+  finishedAt: timestamp("finished_at", { mode: "date" }),
   /** Cartons rouges reçus (0 ou 1 par équipe en pratique). */
   redHome: integer("red_home").notNull().default(0),
   redAway: integer("red_away").notNull().default(0),

@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  if (match.suspended) {
+    return NextResponse.json(
+      { error: "Marché suspendu — cash-out indisponible" },
+      { status: 400 }
+    );
+  }
   if (bet.market !== "result") {
     return NextResponse.json(
       { error: "Le cash-out n'est pas disponible pour ce marché" },
