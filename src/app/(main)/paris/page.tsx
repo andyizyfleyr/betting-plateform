@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Nfc, TicketX } from "lucide-react";
+import { ArrowRight, Nfc, TicketX, RefreshCw } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { BetTicket } from "@/components/bet-ticket";
 import { AnimatedNumber } from "@/components/animated-number";
@@ -11,6 +11,10 @@ import { useApp } from "@/components/providers";
 import { cn, eur } from "@/lib/format";
 
 type Tab = "ongoing" | "finished";
+
+const POLL_INTERVAL = 5_000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1_000;
 
 function dayLabel(iso: string) {
   const d = new Date(iso);
@@ -30,12 +34,23 @@ export default function ParisPage() {
   const { betsVersion, pendingCount, user, toast } = useApp();
   const [tab, setTab] = useState<Tab>("ongoing");
   const [bets, setBets] = useState<ClientBet[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
   const prevStatus = useRef<Map<number, string> | null>(null);
+  const retryCountRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(
-    async (silent = false) => {
+    async (isBackground = false) => {
+      if (abortRef.current) abortRef.current.abort();
+      abortRef.current = new AbortController();
+
       try {
+        if (!isBackground) setIsLoading(true);
+        else setIsUpdating(true);
+
         const r = await api.allBets();
+        retryCountRef.current = 0;
         const prev = prevStatus.current;
         if (prev) {
           for (const b of r.bets) {
@@ -56,8 +71,19 @@ export default function ParisPage() {
         }
         prevStatus.current = new Map(r.bets.map((b) => [b.id, b.status]));
         setBets(r.bets);
-      } catch {
-        if (!silent) setBets([]);
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+
+        if (retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current++;
+          await new Promise(r => setTimeout(r, RETRY_DELAY * retryCountRef.current));
+          return load(isBackground);
+        }
+
+        if (!isBackground) setBets([]);
+      } finally {
+        if (!isBackground) setIsLoading(false);
+        else setIsUpdating(false);
       }
     },
     [toast]
@@ -68,8 +94,11 @@ export default function ParisPage() {
   }, [load, betsVersion]);
 
   useEffect(() => {
-    const id = setInterval(() => load(true), 5_000);
-    return () => clearInterval(id);
+    const id = setInterval(() => load(true), POLL_INTERVAL);
+    return () => {
+      clearInterval(id);
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, [load]);
 
   const ongoing = useMemo(() => (bets ?? []).filter((b) => b.status === "pending"), [bets]);
@@ -114,8 +143,11 @@ export default function ParisPage() {
           </h1>
         </div>
         {pendingCount > 0 && (
-          <span className="rounded-lg bg-lime px-2.5 py-1.5 font-display text-[11px] font-bold text-ink">
+          <span className="rounded-lg bg-lime px-2.5 py-1.5 font-display text-[11px] font-bold text-ink flex items-center gap-1.5">
             {pendingCount} en cours
+            {isUpdating && (
+              <RefreshCw className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+            )}
           </span>
         )}
       </div>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Flame, LayoutGrid } from "lucide-react";
+import { Flame, LayoutGrid, RefreshCw } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
@@ -18,28 +18,61 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "football", label: "Foot" },
 ];
 
+const POLL_INTERVAL = 5_000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1_000;
+
 export default function MatchsPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [matches, setMatches] = useState<ClientMatch[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const retryCountRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
-  // Applique les nouvelles données sans notification (buts / coups d'envoi / fins de match)
-  const applyMatches = useCallback((list: ClientMatch[]) => {
-    setMatches(list);
+  const fetchMatches = useCallback(async (isBackground = false) => {
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+
+    try {
+      if (!isBackground) setIsLoading(true);
+      else setIsUpdating(true);
+      setError(null);
+
+      const r = await api.matches();
+      retryCountRef.current = 0;
+      setMatches(r.matches);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      
+      if (retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current++;
+        await new Promise(r => setTimeout(r, RETRY_DELAY * retryCountRef.current));
+        return fetchMatches(isBackground);
+      }
+      
+      const msg = e instanceof Error ? e.message : "Erreur de chargement";
+      if (!isBackground) {
+        setError(msg);
+        setMatches([]);
+      }
+      // On background error: keep previous data, just show error toast via provider if needed
+    } finally {
+      if (!isBackground) setIsLoading(false);
+      else setIsUpdating(false);
+    }
   }, []);
 
+  // Initial load + polling
   useEffect(() => {
-    api
-      .matches()
-      .then((r) => applyMatches(r.matches))
-      .catch(() => setMatches([]));
-    const id = setInterval(() => {
-      api
-        .matches()
-        .then((r) => applyMatches(r.matches))
-        .catch(() => undefined);
-    }, 5_000);
-    return () => clearInterval(id);
-  }, [applyMatches]);
+    fetchMatches(false);
+    const id = setInterval(() => fetchMatches(true), POLL_INTERVAL);
+    return () => {
+      clearInterval(id);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [fetchMatches]);
 
   const liveCount = useMemo(
     () => (matches ?? []).filter((m) => m.status === "live").length,
@@ -84,6 +117,17 @@ export default function MatchsPage() {
           <span className={cn("h-2 w-2 rounded-full", liveCount > 0 ? "bg-live live-dot" : "bg-dim")} />
           <span className="font-display text-xl font-bold leading-none tabular-nums">{liveCount}</span>
           <span className="text-[9px] font-semibold tracking-[0.18em] text-dim">EN DIRECT</span>
+          {isUpdating && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="flex items-center gap-1 rounded-md bg-lime/15 px-2 py-0.5 text-[9px] font-semibold tracking-[0.18em] text-lime"
+            >
+              <RefreshCw className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+              MAJ
+            </motion.span>
+          )}
         </div>
       </div>
 
