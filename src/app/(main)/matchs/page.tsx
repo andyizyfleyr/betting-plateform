@@ -57,7 +57,7 @@ export default function MatchsPage() {
   const upcoming = visible.filter((m) => m.status === "upcoming");
   const featured = live[0] ?? upcoming[0] ?? null;
 
-  const liveRest = featured?.status === "live" ? live.slice(1) : live;
+  const liveRest = live.slice(1);
 
   const upcomingByLeague = useMemo(() => {
     const map = new Map<string, ClientMatch[]>();
@@ -230,9 +230,9 @@ function SectionHeader({
 function Skeletons() {
   return (
     <div className="mt-4 flex flex-col gap-2.5">
-      <div className="shimmer h-[212px] rounded-[20px]" />
+      <div className="shimmer h-[220px] rounded-[20px]" />
       {[0, 1].map((i) => (
-        <div key={i} className="shimmer h-[136px] rounded-[18px]" />
+        <div key={i} className="shimmer h-[144px] rounded-[18px]" />
       ))}
     </div>
   );

@@ -108,7 +108,7 @@ export function MarketSheet() {
                 </div>
                 {isLive ? (
                   <span className="shrink-0 font-display text-[16px] font-bold tabular-nums text-lime">
-                    {match.homeScore}–{match.awayScore}
+                    {match.homeScore ?? 0}–{match.awayScore ?? 0}
                   </span>
                 ) : (
                   <span className="shrink-0 text-right text-[10px] font-semibold leading-tight text-mist">

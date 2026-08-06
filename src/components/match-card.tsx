@@ -37,7 +37,7 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
         {isLive ? (
           <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 font-display text-[10px] font-black tracking-wide text-live">
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
-            LIVE {match.minute}
+            LIVE {match.minute ?? ""}
           </span>
         ) : (
           <span className="ml-auto shrink-0 font-display text-[10px] font-semibold tracking-[0.08em] text-mist">
@@ -90,13 +90,18 @@ function TeamRow({
   winner: boolean;
   isLive: boolean;
 }) {
+  const isFinished = score != null && !isLive;
   return (
     <div className="flex items-center gap-2.5">
       <TeamAvatar name={name} size="xs" />
       <span
         className={cn(
           "font-display text-[14px] font-semibold tracking-tight",
-          winner ? "text-white" : score != null && !winner ? "text-mist" : "text-white"
+          isFinished
+            ? winner
+              ? "text-white"
+              : "text-mist"
+            : "text-white"
         )}
       >
         {name}
@@ -109,7 +114,13 @@ function TeamRow({
           transition={{ type: "spring", stiffness: 420, damping: 17 }}
           className={cn(
             "ml-auto font-display text-[16px] font-bold tabular-nums",
-            isLive ? "glow-lime text-lime" : winner ? "text-white" : "text-mist"
+            isLive
+              ? "glow-lime text-lime"
+              : isFinished
+              ? winner
+                ? "text-white"
+                : "text-mist"
+              : "text-white"
           )}
         >
           {score}
@@ -123,13 +134,17 @@ function TeamRow({
 function useOddsFlash(odds: number) {
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prev = useRef(odds);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (odds === prev.current) return;
     setFlash(odds > prev.current ? "up" : "down");
     prev.current = odds;
-    const t = setTimeout(() => setFlash(null), 1500);
-    return () => clearTimeout(t);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setFlash(null), 800);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, [odds]);
 
   return flash;
@@ -205,14 +220,19 @@ function OddsCell({
       className={cn(
         "relative flex h-11 flex-col items-center justify-center transition-colors duration-500",
         borderLeft && "border-l border-white/[0.06]",
-        suspended && "cursor-not-allowed",
+        suspended && "cursor-not-allowed opacity-60 bg-white/[0.01]",
         flash === "up" && "bg-lime/[0.13]",
         flash === "down" && "bg-live/[0.13]"
       )}
     >
       <span className="text-[8.5px] font-semibold tracking-[0.2em] text-dim">{tag}</span>
       {suspended ? (
-        <Lock className="h-3 w-3 text-dim" strokeWidth={2.6} />
+        <>
+          <Lock className="h-3 w-3 text-dim" strokeWidth={2.6} />
+          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[7px] font-medium text-dim">
+            SUSPENDU
+          </span>
+        </>
       ) : (
         <span className="flex items-center gap-1">
           <span

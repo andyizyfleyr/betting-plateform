@@ -6,15 +6,15 @@ export function LiveTicker({ live }: { live: ClientMatch[] }) {
 
   const items = live.map(
     (m) =>
-      `${m.homeTeam} ${m.homeScore ?? 0}–${m.awayScore ?? 0} ${m.awayTeam} · ${m.minute}`
+      `${m.homeTeam} ${m.homeScore ?? 0}–${m.awayScore ?? 0} ${m.awayTeam} · ${m.minute ?? ""}`
   );
   const loop = [...items, ...items, ...items, ...items];
 
   return (
     <div className="relative -mx-3 mt-4 overflow-hidden border-y border-lime/25 bg-lime py-1.5">
-      <div className="marquee flex w-max items-center gap-5 px-3">
+      <div className="marquee flex min-w-max items-center gap-5 px-3 whitespace-nowrap" style={{ willChange: "transform" }}>
         {loop.map((label, i) => (
-          <span key={i} className="flex items-center gap-2 whitespace-nowrap">
+          <span key={i} className="flex items-center gap-2 shrink-0 whitespace-nowrap">
             <span className="flex items-center gap-1.5 font-display text-[8.5px] font-black tracking-[0.2em] text-ink/70">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink" />
               LIVE

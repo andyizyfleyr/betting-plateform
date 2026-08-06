@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { teamLogo } from "@/lib/team-logos";
 import { cn, initials, teamHue } from "@/lib/format";
 
@@ -27,9 +27,20 @@ export function TeamAvatar({
   const hue = teamHue(name);
   const logo = teamLogo(name);
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const s = SIZES[size];
 
-  if (logo && !broken) {
+  // Précharger l'image pour éviter le flash
+  useEffect(() => {
+    if (logo && !broken) {
+      const img = new Image();
+      img.src = logo;
+      img.onload = () => setLoaded(true);
+      img.onerror = () => setBroken(true);
+    }
+  }, [logo, broken]);
+
+  if (logo && !broken && loaded) {
     return (
       <span
         className={cn(
@@ -49,6 +60,7 @@ export function TeamAvatar({
           alt=""
           loading="lazy"
           onError={() => setBroken(true)}
+          onLoad={() => setLoaded(true)}
           className={cn("h-full w-full object-contain", s.pad)}
         />
       </span>

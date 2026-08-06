@@ -55,11 +55,11 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
             {isLive ? (
               <>
                 <span className="glow-lime font-display text-[32px] font-bold leading-none tabular-nums text-lime">
-                  {match.homeScore}–{match.awayScore}
+                  {match.homeScore ?? 0}–{match.awayScore ?? 0}
                 </span>
                 <span className="mt-2 inline-flex items-center gap-1.5 font-display text-[10px] font-black tracking-wide text-live">
                   <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
-                  LIVE {match.minute}
+                  LIVE {match.minute ?? ""}
                 </span>
               </>
             ) : (

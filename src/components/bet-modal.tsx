@@ -149,7 +149,7 @@ export function BetModal() {
                       {target.match.status === "live" ? (
                         <span className="inline-flex items-center gap-1 font-bold text-live">
                           <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
-                          LIVE {target.match.minute}
+                          LIVE {target.match.minute ?? ""}
                         </span>
                       ) : (
                         target.match.league
