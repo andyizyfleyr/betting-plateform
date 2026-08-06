@@ -19,7 +19,7 @@ export async function proxy(req: NextRequest) {
 
   // ---- API ----
   if (isApi) {
-    const publicApi = pathname === "/api/health" || pathname.startsWith("/api/auth");
+    const publicApi = pathname === "/api/health" || pathname.startsWith("/api/auth") || pathname === "/api/matches";
     if (publicApi) return NextResponse.next();
     if (!authed) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
