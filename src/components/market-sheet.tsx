@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, Lock, X } from "lucide-react";
 import type { ClientMatch, MarketGroup, MarketOutcome } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
@@ -37,6 +37,7 @@ export function MarketSheet() {
 
   const groups = match.markets ?? [];
   const isLive = match.status === "live";
+  const suspended = isLive && match.suspended;
 
   return (
     <AnimatePresence>
@@ -124,6 +125,7 @@ export function MarketSheet() {
                   key={g.key}
                   group={g}
                   isLive={isLive}
+                  suspended={suspended}
                   open={openKey === g.key}
                   onToggle={() => setOpenKey((k) => (k === g.key ? null : g.key))}
                   onPick={(outcome) =>
@@ -153,12 +155,14 @@ export function MarketSheet() {
 function AccordionItem({
   group,
   isLive,
+  suspended,
   open,
   onToggle,
   onPick,
 }: {
   group: MarketGroup;
   isLive: boolean;
+  suspended: boolean;
   open: boolean;
   onToggle: () => void;
   onPick: (o: MarketGroup["outcomes"][number]) => void;
@@ -203,7 +207,7 @@ function AccordionItem({
               </span>
               <div className="grid flex-1 grid-cols-2 gap-[5px]">
                 {row.outcomes.map((o) => (
-                  <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+                  <OutcomeCell key={o.key} o={o} isLive={isLive} suspended={suspended} onPick={() => onPick(o)} />
                 ))}
               </div>
             </div>
@@ -218,7 +222,7 @@ function AccordionItem({
           )}
         >
           {group.outcomes.map((o) => (
-            <OutcomeCell key={o.key} o={o} isLive={isLive} onPick={() => onPick(o)} />
+            <OutcomeCell key={o.key} o={o} isLive={isLive} suspended={suspended} onPick={() => onPick(o)} />
           ))}
         </div>
       )}
@@ -229,31 +233,41 @@ function AccordionItem({
 function OutcomeCell({
   o,
   isLive,
+  suspended,
   onPick,
 }: {
   o: MarketOutcome;
   isLive: boolean;
+  suspended: boolean;
   onPick: () => void;
 }) {
   const { oddsFormat } = useApp();
 
   return (
     <motion.button
-      whileTap={{ scale: 0.97 }}
-      onClick={onPick}
-      className="flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-lime/60 active:bg-lime/[0.14]"
+      whileTap={suspended ? undefined : { scale: 0.97 }}
+      onClick={suspended ? undefined : onPick}
+      aria-disabled={suspended}
+      className={cn(
+        "flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-lime/60 active:bg-lime/[0.14]",
+        suspended && "cursor-not-allowed opacity-50"
+      )}
     >
       <span className="max-w-full truncate text-[9.5px] font-semibold uppercase tracking-wider text-dim">
         {o.short}
       </span>
-      <span
-        className={cn(
-          "font-display text-[13px] font-extrabold tabular-nums leading-none",
-          isLive ? "text-lime" : "text-white"
-        )}
-      >
-        {formatOdds(o.odds, oddsFormat)}
-      </span>
+      {suspended ? (
+        <Lock className="h-3.5 w-3.5 text-dim" strokeWidth={2.6} />
+      ) : (
+        <span
+          className={cn(
+            "font-display text-[13px] font-extrabold tabular-nums leading-none",
+            isLive ? "text-lime" : "text-white"
+          )}
+        >
+          {formatOdds(o.odds, oddsFormat)}
+        </span>
+      )}
     </motion.button>
   );
 }

@@ -136,6 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Délai de validation de pari pour les matchs en direct (sécurité bookmaker pro)
+  let pricedMatch = match;
   if (match.status === "live") {
     await new Promise((resolve) => setTimeout(resolve, 2500));
     const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
@@ -145,10 +146,21 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    pricedMatch = freshMatch;
   }
 
-  const odds = marketOddsFor(market, selection, match.homeTeam, match.awayTeam);
-  const selectionLabel = marketLabelFor(market, selection, match.homeTeam, match.awayTeam);
+  // En direct, le marché « Résultat » est coté aux cotes live (score en cours).
+  const odds =
+    market === "result" && pricedMatch.status === "live"
+      ? selection === "home"
+        ? pricedMatch.oddsHome
+        : selection === "draw"
+          ? pricedMatch.oddsDraw
+          : selection === "away"
+            ? pricedMatch.oddsAway
+            : null
+      : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
+  const selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
   if (odds == null || selectionLabel == null) {
     return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
   }
@@ -165,11 +177,11 @@ export async function POST(req: NextRequest) {
     .insert(bets)
     .values({
       userId: uid,
-      matchId: match.id,
-      sport: match.sport,
-      league: match.league,
-      homeTeam: match.homeTeam,
-      awayTeam: match.awayTeam,
+      matchId: pricedMatch.id,
+      sport: pricedMatch.sport,
+      league: pricedMatch.league,
+      homeTeam: pricedMatch.homeTeam,
+      awayTeam: pricedMatch.awayTeam,
       market,
       selection,
       selectionLabel,

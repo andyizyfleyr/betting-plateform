@@ -17,6 +17,25 @@ function pairIndex(home: string, away: string): number {
   return ALL_PAIRS.findIndex((p) => p.home === home && p.away === away);
 }
 
+/** Fenêtre de suspension du marché après un but (en minutes de jeu, ~13 s réelles). */
+const GOAL_SUSPEND_MIN = 4;
+
+/** Vrai si un but a été marqué dans les `window` dernières minutes de jeu. */
+function hasGoalWithin(
+  round: number,
+  minute: number,
+  home: string,
+  away: string,
+  window: number
+): boolean {
+  for (let m = minute; m >= minute - window && m >= 0; m--) {
+    const cur = scoreAt(round, m, home, away);
+    const prev = scoreAt(round, m - 1, home, away);
+    if (cur.home !== prev.home || cur.away !== prev.away) return true;
+  }
+  return false;
+}
+
 /**
  * Tournoi virtuel : un match à la fois, 5 minutes par affiche (ROUND_MS).
  * Les 45 affiches défilent en séquence linéaire et repartent en boucle.
@@ -93,7 +112,16 @@ export async function runLiveEngine() {
   if (liveMatch) {
     const score = scoreAt(liveIdx, gameMinute, liveMatch.homeTeam, liveMatch.awayTeam);
     const goalScored = score.home !== (liveMatch.homeScore ?? 0) || score.away !== (liveMatch.awayScore ?? 0);
-    const suspended = isOver || gameMinute >= 88 || goalScored;
+    // Marché suspendu sur un but et pendant quelques minutes après (comme sur les
+    // plateformes pro : il rouvre ensuite avec des cotes ajustées en faveur du meneur).
+    const recentGoal = hasGoalWithin(
+      liveIdx,
+      gameMinute,
+      liveMatch.homeTeam,
+      liveMatch.awayTeam,
+      GOAL_SUSPEND_MIN
+    );
+    const suspended = isOver || gameMinute >= 88 || goalScored || recentGoal;
     const dynamicOdds = liveOddsFor(liveMatch.homeTeam, liveMatch.awayTeam, score.home, score.away, gameMinute);
 
     await db

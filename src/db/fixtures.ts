@@ -96,14 +96,25 @@ export function poissonPmf(k: number, lambda: number): number {
   return (Math.exp(-lambda) * Math.pow(lambda, k)) / fact;
 }
 
-export function winProbabilities(lambdaHome: number, lambdaAway: number) {
+/**
+ * Probabilités de résultat.
+ * `offset` = différentiel de buts déjà inscrit (homeScore - awayScore) : la
+ * probabilité est alors conditionnée au score en cours, comme sur les plateformes
+ * professionnelles (l'équipe qui mène voit sa probabilité grimper).
+ */
+export function winProbabilities(
+  lambdaHome: number,
+  lambdaAway: number,
+  offset = 0
+): { home: number; draw: number; away: number } {
   let home = 0;
   let draw = 0;
   for (let i = 0; i <= 15; i++) {
     for (let j = 0; j <= 15; j++) {
       const p = poissonPmf(i, lambdaHome) * poissonPmf(j, lambdaAway);
-      if (i > j) home += p;
-      else if (i === j) draw += p;
+      const diff = i - j + offset;
+      if (diff > 0) home += p;
+      else if (diff === 0) draw += p;
     }
   }
   const away = Math.max(0.001, 1 - home - draw);
@@ -120,6 +131,24 @@ export function oddsFor(home: string, away: string) {
   };
 }
 
+/** Modèle de cotes en direct — comportement bookmaker professionnel. */
+const LIVE_BUCKET_MIN = 5; // créneau de temps : les cotes ne bougent que sur un but ou au passage d'un créneau
+const LIVE_GOAL_FLOOR = 0.3; // plancher de buts restants attendus : une remontée reste toujours possible
+const LIVE_MIN_DRAW = 0.015; // probabilité minimale crédible du nul
+const LIVE_MIN_TRAILING = 0.02; // probabilité minimale crédible de l'équipe menée
+const LIVE_ODDS_MAX = 100;
+
+/**
+ * Cotes live façon grandes plateformes de paris :
+ * - la probabilité est calculée à partir du score en cours (différentiel) et des
+ *   buts attendus sur le temps restant — aucun ajustement arbitraire ;
+ * - quand une équipe marque, sa cote chute très bas et celle de l'équipe menée
+ *   grimpe fort (l'écart se creuse avec le temps) ;
+ * - le temps est découpé en créneaux de 5 minutes : les cotes restent stables
+ *   entre les événements au lieu de bouger à chaque tick du moteur ;
+ * - plancher de buts restants : le favori n'est jamais coté en dessous de ~1.05
+ *   et l'équipe menée garde une cote réaliste (jamais « impossible »).
+ */
 export function liveOddsFor(
   home: string,
   away: string,
@@ -128,29 +157,36 @@ export function liveOddsFor(
   minute: number
 ) {
   const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const remainingFraction = Math.max(0.05, (90 - minute) / 90);
-  const scoreDiff = currentHomeScore - currentAwayScore;
+  const offset = currentHomeScore - currentAwayScore;
 
-  const adjHome = Math.max(0.05, lambdaHome * remainingFraction + (scoreDiff < 0 ? 0.35 * Math.abs(scoreDiff) : -0.12 * scoreDiff));
-  const adjAway = Math.max(0.05, lambdaAway * remainingFraction + (scoreDiff > 0 ? 0.35 * scoreDiff : -0.12 * Math.abs(scoreDiff)));
+  const bucket = Math.max(1, Math.min(90, Math.ceil(minute / LIVE_BUCKET_MIN) * LIVE_BUCKET_MIN));
+  const remainingFraction = Math.max(0.02, (90 - bucket) / 90);
 
-  const p = winProbabilities(adjHome, adjAway);
-  let pH = p.home;
-  let pD = p.draw;
-  let pA = p.away;
+  const lamH = lambdaHome * remainingFraction + LIVE_GOAL_FLOOR;
+  const lamA = lambdaAway * remainingFraction + LIVE_GOAL_FLOOR;
 
-  if (scoreDiff > 0) {
-    pH = Math.min(0.99, p.home + 0.18 * scoreDiff * (1 - remainingFraction));
-    pA = Math.max(0.001, 1 - pH - pD);
-  } else if (scoreDiff < 0) {
-    pA = Math.min(0.99, p.away + 0.18 * Math.abs(scoreDiff) * (1 - remainingFraction));
-    pH = Math.max(0.001, 1 - pA - pD);
+  const p = winProbabilities(lamH, lamA, offset);
+
+  let { home: pH, draw: pD, away: pA } = p;
+  pD = Math.max(pD, LIVE_MIN_DRAW);
+  if (offset > 0) {
+    pA = Math.max(pA, LIVE_MIN_TRAILING);
+  } else if (offset < 0) {
+    pH = Math.max(pH, LIVE_MIN_TRAILING);
+  } else {
+    pH = Math.max(pH, LIVE_MIN_TRAILING);
+    pA = Math.max(pA, LIVE_MIN_TRAILING);
   }
 
+  const total = pH + pD + pA;
+  pH /= total;
+  pD /= total;
+  pA /= total;
+
   return {
-    oddsHome: round2(clamp(1 / (pH * MARGIN), 1.01, 100)),
-    oddsDraw: round2(clamp(1 / (pD * MARGIN), 1.01, 100)),
-    oddsAway: round2(clamp(1 / (pA * MARGIN), 1.01, 100)),
+    oddsHome: round2(clamp(1 / (pH * MARGIN), 1.01, LIVE_ODDS_MAX)),
+    oddsDraw: round2(clamp(1 / (pD * MARGIN), 1.01, LIVE_ODDS_MAX)),
+    oddsAway: round2(clamp(1 / (pA * MARGIN), 1.01, LIVE_ODDS_MAX)),
   };
 }
 

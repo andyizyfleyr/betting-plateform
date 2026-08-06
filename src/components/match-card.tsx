@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronDown, ChevronUp, LayoutGrid } from "lucide-react";
+import { ChevronDown, ChevronUp, LayoutGrid, Lock } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
@@ -160,6 +160,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
           tag={c.tag}
           odds={c.odds}
           isLive={match.status === "live"}
+          suspended={match.suspended}
           borderLeft={i > 0}
           onPick={(e) => {
             e.stopPropagation();
@@ -182,12 +183,14 @@ function OddsCell({
   tag,
   odds,
   isLive,
+  suspended,
   borderLeft,
   onPick,
 }: {
   tag: string;
   odds: number;
   isLive: boolean;
+  suspended: boolean;
   borderLeft: boolean;
   onPick: (e: React.MouseEvent) => void;
 }) {
@@ -196,28 +199,37 @@ function OddsCell({
 
   return (
     <motion.button
-      whileTap={{ scale: 0.96 }}
-      onClick={onPick}
+      whileTap={suspended ? undefined : { scale: 0.96 }}
+      onClick={suspended ? (e) => e.stopPropagation() : onPick}
+      aria-disabled={suspended}
       className={cn(
         "relative flex h-11 flex-col items-center justify-center transition-colors duration-500",
         borderLeft && "border-l border-white/[0.06]",
+        suspended && "cursor-not-allowed",
         flash === "up" && "bg-lime/[0.13]",
         flash === "down" && "bg-live/[0.13]"
       )}
     >
       <span className="text-[8.5px] font-semibold tracking-[0.2em] text-dim">{tag}</span>
-      <span className="flex items-center gap-1">
-        <span
-          className={cn(
-            "font-display text-[14px] font-bold tabular-nums",
-            isLive ? "text-lime" : "text-white"
-          )}
-        >
-          {formatOdds(odds, oddsFormat)}
+      {suspended ? (
+        <span className="flex items-center gap-1 text-dim">
+          <Lock className="h-3 w-3" strokeWidth={2.6} />
+          <span className="font-display text-[9px] font-black tracking-[0.12em]">SUSP</span>
         </span>
-        {flash === "up" && <ChevronUp className="h-3 w-3 text-lime" strokeWidth={3} />}
-        {flash === "down" && <ChevronDown className="h-3 w-3 text-live" strokeWidth={3} />}
-      </span>
+      ) : (
+        <span className="flex items-center gap-1">
+          <span
+            className={cn(
+              "font-display text-[14px] font-bold tabular-nums",
+              isLive ? "text-lime" : "text-white"
+            )}
+          >
+            {formatOdds(odds, oddsFormat)}
+          </span>
+          {flash === "up" && <ChevronUp className="h-3 w-3 text-lime" strokeWidth={3} />}
+          {flash === "down" && <ChevronDown className="h-3 w-3 text-live" strokeWidth={3} />}
+        </span>
+      )}
     </motion.button>
   );
 }

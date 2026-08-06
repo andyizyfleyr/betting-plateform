@@ -36,6 +36,7 @@ export interface ClientMatch {
   oddsHome: number;
   oddsDraw: number | null;
   oddsAway: number;
+  suspended: boolean;
   markets: MarketGroup[];
 }
 
