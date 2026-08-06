@@ -102,7 +102,19 @@ export async function runLiveEngine() {
     const lastGoalAt = goalScored ? new Date() : (liveMatch.lastGoalAt ?? null);
     const recentGoal = lastGoalAt != null && now - lastGoalAt.getTime() < GOAL_SUSPEND_MS;
     const suspended = isOver || gameMinute >= 88 || recentGoal;
-    const dynamicOdds = liveOddsFor(liveMatch.homeTeam, liveMatch.awayTeam, score.home, score.away, gameMinute);
+    const dynamicOdds = liveOddsFor(
+      liveMatch.homeTeam,
+      liveMatch.awayTeam,
+      score.home,
+      score.away,
+      gameMinute,
+      {
+        homeForm: liveMatch.homeForm ?? 1,
+        awayForm: liveMatch.awayForm ?? 1,
+        redHome: liveMatch.redHome ?? 0,
+        redAway: liveMatch.redAway ?? 0,
+      }
+    );
 
     await db
       .update(matches)

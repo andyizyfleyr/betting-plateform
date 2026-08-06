@@ -552,10 +552,11 @@ export function buildLiveMarkets(
   away: string,
   homeScore: number,
   awayScore: number,
-  minute: number
+  minute: number,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
 ): MarketGroup[] {
-  const live = liveOddsFor(home, away, homeScore, awayScore, minute);
-  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute);
+  const live = liveOddsFor(home, away, homeScore, awayScore, minute, opts);
+  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
 
   return MARKETS.map((m): MarketGroup | null => {
     const open = m
@@ -601,7 +602,8 @@ export function liveMarketOddsFor(
   away: string,
   homeScore: number,
   awayScore: number,
-  minute: number
+  minute: number,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
 ): number | null {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
@@ -610,11 +612,11 @@ export function liveMarketOddsFor(
   if (idx < 0) return null;
 
   if (market === "result") {
-    const live = liveOddsFor(home, away, homeScore, awayScore, minute);
+    const live = liveOddsFor(home, away, homeScore, awayScore, minute, opts);
     return outcome === "home" ? live.oddsHome : outcome === "draw" ? live.oddsDraw : live.oddsAway;
   }
 
-  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute);
+  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
   const p = sumOverLive((i, j) => def.win(outcome, i, j), grid);
   return oddsFromProb(p, margin);
 }

@@ -28,7 +28,19 @@ export async function GET() {
     // En direct : cotes live sur TOUS les marchés, issues déjà décidées retirées.
     const markets =
       m.status === "live"
-        ? buildLiveMarkets(m.homeTeam, m.awayTeam, m.homeScore ?? 0, m.awayScore ?? 0, minuteNumber(m.minute))
+        ? buildLiveMarkets(
+            m.homeTeam,
+            m.awayTeam,
+            m.homeScore ?? 0,
+            m.awayScore ?? 0,
+            minuteNumber(m.minute),
+            {
+              homeForm: m.homeForm ?? 1,
+              awayForm: m.awayForm ?? 1,
+              redHome: m.redHome ?? 0,
+              redAway: m.redAway ?? 0,
+            }
+          )
         : buildMarkets(m.homeTeam, m.awayTeam);
     return { ...m, markets };
   });

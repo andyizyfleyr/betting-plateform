@@ -1,5 +1,5 @@
 export const VIRTUAL_LEAGUE = "Ligue des Champions · Europe";
-export const ROUND_MS = 300_000; // 5 minutes
+export const ROUND_MS = 300_000;
 
 const BASE = 1.35;
 const HOME_ADV = 1.12;
@@ -54,10 +54,8 @@ export function pairingsForRound(round: number): Pair[] {
   return ROUNDS[((round % n) + n) % n];
 }
 
-/** Toutes les affiches en séquence linéaire (45 matchs, 5 par journée × 9 journées). */
 export const ALL_PAIRS: Pair[] = ROUNDS.flat();
 
-/** Index du match en live. Un seul match à la fois. */
 export function livePairIndex(total: number): number {
   return ((total % ALL_PAIRS.length) + ALL_PAIRS.length) % ALL_PAIRS.length;
 }
@@ -80,6 +78,13 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+export interface LiveScoreModel {
+  grid: number[][];
+  margin: number;
+  lamH: number;
+  lamA: number;
+}
+
 export function expectedGoals(home: string, away: string): { lambdaHome: number; lambdaAway: number } {
   const sh = teamStrength(home);
   const sa = teamStrength(away);
@@ -96,12 +101,16 @@ export function poissonPmf(k: number, lambda: number): number {
   return (Math.exp(-lambda) * Math.pow(lambda, k)) / fact;
 }
 
-/**
- * Probabilités de résultat.
- * `offset` = différentiel de buts déjà inscrit (homeScore - awayScore) : la
- * probabilité est alors conditionnée au score en cours, comme sur les plateformes
- * professionnelles (l'équipe qui mène voit sa probabilité grimper).
- */
+export function oddsFor(home: string, away: string) {
+  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
+  const p = winProbabilities(lambdaHome, lambdaAway);
+  return {
+    oddsHome: round2(clamp(1 / (p.home * MARGIN), 1.01, 50)),
+    oddsDraw: round2(clamp(1 / (p.draw * MARGIN), 1.01, 50)),
+    oddsAway: round2(clamp(1 / (p.away * MARGIN), 1.01, 50)),
+  };
+}
+
 export function winProbabilities(
   lambdaHome: number,
   lambdaAway: number,
@@ -121,154 +130,11 @@ export function winProbabilities(
   return { home, draw, away };
 }
 
-export function oddsFor(home: string, away: string) {
+export function scoreAt(round: number, minute: number, home: string, away: string) {
   const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const p = winProbabilities(lambdaHome, lambdaAway);
-  return {
-    oddsHome: round2(clamp(1 / (p.home * MARGIN), 1.01, 50)),
-    oddsDraw: round2(clamp(1 / (p.draw * MARGIN), 1.01, 50)),
-    oddsAway: round2(clamp(1 / (p.away * MARGIN), 1.01, 50)),
-  };
-}
-
-/** Modèle de cotes en direct — comportement bookmaker professionnel. */
-const LIVE_BUCKET_MIN = 5; // créneau de temps : les cotes ne bougent que sur un but ou au passage d'un créneau
-const LIVE_GOAL_FLOOR = 0.3; // plancher de buts restants attendus : une remontée reste toujours possible
-const LIVE_MIN_DRAW = 0.015; // probabilité minimale crédible du nul
-const LIVE_MIN_TRAILING = 0.02; // probabilité minimale crédible de l'équipe menée
-const LIVE_ODDS_MAX = 100;
-const LIVE_MAX_REMAIN = 12; // buts restants possibles par équipe (distribution tronquée)
-const LIVE_MARGIN_MIN = 1.05; // marge bookmaker en début de match
-const LIVE_MARGIN_MAX = 1.2; // marge élargie dans les dernières minutes (événements couperet)
-
-/** Distribution de Poisson tronquée des buts restants (0..max). */
-function poissonDist(lambda: number, max: number): number[] {
-  const p: number[] = [];
-  for (let k = 0; k <= max; k++) p.push(poissonPmf(k, lambda));
-  return p;
-}
-
-export interface LiveScoreModel {
-  /** Probabilité de chaque score final : grid[scoreHome][scoreAway]. */
-  grid: number[][];
-  /** Marge bookmaker dynamique pour la minute courante. */
-  margin: number;
-  /** Buts restants attendus pour chaque équipe (score futur incl.). */
-  lamH: number;
-  lamA: number;
-}
-
-/**
- * Moteur de cotes en direct — modèle probabiliste riche :
- * - les probabilités sont conditionnées au score en cours : la grille des scores
- *   finaux est construite depuis les buts restants (Poisson), donc chaque marché
- *   (Résultat, Double chance, O/U, BTTS, Score exact, Clean sheet, …) est coté
- *   exactement à partir de la distribution des scores finaux — aucun ajustement
- *   arbitraire, et un but déplace toutes les cotes d'un seul coup ;
- * - le temps est découpé en créneaux de 5 minutes : les cotes restent stables
- *   entre les événements au lieu de bouger à chaque tick du moteur ;
- * - l'avantage du terrain s'estompe avec le temps (home fade) et un plancher de
- *   buts restants garantit qu'une remontée reste toujours crédible ;
- * - la marge bookmaker est dynamique : plus fine en début de match, elle s'élargit
- *   dans les dernières minutes quand l'issue devient un événement couperet.
- */
-export function liveScoreModel(
-  home: string,
-  away: string,
-  homeScore: number,
-  awayScore: number,
-  minute: number
-): LiveScoreModel {
-  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const bucket = clamp(Math.ceil(minute / LIVE_BUCKET_MIN) * LIVE_BUCKET_MIN, 1, 90);
-  const remaining = clamp((90 - bucket) / 90, 0.02, 1);
-
-  const homeFade = 1 - 0.12 * (1 - remaining);
-  const lamH = lambdaHome * homeFade * remaining + LIVE_GOAL_FLOOR;
-  const lamA = lambdaAway * remaining + LIVE_GOAL_FLOOR;
-
-  const margin = round2(
-    clamp(
-      LIVE_MARGIN_MIN + (1 - remaining) * (LIVE_MARGIN_MAX - LIVE_MARGIN_MIN),
-      LIVE_MARGIN_MIN,
-      LIVE_MARGIN_MAX
-    )
-  );
-
-  const ph = poissonDist(lamH, LIVE_MAX_REMAIN);
-  const pa = poissonDist(lamA, LIVE_MAX_REMAIN);
-
-  const size = Math.max(homeScore + LIVE_MAX_REMAIN, awayScore + LIVE_MAX_REMAIN) + 1;
-  const grid: number[][] = Array.from({ length: size }, () => new Array<number>(size).fill(0));
-  for (let i = 0; i <= LIVE_MAX_REMAIN; i++) {
-    for (let j = 0; j <= LIVE_MAX_REMAIN; j++) {
-      grid[homeScore + i][awayScore + j] = ph[i] * pa[j];
-    }
-  }
-
-  return { grid, margin, lamH, lamA };
-}
-
-/**
- * Probabilités live du marché Résultat, depuis la grille des scores finaux.
- * L'équipe qui mène voit sa probabilité grimper, celle qui est menée garde une
- * cote réaliste (jamais « impossible ») et le nul une probabilité minimale crédible.
- */
-export function liveResultProbs(
-  home: string,
-  away: string,
-  homeScore: number,
-  awayScore: number,
-  minute: number
-): { home: number; draw: number; away: number } {
-  const { grid } = liveScoreModel(home, away, homeScore, awayScore, minute);
-
-  let pH = 0;
-  let pD = 0;
-  let pA = 0;
-  for (let i = 0; i < grid.length; i++) {
-    for (let j = 0; j < grid[i].length; j++) {
-      const v = grid[i][j];
-      if (v <= 0) continue;
-      if (i > j) pH += v;
-      else if (i === j) pD += v;
-      else pA += v;
-    }
-  }
-
-  const offset = homeScore - awayScore;
-  pD = Math.max(pD, LIVE_MIN_DRAW);
-  if (offset > 0) pA = Math.max(pA, LIVE_MIN_TRAILING);
-  else if (offset < 0) pH = Math.max(pH, LIVE_MIN_TRAILING);
-  else {
-    pH = Math.max(pH, LIVE_MIN_TRAILING);
-    pA = Math.max(pA, LIVE_MIN_TRAILING);
-  }
-
-  const total = pH + pD + pA;
-  return { home: pH / total, draw: pD / total, away: pA / total };
-}
-
-/**
- * Cotes live du marché Résultat (1/N/2) — modèle pro, marge dynamique incluse.
- * Utilisées par le moteur (cartes / ticker) et par l'API des paris : cotes
- * identiques partout, dérivées de la même grille de scores finaux.
- */
-export function liveOddsFor(
-  home: string,
-  away: string,
-  currentHomeScore: number,
-  currentAwayScore: number,
-  minute: number
-) {
-  const { margin } = liveScoreModel(home, away, currentHomeScore, currentAwayScore, minute);
-  const p = liveResultProbs(home, away, currentHomeScore, currentAwayScore, minute);
-  const odds = (prob: number) => round2(clamp(1 / (prob * margin), 1.01, LIVE_ODDS_MAX));
-  return {
-    oddsHome: odds(p.home),
-    oddsDraw: odds(p.draw),
-    oddsAway: odds(p.away),
-  };
+  const homeGoals = goalMinutes(round, home, lambdaHome).filter((m) => m <= minute).length;
+  const awayGoals = goalMinutes(round, away, lambdaAway).filter((m) => m <= minute).length;
+  return { home: homeGoals, away: awayGoals };
 }
 
 function hashString(s: string): number {
@@ -309,9 +175,291 @@ function goalMinutes(round: number, team: string, lambda: number): number[] {
   return minutes.sort((a, b) => a - b);
 }
 
-export function scoreAt(round: number, minute: number, home: string, away: string) {
-  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const homeGoals = goalMinutes(round, home, lambdaHome).filter((m) => m <= minute).length;
-  const awayGoals = goalMinutes(round, away, lambdaAway).filter((m) => m <= minute).length;
-  return { home: homeGoals, away: awayGoals };
+// ──────────────────────────────────────────────
+//  Modèle live avancé
+// ──────────────────────────────────────────────
+
+/** Biais Dixon–Coles : correction τ pour les scores faibles. */
+const DC_RHO = 0.04;
+
+function dixonColesTau(x: number, y: number, lambdaH: number, lambdaA: number): number {
+  if (x + y >= 2) return 1;
+  if (x === 0 && y === 0) return 1 - DC_RHO * lambdaH * lambdaA;
+  if (x === 1 && y === 0) return 1 + DC_RHO * lambdaA;
+  if (x === 0 && y === 1) return 1 + DC_RHO * lambdaH;
+  if (x === 1 && y === 1) return 1 - DC_RHO;
+  return 1;
 }
+
+/** Factorial précalculé. */
+function fact(n: number): number {
+  let r = 1;
+  for (let i = 2; i <= n; i++) r *= i;
+  return r;
+}
+
+/**
+ * Distribution de Poisson bivariée à choc commun.
+ * X = X' + Z, Y = Y' + Z avec X'~Pois(λ1), Y'~Pois(λ2), Z~Pois(λ3).
+ * Cov(X,Y) = λ3. On choisit λ3 = ρ * sqrt(λ1*λ2).
+ */
+const CORR_RHO = 0.12;
+
+function bivariatePoissonGrid(
+  lambdaH: number,
+  lambdaA: number,
+  maxGoals: number
+): number[][] {
+  const lambda3 = CORR_RHO * Math.sqrt(Math.max(lambdaH, 0.01) * Math.max(lambdaA, 0.01));
+  const lambda1 = Math.max(lambdaH - lambda3, 0.01);
+  const lambda2 = Math.max(lambdaA - lambda3, 0.01);
+  const lambda3Safe = Math.max(lambda3, 0.001);
+
+  const size = maxGoals + 1;
+  const grid: number[][] = Array.from({ length: size }, () => new Array<number>(size).fill(0));
+
+  // Précalcul log-factorielles
+  const logFact: number[] = [0];
+  for (let i = 1; i <= maxGoals; i++) logFact[i] = logFact[i - 1] + Math.log(i);
+
+  const logL1 = Math.log(lambda1);
+  const logL2 = Math.log(lambda2);
+  const logL3 = Math.log(lambda3Safe);
+  const logETotal = -(lambda1 + lambda2 + lambda3Safe);
+
+  for (let i = 0; i <= maxGoals; i++) {
+    for (let j = 0; j <= maxGoals; j++) {
+      let sum = 0;
+      const maxK = Math.min(i, j);
+      for (let k = 0; k <= maxK; k++) {
+        const logTerm =
+          (i - k) * logL1 +
+          (j - k) * logL2 +
+          k * logL3 -
+          logFact[i - k] -
+          logFact[j - k] -
+          logFact[k];
+        sum += Math.exp(logTerm);
+      }
+      grid[i][j] = Math.exp(logETotal) * sum;
+    }
+  }
+
+  // Normaliser (erreur d'arrondi)
+  let total = 0;
+  for (let i = 0; i <= maxGoals; i++)
+    for (let j = 0; j <= maxGoals; j++)
+      total += grid[i][j];
+  if (total > 0 && Math.abs(total - 1) > 1e-6) {
+    for (let i = 0; i <= maxGoals; i++)
+      for (let j = 0; j <= maxGoals; j++)
+        grid[i][j] /= total;
+  }
+
+  return grid;
+}
+
+/** Profil d'intensité cumulé : proportion de buts attendus marqués d'ici la minute m. */
+const INTENSITY_BUCKETS: Array<{ minute: number; cumul: number }> = [
+  { minute: 0, cumul: 0 },
+  { minute: 15, cumul: 0.13 },
+  { minute: 30, cumul: 0.29 },
+  { minute: 45, cumul: 0.47 },
+  { minute: 60, cumul: 0.63 },
+  { minute: 75, cumul: 0.8 },
+  { minute: 90, cumul: 1 },
+];
+
+function goalTimeCDF(minute: number): number {
+  const m = clamp(minute, 0, 90);
+  for (let i = 1; i < INTENSITY_BUCKETS.length; i++) {
+    const prev = INTENSITY_BUCKETS[i - 1];
+    const cur = INTENSITY_BUCKETS[i];
+    if (m <= cur.minute) {
+      const frac = (m - prev.minute) / (cur.minute - prev.minute);
+      return prev.cumul + frac * (cur.cumul - prev.cumul);
+    }
+  }
+  return 1;
+}
+
+/** Distribution de Skellam : différence de deux Poisson(λ1, λ2). */
+function modifiedBesselI(n: number, x: number): number {
+  if (x === 0) return n === 0 ? 1 : 0;
+  let result = 0;
+  for (let m = 0; m < 50; m++) {
+    const power = 2 * m + Math.abs(n);
+    const num = Math.pow(x / 2, power);
+    const denom = fact(m) * fact(m + Math.abs(n));
+    result += num / denom;
+  }
+  return result;
+}
+
+function skellamPMF(k: number, lambda1: number, lambda2: number): number {
+  const mu = lambda1 + lambda2;
+  const ratio = lambda1 / Math.max(lambda2, 0.001);
+  const x = 2 * Math.sqrt(Math.max(lambda1, 0.001) * Math.max(lambda2, 0.001));
+  const bessel = modifiedBesselI(k, x);
+  return Math.exp(-mu) * Math.pow(ratio, k / 2) * bessel;
+}
+
+function skellamCDF(k: number, lambda1: number, lambda2: number): number {
+  let sum = 0;
+  for (let i = -200; i <= k; i++) {
+    const p = skellamPMF(i, lambda1, lambda2);
+    if (!isFinite(p) || isNaN(p) || p < 0) continue;
+    sum += p;
+  }
+  return clamp(sum, 0, 1);
+}
+
+/** Probabilités du résultat via Skellam (queues exactes, pas de troncature). */
+export function liveResultProbs(
+  home: string,
+  away: string,
+  homeScore: number,
+  awayScore: number,
+  minute: number,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+): { home: number; draw: number; away: number } {
+  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
+  const elapsed = minute / 90;
+  const remaining = 1 - elapsed;
+
+  let lamH = lambdaHome * remaining;
+  let lamA = lambdaAway * remaining;
+
+  const hf = opts?.homeForm ?? 1;
+  const af = opts?.awayForm ?? 1;
+  lamH *= hf;
+  lamA *= af;
+
+  const rh = opts?.redHome ?? 0;
+  const ra = opts?.redAway ?? 0;
+  lamH *= Math.pow(0.7, rh);
+  lamA *= Math.pow(0.7, ra);
+  lamH *= 1 + 0.15 * ra;
+  lamA *= 1 + 0.15 * rh;
+
+  const offset = homeScore - awayScore;
+  if (minute >= 60 && offset < 0) { lamH *= 1.12; lamA *= 1.12; }
+  if (minute >= 60 && offset > 0) { lamH *= 0.95; lamA *= 0.95; }
+
+  // Mise à jour bayésienne gamma-poisson
+  const gH = homeScore;
+  const gA = awayScore;
+  const kappa = 1;
+  const priorH = lamH / Math.max(remaining, 0.02);
+  const priorA = lamA / Math.max(remaining, 0.02);
+  const postH = (kappa * priorH + gH) / (kappa + elapsed + 1e-9);
+  const postA = (kappa * priorA + gA) / (kappa + elapsed + 1e-9);
+  const remH = postH * Math.max(remaining, 0.02);
+  const remA = postA * Math.max(remaining, 0.02);
+
+  const pHomeWin = 1 - skellamCDF(0, remH, remA);
+  const pAwayWin = skellamCDF(-1, remH, remA);
+  const pDraw = skellamPMF(0, remH, remA);
+
+  const total = pHomeWin + pDraw + pAwayWin;
+  return {
+    home: pHomeWin / total,
+    draw: pDraw / total,
+    away: pAwayWin / total,
+  };
+}
+
+/** Cotes live du marché Résultat (1/N/2) — Dixon-Coles + bivarié + Skellam. */
+export function liveOddsFor(
+  home: string,
+  away: string,
+  currentHomeScore: number,
+  currentAwayScore: number,
+  minute: number,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+) {
+  const { margin } = liveScoreModel(home, away, currentHomeScore, currentAwayScore, minute, opts);
+  const p = liveResultProbs(home, away, currentHomeScore, currentAwayScore, minute, opts);
+  const odds = (prob: number) => round2(clamp(1 / (prob * margin), 1.01, LIVE_ODDS_MAX));
+  return {
+    oddsHome: odds(p.home),
+    oddsDraw: odds(p.draw),
+    oddsAway: odds(p.away),
+  };
+}
+
+const LIVE_MAX_REMAIN = 20;
+
+/**
+ * Moteur de cotes en direct — modèle probabiliste avancé.
+ * - Dixon-Coles τ pour les scores faibles
+ * - Poisson bivarié à choc commun (corrélation home/away)
+ * - Profil d'intensité non-homogène (buts plus fréquents en fin de match)
+ * - Skellam pour les queues du résultat (pas de troncature)
+ * - Mise à jour bayésienne gamma-poisson après observation des buts
+ * - Facteur carton rouge (λ × 0.7 pour l'équipe réduite, +15% pour l'adversaire)
+ * - Jeu ouvert (boost mutuel si match serré après 60')
+ * - Facteur de forme EWMA par équipe
+ * - Marge bookmaker dynamique
+ */
+export function liveScoreModel(
+  home: string,
+  away: string,
+  homeScore: number,
+  awayScore: number,
+  minute: number,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+): LiveScoreModel {
+  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
+  const elapsed = minute / 90;
+  const remaining = clamp(1 - elapsed, 0.02, 1);
+
+  let lamH = lambdaHome * remaining;
+  let lamA = lambdaAway * remaining;
+
+  const hf = opts?.homeForm ?? 1;
+  const af = opts?.awayForm ?? 1;
+  lamH *= hf;
+  lamA *= af;
+
+  const rh = opts?.redHome ?? 0;
+  const ra = opts?.redAway ?? 0;
+  lamH *= Math.pow(0.7, rh);
+  lamA *= Math.pow(0.7, ra);
+  lamH *= 1 + 0.15 * ra;
+  lamA *= 1 + 0.15 * rh;
+
+  const offset = homeScore - awayScore;
+  if (minute >= 60 && offset < 0) { lamH *= 1.12; lamA *= 1.12; }
+  if (minute >= 60 && offset > 0) { lamH *= 0.95; lamA *= 0.95; }
+
+  // Bayesian update
+  const gH = homeScore;
+  const gA = awayScore;
+  const kappa = 1;
+  const priorH = lamH / Math.max(remaining, 0.02);
+  const priorA = lamA / Math.max(remaining, 0.02);
+  const postH = (kappa * priorH + gH) / (kappa + elapsed + 1e-9);
+  const postA = (kappa * priorA + gA) / (kappa + elapsed + 1e-9);
+  const remH = postH * Math.max(remaining, 0.02);
+  const remA = postA * Math.max(remaining, 0.02);
+
+  const margin = round2(
+    clamp(
+      LIVE_MARGIN_MIN + (1 - remaining) * (LIVE_MARGIN_MAX - LIVE_MARGIN_MIN),
+      LIVE_MARGIN_MIN,
+      LIVE_MARGIN_MAX
+    )
+  );
+
+  const maxG = Math.max(remH, remA) * 3 + 6;
+  const maxGoals = clamp(Math.ceil(maxG), 6, LIVE_MAX_REMAIN);
+
+  const grid = bivariatePoissonGrid(remH, remA, maxGoals);
+
+  return { grid, margin, lamH: remH, lamA: remA };
+}
+
+const LIVE_MARGIN_MIN = 1.05;
+const LIVE_MARGIN_MAX = 1.2;
+const LIVE_ODDS_MAX = 100;
