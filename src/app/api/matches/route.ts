@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
-import { buildMarkets } from "@/lib/markets";
+import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
 
@@ -25,22 +25,11 @@ export async function GET() {
     );
 
   const withMarkets = rows.map((m) => {
-    const markets = buildMarkets(m.homeTeam, m.awayTeam);
-    if (m.status === "live") {
-      // Le marché « Résultat » reflète les cotes live (score en cours), comme les
-      // grandes plateformes : le favori est coté bas, l'équipe menée très haut.
-      const result = markets.find((g) => g.key === "result");
-      if (result) {
-        const liveOdds: Record<string, number | null> = {
-          home: m.oddsHome,
-          draw: m.oddsDraw,
-          away: m.oddsAway,
-        };
-        result.outcomes = result.outcomes.map((o) =>
-          liveOdds[o.key] != null ? { ...o, odds: liveOdds[o.key] as number } : o
-        );
-      }
-    }
+    // En direct : cotes live sur TOUS les marchés, issues déjà décidées retirées.
+    const markets =
+      m.status === "live"
+        ? buildLiveMarkets(m.homeTeam, m.awayTeam, m.homeScore ?? 0, m.awayScore ?? 0, minuteNumber(m.minute))
+        : buildMarkets(m.homeTeam, m.awayTeam);
     return { ...m, markets };
   });
 

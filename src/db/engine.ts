@@ -17,24 +17,8 @@ function pairIndex(home: string, away: string): number {
   return ALL_PAIRS.findIndex((p) => p.home === home && p.away === away);
 }
 
-/** Fenêtre de suspension du marché après un but (en minutes de jeu, ~13 s réelles). */
-const GOAL_SUSPEND_MIN = 4;
-
-/** Vrai si un but a été marqué dans les `window` dernières minutes de jeu. */
-function hasGoalWithin(
-  round: number,
-  minute: number,
-  home: string,
-  away: string,
-  window: number
-): boolean {
-  for (let m = minute; m >= minute - window && m >= 0; m--) {
-    const cur = scoreAt(round, m, home, away);
-    const prev = scoreAt(round, m - 1, home, away);
-    if (cur.home !== prev.home || cur.away !== prev.away) return true;
-  }
-  return false;
-}
+/** Blocage du marché en temps réel : 3 s après un but (anti-triche, réouverture avec cotes ajustées). */
+const GOAL_SUSPEND_MS = 3000;
 
 /**
  * Tournoi virtuel : un match à la fois, 5 minutes par affiche (ROUND_MS).
@@ -96,6 +80,7 @@ export async function runLiveEngine() {
           homeScore: s.home,
           awayScore: s.away,
           startsAt: new Date(matchStart),
+          lastGoalAt: s.home + s.away > 0 ? new Date() : null,
         })
         .where(eq(matches.id, existingLive.id));
     }
@@ -112,16 +97,11 @@ export async function runLiveEngine() {
   if (liveMatch) {
     const score = scoreAt(liveIdx, gameMinute, liveMatch.homeTeam, liveMatch.awayTeam);
     const goalScored = score.home !== (liveMatch.homeScore ?? 0) || score.away !== (liveMatch.awayScore ?? 0);
-    // Marché suspendu sur un but et pendant quelques minutes après (comme sur les
-    // plateformes pro : il rouvre ensuite avec des cotes ajustées en faveur du meneur).
-    const recentGoal = hasGoalWithin(
-      liveIdx,
-      gameMinute,
-      liveMatch.homeTeam,
-      liveMatch.awayTeam,
-      GOAL_SUSPEND_MIN
-    );
-    const suspended = isOver || gameMinute >= 88 || goalScored || recentGoal;
+    // Marché suspendu 3 s en temps réel après un but, puis réouverture avec des
+    // cotes ajustées en faveur du meneur (comme sur les plateformes pro).
+    const lastGoalAt = goalScored ? new Date() : (liveMatch.lastGoalAt ?? null);
+    const recentGoal = lastGoalAt != null && now - lastGoalAt.getTime() < GOAL_SUSPEND_MS;
+    const suspended = isOver || gameMinute >= 88 || recentGoal;
     const dynamicOdds = liveOddsFor(liveMatch.homeTeam, liveMatch.awayTeam, score.home, score.away, gameMinute);
 
     await db
@@ -134,6 +114,7 @@ export async function runLiveEngine() {
         oddsHome: dynamicOdds.oddsHome,
         oddsDraw: dynamicOdds.oddsDraw,
         oddsAway: dynamicOdds.oddsAway,
+        lastGoalAt,
         suspended,
       })
       .where(eq(matches.id, liveMatch.id));

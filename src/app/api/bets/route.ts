@@ -5,10 +5,17 @@ import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { appUser, bets, matches } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
-import { isKnownMarket, marketLabelFor, marketOddsFor, marketWin } from "@/lib/markets";
+import { isKnownMarket, liveMarketOddsFor, marketLabelFor, marketOddsFor, marketOutcomeSettled, marketWin, minuteNumber } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+
+/** Anti-triche : limites de mise (€) et intervalle minimal entre deux paris. */
+const MIN_STAKE = 0.5;
+const MAX_STAKE = 500;
+const BET_COOLDOWN_MS = 700;
+/** Délai de validation des paris en direct (recotation serveur + état du marché). */
+const LIVE_VALIDATION_MS = 2500;
 
 /** Règle les paris en cours du joueur dont le match est terminé (déterministe, basé sur le score). */
 async function settleFinishedBets(uid: number) {
@@ -126,6 +133,23 @@ export async function POST(req: NextRequest) {
   if (!isKnownMarket(market)) {
     return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
   }
+  if (stake < MIN_STAKE || stake > MAX_STAKE) {
+    return NextResponse.json(
+      { error: `Mise hors limites (${MIN_STAKE} € – ${MAX_STAKE} €)` },
+      { status: 400 }
+    );
+  }
+
+  // Anti-spam : une mise toutes les 700 ms maximum (pas de machine-gun de paris).
+  const [lastBet] = await db
+    .select({ placedAt: bets.placedAt })
+    .from(bets)
+    .where(eq(bets.userId, uid))
+    .orderBy(desc(bets.placedAt))
+    .limit(1);
+  if (lastBet && Date.now() - lastBet.placedAt.getTime() < BET_COOLDOWN_MS) {
+    return NextResponse.json({ error: "Trop rapide — veuillez patienter" }, { status: 429 });
+  }
 
   const [match] = await db.select().from(matches).where(eq(matches.id, matchId));
   if (!match) {
@@ -135,10 +159,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ce match est terminé" }, { status: 400 });
   }
 
-  // Délai de validation de pari pour les matchs en direct (sécurité bookmaker pro)
+  // Délai de validation des paris en direct : on recote AU MOMENT de la validation
+  // (marché suspendu, score/minutes à jour) — la cote envoyée par le client n'est
+  // jamais utilisée, c'est le serveur qui fixe le prix.
   let pricedMatch = match;
   if (match.status === "live") {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
     const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
     if (!freshMatch || freshMatch.status === "finished" || freshMatch.suspended) {
       return NextResponse.json(
@@ -149,16 +175,27 @@ export async function POST(req: NextRequest) {
     pricedMatch = freshMatch;
   }
 
-  // En direct, le marché « Résultat » est coté aux cotes live (score en cours).
+  const homeScore = pricedMatch.homeScore ?? 0;
+  const awayScore = pricedMatch.awayScore ?? 0;
+
+  // Anti-triche : interdiction de parier sur une issue déjà décidée (gagnée ou
+  // devenue impossible) — ex. « Plus de 2,5 » avec 3 buts inscrits, « 0-0 » à 1-0, etc.
+  if (pricedMatch.status === "live" && marketOutcomeSettled(market, selection, homeScore, awayScore)) {
+    return NextResponse.json({ error: "Ce marché est déjà décidé" }, { status: 400 });
+  }
+
+  // Recotation serveur : en direct = grille de scores finaux, sinon cotes d'avant-match.
   const odds =
-    market === "result" && pricedMatch.status === "live"
-      ? selection === "home"
-        ? pricedMatch.oddsHome
-        : selection === "draw"
-          ? pricedMatch.oddsDraw
-          : selection === "away"
-            ? pricedMatch.oddsAway
-            : null
+    pricedMatch.status === "live"
+      ? liveMarketOddsFor(
+          market,
+          selection,
+          pricedMatch.homeTeam,
+          pricedMatch.awayTeam,
+          homeScore,
+          awayScore,
+          minuteNumber(pricedMatch.minute)
+        )
       : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
   const selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
   if (odds == null || selectionLabel == null) {

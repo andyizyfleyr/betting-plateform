@@ -1,4 +1,4 @@
-import { expectedGoals, poissonPmf } from "@/db/fixtures";
+import { expectedGoals, liveOddsFor, liveScoreModel, poissonPmf } from "@/db/fixtures";
 
 /**
  * Catalogue des marchés de pari (terminologie façon 1xbet).
@@ -67,8 +67,8 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function oddsFromProb(p: number) {
-  return round2(clamp(1 / (clamp(p, 0.0005, 1) * MARGIN), ODDS_MIN, ODDS_MAX));
+function oddsFromProb(p: number, margin = MARGIN, cap = ODDS_MAX) {
+  return round2(clamp(1 / (clamp(p, 0.0005, 1) * margin), ODDS_MIN, cap));
 }
 
 /** Distribution de Poisson tronquée + somme cumulée (pour les probabilités). */
@@ -470,4 +470,158 @@ export function marketLabelFor(market: string, outcome: string, home: string, aw
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
   return def.outcomes(home, away).find((o) => o.key === outcome)?.label ?? null;
+}
+
+/** Somme de la grille des scores finaux sur un prédicat (grille indexée par score final). */
+function sumOverLive(predicate: (i: number, j: number) => boolean, grid: number[][]) {
+  let s = 0;
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      const v = grid[i][j];
+      if (v > 0 && predicate(i, j)) s += v;
+    }
+  }
+  return s;
+}
+
+/** Vrai si une issue est déjà décidée par le score en cours (gagnée OU impossible). */
+export function marketOutcomeSettled(
+  market: string,
+  outcome: string,
+  homeScore: number,
+  awayScore: number
+): boolean {
+  const total = homeScore + awayScore;
+  switch (market) {
+    case "result":
+    case "double_chance":
+    case "odd_even":
+      return false;
+    case "total_ou": {
+      const m = /^ou_(\d+)_(\d+)_(over|under)$/.exec(outcome);
+      if (!m) return false;
+      const line = Number(`${m[1]}.${m[2]}`);
+      return total > line;
+    }
+    case "total_exact": {
+      if (outcome === "5+") return total >= 5;
+      return total > Number(outcome);
+    }
+    case "btts":
+      return homeScore > 0 && awayScore > 0;
+    case "score_exact": {
+      if (outcome === "other") return false;
+      const [i, j] = outcome.split("_").map(Number);
+      return i < homeScore || j < awayScore;
+    }
+    case "result_total":
+      return outcome === "under" && total >= 3;
+    case "home_total":
+      return teamTotalSettled(outcome, homeScore, "h");
+    case "away_total":
+      return teamTotalSettled(outcome, awayScore, "a");
+    case "home_to_nil":
+    case "home_clean_sheet":
+      return awayScore >= 1;
+    case "away_to_nil":
+    case "away_clean_sheet":
+      return homeScore >= 1;
+    default:
+      return false;
+  }
+}
+
+function teamTotalSettled(outcome: string, goals: number, side: "h" | "a"): boolean {
+  const m = /^(h|a)_(\d+)_(\d+)_(over|under)$/.exec(outcome);
+  if (!m || m[1] !== side) return false;
+  const line = Number(`${m[2]}.${m[3]}`);
+  return goals > line;
+}
+
+/**
+ * Construit les marchés d'un match en direct avec les cotes live :
+ * - les issues déjà décidées (gagnées ou devenues impossibles) sont retirées —
+ *   seules les options encore ouvertes restent affichées ;
+ * - chaque marché est coté sur la même grille de scores finaux (modèle live),
+ *   avec la marge bookmaker dynamique ;
+ * - le marché Résultat reprend exactement les cotes 1/N/2 du moteur (cohérence
+ *   cartes / feuille de marchés).
+ */
+export function buildLiveMarkets(
+  home: string,
+  away: string,
+  homeScore: number,
+  awayScore: number,
+  minute: number
+): MarketGroup[] {
+  const live = liveOddsFor(home, away, homeScore, awayScore, minute);
+  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute);
+
+  return MARKETS.map((m): MarketGroup | null => {
+    const open = m
+      .outcomes(home, away)
+      .filter((o) => !marketOutcomeSettled(m.key, o.key, homeScore, awayScore));
+    if (open.length === 0) return null;
+
+    const priced: MarketOutcome[] = open.map((o) => {
+      let odds: number;
+      if (m.key === "result") {
+        odds =
+          o.key === "home" ? live.oddsHome : o.key === "draw" ? live.oddsDraw : live.oddsAway;
+      } else {
+        const p = sumOverLive((i, j) => m.win(o.key, i, j), grid);
+        odds = oddsFromProb(p, margin);
+      }
+      return { ...o, odds };
+    });
+
+    const rows = m.rows
+      ? m
+          .rows(home, away)
+          .map((r) => ({
+            label: r.label,
+            outcomes: priced.filter((o) => r.keys.includes(o.key)),
+          }))
+          .filter((r) => r.outcomes.length > 0)
+      : undefined;
+
+    return { key: m.key, label: m.label, short: m.short, outcomes: priced, rows };
+  }).filter((g): g is MarketGroup => g !== null);
+}
+
+/**
+ * Cote serveur d'une issue en direct (validation anti-triche) : null si le marché
+ * est inconnu, l'issue introuvable ou déjà décidée. Le serveur recote TOUJOURS le
+ * pari au moment de la validation — jamais la cote envoyée par le client.
+ */
+export function liveMarketOddsFor(
+  market: string,
+  outcome: string,
+  home: string,
+  away: string,
+  homeScore: number,
+  awayScore: number,
+  minute: number
+): number | null {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return null;
+  if (marketOutcomeSettled(market, outcome, homeScore, awayScore)) return null;
+  const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
+  if (idx < 0) return null;
+
+  if (market === "result") {
+    const live = liveOddsFor(home, away, homeScore, awayScore, minute);
+    return outcome === "home" ? live.oddsHome : outcome === "draw" ? live.oddsDraw : live.oddsAway;
+  }
+
+  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute);
+  const p = sumOverLive((i, j) => def.win(outcome, i, j), grid);
+  return oddsFromProb(p, margin);
+}
+
+/** Minute numérique depuis le libellé du moteur (« 37' » → 37, null → 1). */
+export function minuteNumber(minute: string | null): number {
+  const m = minute ? /^\d+/.exec(minute) : null;
+  const n = m ? parseInt(m[0], 10) : 1;
+  return Math.max(1, Math.min(90, n));
 }

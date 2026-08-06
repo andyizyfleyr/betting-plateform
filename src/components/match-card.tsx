@@ -212,10 +212,7 @@ function OddsCell({
     >
       <span className="text-[8.5px] font-semibold tracking-[0.2em] text-dim">{tag}</span>
       {suspended ? (
-        <span className="flex items-center gap-1 text-dim">
-          <Lock className="h-3 w-3" strokeWidth={2.6} />
-          <span className="font-display text-[9px] font-black tracking-[0.12em]">SUSP</span>
-        </span>
+        <Lock className="h-3 w-3 text-dim" strokeWidth={2.6} />
       ) : (
         <span className="flex items-center gap-1">
           <span

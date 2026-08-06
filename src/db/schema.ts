@@ -28,6 +28,8 @@ export const matches = pgTable("matches", {
   oddsDraw: doublePrecision("odds_draw"),
   oddsAway: doublePrecision("odds_away").notNull(),
   suspended: boolean("suspended").notNull().default(false),
+  /** Horodatage réel du dernier but : blocage du marché 3 s après un but. */
+  lastGoalAt: timestamp("last_goal_at", { mode: "date" }),
 });
 
 /**
