@@ -68,7 +68,7 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
       {/* Invite à ouvrir les marchés */}
       {!isFinished && (
         <div className="flex items-center justify-center gap-1.5 border-t border-edge bg-elev py-1.5">
-          <LayoutGrid className="h-3 w-3 text-betclic-yellow" strokeWidth={2.4} />
+          <LayoutGrid className="h-3 w-3 text-betclic-red" strokeWidth={2.4} />
           <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
             TOUS LES MARCHÉS
           </span>
@@ -115,7 +115,7 @@ return (
           className={cn(
             "ml-auto font-display text-[16px] font-bold tabular-nums",
             isLive
-              ? "glow-betclic text-betclic-yellow"
+              ? "glow-betclic text-betclic-red"
               : isFinished
                 ? winner
                   ? "text-ink"
@@ -221,7 +221,7 @@ function OddsCell({
         "relative flex h-11 flex-col items-center justify-center transition-colors duration-500",
         borderLeft && "border-l border-edge",
         suspended && "cursor-not-allowed opacity-60 bg-elev/50",
-        flash === "up" && "bg-betclic-yellow/[0.13]",
+        flash === "up" && "bg-betclic-red/[0.13]",
         flash === "down" && "bg-betclic-red/[0.13]"
       )}
     >
@@ -238,12 +238,12 @@ function OddsCell({
           <span
             className={cn(
               "font-display text-[14px] font-bold tabular-nums",
-              isLive ? "text-betclic-yellow" : "text-ink"
+              isLive ? "text-betclic-red" : "text-ink"
             )}
           >
             {formatOdds(odds, oddsFormat)}
           </span>
-          {flash === "up" && <ChevronUp className="h-3 w-3 text-betclic-yellow" strokeWidth={3} />}
+          {flash === "up" && <ChevronUp className="h-3 w-3 text-betclic-red" strokeWidth={3} />}
           {flash === "down" && <ChevronDown className="h-3 w-3 text-betclic-red" strokeWidth={3} />}
         </span>
       )}

@@ -107,7 +107,7 @@ export function MarketSheet() {
                   </p>
                 </div>
                 {isLive ? (
-                  <span className="shrink-0 font-display text-[16px] font-bold tabular-nums text-betclic-yellow">
+                  <span className="shrink-0 font-display text-[16px] font-bold tabular-nums text-betclic-red">
                     {match.homeScore ?? 0}–{match.awayScore ?? 0}
                   </span>
                 ) : (
@@ -262,7 +262,7 @@ function OutcomeCell({
         <span
           className={cn(
             "font-display text-[13px] font-extrabold tabular-nums leading-none",
-            isLive ? "text-betclic-yellow" : "text-ink"
+            isLive ? "text-betclic-red" : "text-ink"
           )}
         >
           {formatOdds(o.odds, oddsFormat)}

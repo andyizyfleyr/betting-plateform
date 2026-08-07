@@ -145,7 +145,7 @@ export default function MatchsPage() {
                 onClick={() => setFilter(key)}
                 className={cn(
                   "relative flex items-center justify-center gap-1 rounded-lg py-2 transition-colors",
-                  active ? "text-ink" : "text-mist"
+                  active ? "text-white" : "text-mist"
                 )}
               >
                 {active && (
@@ -158,7 +158,7 @@ export default function MatchsPage() {
                 <span className="relative z-10 flex items-center gap-1">
                   {key === "all" && <LayoutGrid className="h-3 w-3" strokeWidth={2.4} />}
                   {key === "live" && (
-                    <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-ink" : "bg-live live-dot")} />
+                    <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-white" : "bg-live live-dot")} />
                   )}
                   {key === "football" && <SportIcon sport="football" className="h-3 w-3" />}
                   <span className={cn("font-display text-[11.5px]", active ? "font-bold" : "font-medium")}>

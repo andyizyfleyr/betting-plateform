@@ -18,7 +18,7 @@ export function AppHeader() {
           </span>
           <span className="font-display text-[17px] font-bold tracking-tight text-ink">
             PULSE
-            <span className="ml-1 align-middle font-display text-[8px] font-bold tracking-[0.3em] text-betclic-yellow">
+            <span className="ml-1 align-middle font-display text-[8px] font-bold tracking-[0.3em] text-betclic-red">
               V5
             </span>
           </span>

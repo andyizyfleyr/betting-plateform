@@ -10,8 +10,6 @@
   --color-edge-soft: #ececec;
   --color-betclic-red: #E10014;
   --color-betclic-red-deep: #b80010;
-  --color-betclic-yellow: #FFCC00;
-  --color-betclic-yellow-deep: #e6b800;
   --color-bittersweet: #FB6962;
   --color-outer-space: #343A40;
   --color-live: #E10014;
@@ -52,7 +50,7 @@ body {
   inset: 0;
   background:
     radial-gradient(58rem 30rem at 50% -10%, rgba(225, 0, 20, 0.09), transparent 60%),
-    radial-gradient(40rem 30rem at 85% 110%, rgba(255, 204, 0, 0.08), transparent 60%),
+    radial-gradient(40rem 30rem at 85% 110%, rgba(225, 0, 20, 0.08), transparent 60%),
     radial-gradient(35rem 28rem at 8% 100%, rgba(251, 105, 98, 0.06), transparent 60%);
 }
 .ambient::after {

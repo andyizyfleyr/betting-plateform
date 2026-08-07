@@ -146,7 +146,7 @@ function AuthInner() {
               onClick={() => switchMode(m)}
               className={cn(
                 "relative rounded-lg py-2.5 font-display text-[12.5px] font-semibold transition-colors",
-                active ? "text-ink" : "text-mist"
+                active ? "text-white" : "text-mist"
               )}
             >
               {active && (

@@ -268,7 +268,7 @@ export default function ParametresPage() {
                   onClick={() => patch({ oddsFormat: v }, "Format des cotes mis à jour")}
                   className={cn(
                     "relative rounded-lg py-2 font-display text-[11.5px] transition-colors",
-                    active ? "font-bold text-ink" : "font-medium text-mist"
+                    active ? "font-bold text-white" : "font-medium text-mist"
                   )}
                 >
                   {active && (

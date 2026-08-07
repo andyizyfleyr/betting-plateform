@@ -93,7 +93,7 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
           lost && "bg-elev text-mist",
           cashed && "bg-bittersweet/15 text-bittersweet",
           live && "bg-betclic-red/15 text-betclic-red",
-          bet.status === "pending" && !live && "bg-betclic-yellow/15 text-betclic-yellow"
+          bet.status === "pending" && !live && "bg-betclic-red/15 text-betclic-red"
         )}
       >
         {live && <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />}
@@ -134,7 +134,7 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
 
         <div className="mt-3 flex items-center justify-between rounded-lg bg-elev px-3.5 py-2.5">
           <span className="text-[12.5px] font-semibold text-ink">{bet.selectionLabel}</span>
-          <span className="font-display text-[15px] font-bold tabular-nums text-betclic-yellow">
+          <span className="font-display text-[15px] font-bold tabular-nums text-betclic-red">
             {formatOdds(bet.odds, oddsFormat)}
           </span>
         </div>
@@ -239,7 +239,7 @@ function Amount({
           "mt-0.5 font-display text-[13.5px] font-bold tabular-nums",
           tone === "win" && "text-betclic-red",
           tone === "lost" && "text-mist",
-          tone === "pot" && "text-betclic-yellow",
+          tone === "pot" && "text-betclic-red",
           tone === "cash" && "text-bittersweet",
           tone === "neutral" && "text-ink"
         )}

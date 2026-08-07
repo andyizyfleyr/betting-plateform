@@ -130,7 +130,7 @@ export function Providers({ children }: { children: ReactNode }) {
 const TOAST_STYLE = {
   success: { Icon: CheckCircle2, cls: "text-betclic-red" },
   error: { Icon: AlertTriangle, cls: "text-betclic-red" },
-  info: { Icon: Info, cls: "text-betclic-yellow" },
+  info: { Icon: Info, cls: "text-betclic-red" },
 } as const;
 
 function Toasts({ toasts }: { toasts: Toast[] }) {
@@ -154,7 +154,7 @@ function Toasts({ toasts }: { toasts: Toast[] }) {
                   "-ml-px h-full w-[3px] shrink-0 self-stretch",
                   t.kind === "success" && "bg-betclic-red",
                   t.kind === "error" && "bg-bittersweet",
-                  t.kind === "info" && "bg-betclic-yellow"
+                  t.kind === "info" && "bg-betclic-red"
                 )}
               />
               <Icon className={`h-5 w-5 shrink-0 ${cls}`} strokeWidth={2.2} />

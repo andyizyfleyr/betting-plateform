@@ -159,10 +159,10 @@ export function BetModal() {
                         <span className="text-mist">{target.marketLabel}</span>
                       )}
                       <span className="text-dim"> · </span>
-                      <span className="text-betclic-yellow">{target.label}</span>
+                      <span className="text-betclic-red">{target.label}</span>
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-lg bg-betclic-yellow/10 px-2.5 py-1.5 font-display text-[17px] font-bold tabular-nums text-betclic-yellow">
+                  <span className="shrink-0 rounded-lg bg-betclic-red/10 px-2.5 py-1.5 font-display text-[17px] font-bold tabular-nums text-betclic-red">
                     {formatOdds(target.odds, oddsFormat)}
                   </span>
                 </div>
@@ -275,7 +275,7 @@ export function BetModal() {
                   <AnimatedNumber
                     value={payout}
                     format={eur}
-                    className="font-display text-[22px] font-bold tabular-nums text-betclic-yellow"
+                    className="font-display text-[22px] font-bold tabular-nums text-betclic-red"
                   />
                 </div>
 
@@ -433,7 +433,7 @@ function SuccessView({
             </div>
             <div className="mt-2.5 flex items-center justify-between rounded-lg bg-elev px-3 py-2">
               <span className="text-[12px] font-semibold text-ink">{target.label}</span>
-              <span className="font-display text-[14px] font-bold tabular-nums text-betclic-yellow">
+              <span className="font-display text-[14px] font-bold tabular-nums text-betclic-red">
                 {formatOdds(target.odds, oddsFormat)}
               </span>
             </div>
@@ -457,7 +457,7 @@ function SuccessView({
             </div>
             <div className="text-right">
               <p className="text-[8.5px] font-semibold tracking-[0.16em] text-dim">À GAGNER</p>
-              <p className="glow-betclic mt-0.5 font-display text-[13px] font-bold tabular-nums text-betclic-yellow">
+              <p className="glow-betclic mt-0.5 font-display text-[13px] font-bold tabular-nums text-betclic-red">
                 {eur(payout)}
               </p>
             </div>

@@ -54,7 +54,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
           <div className="flex flex-col items-center px-2">
             {isLive ? (
               <>
-                <span className="glow-betclic font-display text-[32px] font-bold leading-none tabular-nums text-betclic-yellow">
+                <span className="glow-betclic font-display text-[32px] font-bold leading-none tabular-nums text-betclic-red">
                   {match.homeScore ?? 0}–{match.awayScore ?? 0}
                 </span>
                 <span className="mt-2 inline-flex items-center gap-1.5 font-display text-[10px] font-black tracking-wide text-betclic-red">
@@ -79,7 +79,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
       <div className="relative">
         <ResultOdds match={match} />
         <div className="flex items-center justify-center gap-1.5 border-t border-edge bg-elev py-1.5">
-          <LayoutGrid className="h-3 w-3 text-betclic-yellow" strokeWidth={2.4} />
+          <LayoutGrid className="h-3 w-3 text-betclic-red" strokeWidth={2.4} />
           <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
             TOUS LES MARCHÉS
           </span>
