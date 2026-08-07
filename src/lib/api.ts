@@ -1,6 +1,7 @@
 export type MatchStatus = "live" | "upcoming" | "finished";
 export type BetStatus = "pending" | "won" | "lost" | "cashed";
 export type Selection = "home" | "draw" | "away";
+export type BetKind = "sport" | "prediction";
 
 export interface MarketOutcome {
   key: string;
@@ -42,13 +43,16 @@ export interface ClientMatch {
 
 export interface ClientBet {
   id: number;
+  kind: BetKind;
   matchId: number | null;
   sport: string;
   league: string;
   homeTeam: string;
   awayTeam: string;
+  question?: string | null;
+  questionId?: number | null;
   market: string;
-  selection: Selection;
+  selection: string;
   selectionLabel: string;
   odds: number;
   stake: number;
@@ -63,6 +67,36 @@ export interface ClientBet {
   matchAwayScore: number | null;
   matchMinute: string | null;
   matchStartsAt: string | null;
+}
+
+/** Question de prédiction (marché Oui/Non). */
+export interface ClientPrediction {
+  id: number;
+  question: string;
+  category: string;
+  status: "open" | "resolved";
+  resolution: "yes" | "no" | null;
+  oddsYes: number;
+  oddsNo: number;
+  volume: number;
+  yesCount: number;
+  noCount: number;
+  resolvesAt: string;
+  resolvedAt: string | null;
+}
+
+export interface ClientPredictionBet {
+  id: number;
+  questionId: number;
+  question: string;
+  category: string;
+  selection: "yes" | "no";
+  selectionLabel: string;
+  odds: number;
+  stake: number;
+  potentialWin: number;
+  status: BetStatus;
+  placedAt: string;
 }
 
 export interface ClientUser {
@@ -109,6 +143,17 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ betId }),
+    }),
+  predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions"),
+  placePredictionBet: (payload: {
+    questionId: number;
+    selection: "yes" | "no";
+    stake: number;
+  }) =>
+    request<{ bet: ClientPredictionBet; balance: number }>("/api/predictions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
     }),
   settings: () => request<{ user: ClientUser }>("/api/settings"),
   patchSettings: (patch: Partial<ClientUser> | { action: "deposit"; amount: number }) =>

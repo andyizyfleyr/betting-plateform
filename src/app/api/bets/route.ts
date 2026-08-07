@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
-import { appUser, bets, matches } from "@/db/schema";
+import { appUser, bets, matches, predictionBets } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
 import { isKnownMarket, liveMarketOddsFor, marketLabelFor, marketOddsFor, marketOutcomeSettled, marketWin, minuteNumber } from "@/lib/markets";
+import { settleResolvedQuestions } from "@/lib/predictions";
 import { getAuthUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,7 @@ export async function GET(req: NextRequest) {
   await runLiveEngine();
   const uid = (await getAuthUserId(req)) ?? 1;
   await settleFinishedBets();
+  await settleResolvedQuestions();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
 
@@ -75,11 +77,14 @@ export async function GET(req: NextRequest) {
     const livePending = bet.status === "pending" && match?.status === "live";
     return {
       id: bet.id,
+      kind: "sport" as const,
       matchId: bet.matchId,
       sport: bet.sport,
       league: bet.league,
       homeTeam: bet.homeTeam,
       awayTeam: bet.awayTeam,
+      question: null,
+      questionId: null,
       market: bet.market,
       selection: bet.selection,
       selectionLabel: bet.selectionLabel,
@@ -109,12 +114,49 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  const predRows = await db
+    .select()
+    .from(predictionBets)
+    .where(eq(predictionBets.userId, uid))
+    .orderBy(desc(predictionBets.placedAt));
+
+  const predMapped = predRows.map((pb) => ({
+    id: pb.id,
+    kind: "prediction" as const,
+    matchId: null,
+    sport: "prédiction",
+    league: pb.category,
+    homeTeam: "",
+    awayTeam: "",
+    question: pb.question,
+    questionId: pb.questionId,
+    market: "yesno",
+    selection: pb.selection,
+    selectionLabel: pb.selectionLabel,
+    odds: pb.odds,
+    stake: pb.stake,
+    potentialWin: pb.potentialWin,
+    status: pb.status,
+    cashOutAmount: null,
+    cashOut: null,
+    placedAt: pb.placedAt,
+    matchStatus: null,
+    matchHomeScore: null,
+    matchAwayScore: null,
+    matchMinute: null,
+    matchStartsAt: null,
+  }));
+
+  const combined = [...predMapped, ...mapped].sort(
+    (a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime()
+  );
+
   const filtered =
     filter === "ongoing"
-      ? mapped.filter((b) => b.status === "pending")
+      ? combined.filter((b) => b.status === "pending")
       : filter === "finished"
-        ? mapped.filter((b) => b.status !== "pending")
-        : mapped;
+        ? combined.filter((b) => b.status !== "pending")
+        : combined;
 
   return NextResponse.json({ bets: filtered, balance: user?.balance ?? null });
 }

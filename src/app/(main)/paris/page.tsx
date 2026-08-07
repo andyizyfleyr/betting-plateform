@@ -65,7 +65,10 @@ export default function ParisPage() {
               toast({
                 kind: "info",
                 title: "Pari perdu",
-                description: `${b.homeTeam} – ${b.awayTeam} · ${b.selectionLabel}`,
+                description:
+                  b.kind === "prediction"
+                    ? `${b.question} · ${b.selectionLabel}`
+                    : `${b.homeTeam} – ${b.awayTeam} · ${b.selectionLabel}`,
               });
           }
         }

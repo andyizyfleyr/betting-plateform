@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, HandCoins, Loader2, X } from "lucide-react";
+import { Check, HandCoins, Loader2, TrendingUp, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
@@ -15,6 +15,7 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
   const [confirming, setConfirming] = useState(false);
   const [cashing, setCashing] = useState(false);
 
+  const isPrediction = bet.kind === "prediction";
   const won = bet.status === "won";
   const lost = bet.status === "lost";
   const cashed = bet.status === "cashed";
@@ -84,8 +85,21 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
 
       {/* En-tête du ticket */}
       <div className="relative flex items-center gap-2 px-3.5 pt-3.5">
-        <SportIcon sport={bet.sport} className="h-3.5 w-3.5 text-dim" />
-        <span className="truncate text-[11px] font-medium text-mist">{bet.league}</span>
+        {isPrediction ? (
+          <>
+            <TrendingUp className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
+            <span className="font-display text-[10px] font-bold tracking-[0.16em] text-betclic-red">
+              PRÉDICTION
+            </span>
+            <span className="text-dim">·</span>
+            <span className="truncate text-[11px] font-medium text-mist">{bet.league}</span>
+          </>
+        ) : (
+          <>
+            <SportIcon sport={bet.sport} className="h-3.5 w-3.5 text-dim" />
+            <span className="truncate text-[11px] font-medium text-mist">{bet.league}</span>
+          </>
+        )}
 <span
         className={cn(
           "ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-display text-[9.5px] font-bold tracking-[0.14em]",
@@ -109,28 +123,32 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
       </span>
       </div>
 
-      {/* Équipes + sélection */}
+      {/* Question / équipes + sélection */}
       <div className="relative px-3.5 pt-3.5">
-        <div className="flex items-center gap-3">
-          <div className="flex -space-x-2.5">
-            <TeamAvatar name={bet.homeTeam} size="sm" className="ring-2 ring-card" />
-            <TeamAvatar name={bet.awayTeam} size="sm" className="ring-2 ring-card" />
+        {isPrediction ? (
+          <p className="font-display text-[14.5px] font-semibold leading-snug">{bet.question}</p>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-2.5">
+              <TeamAvatar name={bet.homeTeam} size="sm" className="ring-2 ring-card" />
+              <TeamAvatar name={bet.awayTeam} size="sm" className="ring-2 ring-card" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-display text-[14.5px] font-semibold leading-tight">
+                {bet.homeTeam} <span className="text-dim">vs</span> {bet.awayTeam}
+              </p>
+              <p className="mt-0.5 text-[11px] tabular-nums text-dim">
+                {bet.matchStatus === "live" && bet.matchHomeScore != null
+                  ? `${bet.matchHomeScore} - ${bet.matchAwayScore} · ${bet.matchMinute}`
+                  : bet.matchStatus === "finished" && bet.matchHomeScore != null
+                    ? `Score final · ${bet.matchHomeScore} - ${bet.matchAwayScore}`
+                    : bet.matchStartsAt
+                      ? formatKickoff(bet.matchStartsAt)
+                      : formatPlacedAt(bet.placedAt)}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-display text-[14.5px] font-semibold leading-tight">
-              {bet.homeTeam} <span className="text-dim">vs</span> {bet.awayTeam}
-            </p>
-            <p className="mt-0.5 text-[11px] tabular-nums text-dim">
-              {bet.matchStatus === "live" && bet.matchHomeScore != null
-                ? `${bet.matchHomeScore} - ${bet.matchAwayScore} · ${bet.matchMinute}`
-                : bet.matchStatus === "finished" && bet.matchHomeScore != null
-                  ? `Score final · ${bet.matchHomeScore} - ${bet.matchAwayScore}`
-                  : bet.matchStartsAt
-                    ? formatKickoff(bet.matchStartsAt)
-                    : formatPlacedAt(bet.placedAt)}
-            </p>
-          </div>
-        </div>
+        )}
 
         <div className="mt-3 flex items-center justify-between rounded-lg bg-elev px-3.5 py-2.5">
           <span className="text-[12.5px] font-semibold text-ink">{bet.selectionLabel}</span>

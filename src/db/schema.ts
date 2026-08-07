@@ -78,6 +78,51 @@ export const bets = pgTable("bets", {
 });
 
 /**
+ * Questions de prédiction (marchés Oui/Non, style Kalshi/Polymarket).
+ * status: "open" | "resolved"
+ * resolution: "yes" | "no" | null (null tant que non résolue)
+ * seedValue: graine déterministe utilisée à la résolution (jamais exposée au client).
+ */
+export const predictionQuestions = pgTable("prediction_questions", {
+  id: serial("id").primaryKey(),
+  question: text("question").notNull(),
+  category: text("category").notNull(),
+  status: text("status").notNull().default("open"),
+  resolution: text("resolution"),
+  seedValue: integer("seed_value").notNull().default(0),
+  oddsYes: doublePrecision("odds_yes").notNull(),
+  oddsNo: doublePrecision("odds_no").notNull(),
+  volume: doublePrecision("volume").notNull().default(0),
+  yesCount: integer("yes_count").notNull().default(0),
+  noCount: integer("no_count").notNull().default(0),
+  resolvesAt: timestamp("resolves_at", { mode: "date" }).notNull(),
+  resolvedAt: timestamp("resolved_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+/**
+ * Paris placés sur les questions de prédiction.
+ * status: "pending" | "won" | "lost"
+ */
+export const predictionBets = pgTable("prediction_bets", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().default(1),
+  questionId: integer("question_id")
+    .notNull()
+    .references(() => predictionQuestions.id),
+  selection: text("selection").notNull(), // "yes" | "no"
+  selectionLabel: text("selection_label").notNull(), // "Oui" | "Non"
+  /** Instantané de la question (texte + catégorie) à la prise du pari. */
+  question: text("question").notNull(),
+  category: text("category").notNull(),
+  odds: doublePrecision("odds").notNull(),
+  stake: doublePrecision("stake").notNull(),
+  potentialWin: doublePrecision("potential_win").notNull(),
+  status: text("status").notNull().default("pending"),
+  placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+/**
  * Profil + préférences utilisateur (une seule ligne, id = 1).
  */
 export const appUser = pgTable("app_user", {
@@ -142,6 +187,8 @@ export const acceleratorRounds = pgTable("accelerator_rounds", {
 
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
+export type PredictionQuestionRow = typeof predictionQuestions.$inferSelect;
+export type PredictionBetRow = typeof predictionBets.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;
 export type AcceleratorRoundRow = typeof acceleratorRounds.$inferSelect;

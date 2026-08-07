@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { SlidersHorizontal, Ticket, Trophy } from "lucide-react";
+import { SlidersHorizontal, Ticket, TrendingUp, Trophy } from "lucide-react";
 import { useApp } from "./providers";
 import { cn } from "@/lib/format";
 
 const ITEMS = [
   { href: "/matchs", label: "Matchs", Icon: Trophy },
+  { href: "/predictions", label: "Prédictions", Icon: TrendingUp },
   { href: "/paris", label: "Mes paris", Icon: Ticket },
   { href: "/parametres", label: "Réglages", Icon: SlidersHorizontal },
 ];
