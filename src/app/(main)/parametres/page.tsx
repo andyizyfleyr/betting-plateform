@@ -117,7 +117,7 @@ export default function ParametresPage() {
       >
         <div className="relative h-[76px] bg-[linear-gradient(120deg,rgba(225,0,20,0.2),rgba(125,211,252,0.12)_55%,transparent)]">
           <div aria-hidden className="bg-texture absolute inset-0" />
-          <p className="absolute right-4 top-3 font-display text-[9px] font-bold tracking-[0.3em] text-white/40">
+          <p className="absolute right-4 top-3 font-display text-[9px] font-bold tracking-[0.3em] text-ink/40">
             MEMBRE GOLD
           </p>
         </div>
@@ -163,7 +163,7 @@ export default function ParametresPage() {
       <motion.section
         {...listAnim}
         transition={{ duration: 0.5, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-        className="glass-card mt-2.5 grid grid-cols-3 divide-x divide-white/[0.07] rounded-[22px] py-3"
+        className="glass-card mt-2.5 grid grid-cols-3 divide-x divide-edge rounded-[22px] py-3"
       >
         <StatCell label="PARIS" value={String(stats.total)} Icon={Ticket} />
         <StatCell label="GAGNÉS" value={String(stats.wins)} Icon={BadgeCheck} accent />
@@ -187,7 +187,7 @@ export default function ParametresPage() {
         <AnimatedNumber
           value={user?.balance ?? 0}
           format={eur}
-          className="relative mt-1 block font-display text-[36px] font-bold tabular-nums tracking-tight text-white"
+          className="relative mt-1 block font-display text-[36px] font-bold tabular-nums tracking-tight text-ink"
         />
         <p className="relative text-[11px] font-medium text-win">
           +{eur(stats.gains)} encaissés depuis le début
@@ -205,7 +205,7 @@ export default function ParametresPage() {
           <motion.button
             whileTap={{ scale: 0.96 }}
             onClick={soon("Retraits")}
-            className="glass-card flex flex-1 items-center justify-center rounded-xl py-3 font-display text-[13px] font-semibold text-white"
+            className="glass-card flex flex-1 items-center justify-center rounded-xl py-3 font-display text-[13px] font-semibold text-ink"
           >
             Retirer
           </motion.button>
@@ -244,7 +244,7 @@ export default function ParametresPage() {
           onChange={(v) => patch({ liveSim: v }, v ? "Simulation activée" : "Simulation en pause")}
           last
         />
-        <div className="border-t border-white/[0.06] px-4 py-3.5">
+        <div className="border-t border-edge px-4 py-3.5">
           <div className="flex items-center gap-3">
             <IconBubble>
               <HandCoins className="h-4 w-4" strokeWidth={2.2} />
@@ -254,7 +254,7 @@ export default function ParametresPage() {
               <p className="text-[11px] text-dim">Affichage sur toutes les fiches</p>
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+          <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
             {(
               [
                 { v: "decimal", label: "Décimal · 1,95" },
@@ -393,7 +393,7 @@ function StatCell({
       <p
         className={cn(
           "font-display text-[16px] font-bold tabular-nums",
-          accent ? "text-betclic-red" : "text-white"
+          accent ? "text-betclic-red" : "text-ink"
         )}
       >
         {value}
@@ -416,7 +416,7 @@ function GhostTitle({ num, label, delay }: { num: string; label: string; delay: 
       <h2 className="pb-0.5 font-display text-[12px] font-bold uppercase tracking-[0.22em] text-mist">
         {label}
       </h2>
-      <span className="mb-1 h-px flex-1 bg-white/[0.06]" />
+      <span className="mb-1 h-px flex-1 bg-elev" />
     </motion.div>
   );
 }
@@ -457,7 +457,7 @@ function SwitchRow({
   last?: boolean;
 }) {
   return (
-    <div className={cn("flex items-center gap-3 px-4 py-3.5", !last && "border-b border-white/[0.06]")}>
+    <div className={cn("flex items-center gap-3 px-4 py-3.5", !last && "border-b border-edge")}>
       <IconBubble>{Icon}</IconBubble>
       <div className="min-w-0 flex-1">
         <p className="font-display text-[13.5px] font-semibold">{label}</p>
@@ -489,7 +489,7 @@ function ChevronRow({
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-elev/50",
-        !last && "border-b border-white/[0.06]"
+        !last && "border-b border-edge"
       )}
     >
       <IconBubble>{Icon}</IconBubble>

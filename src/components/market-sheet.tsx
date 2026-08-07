@@ -49,7 +49,7 @@ export function MarketSheet() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
             onClick={closeMarkets}
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
           />
 
           <motion.div
@@ -65,20 +65,20 @@ export function MarketSheet() {
             onDragEnd={(_, info) => {
               if (info.offset.y > 130 || info.velocity.y > 600) closeMarkets();
             }}
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[94dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-white/10 bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.9)]"
+            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[94dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-edge bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.3)]"
           >
             <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-betclic-red/70 to-transparent" />
 
             {/* En-tête match, collant — zone de drag pour mobile */}
             <div
               onPointerDown={(e) => dragControls.start(e)}
-              className="shrink-0 cursor-grab border-b border-white/[0.07] px-4 pb-3 pt-1 active:cursor-grabbing"
+              className="shrink-0 cursor-grab border-b border-edge px-4 pb-3 pt-1 active:cursor-grabbing"
             >
               <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-elev" />
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <p className="font-display text-[16px] font-bold tracking-tight">Marchés</p>
-                  <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 font-display text-[9.5px] font-bold text-mist">
+                  <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-bold text-mist">
                     {groups.length}
                   </span>
                 </div>
@@ -92,7 +92,7 @@ export function MarketSheet() {
                 </motion.button>
               </div>
 
-              <div className="mt-2.5 flex items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+              <div className="mt-2.5 flex items-center gap-2.5 rounded-2xl border border-edge bg-elev px-3 py-2.5">
                 <div className="flex shrink-0 -space-x-2">
                   <TeamAvatar name={match.homeTeam} size="sm" className="ring-2 ring-card" />
                   <TeamAvatar name={match.awayTeam} size="sm" className="ring-2 ring-card" />
@@ -142,7 +142,7 @@ export function MarketSheet() {
               ))}
             </div>
 
-            <p className="shrink-0 border-t border-white/[0.06] px-4 py-2 text-center text-[9.5px] text-dim">
+            <p className="shrink-0 border-t border-edge px-4 py-2 text-center text-[9.5px] text-dim">
               Cotes fournies à titre indicatif · 18+ · Jouez de manière responsable.
             </p>
           </motion.div>
@@ -172,8 +172,8 @@ function AccordionItem({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.07] bg-white/[0.02] p-2.5 transition-colors duration-200",
-        open && "border-betclic-red/20 bg-white/[0.04]",
+        "rounded-2xl border border-edge bg-elev p-2.5 transition-colors duration-200",
+        open && "border-betclic-red/20 bg-white",
       )}
     >
       <button
@@ -181,7 +181,7 @@ function AccordionItem({
         aria-expanded={open}
         className="relative mb-1.5 flex w-full items-center pr-[30px] text-left"
       >
-        <span className="text-[11px] font-bold leading-tight tracking-tight text-white">
+        <span className="text-[11px] font-bold leading-tight tracking-tight text-ink">
           {group.label}
         </span>
         <ChevronDown
@@ -249,7 +249,7 @@ function OutcomeCell({
       onClick={suspended ? undefined : onPick}
       aria-disabled={suspended}
       className={cn(
-        "flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-betclic-red/60 active:bg-betclic-red/[0.14]",
+        "flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-edge bg-elev px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-betclic-red/60 active:bg-betclic-red/[0.14]",
         suspended && "cursor-not-allowed opacity-50"
       )}
     >
@@ -262,7 +262,7 @@ function OutcomeCell({
         <span
           className={cn(
             "font-display text-[13px] font-extrabold tabular-nums leading-none",
-            isLive ? "text-betclic-yellow" : "text-white"
+            isLive ? "text-betclic-yellow" : "text-ink"
           )}
         >
           {formatOdds(o.odds, oddsFormat)}

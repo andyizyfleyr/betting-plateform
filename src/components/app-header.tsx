@@ -10,13 +10,13 @@ export function AppHeader() {
   const { balance, pendingCount, user } = useApp();
 
   return (
-    <header className="sticky top-0 z-40 bg-ink/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl">
       <div className="flex h-12 items-center justify-between px-3.5">
         <Link href="/matchs" className="group flex items-center gap-2">
           <span className="relative grid h-7 w-7 rotate-45 place-items-center rounded-[7px] bg-betclic-red shadow-[0_6px_20px_-4px_rgba(225,0,20,0.55)] transition-transform duration-300 group-active:scale-90 group-active:rotate-[135deg]">
             <Zap className="h-3.5 w-3.5 -rotate-45 fill-white text-white transition-transform duration-300 group-active:-rotate-[135deg]" strokeWidth={2.4} />
           </span>
-          <span className="font-display text-[17px] font-bold tracking-tight text-white">
+          <span className="font-display text-[17px] font-bold tracking-tight text-ink">
             PULSE
             <span className="ml-1 align-middle font-display text-[8px] font-bold tracking-[0.3em] text-betclic-yellow">
               V5
@@ -64,7 +64,7 @@ export function AppHeader() {
               <AnimatedNumber
                 value={balance}
                 format={eur}
-                className="font-display text-[12.5px] font-bold tabular-nums tracking-tight text-white"
+                className="font-display text-[12.5px] font-bold tabular-nums tracking-tight text-ink"
               />
             </Link>
           ) : (
@@ -77,7 +77,7 @@ export function AppHeader() {
           )}
         </div>
       </div>
-      <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <div className="h-px bg-gradient-to-r from-transparent via-ink/10 to-transparent" />
     </header>
   );
 }

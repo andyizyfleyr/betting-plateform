@@ -78,7 +78,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
       {/* Cotes 1/N/2 rapides + invite à ouvrir les marchés */}
       <div className="relative">
         <ResultOdds match={match} />
-        <div className="flex items-center justify-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] py-1.5">
+        <div className="flex items-center justify-center gap-1.5 border-t border-edge bg-elev py-1.5">
           <LayoutGrid className="h-3 w-3 text-betclic-yellow" strokeWidth={2.4} />
           <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
             TOUS LES MARCHÉS

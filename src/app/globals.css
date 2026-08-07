@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #000000;
-  --color-deep: #0a0a0a;
-  --color-surface: #121212;
-  --color-card: #1a1a1a;
-  --color-elev: #222222;
-  --color-edge: #333333;
-  --color-edge-soft: #2a2a2a;
+  --color-ink: #1a1a1a;
+  --color-deep: #f5f5f5;
+  --color-surface: #ffffff;
+  --color-card: #ffffff;
+  --color-elev: #f0f0f0;
+  --color-edge: #e0e0e0;
+  --color-edge-soft: #ececec;
   --color-betclic-red: #E10014;
   --color-betclic-red-deep: #b80010;
   --color-betclic-yellow: #FFCC00;
@@ -15,9 +15,9 @@
   --color-bittersweet: #FB6962;
   --color-outer-space: #343A40;
   --color-live: #E10014;
-  --color-win: #4ade80;
-  --color-mist: #8a97a5;
-  --color-dim: #5b6875;
+  --color-win: #16a34a;
+  --color-mist: #666666;
+  --color-dim: #999999;
 
   --font-display: var(--font-grotesk), system-ui, sans-serif;
   --font-body: var(--font-inter), system-ui, sans-serif;
@@ -29,14 +29,14 @@ html {
 
 body {
   font-family: var(--font-inter), system-ui, sans-serif;
-  background: #030507;
+  background: #f5f5f5;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
-  background: var(--color-betclic-yellow);
-  color: #000000;
+  background: var(--color-betclic-red);
+  color: #ffffff;
 }
 
 /* ---------- Ambiance desktop ---------- */
@@ -79,25 +79,23 @@ body {
 
 /* ---------- Matière "panel" signature V5 ---------- */
 .glass-card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.012)),
-    var(--color-card);
-  border: 1px solid rgba(255, 255, 255, 0.065);
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.055),
-    0 18px 42px -26px rgba(0, 0, 0, 0.9);
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 18px 42px -26px rgba(0, 0, 0, 0.12);
 }
 
 .glass-pill {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
   backdrop-filter: blur(16px);
 }
 
 /* Liseré lumineux des tickets gagnés (après .glass-card pour l'emporter) */
 .ticket-won {
   background:
-    linear-gradient(var(--color-card), var(--color-card)) padding-box,
+    linear-gradient(#ffffff, #ffffff) padding-box,
     linear-gradient(135deg, rgba(225, 0, 20, 0.6), rgba(225, 0, 20, 0.06) 45%) border-box;
   border: 1px solid transparent;
 }
@@ -105,7 +103,7 @@ body {
 /* Numéros fantômes éditoriaux */
 .ghost-num {
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.09);
+  -webkit-text-stroke: 1.5px rgba(0, 0, 0, 0.08);
 }
 
 /* Ticker défilant */
@@ -139,15 +137,15 @@ body {
 .barcode {
   background-image: repeating-linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.55) 0 2px,
+    rgba(0, 0, 0, 0.55) 0 2px,
     transparent 2px 4px,
-    rgba(255, 255, 255, 0.55) 4px 5px,
+    rgba(0, 0, 0, 0.55) 4px 5px,
     transparent 5px 9px,
-    rgba(255, 255, 255, 0.55) 9px 12px,
+    rgba(0, 0, 0, 0.55) 9px 12px,
     transparent 12px 13px,
-    rgba(255, 255, 255, 0.55) 13px 14px,
+    rgba(0, 0, 0, 0.55) 13px 14px,
     transparent 14px 18px,
-    rgba(255, 255, 255, 0.55) 18px 21px,
+    rgba(0, 0, 0, 0.55) 18px 21px,
     transparent 21px 23px
   );
 }
@@ -251,9 +249,9 @@ input[type="range"].pulse-range:disabled {
 .shimmer {
   background: linear-gradient(
     100deg,
-    rgba(255, 255, 255, 0.03) 40%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.03) 60%
+    rgba(0, 0, 0, 0.03) 40%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.03) 60%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;

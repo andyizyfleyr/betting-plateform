@@ -157,7 +157,7 @@ export default function ParisPage() {
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        className="relative mt-4 overflow-hidden rounded-[22px] border border-betclic-red/20 bg-[linear-gradient(135deg,#101a12,#0c1220_55%,#0d141e)] p-4"
+        className="relative mt-4 overflow-hidden rounded-[22px] border border-betclic-red/20 bg-[linear-gradient(135deg,#fef2f2,#fff5f5_55%,#f5f5f5)] p-4"
       >
         <div aria-hidden className="bg-texture pointer-events-none absolute inset-0" />
         <div
@@ -210,7 +210,7 @@ export default function ParisPage() {
       </motion.div>
 
       {/* Onglets soulignés */}
-      <div className="mt-5 flex border-b border-white/10">
+      <div className="mt-5 flex border-b border-edge">
         {(
           [
             { key: "ongoing", label: `En cours${pendingCount ? ` · ${pendingCount}` : ""}` },
@@ -226,7 +226,7 @@ export default function ParisPage() {
             <span
               className={cn(
                 "font-display text-[13px]",
-                tab === key ? "font-bold text-white" : "font-medium text-mist"
+                tab === key ? "font-bold text-ink" : "font-medium text-mist"
               )}
             >
               {label}
@@ -327,7 +327,7 @@ function MiniStat({ label, value, accent }: { label: string; value: string; acce
       <p
         className={cn(
           "truncate font-display text-[13px] font-bold tabular-nums",
-          accent ? "text-betclic-red" : "text-white"
+          accent ? "text-betclic-red" : "text-ink"
         )}
       >
         {value}

@@ -86,7 +86,7 @@ function AuthInner() {
             <Zap className="h-4 w-4 -rotate-45 fill-white text-white" strokeWidth={2.4} />
           </span>
           <div>
-            <p className="font-display text-[17px] font-bold leading-none tracking-tight text-white">
+            <p className="font-display text-[17px] font-bold leading-none tracking-tight text-ink">
               PULSE
             </p>
             <p className="mt-0.5 font-display text-[8px] font-bold tracking-[0.3em] text-mist">
@@ -184,7 +184,7 @@ function AuthInner() {
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
               placeholder="Nom d'utilisateur"
-              className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-white outline-none placeholder:text-dim"
+              className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-ink outline-none placeholder:text-dim"
             />
           </FieldWrap>
         )}
@@ -198,8 +198,8 @@ function AuthInner() {
             onChange={(e) => setEmail(e.target.value)}
             type="email"
             autoComplete="email"
-            placeholder="Adresse e-mail"
-            className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-white outline-none placeholder:text-dim"
+              placeholder="Adresse e-mail"
+              className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-ink outline-none placeholder:text-dim"
           />
         </FieldWrap>
 
@@ -212,8 +212,8 @@ function AuthInner() {
             onChange={(e) => setPassword(e.target.value)}
             type={showPw ? "text" : "password"}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
-            placeholder="Mot de passe"
-            className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-white outline-none placeholder:text-dim"
+              placeholder="Mot de passe"
+              className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-ink outline-none placeholder:text-dim"
           />
           <button
             type="button"
@@ -299,7 +299,7 @@ function FieldWrap({ children }: { children: React.ReactNode }) {
 
 function FieldIcon({ children }: { children: React.ReactNode }) {
   return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
+    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elev">
       {children}
     </span>
   );

@@ -67,7 +67,7 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
 
       {/* Invite à ouvrir les marchés */}
       {!isFinished && (
-        <div className="flex items-center justify-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] py-1.5">
+        <div className="flex items-center justify-center gap-1.5 border-t border-edge bg-elev py-1.5">
           <LayoutGrid className="h-3 w-3 text-betclic-yellow" strokeWidth={2.4} />
           <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
             TOUS LES MARCHÉS
@@ -99,9 +99,9 @@ return (
           "font-display text-[14px] font-semibold tracking-tight",
           isFinished
             ? winner
-              ? "text-white"
+              ? "text-ink"
               : "text-mist"
-            : "text-white"
+            : "text-ink"
         )}
       >
         {name}
@@ -118,9 +118,9 @@ return (
               ? "glow-betclic text-betclic-yellow"
               : isFinished
                 ? winner
-                  ? "text-white"
+                  ? "text-ink"
                   : "text-mist"
-                : "text-white"
+                : "text-ink"
           )}
         >
           {score}
@@ -165,7 +165,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
   return (
     <div
       className={cn(
-        "relative grid border-t border-white/[0.06] bg-white/[0.02]",
+        "relative grid border-t border-edge bg-elev",
         cells.length === 3 ? "grid-cols-3" : "grid-cols-2"
       )}
     >
@@ -219,8 +219,8 @@ function OddsCell({
       aria-disabled={suspended}
       className={cn(
         "relative flex h-11 flex-col items-center justify-center transition-colors duration-500",
-        borderLeft && "border-l border-white/[0.06]",
-        suspended && "cursor-not-allowed opacity-60 bg-white/[0.01]",
+        borderLeft && "border-l border-edge",
+        suspended && "cursor-not-allowed opacity-60 bg-elev/50",
         flash === "up" && "bg-betclic-yellow/[0.13]",
         flash === "down" && "bg-betclic-red/[0.13]"
       )}
@@ -238,7 +238,7 @@ function OddsCell({
           <span
             className={cn(
               "font-display text-[14px] font-bold tabular-nums",
-              isLive ? "text-betclic-yellow" : "text-white"
+              isLive ? "text-betclic-yellow" : "text-ink"
             )}
           >
             {formatOdds(odds, oddsFormat)}

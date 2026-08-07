@@ -132,8 +132,8 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between rounded-lg bg-white/[0.05] px-3.5 py-2.5">
-          <span className="text-[12.5px] font-semibold text-white">{bet.selectionLabel}</span>
+        <div className="mt-3 flex items-center justify-between rounded-lg bg-elev px-3.5 py-2.5">
+          <span className="text-[12.5px] font-semibold text-ink">{bet.selectionLabel}</span>
           <span className="font-display text-[15px] font-bold tabular-nums text-betclic-yellow">
             {formatOdds(bet.odds, oddsFormat)}
           </span>
@@ -142,8 +142,8 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
 
       {/* Séparateur perforé */}
       <div className="relative mx-3.5 mt-3.5 border-t border-dashed border-edge">
-        <span className="absolute -left-[25px] -top-[11px] h-[22px] w-[22px] rounded-full bg-ink shadow-[inset_-1px_0_0_rgba(255,255,255,0.075)]" />
-        <span className="absolute -right-[25px] -top-[11px] h-[22px] w-[22px] rounded-full bg-ink shadow-[inset_1px_0_0_rgba(255,255,255,0.075)]" />
+        <span className="absolute -left-[25px] -top-[11px] h-[22px] w-[22px] rounded-full bg-ink shadow-[inset_-1px_0_0_rgba(0,0,0,0.075)]" />
+        <span className="absolute -right-[25px] -top-[11px] h-[22px] w-[22px] rounded-full bg-ink shadow-[inset_1px_0_0_rgba(0,0,0,0.075)]" />
       </div>
 
       {/* Montants */}
@@ -190,7 +190,7 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
               <motion.button
                 whileTap={{ scale: 0.94 }}
                 onClick={() => setConfirming(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-mist"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-elev text-mist"
                 aria-label="Annuler"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={2.4} />
@@ -241,7 +241,7 @@ function Amount({
           tone === "lost" && "text-mist",
           tone === "pot" && "text-betclic-yellow",
           tone === "cash" && "text-bittersweet",
-          tone === "neutral" && "text-white"
+          tone === "neutral" && "text-ink"
         )}
       >
         {value}

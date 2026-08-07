@@ -87,7 +87,7 @@ export function BetModal() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
             onClick={phase === "success" ? undefined : closeBet}
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
           />
 
           <motion.div
@@ -103,7 +103,7 @@ export function BetModal() {
             onDragEnd={(_, info) => {
               if (info.offset.y > 130 || info.velocity.y > 600) closeBet();
             }}
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[94dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-white/10 bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.9)]"
+            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[94dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-edge bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.3)]"
           >
             <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-betclic-red/70 to-transparent" />
 
@@ -174,7 +174,7 @@ export function BetModal() {
                     <div
                       className={cn(
                         "flex items-baseline font-display text-[32px] font-bold leading-none tracking-tight tabular-nums",
-                        overBalance ? "text-betclic-red" : "text-white"
+                        overBalance ? "text-betclic-red" : "text-ink"
                       )}
                     >
                       {eur(stake)}
@@ -211,7 +211,7 @@ export function BetModal() {
                       key={a}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => setCents((c) => Math.min(c + a * 100, 9_999_999))}
-                      className="glass-pill rounded-lg py-1.5 font-display text-[12px] font-bold text-white transition-colors active:border-betclic-red/50 active:bg-betclic-red/10 active:text-betclic-red"
+                      className="glass-pill rounded-lg py-1.5 font-display text-[12px] font-bold text-ink transition-colors active:border-betclic-red/50 active:bg-betclic-red/10 active:text-betclic-red"
                     >
                       +{a}€
                     </motion.button>
@@ -255,7 +255,7 @@ export function BetModal() {
                   <motion.button
                     whileTap={{ scale: 0.94 }}
                     onClick={backspace}
-                    className="grid h-12 place-items-center rounded-xl border border-white/[0.07] bg-white/[0.02] text-mist shadow-[inset_0_-2px_0_rgba(255,255,255,0.04)] active:bg-elev"
+                    className="grid h-12 place-items-center rounded-xl border border-edge bg-elev text-mist active:bg-elev/70"
                     aria-label="Effacer"
                   >
                     <Delete className="h-[18px] w-[18px]" strokeWidth={2} />
@@ -341,10 +341,10 @@ function Key({
       whileTap={{ scale: 0.94 }}
       onClick={onPress}
       className={cn(
-        "grid h-12 place-items-center rounded-xl border font-display text-[18px] font-bold shadow-[inset_0_-2px_0_rgba(255,255,255,0.05)] transition-colors",
+        "grid h-12 place-items-center rounded-xl border font-display text-[18px] font-bold transition-colors",
         muted
-          ? "border-white/[0.06] bg-white/[0.02] text-mist active:bg-elev"
-          : "border-white/[0.07] bg-white/[0.045] text-white active:bg-elev"
+          ? "border-edge bg-elev text-mist active:bg-elev/70"
+          : "border-edge bg-elev text-ink active:bg-elev/70"
       )}
     >
       {label}
@@ -431,8 +431,8 @@ function SuccessView({
                 {target.match.homeTeam} <span className="text-dim">–</span> {target.match.awayTeam}
               </p>
             </div>
-            <div className="mt-2.5 flex items-center justify-between rounded-lg bg-white/[0.05] px-3 py-2">
-              <span className="text-[12px] font-semibold text-white">{target.label}</span>
+            <div className="mt-2.5 flex items-center justify-between rounded-lg bg-elev px-3 py-2">
+              <span className="text-[12px] font-semibold text-ink">{target.label}</span>
               <span className="font-display text-[14px] font-bold tabular-nums text-betclic-yellow">
                 {formatOdds(target.odds, oddsFormat)}
               </span>
@@ -489,7 +489,7 @@ function SuccessView({
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={onContinue}
-          className="glass-card mt-2 flex h-11 w-full items-center justify-center rounded-xl font-display text-[13px] font-semibold text-white active:bg-elev"
+          className="glass-card mt-2 flex h-11 w-full items-center justify-center rounded-xl font-display text-[13px] font-semibold text-ink active:bg-elev"
         >
           Continuer à parier
         </motion.button>

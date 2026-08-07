@@ -14,15 +14,15 @@ export function LiveTicker({ live }: { live: ClientMatch[] }) {
     <div className="relative -mx-3 mt-4 overflow-hidden border-y border-betclic-red/25 bg-betclic-red/10 py-1.5">
       <div className="marquee flex min-w-max items-center gap-5 px-3 whitespace-nowrap" style={{ willChange: "transform" }}>
         {loop.map((label, i) => (
-          <span key={i} className="flex items-center gap-2 shrink-0 whitespace-nowrap">
-            <span className="flex items-center gap-1.5 font-display text-[8.5px] font-black tracking-[0.2em] text-white/70">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+            <span key={i} className="flex items-center gap-2 shrink-0 whitespace-nowrap">
+            <span className="flex items-center gap-1.5 font-display text-[8.5px] font-black tracking-[0.2em] text-betclic-red">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-betclic-red" />
               LIVE
             </span>
-            <span className="font-display text-[12px] font-bold tabular-nums text-white">
+            <span className="font-display text-[12px] font-bold tabular-nums text-ink">
               {label}
             </span>
-            <span className="h-3 w-px rotate-12 bg-white/25" />
+            <span className="h-3 w-px rotate-12 bg-ink/15" />
           </span>
         ))}
       </div>

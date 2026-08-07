@@ -113,7 +113,7 @@ export default function MatchsPage() {
             Programme
           </h1>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2">
+        <div className="flex items-center gap-2 rounded-xl border border-edge bg-white px-3 py-2">
           <span className={cn("h-2 w-2 rounded-full", liveCount > 0 ? "bg-live live-dot" : "bg-dim")} />
           <span className="font-display text-xl font-bold leading-none tabular-nums">{liveCount}</span>
           <span className="text-[9px] font-semibold tracking-[0.18em] text-dim">EN DIRECT</span>
@@ -135,8 +135,8 @@ export default function MatchsPage() {
       <LiveTicker live={live} />
 
       {/* Filtres segmentés */}
-      <div className="sticky top-12 z-30 -mx-3 bg-ink/90 px-3 pb-1 pt-3 backdrop-blur-xl">
-        <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/[0.08] bg-white/[0.03] p-1">
+      <div className="sticky top-12 z-30 -mx-3 bg-white/90 px-3 pb-1 pt-3 backdrop-blur-xl">
+        <div className="grid grid-cols-3 gap-1 rounded-xl border border-edge bg-white p-1">
           {FILTERS.map(({ key, label }) => {
             const active = filter === key;
             return (
@@ -218,7 +218,7 @@ export default function MatchsPage() {
                         <span className="text-[11px] font-semibold tracking-wide text-mist">
                           {league}
                         </span>
-                        <span className="h-px flex-1 bg-white/[0.06]" />
+                        <span className="h-px flex-1 bg-elev" />
                         <span className="font-display text-[10px] font-bold text-dim">
                           {group.length}
                         </span>
@@ -260,11 +260,11 @@ function SectionHeader({
       ) : (
         <span className="h-2 w-2 rounded-full bg-betclic-red/70" />
       )}
-      <h2 className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-white">
+      <h2 className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-ink">
         {label}
       </h2>
-      <span className="h-px flex-1 bg-white/[0.06]" />
-      <span className="rounded-md bg-white/[0.05] px-2 py-0.5 font-display text-[10.5px] font-bold text-mist">
+      <span className="h-px flex-1 bg-elev" />
+      <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold text-mist">
         {count}
       </span>
     </div>

@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#05080d",
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -37,10 +37,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={`${grotesk.variable} ${inter.variable} ${montserrat.variable}`}>
-      <body className="bg-[#030507] text-white antialiased">
+      <body className="bg-[#f5f5f5] text-[#1a1a1a] antialiased">
         <div className="ambient" aria-hidden />
         <Providers>
-          <div className="app-shell relative z-10 mx-auto flex min-h-dvh w-full max-w-[27.5rem] flex-col bg-ink sm:border-x sm:border-edge/50">
+          <div className="app-shell relative z-10 mx-auto flex min-h-dvh w-full max-w-[27.5rem] flex-col bg-surface sm:border-x sm:border-edge/50">
             {children}
           </div>
         </Providers>

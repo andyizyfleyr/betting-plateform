@@ -147,7 +147,7 @@ function Toasts({ toasts }: { toasts: Toast[] }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -18, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 500, damping: 32 }}
-              className="pointer-events-auto flex w-full items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-elev/95 py-3 pl-0 pr-4 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.7)] backdrop-blur-xl"
+              className="pointer-events-auto flex w-full items-center gap-3 overflow-hidden rounded-xl border border-edge bg-white/95 py-3 pl-0 pr-4 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.15)] backdrop-blur-xl"
             >
               <span
                 className={cn(
@@ -159,7 +159,7 @@ function Toasts({ toasts }: { toasts: Toast[] }) {
               />
               <Icon className={`h-5 w-5 shrink-0 ${cls}`} strokeWidth={2.2} />
               <div className="min-w-0">
-                <p className="truncate font-display text-[13px] font-semibold text-white">
+                <p className="truncate font-display text-[13px] font-semibold text-ink">
                   {t.title}
                 </p>
                 {t.description && (

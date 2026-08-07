@@ -20,7 +20,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[27.5rem]">
-      <div className="relative flex border-t border-white/10 bg-[#060a10]/92 pb-safe backdrop-blur-2xl">
+      <div className="relative flex border-t border-edge bg-white/95 pb-safe backdrop-blur-2xl">
         {ITEMS.map(({ href, label, Icon }) => {
           const active = pathname.startsWith(href);
           return (
