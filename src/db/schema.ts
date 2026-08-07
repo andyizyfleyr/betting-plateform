@@ -185,10 +185,29 @@ export const acceleratorRounds = pgTable("accelerator_rounds", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+/**
+ * Dépôts (rechargements) effectués via un prestataire : Stripe ou PayPal.
+ * status: "pending" | "paid" | "credited" | "failed" | "expired"
+ * providerRef = session Stripe (cs_...) ou PayPal order id (8-...).
+ * Le crédit du solde est idempotent (status "credited" pivoté une seule fois).
+ */
+export const deposits = pgTable("deposits", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().default(1),
+  provider: text("provider").notNull(), // "stripe" | "paypal"
+  providerRef: text("provider_ref").notNull(),
+  amount: doublePrecision("amount").notNull(),
+  currency: text("currency").notNull().default("EUR"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type PredictionQuestionRow = typeof predictionQuestions.$inferSelect;
 export type PredictionBetRow = typeof predictionBets.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
+export type DepositRow = typeof deposits.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;
 export type AcceleratorRoundRow = typeof acceleratorRounds.$inferSelect;

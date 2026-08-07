@@ -271,6 +271,21 @@ export async function ensureSeeded() {
     );
   `);
 
+  // Table des dépôts (Stripe / PayPal) — sécurise le déploiement Vercel.
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "deposits" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer DEFAULT 1 NOT NULL,
+      "provider" text NOT NULL,
+      "provider_ref" text NOT NULL,
+      "amount" double precision NOT NULL,
+      "currency" text DEFAULT 'EUR' NOT NULL,
+      "status" text DEFAULT 'pending' NOT NULL,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
   // Questions de prédiction (idempotent, indépendant des matchs).
   const [{ predictionCount }] = await db
     .select({ predictionCount: sql<number>`count(*)::int` })

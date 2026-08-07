@@ -113,6 +113,13 @@ export interface ClientUser {
   createdAt?: string | null;
 }
 
+export interface PaymentProvider {
+  id: "stripe" | "paypal";
+  name: string;
+  enabled: boolean;
+  live: boolean;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
@@ -156,12 +163,32 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   settings: () => request<{ user: ClientUser }>("/api/settings"),
-  patchSettings: (patch: Partial<ClientUser> | { action: "deposit"; amount: number }) =>
+  patchSettings: (patch: Partial<ClientUser>) =>
     request<{ user: ClientUser }>("/api/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }),
+  payments: {
+    providers: () =>
+      request<{ providers: PaymentProvider[] }>("/api/payments"),
+    create: (provider: "stripe" | "paypal", amount: number) =>
+      request<{ url: string }>(`/api/payments/${provider}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      }),
+    capturePayPal: (orderId: string) =>
+      request<{ user: ClientUser }>("/api/payments/paypal/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      }),
+    status: (ref: string) =>
+      request<{ status: string; credited: boolean }>(
+        `/api/payments/status?ref=${encodeURIComponent(ref)}`
+      ),
+  },
   auth: {
     login: (payload: { email: string; password: string }) =>
       request<{ user: ClientUser }>("/api/auth/login", {

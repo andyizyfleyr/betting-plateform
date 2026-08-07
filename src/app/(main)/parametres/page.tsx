@@ -28,6 +28,7 @@ import { api, type ClientBet, type ClientUser } from "@/lib/api";
 import { useApp } from "@/components/providers";
 import { AnimatedNumber } from "@/components/animated-number";
 import { Toggle } from "@/components/toggle";
+import { RechargeModal } from "@/components/recharge-modal";
 import { cn, eur, initials, teamHue } from "@/lib/format";
 
 const listAnim = {
@@ -38,7 +39,7 @@ const listAnim = {
 export default function ParametresPage() {
   const { user, applyUser, toast } = useApp();
   const router = useRouter();
-  const [depositing, setDepositing] = useState(false);
+  const [rechargeOpen, setRechargeOpen] = useState(false);
   const [bets, setBets] = useState<ClientBet[] | null>(null);
 
   useEffect(() => {
@@ -46,6 +47,64 @@ export default function ParametresPage() {
       .allBets()
       .then((r) => setBets(r.bets))
       .catch(() => setBets([]));
+  }, []);
+
+  // Retour de paiement (Stripe/PayPal) via les params d'URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const flow = params.get("deposit");
+
+    if (flow === "cancelled") {
+      toast({ kind: "info", title: "Paiement annulé" });
+      window.history.replaceState({}, "", "/parametres");
+      return;
+    }
+
+    if (flow === "stripe") {
+      const ref = params.get("ref");
+      toast({ kind: "info", title: "Confirmation du paiement…" });
+      // Le crédit est confirmé par webhook Stripe. On interroge jusqu'à confirmation.
+      let tries = 0;
+      const tick = async () => {
+        if (!ref) return;
+        try {
+          const s = await api.payments.status(ref);
+          if (s.credited) {
+            const r = await api.settings();
+            applyUser(r.user);
+            toast({ kind: "success", title: "Solde rechargé" });
+            window.history.replaceState({}, "", "/parametres");
+            return;
+          }
+        } catch {
+          /* on réinterroge */
+        }
+        tries += 1;
+        if (tries < 8) window.setTimeout(tick, 1500);
+        else toast({ kind: "info", title: "Vérification…", description: "Actualisez dans quelques secondes" });
+      };
+      void tick();
+      return;
+    }
+
+    if (flow === "paypal") {
+      const orderId = params.get("token");
+      if (orderId) {
+        (async () => {
+          toast({ kind: "info", title: "Capturation du paiement…" });
+          try {
+            const r = await api.payments.capturePayPal(orderId);
+            if (r.user) applyUser(r.user);
+            toast({ kind: "success", title: "Solde rechargé" });
+          } catch {
+            toast({ kind: "error", title: "Paiement non confirmé" });
+          }
+          window.history.replaceState({}, "", "/parametres");
+        })();
+      }
+      return;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stats = useMemo(() => {
@@ -69,24 +128,6 @@ export default function ParametresPage() {
     }
   };
 
-  const deposit = async () => {
-    if (depositing) return;
-    setDepositing(true);
-    try {
-      const r = await api.patchSettings({ action: "deposit", amount: 100 });
-      applyUser(r.user);
-      toast({
-        kind: "success",
-        title: "Compte rechargé",
-        description: "+100,00 € ajoutés à votre solde",
-      });
-    } catch {
-      toast({ kind: "error", title: "Rechargement échoué" });
-    } finally {
-      setDepositing(false);
-    }
-  };
-
   const soon = (label: string) => () =>
     toast({ kind: "info", title: label, description: "Bientôt disponible dans PULSE" });
 
@@ -104,6 +145,7 @@ export default function ParametresPage() {
 
   return (
     <div className="px-3 pb-24 pt-5">
+      <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
       <p className="text-[10px] font-semibold tracking-[0.24em] text-betclic-red">VOTRE COMPTE</p>
       <h1 className="mt-1 font-display text-[30px] font-bold leading-none tracking-tight">
         Réglages
@@ -195,12 +237,11 @@ export default function ParametresPage() {
         <div className="relative mt-4 flex gap-2">
           <motion.button
             whileTap={{ scale: 0.96 }}
-            onClick={deposit}
-            disabled={depositing}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] py-3 font-display text-[13px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] transition-opacity disabled:opacity-60"
+            onClick={() => setRechargeOpen(true)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] py-3 font-display text-[13px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]"
           >
             <Plus className="h-4 w-4" strokeWidth={2.6} />
-            {depositing ? "Rechargement…" : "Recharger 100 €"}
+            Recharger
           </motion.button>
           <motion.button
             whileTap={{ scale: 0.96 }}

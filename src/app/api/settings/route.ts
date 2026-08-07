@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -25,20 +25,6 @@ export async function PATCH(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
-  }
-
-  // Rechargement du solde (démo)
-  if (body.action === "deposit") {
-    const amount = Number(body.amount);
-    if (!amount || amount <= 0 || amount > 10000) {
-      return NextResponse.json({ error: "Montant invalide" }, { status: 400 });
-    }
-    const [user] = await db
-      .update(appUser)
-      .set({ balance: sql`${appUser.balance} + ${amount}` })
-      .where(eq(appUser.id, uid))
-      .returning();
-    return NextResponse.json({ user: publicUser(user) });
   }
 
   const patch: Partial<typeof appUser.$inferInsert> = {};
