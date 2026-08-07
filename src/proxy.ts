@@ -19,7 +19,12 @@ export async function proxy(req: NextRequest) {
 
   // ---- API ----
   if (isApi) {
-    const publicApi = pathname === "/api/health" || pathname.startsWith("/api/auth") || pathname === "/api/matches";
+    const publicApi =
+      pathname === "/api/health" ||
+      pathname.startsWith("/api/auth") ||
+      pathname === "/api/matches" ||
+      // Webhook Stripe : appelé par Stripe SANS cookie d'authentification.
+      pathname === "/api/payments/stripe/webhook";
     if (publicApi) return NextResponse.next();
     if (!authed) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
