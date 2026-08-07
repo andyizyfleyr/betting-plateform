@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Clock, TrendingUp } from "lucide-react";
+import { CheckCircle2, Clock, TrendingUp } from "lucide-react";
 import { api, type ClientPrediction } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { useApp } from "@/components/providers";
@@ -251,12 +251,12 @@ function QuestionCard({
       className={cn("glass-card rounded-[20px] p-4", expired && "opacity-75")}
     >
       <div className="flex items-center gap-2">
-        <span className="rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
+        <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
           {q.category.toUpperCase()}
         </span>
-        <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-dim">
+        <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-semibold text-dim">
           <Clock className="h-3 w-3" strokeWidth={2.2} />
-          {formatResolves(q.resolvesAt)}
+          {expired ? "Paris clos" : formatResolves(q.resolvesAt)}
         </span>
       </div>
 
@@ -297,15 +297,15 @@ function ResolvedCard({ q, index }: { q: ClientPrediction; index: number }) {
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: Math.min(index * 0.06, 0.4), ease: [0.22, 1, 0.36, 1] }}
-      className="glass-card rounded-[20px] p-4 opacity-80"
+      className="glass-card rounded-[20px] p-4"
     >
       <div className="flex items-center gap-2">
-        <span className="rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
+        <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
           {q.category.toUpperCase()}
         </span>
-        <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-dim">
-          <Check className="h-3 w-3" strokeWidth={2.4} />
-          Résolue
+        <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-semibold text-win">
+          <CheckCircle2 className="h-3 w-3" strokeWidth={2.4} />
+          Résolue · {answer}
         </span>
       </div>
 
@@ -318,8 +318,8 @@ function ResolvedCard({ q, index }: { q: ClientPrediction; index: number }) {
       </p>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <SideButton label="Oui" odds={q.oddsYes} oddsFormat={oddsFormat} resolved={answer === "Oui"} />
-        <SideButton label="Non" odds={q.oddsNo} oddsFormat={oddsFormat} resolved={answer === "Non"} />
+        <SideButton label="Oui" odds={q.oddsYes} oddsFormat={oddsFormat} winner={answer === "Oui"} />
+        <SideButton label="Non" odds={q.oddsNo} oddsFormat={oddsFormat} winner={answer === "Non"} />
       </div>
     </motion.article>
   );
@@ -330,14 +330,14 @@ function SideButton({
   odds,
   oddsFormat,
   onClick,
-  resolved,
+  winner,
   disabled,
 }: {
   label: string;
   odds: number;
   oddsFormat: "decimal" | "fractional";
   onClick?: () => void;
-  resolved?: boolean;
+  winner?: boolean;
   disabled?: boolean;
 }) {
   return (
@@ -349,21 +349,33 @@ function SideButton({
         "flex items-center justify-between rounded-xl border px-3.5 py-2.5 transition-colors",
         disabled
           ? "border-edge bg-elev/50 opacity-60 cursor-not-allowed"
-          : resolved
-            ? "border-betclic-red/30 bg-betclic-red/10"
-            : resolved === false
+          : winner
+            ? "border-win/50 bg-win/10"
+            : winner === false
               ? "border-edge bg-elev/50 text-mist"
               : "border-edge bg-white text-ink active:border-betclic-red/50 active:bg-betclic-red/5"
       )}
     >
-      <span className="flex items-center gap-1.5">
-        {resolved && <Check className="h-3.5 w-3.5 text-betclic-red" strokeWidth={3} />}
-        <span className="font-display text-[12.5px] font-bold">{label}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {winner && <CheckCircle2 className="h-4 w-4 shrink-0 text-win" strokeWidth={2.6} />}
+        <span
+          className={cn(
+            "font-display text-[12.5px] font-bold",
+            winner && "text-win"
+          )}
+        >
+          {label}
+        </span>
+        {winner && (
+          <span className="hidden whitespace-nowrap text-[9px] font-semibold uppercase tracking-wide text-win sm:inline">
+            Bonne réponse
+          </span>
+        )}
       </span>
       <span
         className={cn(
           "font-display text-[13px] font-bold tabular-nums",
-          resolved ? "text-betclic-red" : resolved === false ? "text-mist" : "text-betclic-red"
+          winner ? "text-win" : winner === false ? "text-mist" : "text-betclic-red"
         )}
       >
         {formatOdds(odds, oddsFormat)}
