@@ -126,7 +126,12 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
       {/* Question / équipes + sélection */}
       <div className="relative px-3.5 pt-3.5">
         {isPrediction ? (
-          <p className="font-display text-[14.5px] font-semibold leading-snug">{bet.question}</p>
+          <div>
+            <p className="font-display text-[14.5px] font-semibold leading-snug">{bet.question}</p>
+            <p className="mt-1 text-[11px] text-dim">
+              {bet.league} · {formatPlacedAt(bet.placedAt)}
+            </p>
+          </div>
         ) : (
           <div className="flex items-center gap-3">
             <div className="flex -space-x-2.5">

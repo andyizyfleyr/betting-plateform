@@ -7,7 +7,7 @@ import { ArrowRight, Check, Loader2, Ticket, TrendingUp, X } from "lucide-react"
 import { api, type ClientPrediction } from "@/lib/api";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
-import { cn, eur, formatOdds } from "@/lib/format";
+import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
 const CHIP_AMOUNTS = [5, 10, 25, 50];
 
@@ -121,6 +121,7 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
                 betId={placed.id}
                 payout={placed.potentialWin}
                 stake={stake}
+                odds={odds}
                 question={question.question}
                 selection={selection}
                 onGoToBets={goToBets}
@@ -154,13 +155,7 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
                       {question.category.toUpperCase()}
                     </span>
                     <span className="ml-auto text-[9.5px] font-medium text-dim">
-                      Résolution ·{" "}
-                      {new Intl.DateTimeFormat("fr-FR", {
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }).format(new Date(question.resolvesAt))}
+                      Résolution · {formatKickoff(question.resolvesAt)}
                     </span>
                   </div>
                   <p className="mt-2 font-display text-[14px] font-bold leading-snug">
@@ -257,6 +252,16 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
                 </div>
 
                 <AnimatePresence>
+                  {overBalance && (
+                    <motion.p
+                      initial={{ opacity: 0, y: 3 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="mt-1.5 px-1 text-[11px] font-semibold text-betclic-red"
+                    >
+                      Solde insuffisant — rechargez ou réduisez la mise
+                    </motion.p>
+                  )}
                   {error && (
                     <motion.p
                       initial={{ opacity: 0, x: -8 }}
@@ -308,6 +313,7 @@ function SuccessView({
   betId,
   payout,
   stake,
+  odds,
   question,
   selection,
   onGoToBets,
@@ -316,6 +322,7 @@ function SuccessView({
   betId: number;
   payout: number;
   stake: number;
+  odds: number;
   question: string;
   selection: "yes" | "no";
   onGoToBets: () => void;
@@ -382,7 +389,7 @@ function SuccessView({
               {selection === "yes" ? "Oui" : "Non"}
             </span>
             <span className="font-display text-[14px] font-bold tabular-nums text-betclic-red">
-              {formatOdds(payout / stake, oddsFormat)}
+              {formatOdds(odds, oddsFormat)}
             </span>
           </div>
         </div>
@@ -400,7 +407,7 @@ function SuccessView({
           <div>
             <p className="text-[8.5px] font-semibold tracking-[0.16em] text-dim">COTE</p>
             <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums">
-              {formatOdds(payout / stake, oddsFormat)}
+              {formatOdds(odds, oddsFormat)}
             </p>
           </div>
           <div className="text-right">

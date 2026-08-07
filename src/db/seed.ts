@@ -234,6 +234,43 @@ export async function ensureSeeded() {
     await db.insert(appUser).values({ id: 1 });
   }
 
+  // S'assure que les tables de prédictions existent (sécurité pour le déploiement Vercel)
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "prediction_questions" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "question" text NOT NULL,
+      "category" text NOT NULL,
+      "status" text DEFAULT 'open' NOT NULL,
+      "resolution" text,
+      "seed_value" integer DEFAULT 0 NOT NULL,
+      "odds_yes" double precision NOT NULL,
+      "odds_no" double precision NOT NULL,
+      "volume" double precision DEFAULT 0 NOT NULL,
+      "yes_count" integer DEFAULT 0 NOT NULL,
+      "no_count" integer DEFAULT 0 NOT NULL,
+      "resolves_at" timestamp NOT NULL,
+      "resolved_at" timestamp,
+      "created_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "prediction_bets" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer DEFAULT 1 NOT NULL,
+      "question_id" integer NOT NULL REFERENCES "prediction_questions"("id"),
+      "selection" text NOT NULL,
+      "selection_label" text NOT NULL,
+      "question" text NOT NULL,
+      "category" text NOT NULL,
+      "odds" double precision NOT NULL,
+      "stake" double precision NOT NULL,
+      "potential_win" double precision NOT NULL,
+      "status" text DEFAULT 'pending' NOT NULL,
+      "placed_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
   // Questions de prédiction (idempotent, indépendant des matchs).
   const [{ predictionCount }] = await db
     .select({ predictionCount: sql<number>`count(*)::int` })

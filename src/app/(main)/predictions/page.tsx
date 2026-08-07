@@ -17,6 +17,7 @@ const CATEGORIES: Category[] = ["Tous", "Sport", "Actus", "Crypto", "Culture"];
 
 function formatResolves(iso: string) {
   const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return "En cours de résolution";
   const mins = Math.round(diff / 60_000);
   if (mins < 60) return `Dans ${Math.max(mins, 1)} min`;
   const hours = Math.round(mins / 60);
@@ -87,7 +88,10 @@ export default function PredictionsPage() {
     [resolved, category]
   );
 
-  const openVolume = open.reduce((s, q) => s + q.volume, 0);
+  const visibleOpenVolume = useMemo(
+    () => visibleOpen.reduce((s, q) => s + q.volume, 0),
+    [visibleOpen]
+  );
 
   return (
     <div className="px-3 pb-24 pt-5">
@@ -166,7 +170,7 @@ export default function PredictionsPage() {
                 <SectionHeader
                   label="En cours"
                   count={visibleOpen.length}
-                  detail={`Volume ${eur(openVolume)}`}
+                  detail={`Volume ${eur(visibleOpenVolume)}`}
                 />
                 <div className="mt-2.5 flex flex-col gap-2.5">
                   {visibleOpen.map((q, i) => (
@@ -237,13 +241,14 @@ function QuestionCard({
   onSelect: (selection: "yes" | "no") => void;
 }) {
   const { oddsFormat } = useApp();
+  const expired = new Date(q.resolvesAt).getTime() <= Date.now();
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: Math.min(index * 0.06, 0.4), ease: [0.22, 1, 0.36, 1] }}
-      className="glass-card rounded-[20px] p-4"
+      className={cn("glass-card rounded-[20px] p-4", expired && "opacity-75")}
     >
       <div className="flex items-center gap-2">
         <span className="rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
@@ -268,13 +273,15 @@ function QuestionCard({
           label="Oui"
           odds={q.oddsYes}
           oddsFormat={oddsFormat}
-          onClick={() => onSelect("yes")}
+          onClick={expired ? undefined : () => onSelect("yes")}
+          disabled={expired}
         />
         <SideButton
           label="Non"
           odds={q.oddsNo}
           oddsFormat={oddsFormat}
-          onClick={() => onSelect("no")}
+          onClick={expired ? undefined : () => onSelect("no")}
+          disabled={expired}
         />
       </div>
     </motion.article>
@@ -324,24 +331,29 @@ function SideButton({
   oddsFormat,
   onClick,
   resolved,
+  disabled,
 }: {
   label: string;
   odds: number;
   oddsFormat: "decimal" | "fractional";
   onClick?: () => void;
   resolved?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <motion.button
-      whileTap={onClick ? { scale: 0.96 } : undefined}
+      whileTap={onClick && !disabled ? { scale: 0.96 } : undefined}
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         "flex items-center justify-between rounded-xl border px-3.5 py-2.5 transition-colors",
-        resolved
-          ? "border-betclic-red/30 bg-betclic-red/10"
-          : resolved === false
-            ? "border-edge bg-elev/50 text-mist"
-            : "border-edge bg-white text-ink active:border-betclic-red/50 active:bg-betclic-red/5"
+        disabled
+          ? "border-edge bg-elev/50 opacity-60 cursor-not-allowed"
+          : resolved
+            ? "border-betclic-red/30 bg-betclic-red/10"
+            : resolved === false
+              ? "border-edge bg-elev/50 text-mist"
+              : "border-edge bg-white text-ink active:border-betclic-red/50 active:bg-betclic-red/5"
       )}
     >
       <span className="flex items-center gap-1.5">
