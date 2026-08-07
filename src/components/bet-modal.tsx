@@ -105,7 +105,7 @@ export function BetModal() {
             }}
             className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[94dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-white/10 bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.9)]"
           >
-            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-lime/70 to-transparent" />
+            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-betclic-red/70 to-transparent" />
 
             {phase === "success" && placed ? (
               <SuccessView
@@ -147,8 +147,8 @@ export function BetModal() {
                     </p>
                     <p className="mt-0.5 truncate text-[10.5px] font-medium text-mist">
                       {target.match.status === "live" ? (
-                        <span className="inline-flex items-center gap-1 font-bold text-live">
-                          <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
+                        <span className="inline-flex items-center gap-1 font-bold text-betclic-red">
+                          <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
                           LIVE {target.match.minute ?? ""}
                         </span>
                       ) : (
@@ -159,10 +159,10 @@ export function BetModal() {
                         <span className="text-mist">{target.marketLabel}</span>
                       )}
                       <span className="text-dim"> · </span>
-                      <span className="text-lime">{target.label}</span>
+                      <span className="text-betclic-yellow">{target.label}</span>
                     </p>
                   </div>
-                  <span className="shrink-0 rounded-lg bg-lime/10 px-2.5 py-1.5 font-display text-[17px] font-bold tabular-nums text-lime">
+                  <span className="shrink-0 rounded-lg bg-betclic-yellow/10 px-2.5 py-1.5 font-display text-[17px] font-bold tabular-nums text-betclic-yellow">
                     {formatOdds(target.odds, oddsFormat)}
                   </span>
                 </div>
@@ -174,11 +174,11 @@ export function BetModal() {
                     <div
                       className={cn(
                         "flex items-baseline font-display text-[32px] font-bold leading-none tracking-tight tabular-nums",
-                        overBalance ? "text-live" : "text-white"
+                        overBalance ? "text-betclic-red" : "text-white"
                       )}
                     >
                       {eur(stake)}
-                      <span className="caret-blink ml-1 inline-block h-7 w-[3px] translate-y-0.5 rounded bg-lime" />
+                      <span className="caret-blink ml-1 inline-block h-7 w-[3px] translate-y-0.5 rounded bg-betclic-red" />
                     </div>
                   </div>
                   <button
@@ -191,13 +191,13 @@ export function BetModal() {
                     Solde · {eur(balance)}
                   </button>
                 </div>
-                <AnimatePresence>
-                  {overBalance && (
+<AnimatePresence>
+                  {error && (
                     <motion.p
                       initial={{ opacity: 0, y: 3 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="mt-1 px-1 text-[11px] font-semibold text-live"
+                      className="mt-1.5 px-1 text-[11px] font-semibold text-betclic-red"
                     >
                       Solde insuffisant — rechargez ou réduisez la mise
                     </motion.p>
@@ -211,7 +211,7 @@ export function BetModal() {
                       key={a}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => setCents((c) => Math.min(c + a * 100, 9_999_999))}
-                      className="glass-pill rounded-lg py-1.5 font-display text-[12px] font-bold text-white transition-colors active:border-lime/50 active:bg-lime/10 active:text-lime"
+                      className="glass-pill rounded-lg py-1.5 font-display text-[12px] font-bold text-white transition-colors active:border-betclic-red/50 active:bg-betclic-red/10 active:text-betclic-red"
                     >
                       +{a}€
                     </motion.button>
@@ -219,7 +219,7 @@ export function BetModal() {
                   <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={() => setCents(Math.floor(balance * 100))}
-                    className="rounded-lg border border-lime/40 bg-lime/10 py-1.5 font-display text-[12px] font-bold text-lime"
+                    className="rounded-lg border border-betclic-red/40 bg-betclic-red/10 py-1.5 font-display text-[12px] font-bold text-betclic-red"
                   >
                     MAX
                   </motion.button>
@@ -268,14 +268,14 @@ export function BetModal() {
                     <span className="text-[9.5px] font-semibold tracking-[0.18em] text-dim">
                       GAIN POTENTIEL
                     </span>
-                    <span className="text-[10.5px] font-medium text-win">
+                    <span className="text-[10.5px] font-medium text-betclic-red">
                       +{eur(Math.max(profit, 0))}
                     </span>
                   </div>
                   <AnimatedNumber
                     value={payout}
                     format={eur}
-                    className="font-display text-[22px] font-bold tabular-nums text-lime"
+                    className="font-display text-[22px] font-bold tabular-nums text-betclic-yellow"
                   />
                 </div>
 
@@ -300,7 +300,7 @@ export function BetModal() {
                   className={cn(
                     "mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl font-display text-[14.5px] font-bold transition-opacity",
                     stake > 0 && !overBalance
-                      ? "bg-[linear-gradient(135deg,#d4ff54,#9ccf1f)] text-ink shadow-[0_14px_38px_-10px_rgba(201,247,58,0.6),inset_0_1px_0_rgba(255,255,255,0.4)]"
+                      ? "bg-[linear-gradient(135deg,#E10014,#FB6962)] text-white shadow-[0_14px_38px_-10px_rgba(225,0,20,0.6),inset_0_1px_0_rgba(255,255,255,0.4)]"
                       : "bg-elev text-dim"
                   )}
                 >
@@ -377,7 +377,7 @@ function SuccessView({
             <motion.span
               key={i}
               className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full"
-              style={{ background: i % 3 === 0 ? "#7dd3fc" : "var(--color-lime)" }}
+              style={{ background: i % 3 === 0 ? "#FB6962" : "var(--color-betclic-red)" }}
               initial={{ x: -3, y: -3, scale: 1, opacity: 1 }}
               animate={{
                 x: Math.cos((i / 12) * Math.PI * 2) * (70 + (i % 4) * 14),
@@ -391,15 +391,15 @@ function SuccessView({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="spin-slow absolute -inset-3 rounded-full border-2 border-dashed border-lime/40"
+            className="spin-slow absolute -inset-3 rounded-full border-2 border-dashed border-betclic-red/40"
           />
           <motion.div
             initial={{ scale: 0, rotate: -30 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 16, delay: 0.1 }}
-            className="grid h-[72px] w-[72px] place-items-center rounded-full bg-[linear-gradient(135deg,#d4ff54,#9ccf1f)] shadow-[0_0_50px_-8px_rgba(201,247,58,0.75),inset_0_1px_0_rgba(255,255,255,0.5)]"
+            className="grid h-[72px] w-[72px] place-items-center rounded-full bg-[linear-gradient(135deg,#E10014,#FB6962)] shadow-[0_0_50px_-8px_rgba(225,0,20,0.75),inset_0_1px_0_rgba(255,255,255,0.5)]"
           >
-            <Check className="h-8 w-8 text-ink" strokeWidth={3} />
+            <Check className="h-8 w-8 text-white" strokeWidth={3} />
           </motion.div>
         </div>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
@@ -418,7 +418,7 @@ function SuccessView({
           transition={{ delay: 0.34 }}
           className="glass-card relative mt-5 overflow-hidden rounded-2xl"
         >
-          <span className="pointer-events-none absolute right-3 top-3 rotate-[8deg] rounded border border-lime/50 px-1.5 py-0.5 font-display text-[8px] font-bold tracking-[0.18em] text-lime/80">
+          <span className="pointer-events-none absolute right-3 top-3 rotate-[8deg] rounded border border-betclic-red/50 px-1.5 py-0.5 font-display text-[8px] font-bold tracking-[0.18em] text-betclic-red/80">
             CONFIRMÉ
           </span>
           <div className="px-3.5 pt-3">
@@ -433,7 +433,7 @@ function SuccessView({
             </div>
             <div className="mt-2.5 flex items-center justify-between rounded-lg bg-white/[0.05] px-3 py-2">
               <span className="text-[12px] font-semibold text-white">{target.label}</span>
-              <span className="font-display text-[14px] font-bold tabular-nums text-lime">
+              <span className="font-display text-[14px] font-bold tabular-nums text-betclic-yellow">
                 {formatOdds(target.odds, oddsFormat)}
               </span>
             </div>
@@ -457,7 +457,7 @@ function SuccessView({
             </div>
             <div className="text-right">
               <p className="text-[8.5px] font-semibold tracking-[0.16em] text-dim">À GAGNER</p>
-              <p className="glow-lime mt-0.5 font-display text-[13px] font-bold tabular-nums text-lime">
+              <p className="glow-betclic mt-0.5 font-display text-[13px] font-bold tabular-nums text-betclic-yellow">
                 {eur(payout)}
               </p>
             </div>
@@ -481,7 +481,7 @@ function SuccessView({
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={onGoToBets}
-          className="flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#d4ff54,#9ccf1f)] font-display text-[14.5px] font-bold text-ink shadow-[0_14px_38px_-10px_rgba(201,247,58,0.6),inset_0_1px_0_rgba(255,255,255,0.4)]"
+          className="flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] font-display text-[14.5px] font-bold text-white shadow-[0_14px_38px_-10px_rgba(225,0,20,0.6),inset_0_1px_0_rgba(255,255,255,0.4)]"
         >
           <Ticket className="h-4.5 w-4.5" strokeWidth={2.4} />
           Voir mes paris

@@ -106,7 +106,7 @@ export default function MatchsPage() {
       {/* Titre + compteur live */}
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.24em] text-lime">
+          <p className="text-[10px] font-semibold tracking-[0.24em] text-betclic-red">
             {todayLabel().toUpperCase()}
           </p>
           <h1 className="mt-1 font-display text-[30px] font-bold leading-none tracking-tight">
@@ -122,7 +122,7 @@ export default function MatchsPage() {
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              className="flex items-center gap-1 rounded-md bg-lime/15 px-2 py-0.5 text-[9px] font-semibold tracking-[0.18em] text-lime"
+              className="flex items-center gap-1 rounded-md bg-betclic-red/15 px-2 py-0.5 text-[9px] font-semibold tracking-[0.18em] text-betclic-red"
             >
               <RefreshCw className="h-3 w-3 animate-spin" strokeWidth={2.5} />
               MAJ
@@ -152,7 +152,7 @@ export default function MatchsPage() {
                   <motion.span
                     layoutId="seg-pill"
                     transition={{ type: "spring", stiffness: 500, damping: 38 }}
-                    className="absolute inset-0 rounded-lg bg-lime"
+                    className="absolute inset-0 rounded-lg bg-betclic-red"
                   />
                 )}
                 <span className="relative z-10 flex items-center gap-1">
@@ -258,7 +258,7 @@ function SectionHeader({
       {pulse ? (
         <span className="live-dot h-2 w-2 rounded-full bg-live" />
       ) : (
-        <span className="h-2 w-2 rounded-full bg-lime/70" />
+        <span className="h-2 w-2 rounded-full bg-betclic-red/70" />
       )}
       <h2 className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-white">
         {label}

@@ -104,7 +104,7 @@ export default function ParametresPage() {
 
   return (
     <div className="px-3 pb-24 pt-5">
-      <p className="text-[10px] font-semibold tracking-[0.24em] text-lime">VOTRE COMPTE</p>
+      <p className="text-[10px] font-semibold tracking-[0.24em] text-betclic-red">VOTRE COMPTE</p>
       <h1 className="mt-1 font-display text-[30px] font-bold leading-none tracking-tight">
         Réglages
       </h1>
@@ -115,7 +115,7 @@ export default function ParametresPage() {
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         className="glass-card relative mt-4 overflow-hidden rounded-[22px]"
       >
-        <div className="relative h-[76px] bg-[linear-gradient(120deg,rgba(201,247,58,0.2),rgba(125,211,252,0.12)_55%,transparent)]">
+        <div className="relative h-[76px] bg-[linear-gradient(120deg,rgba(225,0,20,0.2),rgba(125,211,252,0.12)_55%,transparent)]">
           <div aria-hidden className="bg-texture absolute inset-0" />
           <p className="absolute right-4 top-3 font-display text-[9px] font-bold tracking-[0.3em] text-white/40">
             MEMBRE GOLD
@@ -126,7 +126,7 @@ export default function ParametresPage() {
             className="inline-block rounded-[26px] p-[3px]"
             style={{
               background:
-                "conic-gradient(from 210deg, var(--color-lime) 0 72%, var(--color-elev) 72% 100%)",
+                "conic-gradient(from 210deg, var(--color-betclic-red) 0 72%, var(--color-elev) 72% 100%)",
             }}
           >
             <span
@@ -143,12 +143,12 @@ export default function ParametresPage() {
             <div className="min-w-0">
               <p className="truncate font-display text-[18px] font-bold">{user?.name ?? "—"}</p>
               <p className="mt-1 flex items-center gap-1 text-[11px] text-mist">
-                <BadgeCheck className="h-3.5 w-3.5 text-lime" strokeWidth={2.4} />
+                <BadgeCheck className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
                 Compte vérifié · Niveau 7
               </p>
             </div>
-            <span className="shrink-0 rounded-lg bg-lime/10 px-2.5 py-1.5 text-center">
-              <span className="glow-lime block font-display text-base font-bold leading-none text-lime">
+            <span className="shrink-0 rounded-lg bg-betclic-red/10 px-2.5 py-1.5 text-center">
+              <span className="glow-betclic block font-display text-base font-bold leading-none text-betclic-red">
                 72%
               </span>
               <span className="mt-1 block text-[8px] font-semibold tracking-[0.14em] text-mist">
@@ -174,12 +174,12 @@ export default function ParametresPage() {
       <motion.section
         {...listAnim}
         transition={{ duration: 0.5, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-        className="relative mt-3 overflow-hidden rounded-[22px] border border-lime/25 bg-gradient-to-br from-lime/[0.12] via-card to-card p-4"
+        className="relative mt-3 overflow-hidden rounded-[22px] border border-betclic-red/25 bg-gradient-to-br from-betclic-red/[0.12] via-card to-card p-4"
       >
         <div
           aria-hidden
           className="breathe pointer-events-none absolute -right-10 -top-12 h-44 w-44 rounded-full"
-          style={{ background: "radial-gradient(closest-side, rgba(201,247,58,0.16), transparent)" }}
+          style={{ background: "radial-gradient(closest-side, rgba(225,0,20,0.16), transparent)" }}
         />
         <p className="relative text-[10px] font-semibold tracking-[0.24em] text-mist">
           SOLDE DISPONIBLE
@@ -197,7 +197,7 @@ export default function ParametresPage() {
             whileTap={{ scale: 0.96 }}
             onClick={deposit}
             disabled={depositing}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#d4ff54,#9ccf1f)] py-3 font-display text-[13px] font-bold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] transition-opacity disabled:opacity-60"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] py-3 font-display text-[13px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] transition-opacity disabled:opacity-60"
           >
             <Plus className="h-4 w-4" strokeWidth={2.6} />
             {depositing ? "Rechargement…" : "Recharger 100 €"}
@@ -275,7 +275,7 @@ export default function ParametresPage() {
                     <motion.span
                       layoutId="odds-pill"
                       transition={{ type: "spring", stiffness: 480, damping: 38 }}
-                      className="absolute inset-0 rounded-lg bg-lime"
+                      className="absolute inset-0 rounded-lg bg-betclic-red"
                     />
                   )}
                   <span className="relative z-10">{label}</span>
@@ -360,8 +360,8 @@ export default function ParametresPage() {
         transition={{ duration: 0.5, delay: 0.3 }}
         className="mt-10 flex flex-col items-center gap-3 text-center"
       >
-        <span className="grid h-9 w-9 rotate-45 place-items-center rounded-lg bg-lime/15">
-          <Zap className="h-4 w-4 -rotate-45 text-lime" strokeWidth={2.2} />
+        <span className="grid h-9 w-9 rotate-45 place-items-center rounded-lg bg-betclic-red/15">
+          <Zap className="h-4 w-4 -rotate-45 text-betclic-red" strokeWidth={2.2} />
         </span>
         <div>
           <p className="font-display text-[12px] font-bold tracking-[0.2em] text-mist">
@@ -389,11 +389,11 @@ function StatCell({
 }) {
   return (
     <div className="flex flex-col items-center px-2">
-      <Icon className={cn("mb-1 h-3.5 w-3.5", accent ? "text-lime" : "text-dim")} strokeWidth={2.2} />
+      <Icon className={cn("mb-1 h-3.5 w-3.5", accent ? "text-betclic-red" : "text-dim")} strokeWidth={2.2} />
       <p
         className={cn(
           "font-display text-[16px] font-bold tabular-nums",
-          accent ? "text-lime" : "text-white"
+          accent ? "text-betclic-red" : "text-white"
         )}
       >
         {value}
@@ -435,7 +435,7 @@ function Group({ children, delay }: { children: ReactNode; delay: number }) {
 
 function IconBubble({ children }: { children: ReactNode }) {
   return (
-    <span className="glass-pill grid h-9 w-9 shrink-0 place-items-center rounded-full text-lime">
+    <span className="glass-pill grid h-9 w-9 shrink-0 place-items-center rounded-full text-betclic-red">
       {children}
     </span>
   );

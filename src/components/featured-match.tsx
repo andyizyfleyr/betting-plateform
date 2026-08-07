@@ -42,8 +42,8 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
 
       <div className="relative p-3.5 pb-0">
         <div className="flex items-center justify-between">
-          <span className="inline-flex items-center gap-1.5 rounded-md bg-lime px-2 py-1 font-display text-[9px] font-black tracking-[0.18em] text-ink">
-            <Star className="h-3 w-3 fill-ink" strokeWidth={0} />
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-betclic-red px-2 py-1 font-display text-[9px] font-black tracking-[0.18em] text-white">
+            <Star className="h-3 w-3 fill-white" strokeWidth={0} />
             À LA UNE
           </span>
           <span className="text-[10.5px] font-medium text-mist">{match.league}</span>
@@ -54,11 +54,11 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
           <div className="flex flex-col items-center px-2">
             {isLive ? (
               <>
-                <span className="glow-lime font-display text-[32px] font-bold leading-none tabular-nums text-lime">
+                <span className="glow-betclic font-display text-[32px] font-bold leading-none tabular-nums text-betclic-yellow">
                   {match.homeScore ?? 0}–{match.awayScore ?? 0}
                 </span>
-                <span className="mt-2 inline-flex items-center gap-1.5 font-display text-[10px] font-black tracking-wide text-live">
-                  <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
+                <span className="mt-2 inline-flex items-center gap-1.5 font-display text-[10px] font-black tracking-wide text-betclic-red">
+                  <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
                   LIVE {match.minute ?? ""}
                 </span>
               </>
@@ -79,7 +79,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
       <div className="relative">
         <ResultOdds match={match} />
         <div className="flex items-center justify-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] py-1.5">
-          <LayoutGrid className="h-3 w-3 text-lime" strokeWidth={2.4} />
+          <LayoutGrid className="h-3 w-3 text-betclic-yellow" strokeWidth={2.4} />
           <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
             TOUS LES MARCHÉS
           </span>

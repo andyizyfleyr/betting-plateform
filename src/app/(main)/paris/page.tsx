@@ -137,13 +137,13 @@ export default function ParisPage() {
       {/* Titre */}
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.24em] text-lime">PORTEFEUILLE</p>
+          <p className="text-[10px] font-semibold tracking-[0.24em] text-betclic-red">PORTEFEUILLE</p>
           <h1 className="mt-1 font-display text-[30px] font-bold leading-none tracking-tight">
             Mes paris
           </h1>
         </div>
         {pendingCount > 0 && (
-          <span className="rounded-lg bg-lime px-2.5 py-1.5 font-display text-[11px] font-bold text-ink flex items-center gap-1.5">
+          <span className="rounded-lg bg-betclic-red px-2.5 py-1.5 font-display text-[11px] font-bold text-white flex items-center gap-1.5">
             {pendingCount} en cours
             {isUpdating && (
               <RefreshCw className="h-3 w-3 animate-spin" strokeWidth={2.5} />
@@ -157,13 +157,13 @@ export default function ParisPage() {
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        className="relative mt-4 overflow-hidden rounded-[22px] border border-lime/20 bg-[linear-gradient(135deg,#101a12,#0c1220_55%,#0d141e)] p-4"
+        className="relative mt-4 overflow-hidden rounded-[22px] border border-betclic-red/20 bg-[linear-gradient(135deg,#101a12,#0c1220_55%,#0d141e)] p-4"
       >
         <div aria-hidden className="bg-texture pointer-events-none absolute inset-0" />
         <div
           aria-hidden
           className="breathe pointer-events-none absolute -right-12 -top-14 h-44 w-44 rounded-full"
-          style={{ background: "radial-gradient(closest-side, rgba(201,247,58,0.14), transparent)" }}
+          style={{ background: "radial-gradient(closest-side, rgba(225,0,20,0.14), transparent)" }}
         />
         <div className="relative flex items-center justify-between">
           <Nfc className="h-5 w-5 rotate-90 text-mist" strokeWidth={1.8} />
@@ -184,7 +184,7 @@ export default function ParisPage() {
               <p
                 className={cn(
                   "mt-1 text-right font-display text-[11px] font-bold tabular-nums",
-                  perf[perf.length - 1] >= 0 ? "text-lime" : "text-live"
+                  perf[perf.length - 1] >= 0 ? "text-betclic-red" : "text-betclic-red"
                 )}
               >
                 {perf[perf.length - 1] >= 0 ? "+" : "−"}{eur(Math.abs(perf[perf.length - 1]))}
@@ -235,7 +235,7 @@ export default function ParisPage() {
               <motion.span
                 layoutId="tab-underline"
                 transition={{ type: "spring", stiffness: 500, damping: 38 }}
-                className="absolute inset-x-10 -bottom-px h-[2.5px] rounded-full bg-lime shadow-[0_4px_14px_rgba(201,247,58,0.5)]"
+                className="absolute inset-x-10 -bottom-px h-[2.5px] rounded-full bg-betclic-red shadow-[0_4px_14px_rgba(225,0,20,0.5)]"
               />
             )}
           </button>
@@ -270,7 +270,7 @@ export default function ParisPage() {
             </p>
             <Link
               href="/matchs"
-              className="mt-6 flex items-center gap-2 rounded-full bg-[linear-gradient(135deg,#d4ff54,#9ccf1f)] px-5 py-3 font-display text-[13px] font-bold text-ink shadow-[0_10px_30px_-10px_rgba(201,247,58,0.55)] transition-transform active:scale-95"
+              className="mt-6 flex items-center gap-2 rounded-full bg-[linear-gradient(135deg,#E10014,#FB6962)] px-5 py-3 font-display text-[13px] font-bold text-white shadow-[0_10px_30px_-10px_rgba(225,0,20,0.55)] transition-transform active:scale-95"
             >
               Voir les matchs
               <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
@@ -327,7 +327,7 @@ function MiniStat({ label, value, accent }: { label: string; value: string; acce
       <p
         className={cn(
           "truncate font-display text-[13px] font-bold tabular-nums",
-          accent ? "text-lime" : "text-white"
+          accent ? "text-betclic-red" : "text-white"
         )}
       >
         {value}
@@ -350,9 +350,9 @@ function Sparkline({ values, up }: { values: number[]; up: boolean }) {
     return [x, y] as const;
   });
   const line = coords.map(([x, y]) => `${x},${y}`).join(" ");
-  const color = up ? "var(--color-lime)" : "var(--color-live)";
+  const color = up ? "var(--color-betclic-red)" : "var(--color-live)";
   const gid = up ? "spark-up" : "spark-down";
-  const stop = up ? "201,247,58" : "255,77,94";
+  const stop = up ? "225,0,20" : "255,77,94";
 
   return (
     <svg viewBox="0 0 100 32" className="h-9 w-full" preserveAspectRatio="none" aria-hidden>

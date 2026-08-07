@@ -13,7 +13,7 @@ const ITEMS = [
   { href: "/parametres", label: "Réglages", Icon: SlidersHorizontal },
 ];
 
-/** Barre attachée — indicateur lime animé sur l'onglet actif. */
+/** Barre attachée — indicateur betclic-red animé sur l'onglet actif. */
 export function BottomNav() {
   const pathname = usePathname();
   const { pendingCount } = useApp();
@@ -33,19 +33,19 @@ export function BottomNav() {
                 <motion.span
                   layoutId="nav-line"
                   transition={{ type: "spring", stiffness: 520, damping: 36 }}
-                  className="absolute inset-x-0 top-0 mx-auto h-[3px] w-12 rounded-b-full bg-lime shadow-[0_4px_14px_rgba(201,247,58,0.55)]"
+                  className="absolute inset-x-0 top-0 mx-auto h-[3px] w-12 rounded-b-full bg-betclic-red shadow-[0_4px_14px_rgba(225,0,20,0.55)]"
                 />
               )}
               <span className="relative">
                 <Icon
                   className={cn(
                     "h-[19px] w-[19px] transition-colors duration-200",
-                    active ? "text-lime" : "text-mist"
+                    active ? "text-betclic-red" : "text-mist"
                   )}
                   strokeWidth={active ? 2.4 : 2}
                 />
                 {href === "/paris" && pendingCount > 0 && (
-                  <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-md bg-lime px-1 font-display text-[9px] font-bold text-ink">
+                  <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-md bg-betclic-red px-1 font-display text-[9px] font-bold text-white">
                     {pendingCount}
                   </span>
                 )}
@@ -53,7 +53,7 @@ export function BottomNav() {
               <span
                 className={cn(
                   "font-display text-[10px] tracking-wide transition-colors duration-200",
-                  active ? "font-bold text-lime" : "font-medium text-mist"
+                  active ? "font-bold text-betclic-red" : "font-medium text-mist"
                 )}
               >
                 {label}

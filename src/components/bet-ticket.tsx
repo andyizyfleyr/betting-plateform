@@ -73,7 +73,7 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
         <span
           className={cn(
             "pointer-events-none absolute right-3 top-6 rotate-[-10deg] rounded-md border-2 px-2 py-0.5 font-display text-[11px] font-bold tracking-[0.2em]",
-            won && "border-lime/50 text-lime/60",
+            won && "border-betclic-red/50 text-betclic-red/60",
             lost && "border-mist/30 text-mist/40",
             cashed && "border-sky-300/50 text-sky-300/70"
           )}
@@ -86,27 +86,27 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
       <div className="relative flex items-center gap-2 px-3.5 pt-3.5">
         <SportIcon sport={bet.sport} className="h-3.5 w-3.5 text-dim" />
         <span className="truncate text-[11px] font-medium text-mist">{bet.league}</span>
-        <span
-          className={cn(
-            "ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-display text-[9.5px] font-bold tracking-[0.14em]",
-            won && "bg-lime text-ink",
-            lost && "bg-elev text-mist",
-            cashed && "bg-sky-400/15 text-sky-300",
-            live && "bg-live/15 text-live",
-            bet.status === "pending" && !live && "bg-lime/10 text-lime"
-          )}
-        >
-          {live && <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />}
-          {won
-            ? "GAGNÉ"
-            : lost
-              ? "PERDU"
-              : cashed
-                ? "ENCAISSÉ"
-                : live
-                  ? `DIRECT · ${bet.matchMinute}`
-                  : "EN COURS"}
-        </span>
+<span
+        className={cn(
+          "ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-display text-[9.5px] font-bold tracking-[0.14em]",
+          won && "bg-betclic-red text-white",
+          lost && "bg-elev text-mist",
+          cashed && "bg-bittersweet/15 text-bittersweet",
+          live && "bg-betclic-red/15 text-betclic-red",
+          bet.status === "pending" && !live && "bg-betclic-yellow/15 text-betclic-yellow"
+        )}
+      >
+        {live && <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />}
+        {won
+          ? "GAGNÉ"
+          : lost
+            ? "PERDU"
+            : cashed
+              ? "ENCAISSÉ"
+              : live
+                ? `DIRECT · ${bet.matchMinute}`
+                : "EN COURS"}
+      </span>
       </div>
 
       {/* Équipes + sélection */}
@@ -134,7 +134,7 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
 
         <div className="mt-3 flex items-center justify-between rounded-lg bg-white/[0.05] px-3.5 py-2.5">
           <span className="text-[12.5px] font-semibold text-white">{bet.selectionLabel}</span>
-          <span className="font-display text-[15px] font-bold tabular-nums text-lime">
+          <span className="font-display text-[15px] font-bold tabular-nums text-betclic-yellow">
             {formatOdds(bet.odds, oddsFormat)}
           </span>
         </div>
@@ -170,15 +170,15 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
       {canCashOut && (
         <div className="relative px-3.5 pb-3">
           {confirming ? (
-            <div className="flex items-center gap-2 rounded-2xl border border-sky-300/30 bg-sky-400/[0.08] px-3 py-2">
-              <p className="flex-1 text-[11px] font-medium text-sky-100/90">
+            <div className="flex items-center gap-2 rounded-2xl border border-bittersweet/30 bg-bittersweet/[0.08] px-3 py-2">
+              <p className="flex-1 text-[11px] font-medium text-bittersweet/90">
                 Confirmer l'encaissement ?
               </p>
               <motion.button
                 whileTap={{ scale: 0.94 }}
                 onClick={doCashOut}
                 disabled={cashing}
-                className="flex h-8 items-center gap-1 rounded-full bg-sky-300 px-3 font-display text-[11px] font-bold text-[#04121d] disabled:opacity-60"
+                className="flex h-8 items-center gap-1 rounded-full bg-bittersweet px-3 font-display text-[11px] font-bold text-white disabled:opacity-60"
               >
                 {cashing ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.6} />
@@ -200,7 +200,7 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
             <motion.button
               whileTap={{ scale: 0.97 }}
               onClick={() => setConfirming(true)}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#7dd3fc,#38bdf8)] font-display text-[12.5px] font-bold text-[#04121d] shadow-[0_10px_26px_-12px_rgba(56,189,248,0.7)]"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] font-display text-[12.5px] font-bold text-white shadow-[0_10px_26px_-12px_rgba(225,0,20,0.7)]"
             >
               <HandCoins className="h-4 w-4" strokeWidth={2.2} />
               Encaisser · {eur(bet.cashOut!)}
@@ -237,10 +237,10 @@ function Amount({
       <p
         className={cn(
           "mt-0.5 font-display text-[13.5px] font-bold tabular-nums",
-          tone === "win" && "text-lime",
+          tone === "win" && "text-betclic-red",
           tone === "lost" && "text-mist",
-          tone === "pot" && "text-white",
-          tone === "cash" && "text-sky-300",
+          tone === "pot" && "text-betclic-yellow",
+          tone === "cash" && "text-bittersweet",
           tone === "neutral" && "text-white"
         )}
       >

@@ -68,7 +68,7 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
       {/* Invite à ouvrir les marchés */}
       {!isFinished && (
         <div className="flex items-center justify-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] py-1.5">
-          <LayoutGrid className="h-3 w-3 text-lime" strokeWidth={2.4} />
+          <LayoutGrid className="h-3 w-3 text-betclic-yellow" strokeWidth={2.4} />
           <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
             TOUS LES MARCHÉS
           </span>
@@ -91,7 +91,7 @@ function TeamRow({
   isLive: boolean;
 }) {
   const isFinished = score != null && !isLive;
-  return (
+return (
     <div className="flex items-center gap-2.5">
       <TeamAvatar name={name} size="xs" />
       <span
@@ -115,12 +115,12 @@ function TeamRow({
           className={cn(
             "ml-auto font-display text-[16px] font-bold tabular-nums",
             isLive
-              ? "glow-lime text-lime"
+              ? "glow-betclic text-betclic-yellow"
               : isFinished
-              ? winner
-                ? "text-white"
-                : "text-mist"
-              : "text-white"
+                ? winner
+                  ? "text-white"
+                  : "text-mist"
+                : "text-white"
           )}
         >
           {score}
@@ -221,8 +221,8 @@ function OddsCell({
         "relative flex h-11 flex-col items-center justify-center transition-colors duration-500",
         borderLeft && "border-l border-white/[0.06]",
         suspended && "cursor-not-allowed opacity-60 bg-white/[0.01]",
-        flash === "up" && "bg-lime/[0.13]",
-        flash === "down" && "bg-live/[0.13]"
+        flash === "up" && "bg-betclic-yellow/[0.13]",
+        flash === "down" && "bg-betclic-red/[0.13]"
       )}
     >
       <span className="text-[8.5px] font-semibold tracking-[0.2em] text-dim">{tag}</span>
@@ -238,13 +238,13 @@ function OddsCell({
           <span
             className={cn(
               "font-display text-[14px] font-bold tabular-nums",
-              isLive ? "text-lime" : "text-white"
+              isLive ? "text-betclic-yellow" : "text-white"
             )}
           >
             {formatOdds(odds, oddsFormat)}
           </span>
-          {flash === "up" && <ChevronUp className="h-3 w-3 text-lime" strokeWidth={3} />}
-          {flash === "down" && <ChevronDown className="h-3 w-3 text-live" strokeWidth={3} />}
+          {flash === "up" && <ChevronUp className="h-3 w-3 text-betclic-yellow" strokeWidth={3} />}
+          {flash === "down" && <ChevronDown className="h-3 w-3 text-betclic-red" strokeWidth={3} />}
         </span>
       )}
     </motion.button>

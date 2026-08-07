@@ -67,7 +67,7 @@ export function MarketSheet() {
             }}
             className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[94dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-white/10 bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.9)]"
           >
-            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-lime/70 to-transparent" />
+            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-betclic-red/70 to-transparent" />
 
             {/* En-tête match, collant — zone de drag pour mobile */}
             <div
@@ -107,7 +107,7 @@ export function MarketSheet() {
                   </p>
                 </div>
                 {isLive ? (
-                  <span className="shrink-0 font-display text-[16px] font-bold tabular-nums text-lime">
+                  <span className="shrink-0 font-display text-[16px] font-bold tabular-nums text-betclic-yellow">
                     {match.homeScore ?? 0}–{match.awayScore ?? 0}
                   </span>
                 ) : (
@@ -173,7 +173,7 @@ function AccordionItem({
     <div
       className={cn(
         "rounded-2xl border border-white/[0.07] bg-white/[0.02] p-2.5 transition-colors duration-200",
-        open && "border-lime/20 bg-white/[0.04]",
+        open && "border-betclic-red/20 bg-white/[0.04]",
       )}
     >
       <button
@@ -187,7 +187,7 @@ function AccordionItem({
         <ChevronDown
           className={cn(
             "absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 transition-transform duration-300",
-            open ? "text-lime" : "-rotate-90 text-dim",
+            open ? "text-betclic-red" : "-rotate-90 text-dim",
           )}
           strokeWidth={2.5}
         />
@@ -249,7 +249,7 @@ function OutcomeCell({
       onClick={suspended ? undefined : onPick}
       aria-disabled={suspended}
       className={cn(
-        "flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-lime/60 active:bg-lime/[0.14]",
+        "flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/[0.08] bg-white/[0.03] px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-betclic-red/60 active:bg-betclic-red/[0.14]",
         suspended && "cursor-not-allowed opacity-50"
       )}
     >
@@ -262,7 +262,7 @@ function OutcomeCell({
         <span
           className={cn(
             "font-display text-[13px] font-extrabold tabular-nums leading-none",
-            isLive ? "text-lime" : "text-white"
+            isLive ? "text-betclic-yellow" : "text-white"
           )}
         >
           {formatOdds(o.odds, oddsFormat)}

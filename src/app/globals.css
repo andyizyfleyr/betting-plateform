@@ -1,16 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #04070b;
-  --color-deep: #080d14;
-  --color-surface: #0a1017;
-  --color-card: #0d141e;
-  --color-elev: #18222f;
-  --color-edge: #1d2836;
-  --color-edge-soft: #16202c;
-  --color-lime: #c9f73a;
-  --color-lime-deep: #9ccf1f;
-  --color-live: #ff4d5e;
+  --color-ink: #000000;
+  --color-deep: #0a0a0a;
+  --color-surface: #121212;
+  --color-card: #1a1a1a;
+  --color-elev: #222222;
+  --color-edge: #333333;
+  --color-edge-soft: #2a2a2a;
+  --color-betclic-red: #E10014;
+  --color-betclic-red-deep: #b80010;
+  --color-betclic-yellow: #FFCC00;
+  --color-betclic-yellow-deep: #e6b800;
+  --color-bittersweet: #FB6962;
+  --color-outer-space: #343A40;
+  --color-live: #E10014;
   --color-win: #4ade80;
   --color-mist: #8a97a5;
   --color-dim: #5b6875;
@@ -31,8 +35,8 @@ body {
 }
 
 ::selection {
-  background: var(--color-lime);
-  color: #04070b;
+  background: var(--color-betclic-yellow);
+  color: #000000;
 }
 
 /* ---------- Ambiance desktop ---------- */
@@ -47,9 +51,9 @@ body {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(58rem 30rem at 50% -10%, rgba(201, 247, 58, 0.09), transparent 60%),
-    radial-gradient(40rem 30rem at 85% 110%, rgba(56, 130, 246, 0.08), transparent 60%),
-    radial-gradient(35rem 28rem at 8% 100%, rgba(255, 77, 94, 0.06), transparent 60%);
+    radial-gradient(58rem 30rem at 50% -10%, rgba(225, 0, 20, 0.09), transparent 60%),
+    radial-gradient(40rem 30rem at 85% 110%, rgba(255, 204, 0, 0.08), transparent 60%),
+    radial-gradient(35rem 28rem at 8% 100%, rgba(251, 105, 98, 0.06), transparent 60%);
 }
 .ambient::after {
   content: "";
@@ -61,7 +65,7 @@ body {
 }
 
 .app-shell {
-  box-shadow: 0 0 120px -30px rgba(201, 247, 58, 0.12);
+  box-shadow: 0 0 120px -30px rgba(225, 0, 20, 0.12);
 }
 
 /* Texture diagonale fine pour fonds de page et cartes héro */
@@ -94,7 +98,7 @@ body {
 .ticket-won {
   background:
     linear-gradient(var(--color-card), var(--color-card)) padding-box,
-    linear-gradient(135deg, rgba(201, 247, 58, 0.6), rgba(201, 247, 58, 0.06) 45%) border-box;
+    linear-gradient(135deg, rgba(225, 0, 20, 0.6), rgba(225, 0, 20, 0.06) 45%) border-box;
   border: 1px solid transparent;
 }
 
@@ -166,7 +170,7 @@ input[type="range"].pulse-range:disabled {
   border-radius: 999px;
   background: linear-gradient(
     to right,
-    var(--color-lime) var(--fill, 0%),
+    var(--color-betclic-red) var(--fill, 0%),
     var(--color-elev) var(--fill, 0%)
   );
 }
@@ -177,9 +181,9 @@ input[type="range"].pulse-range:disabled {
   width: 28px;
   border-radius: 999px;
   background: var(--color-ink);
-  border: 3px solid var(--color-lime);
+  border: 3px solid var(--color-betclic-red);
   box-shadow:
-    0 0 0 6px rgba(201, 247, 58, 0.14),
+    0 0 0 6px rgba(225, 0, 20, 0.14),
     0 6px 16px rgba(0, 0, 0, 0.55);
 }
 .pulse-range::-moz-range-track {
@@ -190,16 +194,16 @@ input[type="range"].pulse-range:disabled {
 .pulse-range::-moz-range-progress {
   height: 6px;
   border-radius: 999px;
-  background: var(--color-lime);
+  background: var(--color-betclic-red);
 }
 .pulse-range::-moz-range-thumb {
   height: 22px;
   width: 22px;
   border-radius: 999px;
   background: var(--color-ink);
-  border: 3px solid var(--color-lime);
+  border: 3px solid var(--color-betclic-red);
   box-shadow:
-    0 0 0 6px rgba(201, 247, 58, 0.14),
+    0 0 0 6px rgba(225, 0, 20, 0.14),
     0 6px 16px rgba(0, 0, 0, 0.55);
 }
 
@@ -223,13 +227,13 @@ input[type="range"].pulse-range:disabled {
 /* ---------- Animations ---------- */
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 77, 94, 0.55);
+    box-shadow: 0 0 0 0 rgba(225, 0, 20, 0.55);
   }
   70% {
-    box-shadow: 0 0 0 7px rgba(255, 77, 94, 0);
+    box-shadow: 0 0 0 7px rgba(225, 0, 20, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 77, 94, 0);
+    box-shadow: 0 0 0 0 rgba(225, 0, 20, 0);
   }
 }
 .live-dot {
@@ -278,6 +282,6 @@ input[type="range"].pulse-range:disabled {
   animation: spin-slow 7s linear infinite;
 }
 
-.glow-lime {
-  text-shadow: 0 0 22px rgba(201, 247, 58, 0.45);
+.glow-betclic {
+  text-shadow: 0 0 22px rgba(225, 0, 20, 0.45);
 }

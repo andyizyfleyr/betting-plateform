@@ -21,7 +21,7 @@ export function Toggle({
       onClick={() => onChange(!checked)}
       className={cn(
         "relative h-[30px] w-[52px] shrink-0 rounded-full transition-colors duration-300",
-        checked ? "bg-lime" : "bg-elev",
+        checked ? "bg-betclic-red" : "bg-elev",
         disabled && "opacity-50"
       )}
     >

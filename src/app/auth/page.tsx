@@ -82,8 +82,8 @@ function AuthInner() {
         className="flex items-center justify-between"
       >
         <div className="flex items-center gap-2">
-          <span className="relative grid h-8 w-8 rotate-45 place-items-center rounded-lg bg-lime shadow-[0_6px_24px_-4px_rgba(201,247,58,0.55)]">
-            <Zap className="h-4 w-4 -rotate-45 fill-ink text-ink" strokeWidth={2.4} />
+          <span className="relative grid h-8 w-8 rotate-45 place-items-center rounded-lg bg-betclic-red shadow-[0_6px_24px_-4px_rgba(225,0,20,0.55)]">
+            <Zap className="h-4 w-4 -rotate-45 fill-white text-white" strokeWidth={2.4} />
           </span>
           <div>
             <p className="font-display text-[17px] font-bold leading-none tracking-tight text-white">
@@ -94,7 +94,7 @@ function AuthInner() {
             </p>
           </div>
         </div>
-        <span className="glass-pill rounded-full px-2.5 py-1 font-display text-[9px] font-bold tracking-[0.2em] text-lime">
+        <span className="glass-pill rounded-full px-2.5 py-1 font-display text-[9px] font-bold tracking-[0.2em] text-betclic-red">
           JWT · SECURISÉ
         </span>
       </motion.div>
@@ -106,7 +106,7 @@ function AuthInner() {
         transition={{ duration: 0.5, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
         className="mt-8"
       >
-        <p className="text-[10px] font-semibold tracking-[0.26em] text-lime">
+        <p className="text-[10px] font-semibold tracking-[0.26em] text-betclic-red">
           {mode === "login" ? "BIENVENUE" : "REJOINDRE LA PLATEFORME"}
         </p>
         <h1 className="mt-1.5 font-display text-[30px] font-bold leading-[1.05] tracking-tight">
@@ -153,7 +153,7 @@ function AuthInner() {
                 <motion.span
                   layoutId="auth-pill"
                   transition={spring}
-                  className="absolute inset-0 rounded-lg bg-lime shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
+                  className="absolute inset-0 rounded-lg bg-betclic-red shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
                 />
               )}
               <span className="relative z-10">
@@ -177,7 +177,7 @@ function AuthInner() {
         {mode === "register" && (
           <FieldWrap>
             <FieldIcon>
-              <User className="h-[18px] w-[18px] text-lime" strokeWidth={2.2} />
+              <User className="h-[18px] w-[18px] text-betclic-red" strokeWidth={2.2} />
             </FieldIcon>
             <input
               value={name}
@@ -191,7 +191,7 @@ function AuthInner() {
 
         <FieldWrap>
           <FieldIcon>
-            <Mail className="h-[18px] w-[18px] text-lime" strokeWidth={2.2} />
+            <Mail className="h-[18px] w-[18px] text-betclic-red" strokeWidth={2.2} />
           </FieldIcon>
           <input
             value={email}
@@ -205,7 +205,7 @@ function AuthInner() {
 
         <FieldWrap>
           <FieldIcon>
-            <ShieldCheck className="h-[18px] w-[18px] text-lime" strokeWidth={2.2} />
+            <ShieldCheck className="h-[18px] w-[18px] text-betclic-red" strokeWidth={2.2} />
           </FieldIcon>
           <input
             value={password}
@@ -231,7 +231,7 @@ function AuthInner() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden px-1 text-[12px] font-medium text-live"
+              className="overflow-hidden px-1 text-[12px] font-medium text-betclic-red"
             >
               {error}
             </motion.p>
@@ -243,7 +243,7 @@ function AuthInner() {
           whileTap={{ scale: 0.97 }}
           disabled={loading}
           className={cn(
-            "mt-1 flex h-[52px] items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#d4ff54,#9ccf1f)] font-display text-[14px] font-bold text-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_14px_30px_-12px_rgba(201,247,58,0.5)] transition-opacity disabled:opacity-60"
+            "mt-1 flex h-[52px] items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] font-display text-[14px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_14px_30px_-12px_rgba(225,0,20,0.5)] transition-opacity disabled:opacity-60"
           )}
         >
           {loading ? (
@@ -273,7 +273,7 @@ function AuthInner() {
         }}
         className="mt-5 flex items-center justify-center gap-1.5 text-[12px] font-medium text-dim transition-colors hover:text-mist"
       >
-        <Zap className="h-3.5 w-3.5 text-lime" strokeWidth={2.4} />
+        <Zap className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
         Essayer avec le compte démo : <span className="font-semibold text-mist">demo@pulse.app / demo1234</span>
       </motion.button>
 
@@ -291,7 +291,7 @@ function AuthInner() {
 
 function FieldWrap({ children }: { children: React.ReactNode }) {
   return (
-    <div className="glass-card flex items-center gap-3 rounded-xl py-0 pl-3 pr-2 focus-within:border-lime/40">
+    <div className="glass-card flex items-center gap-3 rounded-xl py-0 pl-3 pr-2 focus-within:border-betclic-red/40">
       {children}
     </div>
   );
