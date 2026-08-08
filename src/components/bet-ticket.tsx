@@ -74,9 +74,9 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
         <span
           className={cn(
             "pointer-events-none absolute right-3 top-6 rotate-[-10deg] rounded-md border-2 px-2 py-0.5 font-display text-[11px] font-bold tracking-[0.2em]",
-            won && "border-betclic-red/50 text-betclic-red/60",
-            lost && "border-mist/30 text-mist/40",
-            cashed && "border-sky-300/50 text-sky-300/70"
+            won && "border-win text-win",
+            lost && "border-betclic-red text-betclic-red",
+            cashed && "border-sky-500 text-sky-600"
           )}
         >
           {won ? "PAYÉ" : lost ? "PERDU" : "CASH-OUT"}
