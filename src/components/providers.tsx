@@ -16,6 +16,7 @@ import { api, type ClientMatch, type ClientUser } from "@/lib/api";
 import { cn } from "@/lib/format";
 import { BetModal } from "./bet-modal";
 import { MarketSheet } from "./market-sheet";
+import { SplashScreen } from "./splash-screen";
 
 export interface BetTarget {
   match: ClientMatch;
@@ -68,13 +69,18 @@ export function Providers({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [splashVisible, setSplashVisible] = useState(true);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     api
       .settings()
-      .then((r) => setUser(r.user))
-      .catch(() => undefined);
+      .then((r) => {
+        setUser(r.user);
+        // Petit délai minimal pour que le splash s'affiche élégamment avant de disparaître.
+        setTimeout(() => setSplashVisible(false), 600);
+      })
+      .catch(() => setSplashVisible(false));
   }, []);
 
   useEffect(() => {
@@ -119,6 +125,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={value}>
+      <SplashScreen visible={splashVisible} />
       {children}
       <MarketSheet />
       <BetModal />

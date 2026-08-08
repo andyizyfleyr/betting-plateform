@@ -13,6 +13,7 @@ import {
   HelpCircle,
   History,
   Languages,
+  Loader2,
   LogOut,
   Plus,
   Radio,
@@ -41,6 +42,7 @@ export default function ParametresPage() {
   const router = useRouter();
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [bets, setBets] = useState<ClientBet[] | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     api
@@ -132,6 +134,8 @@ export default function ParametresPage() {
     toast({ kind: "info", title: label, description: "Bientôt disponible dans PULSE" });
 
   const logout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
     try {
       await api.auth.logout();
     } catch {
@@ -139,6 +143,7 @@ export default function ParametresPage() {
     }
     router.push("/auth");
     router.refresh();
+    setLoggingOut(false);
   };
 
   const hue = teamHue(user?.name ?? "Pulse");
@@ -357,10 +362,15 @@ export default function ParametresPage() {
         <motion.button
           whileTap={{ scale: 0.985 }}
           onClick={logout}
-          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-red-500/10"
+          disabled={loggingOut}
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-red-500/10 disabled:opacity-60"
         >
           <span className="glass-pill grid h-9 w-9 shrink-0 place-items-center rounded-full bg-red-500/15 text-red-400">
-            <LogOut className="h-4 w-4" strokeWidth={2.2} />
+            {loggingOut ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.2} />
+            ) : (
+              <LogOut className="h-4 w-4" strokeWidth={2.2} />
+            )}
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-display text-[13.5px] font-semibold text-red-400">
