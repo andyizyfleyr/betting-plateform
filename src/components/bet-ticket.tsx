@@ -100,27 +100,14 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
             <span className="truncate text-[11px] font-medium text-mist">{bet.league}</span>
           </>
         )}
-<span
-        className={cn(
-          "ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-display text-[9.5px] font-bold tracking-[0.14em]",
-          won && "bg-betclic-red text-white",
-          lost && "bg-elev text-mist",
-          cashed && "bg-bittersweet/15 text-bittersweet",
-          live && "bg-betclic-red/15 text-betclic-red",
-          bet.status === "pending" && !live && "bg-betclic-red/15 text-betclic-red"
+{!won && !lost && !cashed && (
+          <span
+            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md bg-betclic-red/15 px-2.5 py-1 font-display text-[9.5px] font-bold tracking-[0.14em] text-betclic-red"
+          >
+            {live && <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />}
+            {live ? `DIRECT · ${bet.matchMinute}` : "EN COURS"}
+          </span>
         )}
-      >
-        {live && <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />}
-        {won
-          ? "GAGNÉ"
-          : lost
-            ? "PERDU"
-            : cashed
-              ? "ENCAISSÉ"
-              : live
-                ? `DIRECT · ${bet.matchMinute}`
-                : "EN COURS"}
-      </span>
       </div>
 
       {/* Question / équipes + sélection */}
