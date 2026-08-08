@@ -159,7 +159,8 @@ export async function POST(req: NextRequest) {
     const oddsHome = roundNumber(body.oddsHome) ?? 1.9;
     const oddsDraw = roundNumber(body.oddsDraw) ?? 3.3;
     const oddsAway = roundNumber(body.oddsAway) ?? 3.1;
-    const startsAt = new Date(Date.now() + 10 * 60_000);
+    const status = body.status === "live" ? "live" : "upcoming";
+    const startsAt = status === "live" ? new Date() : new Date(Date.now() + 10 * 60_000);
     const [m] = await db
       .insert(matches)
       .values({
@@ -169,8 +170,8 @@ export async function POST(req: NextRequest) {
         awayTeam: away,
         homeScore: null,
         awayScore: null,
-        status: "upcoming",
-        minute: null,
+        status,
+        minute: status === "live" ? "30'" : null,
         startsAt,
         oddsHome,
         oddsDraw,

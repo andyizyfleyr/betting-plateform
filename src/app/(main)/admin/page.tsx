@@ -140,7 +140,15 @@ export default function AdminPage() {
   const [notice, setNotice] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const [matchForm, setMatchForm] = useState({ home: "", away: "", league: "Football" });
+  const [matchForm, setMatchForm] = useState({
+    home: "",
+    away: "",
+    league: "Football",
+    oddsHome: "1.90",
+    oddsDraw: "3.30",
+    oddsAway: "3.10",
+    status: "upcoming",
+  });
   const [questionForm, setQuestionForm] = useState({ question: "", category: "Sport", oddsYes: "1.90", oddsNo: "1.80", hours: "72" });
   const [balanceForm, setBalanceForm] = useState<Record<number, string>>({});
 
@@ -190,11 +198,22 @@ export default function AdminPage() {
   const onAddMatch = async (e: FormEvent) => {
     e.preventDefault();
     const ok = await act(
-      { action: "addMatch", home: matchForm.home, away: matchForm.away, league: matchForm.league },
+      {
+        action: "addMatch",
+        home: matchForm.home,
+        away: matchForm.away,
+        league: matchForm.league,
+        oddsHome: Number(matchForm.oddsHome),
+        oddsDraw: Number(matchForm.oddsDraw),
+        oddsAway: Number(matchForm.oddsAway),
+        status: matchForm.status,
+      },
       "add-match",
       "Match créé"
     );
-    if (ok) setMatchForm({ home: "", away: "", league: "Football" });
+    if (ok) {
+      setMatchForm({ home: "", away: "", league: "Football", oddsHome: "1.90", oddsDraw: "3.30", oddsAway: "3.10", status: "upcoming" });
+    }
   };
 
   const onAddQuestion = async (e: FormEvent) => {
@@ -259,8 +278,8 @@ export default function AdminPage() {
       )}
 
       {/* Onglets */}
-      <div className="sticky top-12 z-30 -mx-3 mt-4 overflow-x-auto bg-white/90 px-3 pb-1 pt-2 backdrop-blur-xl">
-        <div className="flex gap-1 rounded-xl border border-edge bg-white p-1">
+      <div className="sticky top-12 z-30 -mx-3 mt-5 overflow-x-auto bg-white/90 px-3 pb-0 pt-2 backdrop-blur-xl">
+        <div className="flex items-center gap-1">
           {TABS.map(({ key, label, Icon }) => {
             const active = tab === key;
             return (
@@ -268,21 +287,20 @@ export default function AdminPage() {
                 key={key}
                 onClick={() => setTab(key)}
                 className={cn(
-                  "relative flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-lg py-2 transition-colors",
-                  active ? "text-white" : "text-mist"
+                  "relative flex items-center gap-1.5 whitespace-nowrap px-3.5 pb-2.5 pt-1 transition-colors",
+                  active ? "text-foreground" : "text-mist hover:text-dim"
                 )}
               >
-                {active && (
-                  <motion.span
-                    layoutId="admin-tab"
-                    transition={{ type: "spring", stiffness: 500, damping: 38 }}
-                    className="absolute inset-0 rounded-lg bg-betclic-red"
-                  />
-                )}
-                <span className="relative z-10 flex items-center gap-1">
-                  <Icon className="h-3 w-3" strokeWidth={2.4} />
-                  <span className="font-display text-[11px]">{label}</span>
-                </span>
+                <Icon className="h-3.5 w-3.5" strokeWidth={active ? 2.6 : 2.1} />
+                <span className={cn("font-display text-[11.5px]", active && "font-bold")}>{label}</span>
+                <motion.span
+                  layoutId="admin-tab-underline"
+                  transition={{ type: "spring", stiffness: 520, damping: 40 }}
+                  className={cn(
+                    "absolute inset-x-2 -bottom-0 h-[2.5px] rounded-full",
+                    active ? "bg-betclic-red" : "bg-transparent"
+                  )}
+                />
               </button>
             );
           })}
@@ -389,8 +407,16 @@ function MatchesTab({
   matches: AdminMatch[];
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
-  form: { home: string; away: string; league: string };
-  setForm: (f: { home: string; away: string; league: string }) => void;
+  form: {
+    home: string;
+    away: string;
+    league: string;
+    oddsHome: string;
+    oddsDraw: string;
+    oddsAway: string;
+    status: string;
+  };
+  setForm: (f: typeof form) => void;
   onAdd: (e: FormEvent) => void;
 }) {
   return (
@@ -405,6 +431,42 @@ function MatchesTab({
           <AdminInput placeholder="Équipe extérieure" value={form.away} onChange={(v) => setForm({ ...form, away: v })} />
         </div>
         <AdminInput label="Championnat" value={form.league} className="mt-2" onChange={(v) => setForm({ ...form, league: v })} />
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          <AdminInput label="Cote domicile" value={form.oddsHome} onChange={(v) => setForm({ ...form, oddsHome: v })} />
+          <AdminInput label="Cote nul" value={form.oddsDraw} onChange={(v) => setForm({ ...form, oddsDraw: v })} />
+          <AdminInput label="Cote ext." value={form.oddsAway} onChange={(v) => setForm({ ...form, oddsAway: v })} />
+        </div>
+        <label className="mt-3 block">
+          <span className="mb-1 block text-[10px] font-semibold tracking-[0.14em] text-dim">STATUT</span>
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
+            {[
+              { v: "upcoming", label: "À venir" },
+              { v: "live", label: "En direct" },
+            ].map(({ v, label }) => {
+              const active = form.status === v;
+              return (
+                <button
+                  type="button"
+                  key={v}
+                  onClick={() => setForm({ ...form, status: v })}
+                  className={cn(
+                    "relative rounded-lg py-2 font-display text-[11.5px] transition-colors",
+                    active ? "font-bold text-white" : "font-medium text-mist"
+                  )}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="add-match-status"
+                      transition={{ type: "spring", stiffness: 480, damping: 38 }}
+                      className="absolute inset-0 rounded-lg bg-betclic-red"
+                    />
+                  )}
+                  <span className="relative z-10">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </label>
         <button
           type="submit"
           disabled={!form.home || !form.away || busy["add-match"]}
