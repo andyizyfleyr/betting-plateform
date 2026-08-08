@@ -38,7 +38,6 @@ export interface ClientMatch {
   oddsDraw: number | null;
   oddsAway: number;
   suspended: boolean;
-  source?: "virtual" | "scraped";
   markets: MarketGroup[];
 }
 

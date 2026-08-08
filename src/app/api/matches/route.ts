@@ -1,4 +1,4 @@
-import { asc, desc, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { matches } from "@/db/schema";
@@ -11,14 +11,12 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   await ensureSeeded();
 
-  // Moteur virtuel : ne touche que les matchs source = "virtual".
   await runLiveEngine();
-  // NB : le scraping 1xBet est déclenché par un cron (vercel.json → /api/scrape),
-  // pas ici, pour garder la requête rapide.
 
   const rows = await db
     .select()
     .from(matches)
+    .where(eq(matches.source, "virtual"))
     .orderBy(
       // Live d'abord, puis à venir, puis terminés
       asc(

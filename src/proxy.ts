@@ -23,8 +23,6 @@ export async function proxy(req: NextRequest) {
       pathname === "/api/health" ||
       pathname.startsWith("/api/auth") ||
       pathname === "/api/matches" ||
-      // Scraping Playwright : déclenché côté serveur (cron), sans cookie d'authentification.
-      pathname === "/api/scrape" ||
       // Webhook Stripe : appelé par Stripe SANS cookie d'authentification.
       pathname === "/api/payments/stripe/webhook";
     if (publicApi) return NextResponse.next();

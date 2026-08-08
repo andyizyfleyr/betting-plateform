@@ -10,12 +10,12 @@ import { LiveTicker } from "@/components/live-ticker";
 import { SportIcon } from "@/components/sport-icon";
 import { cn, todayLabel } from "@/lib/format";
 
-type Filter = "all" | "virtual" | "scraped";
+type Filter = "all" | "live" | "football";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "Tous" },
-  { key: "virtual", label: "Virtuel" },
-  { key: "scraped", label: "Réel" },
+  { key: "live", label: "Direct" },
+  { key: "football", label: "Foot" },
 ];
 
 const POLL_INTERVAL = 5_000;
@@ -82,7 +82,8 @@ export default function MatchsPage() {
   const visible = useMemo(() => {
     const all = (matches ?? []).filter((m) => m.status !== "finished");
     if (filter === "all") return all;
-    return all.filter((m) => (m.source ?? "virtual") === filter);
+    if (filter === "live") return all.filter((m) => m.status === "live");
+    return all.filter((m) => m.sport === filter);
   }, [matches, filter]);
 
   const live = visible.filter((m) => m.status === "live");
@@ -156,8 +157,8 @@ export default function MatchsPage() {
                 )}
                 <span className="relative z-10 flex items-center gap-1">
                   {key === "all" && <LayoutGrid className="h-3 w-3" strokeWidth={2.4} />}
-                  {key === "virtual" && <Flame className="h-3 w-3" strokeWidth={2.4} />}
-                  {key === "scraped" && <SportIcon sport="football" className="h-3 w-3" />}
+                  {key === "live" && <Flame className="h-3 w-3" strokeWidth={2.4} />}
+                  {key === "football" && <SportIcon sport="football" className="h-3 w-3" />}
                   <span className={cn("font-display text-[11.5px]", active ? "font-bold" : "font-medium")}>
                     {label}
                   </span>
