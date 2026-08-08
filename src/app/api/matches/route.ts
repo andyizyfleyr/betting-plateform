@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
-import { ensureAutoScrape } from "@/lib/scraper";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
@@ -14,9 +13,8 @@ export async function GET() {
 
   // Moteur virtuel : ne touche que les matchs source = "virtual".
   await runLiveEngine();
-
-  // Scraping automatique (throttlé, fire-and-forget) pour peupler les vrais matchs.
-  ensureAutoScrape();
+  // NB : le scraping 1xBet est déclenché par un cron (vercel.json → /api/scrape),
+  // pas ici, pour garder la requête rapide.
 
   const rows = await db
     .select()

@@ -3,6 +3,7 @@ import { runScrape, type ScrapeOptions } from "@/lib/scraper";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300; // scraping long (~2 min) — plan Pro requis, sinon plaque au timeout
 
 /**
  * Route indépendante de scraping Playwright (1xBet / bet365).

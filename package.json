@@ -8,7 +8,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "scrape": "tsx scripts/scrape-cron.ts",
-    "scrape:dry": "tsx scripts/scrape-cron.ts --dryRun"
+    "scrape:dry": "tsx scripts/scrape-cron.ts --dryRun",
+    "postinstall": "playwright install chromium"
   },
   "dependencies": {
     "dotenv": "17.3.1",
