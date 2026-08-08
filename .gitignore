@@ -28,6 +28,9 @@ dev.err.log
 .env
 .env*.local
 
+# debug output / scratch
+re.txt
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

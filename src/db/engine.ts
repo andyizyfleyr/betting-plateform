@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser, bets, matches, simState, type MatchRow } from "@/db/schema";
@@ -56,7 +56,7 @@ export async function runLiveEngine() {
   const livePair = ALL_PAIRS[liveIdx];
   const upcomingPair = ALL_PAIRS[nextIdx];
 
-  const all = await db.select().from(matches);
+  const all = await db.select().from(matches).where(eq(matches.source, "virtual"));
 
   // 1) Clôture des anciens matchs « live » qui ne sont plus le match courant.
   for (const m of all) {
@@ -94,7 +94,7 @@ export async function runLiveEngine() {
   const liveMatch = await db
     .select()
     .from(matches)
-    .where(eq(matches.status, "live"))
+    .where(and(eq(matches.status, "live"), eq(matches.source, "virtual")))
     .limit(1)
     .then((r) => r[0] ?? null);
 
@@ -286,7 +286,7 @@ async function finishMatch(m: MatchRow) {
 /** Nettoie les vieux matchs terminés. */
 async function pruneFinished(now: number) {
   const cutoff = now - 3 * ROUND_MS;
-  const finished = await db.select().from(matches).where(eq(matches.status, "finished"));
+  const finished = await db.select().from(matches).where(and(eq(matches.status, "finished"), eq(matches.source, "virtual")));
   const betRows = await db.select({ matchId: bets.matchId }).from(bets);
   const protectedIds = new Set(
     betRows.map((b) => b.matchId).filter((id): id is number => id != null)

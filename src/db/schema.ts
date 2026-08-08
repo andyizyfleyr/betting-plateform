@@ -48,6 +48,8 @@ export const matches = pgTable("matches", {
   awayForm: doublePrecision("away_form").notNull().default(1),
   /** Ligne de handicap asiatique courante (null = pas de handicap). */
   asianHandicapLine: doublePrecision("asian_handicap_line"),
+  /** Origine de la ligne : "virtual" (moteur de simulation) ou "scraped" (Playwright). */
+  source: text("source").notNull().default("virtual"),
 });
 
 /**
