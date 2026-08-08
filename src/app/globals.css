@@ -247,9 +247,9 @@ input[type="range"].pulse-range:disabled {
 .shimmer {
   background: linear-gradient(
     100deg,
-    rgba(0, 0, 0, 0.03) 40%,
-    rgba(0, 0, 0, 0.08) 50%,
-    rgba(0, 0, 0, 0.03) 60%
+    rgba(0, 0, 0, 0.06) 40%,
+    rgba(0, 0, 0, 0.14) 50%,
+    rgba(0, 0, 0, 0.06) 60%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
