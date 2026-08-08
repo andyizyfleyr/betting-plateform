@@ -359,6 +359,14 @@ export default function ParametresPage() {
           label="Historique des transactions"
           onClick={soon("Historique")}
         />
+        {user?.role === "admin" && (
+          <ChevronRow
+            Icon={<ShieldCheck className="h-4 w-4 text-betclic-red" strokeWidth={2.2} />}
+            label="Espace admin"
+            hint="Gestion de la plateforme"
+            onClick={() => router.push("/admin")}
+          />
+        )}
         <motion.button
           whileTap={{ scale: 0.985 }}
           onClick={logout}

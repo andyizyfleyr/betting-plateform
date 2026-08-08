@@ -14,11 +14,16 @@ export async function proxy(req: NextRequest) {
   const token = req.cookies.get(AUTH_COOKIE)?.value;
   const payload = token ? await verifyJwt(token) : null;
   const authed = !!payload;
+  const isAdmin = payload?.role === "admin";
 
   const isApi = pathname.startsWith("/api");
 
   // ---- API ----
   if (isApi) {
+    const adminApi = pathname === "/api/admin" || pathname.startsWith("/api/admin/");
+    if (adminApi && !isAdmin) {
+      return NextResponse.json({ error: "Accès réservé à l'administrateur" }, { status: 403 });
+    }
     const publicApi =
       pathname === "/api/health" ||
       pathname.startsWith("/api/auth") ||
@@ -29,6 +34,18 @@ export async function proxy(req: NextRequest) {
     if (!authed) {
       return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
     }
+    return NextResponse.next();
+  }
+
+  // ---- Pages ----
+  const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");
+  if (isAdminPage) {
+    if (!authed || !isAdmin) {
+      const url = new URL("/auth", req.url);
+      url.searchParams.set("from", pathname);
+      return NextResponse.redirect(url);
+    }
+    // Les pages admin utilisent la même coquille d'application que le reste.
     return NextResponse.next();
   }
 

@@ -103,6 +103,7 @@ export interface ClientUser {
   id: number;
   name: string;
   balance: number;
+  role: string;
   notifications: boolean;
   sound: boolean;
   haptics: boolean;

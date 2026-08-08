@@ -13,7 +13,12 @@ const cookieOpts = {
   path: "/",
 };
 
-export async function signSession(payload: JwtPayload): Promise<string> {
+export interface SessionPayload extends JwtPayload {
+  sub: number;
+  role?: string;
+}
+
+export async function signSession(payload: SessionPayload): Promise<string> {
   return signJwt(payload);
 }
 

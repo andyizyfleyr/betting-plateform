@@ -443,12 +443,39 @@ export async function ensureSeeded() {
     )
   `);
 
+  // Colonne role (admin) — idempotent pour les bases déjà en service.
+  await db.execute(sql`
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
+  `);
+
   // Compte démo (idempotent) : crédentiels par défaut si jamais définis.
   if (user && !user.email) {
     await db
       .update(appUser)
       .set({ email: "demo@pulse.app", passwordHash: hashPassword("demo1234") })
       .where(eq(appUser.id, user.id));
+  }
+
+  // Compte administrateur (email dédié) — créé ou promu à chaque démarrage.
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "admin@pulse.app").trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD ?? "admin1234";
+  const [adminUser] = await db
+    .select()
+    .from(appUser)
+    .where(eq(appUser.email, adminEmail))
+    .limit(1);
+  if (adminUser) {
+    if (adminUser.role !== "admin") {
+      await db.update(appUser).set({ role: "admin" }).where(eq(appUser.id, adminUser.id));
+    }
+  } else {
+    await db.insert(appUser).values({
+      name: "Admin",
+      email: adminEmail,
+      passwordHash: hashPassword(adminPassword),
+      balance: 0,
+      role: "admin",
+    });
   }
 
   seededOnce = true;

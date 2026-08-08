@@ -137,6 +137,8 @@ export const appUser = pgTable("app_user", {
   oddsFormat: text("odds_format").notNull().default("decimal"), // "decimal" | "fractional"
   language: text("language").notNull().default("fr"),
   liveSim: boolean("live_sim").notNull().default(true), // moteur de matchs en direct
+  /** Rôle du compte : "user" (joueur) ou "admin" (espace d'administration). */
+  role: text("role").notNull().default("user"),
   /** Authentification JWT. `email` est unique ; `passwordHash` = scrypt. */
   email: text("email").unique(),
   passwordHash: text("password_hash"),

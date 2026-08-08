@@ -60,6 +60,6 @@ export async function POST(req: NextRequest) {
     .returning();
 
   const res = NextResponse.json({ user: publicUser(user) });
-  setAuthCookie(res, await signSession({ sub: user.id }));
+  setAuthCookie(res, await signSession({ sub: user.id, role: user.role ?? "user" }));
   return res;
 }
