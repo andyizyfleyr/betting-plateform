@@ -26,6 +26,11 @@ function round2(n: number) {
 export async function ensureSeeded() {
   if (seededOnce) return;
 
+  // Colonne role (admin) — idempotent pour les bases déjà en service.
+  await db.execute(sql`
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
+  `);
+
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(matches);
@@ -441,11 +446,6 @@ export async function ensureSeeded() {
       pg_get_serial_sequence('app_user', 'id'),
       GREATEST((SELECT COALESCE(MAX(id), 1) FROM app_user), 1)
     )
-  `);
-
-  // Colonne role (admin) — idempotent pour les bases déjà en service.
-  await db.execute(sql`
-    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
   `);
 
   // Compte démo (idempotent) : crédentiels par défaut si jamais définis.
