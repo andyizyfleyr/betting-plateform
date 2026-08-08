@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/scrape?site=1xbet",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
