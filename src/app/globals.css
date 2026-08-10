@@ -236,6 +236,11 @@ input[type="range"].pulse-range:disabled {
   animation: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Pastille du décompte avant coup d'envoi — pulsation douce. */
+.countdown-dot {
+  animation: pulse-ring 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;

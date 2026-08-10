@@ -6,7 +6,8 @@ import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { ResultOdds } from "./match-card";
-import { formatKickoff, teamHue } from "@/lib/format";
+import { KickoffCountdown } from "./kickoff-countdown";
+import { teamHue } from "@/lib/format";
 
 /** Match à la une V5 — scoreboard immersif + cotes 1/N/2 ; un tap ouvre les marchés. */
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
@@ -65,9 +66,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
             ) : (
               <>
                 <span className="ghost-num font-display text-[30px] font-bold leading-none">VS</span>
-                <span className="mt-2 text-[10px] font-semibold text-mist">
-                  {formatKickoff(match.startsAt)}
-                </span>
+                <KickoffCountdown startsAt={match.startsAt} className="mt-2" />
               </>
             )}
           </div>

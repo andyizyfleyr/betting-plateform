@@ -7,7 +7,8 @@ import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
-import { cn, formatKickoff, formatOdds } from "@/lib/format";
+import { KickoffCountdown } from "./kickoff-countdown";
+import { cn, formatOdds } from "@/lib/format";
 
 /** Carte de match V5 — scoreboard + cotes 1/N/2 rapides ; un tap ouvre les marchés. */
 export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: number }) {
@@ -39,10 +40,12 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
             LIVE {match.minute ?? ""}
           </span>
-        ) : (
+        ) : isFinished ? (
           <span className="ml-auto shrink-0 font-display text-[10px] font-semibold tracking-[0.08em] text-mist">
-            {isFinished ? "TERMINÉ" : formatKickoff(match.startsAt).toUpperCase()}
+            TERMINÉ
           </span>
+        ) : (
+          <KickoffCountdown startsAt={match.startsAt} className="ml-auto" />
         )}
       </div>
 

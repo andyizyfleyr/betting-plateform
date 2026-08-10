@@ -7,7 +7,8 @@ import type { ClientMatch, MarketGroup, MarketOutcome } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
-import { cn, formatKickoff, formatOdds } from "@/lib/format";
+import { KickoffCountdown } from "./kickoff-countdown";
+import { cn, formatOdds } from "@/lib/format";
 
 /** Feuille des marchés façon 1xbet : accordéon mobile avec market-box / market-head / odd-btn. */
 export function MarketSheet() {
@@ -111,8 +112,8 @@ export function MarketSheet() {
                     {match.homeScore ?? 0}–{match.awayScore ?? 0}
                   </span>
                 ) : (
-                  <span className="shrink-0 text-right text-[10px] font-semibold leading-tight text-mist">
-                    {formatKickoff(match.startsAt)}
+                  <span className="shrink-0 text-right font-semibold leading-tight">
+                    <KickoffCountdown startsAt={match.startsAt} />
                   </span>
                 )}
               </div>
