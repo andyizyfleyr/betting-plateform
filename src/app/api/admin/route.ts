@@ -7,6 +7,7 @@ import { publicUser } from "@/lib/auth";
 import { minuteNumber } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
 import { settleMatchBets } from "@/lib/settle";
+import { MANUAL_MINUTE_REAL_MS } from "@/db/engine";
 
 export const dynamic = "force-dynamic";
 
@@ -180,8 +181,9 @@ export async function POST(req: NextRequest) {
     const oddsDraw = roundNumber(body.oddsDraw) ?? 3.3;
     const oddsAway = roundNumber(body.oddsAway) ?? 3.1;
     const status = body.status === "live" ? "live" : "upcoming";
-    // Date/heure de coup d'envoi saisie par l'admin (défaut : dans 10 min).
-    let startsAt = new Date(Date.now() + 10 * 60_000);
+    // Date/heure de coup d'envoi saisie par l'admin (défaut : dans 10 min,
+    // ou maintenant si le match est créé directement en direct).
+    let startsAt = new Date(status === "live" ? Date.now() : Date.now() + 10 * 60_000);
     if (typeof body.startsAt === "string") {
       const parsed = new Date(body.startsAt);
       if (!Number.isNaN(parsed.getTime())) startsAt = parsed;
@@ -248,7 +250,7 @@ export async function POST(req: NextRequest) {
         homeScore: null,
         awayScore: null,
         status,
-        minute: status === "live" ? "30'" : null,
+        minute: status === "live" ? "1'" : null,
         startsAt,
         oddsHome: h,
         oddsDraw: d,
@@ -307,40 +309,50 @@ export async function POST(req: NextRequest) {
 
     let gameMinute = minuteNumber(m.minute);
     if (typeof body.minute === "number" && Number.isFinite(body.minute)) {
-      gameMinute = Math.max(1, Math.min(90, body.minute));
+      gameMinute = body.minute;
     }
+    gameMinute = Math.max(1, Math.min(90, Math.round(gameMinute)));
 
     const events = [...(m.events ?? [])];
     events.push({ type: "goal", team, minute: gameMinute });
 
-    const [updated] = await db
+    // But : blocage du marché (3 s) puis réouverture auto par le moteur avec cotes
+    // ajustées — la suspension est levée au prochain tick une fois le délai écoulé.
+    const reprice = await db
       .update(matches)
       .set({
         homeScore,
         awayScore,
         minute: `${gameMinute}'`,
         status: "live",
+        lastGoalAt: new Date(),
+        startsAt: backdateStartsAt(gameMinute),
+        suspended: true,
         events,
-        ...(m.status !== "live" ? { startsAt: new Date() } : {}),
       })
       .where(eq(matches.id, matchId))
       .returning();
 
-    return NextResponse.json({ ok: true, match: updated });
+    return NextResponse.json({ ok: true, match: reprice[0] });
   }
 
   if (action === "setMinute") {
     const matchId = Number(body.matchId);
-    const minute = String(body.minute ?? "").trim();
+    const minuteText = String(body.minute ?? "").trim();
     if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
     const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
     if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
     if (m.source !== "manual" || m.status === "finished") {
       return NextResponse.json({ error: "Minute modifiable uniquement sur un match réel en cours" }, { status: 400 });
     }
+    const target = minuteNumber(minuteText);
     const [updated] = await db
       .update(matches)
-      .set({ minute: minute || null, status: m.status === "upcoming" ? "live" : m.status, ...(m.status !== "live" ? { startsAt: new Date() } : {}) })
+      .set({
+        minute: minuteText || null,
+        status: m.status === "upcoming" ? "live" : m.status,
+        startsAt: target > 1 ? backdateStartsAt(target) : new Date(),
+      })
       .where(eq(matches.id, matchId))
       .returning();
     return NextResponse.json({ ok: true, match: updated });
@@ -356,7 +368,12 @@ export async function POST(req: NextRequest) {
     }
     const [updated] = await db
       .update(matches)
-      .set({ status: "live", minute: `${minuteNumber(m.minute) || 1}'`, startsAt: m.status === "live" ? m.startsAt : new Date() })
+      .set({
+        status: "live",
+        minute: "1'",
+        startsAt: new Date(),
+        lastGoalAt: null,
+      })
       .where(eq(matches.id, matchId))
       .returning();
     return NextResponse.json({ ok: true, match: updated });
@@ -461,4 +478,14 @@ export async function POST(req: NextRequest) {
 function roundNumber(v: unknown): number | null {
   const n = typeof v === "string" ? parseFloat(v.replace(",", ".")) : typeof v === "number" ? v : NaN;
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+/**
+ * Retourne une heure de coup d'envoi telle que le moteur (1 min = MANUAL_MINUTE_REAL_MS)
+ * réaffiche exactement la minute voulue à l'instant présent. Ainsi les minutes saisies
+ * par l'admin et l'horloge automatique restent synchronisées.
+ */
+function backdateStartsAt(targetMinute: number): Date {
+  const minute = Math.max(1, Math.min(90, Math.floor(targetMinute)));
+  return new Date(Date.now() - (minute - 1) * MANUAL_MINUTE_REAL_MS);
 }
