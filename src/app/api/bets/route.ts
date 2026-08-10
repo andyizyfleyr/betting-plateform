@@ -5,7 +5,7 @@ import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { appUser, bets, matches, predictionBets } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
-import { isKnownMarket, liveMarketOddsFor, marketLabelFor, marketOddsFor, marketOutcomeSettled, marketWin, minuteNumber } from "@/lib/markets";
+import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, marketLabelFor, marketOddsFor, marketOutcomeSettled, marketWin, minuteNumber } from "@/lib/markets";
 import { settleResolvedQuestions } from "@/lib/predictions";
 import { getAuthUserId } from "@/lib/session";
 
@@ -252,27 +252,38 @@ export async function POST(req: NextRequest) {
   }
 
   // Recotation serveur : en direct = grille de scores finaux, sinon cotes d'avant-match.
-  const odds =
-    pricedMatch.status === "live"
-      ? liveMarketOddsFor(
-          market,
-          selection,
-          pricedMatch.homeTeam,
-          pricedMatch.awayTeam,
-          homeScore,
-          awayScore,
-          minuteNumber(pricedMatch.minute),
-          {
-            homeForm: pricedMatch.homeForm ?? 1,
-            awayForm: pricedMatch.awayForm ?? 1,
-            redHome: pricedMatch.redHome ?? 0,
-            redAway: pricedMatch.redAway ?? 0,
-          }
-        )
-      : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
-  const selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
-  if (odds == null || selectionLabel == null) {
-    return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
+  // Match manuel = marchés/cotes personnalisés saisis par l'admin, utilisés tels quels.
+  let odds: number | null = null;
+  let selectionLabel: string | null = null;
+  if (pricedMatch.source === "manual" && pricedMatch.markets && pricedMatch.markets.length > 0) {
+    odds = customMarketOdds(pricedMatch.markets, market, selection);
+    selectionLabel = customMarketLabel(pricedMatch.markets, market, selection);
+    if (odds == null || selectionLabel == null) {
+      return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
+    }
+  } else {
+    odds =
+      pricedMatch.status === "live"
+        ? liveMarketOddsFor(
+            market,
+            selection,
+            pricedMatch.homeTeam,
+            pricedMatch.awayTeam,
+            homeScore,
+            awayScore,
+            minuteNumber(pricedMatch.minute),
+            {
+              homeForm: pricedMatch.homeForm ?? 1,
+              awayForm: pricedMatch.awayForm ?? 1,
+              redHome: pricedMatch.redHome ?? 0,
+              redAway: pricedMatch.redAway ?? 0,
+            }
+          )
+        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
+    selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
+    if (odds == null || selectionLabel == null) {
+      return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
+    }
   }
 
   const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));

@@ -31,6 +31,13 @@ export async function ensureSeeded() {
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
   `);
 
+  // Colonnes des matchs manuels enrichis (logos + marchés personnalisés).
+  await db.execute(sql`
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "home_logo" text;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "away_logo" text;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "markets" jsonb;
+  `);
+
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(matches);

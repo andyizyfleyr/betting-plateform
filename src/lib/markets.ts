@@ -654,3 +654,63 @@ export function minuteNumber(minute: string | null): number {
   const n = m ? parseInt(m[0], 10) : 0;
   return Math.max(0, Math.min(90, n));
 }
+
+/** Un marché perso saisi par l'admin (source "manual"). */
+export interface CustomMarketGroup {
+  key: string;
+  label: string;
+  short: string;
+  outcomes: MarketOutcome[];
+  rows?: MarketRow[];
+}
+
+/** Cote d'une issue dans un catchier de marchés personnalisés (null si absent). */
+export function customMarketOdds(
+  markets: CustomMarketGroup[] | null | undefined,
+  market: string,
+  outcome: string
+): number | null {
+  if (!markets || markets.length === 0) return null;
+  const g = markets.find((m) => m.key === market);
+  if (!g) return null;
+  if (g.rows) {
+    for (const r of g.rows) {
+      const hit = r.outcomes.find((o) => o.key === outcome);
+      if (hit) return hit.odds;
+    }
+    return null;
+  }
+  return g.outcomes.find((o) => o.key === outcome)?.odds ?? null;
+}
+
+/** Libellé d'une issue dans un catalogue de marchés personnalisés (null si absent). */
+export function customMarketLabel(
+  markets: CustomMarketGroup[] | null | undefined,
+  market: string,
+  outcome: string
+): string | null {
+  if (!markets || markets.length === 0) return null;
+  const g = markets.find((m) => m.key === market);
+  if (!g) return null;
+  if (g.rows) {
+    for (const r of g.rows) {
+      const hit = r.outcomes.find((o) => o.key === outcome);
+      if (hit) return hit.label;
+    }
+    return null;
+  }
+  return g.outcomes.find((o) => o.key === outcome)?.label ?? null;
+}
+
+/** Catalogue des marchés éditables dans l'admin (issues sans cotes). */
+export function marketCatalog(): Array<{ key: string; label: string; short: string; outcomes: MarketOutcome[] }> {
+  return MARKETS.map((m) => {
+    const spec = m.outcomes("Domicile", "Extérieur");
+    return {
+      key: m.key,
+      label: m.label,
+      short: m.short,
+      outcomes: spec.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: 2 })),
+    };
+  });
+}

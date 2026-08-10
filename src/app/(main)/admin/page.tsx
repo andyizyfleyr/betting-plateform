@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/providers";
 import { Toggle } from "@/components/toggle";
-import { cn, eur, formatOdds, formatPlacedAt, initials } from "@/lib/format";
+import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 type TabKey = "dashboard" | "matches" | "questions" | "users" | "bets" | "deposits";
 
@@ -65,6 +65,8 @@ interface AdminMatch {
   league: string;
   homeTeam: string;
   awayTeam: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   homeScore: number | null;
   awayScore: number | null;
   status: string;
@@ -129,6 +131,76 @@ const TABS: { key: TabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "deposits", label: "Dépôts", Icon: CircleDollarSign },
 ];
 
+/** Catalogue des marchés éditables (issues avec libellés) pour l'ajout manuel. */
+const MARKET_CATALOG: { key: string; label: string; short: string; outcomes: { key: string; label: string; short: string }[] }[] = [
+  {
+    key: "result",
+    label: "Résultat du match",
+    short: "1/N/2",
+    outcomes: [
+      { key: "home", label: "Victoire du domicile (Domicile)", short: "1" },
+      { key: "draw", label: "Match nul", short: "X" },
+      { key: "away", label: "Victoire de l'extérieur (Extérieur)", short: "2" },
+    ],
+  },
+  {
+    key: "double_chance",
+    label: "Double chance",
+    short: "1X/12/X2",
+    outcomes: [
+      { key: "1X", label: "Domicile ou nul (1X)", short: "1X" },
+      { key: "12", label: "Domicile ou extérieur (12)", short: "12" },
+      { key: "X2", label: "Nul ou extérieur (X2)", short: "X2" },
+    ],
+  },
+  {
+    key: "total_ou",
+    label: "Total de buts (plus/moins)",
+    short: "Plus/Moins",
+    outcomes: [
+      { key: "ou_1_5_over", label: "Plus de 1,5 buts", short: "Plus 1,5" },
+      { key: "ou_1_5_under", label: "Moins de 1,5 buts", short: "Moins 1,5" },
+      { key: "ou_2_5_over", label: "Plus de 2,5 buts", short: "Plus 2,5" },
+      { key: "ou_2_5_under", label: "Moins de 2,5 buts", short: "Moins 2,5" },
+      { key: "ou_3_5_over", label: "Plus de 3,5 buts", short: "Plus 3,5" },
+      { key: "ou_3_5_under", label: "Moins de 3,5 buts", short: "Moins 3,5" },
+    ],
+  },
+  {
+    key: "btts",
+    label: "Les deux équipes marquent",
+    short: "BTTS",
+    outcomes: [
+      { key: "oui", label: "Oui — les deux équipes marquent", short: "Oui" },
+      { key: "non", label: "Non — les deux équipes ne marquent pas", short: "Non" },
+    ],
+  },
+  {
+    key: "odd_even",
+    label: "Total de buts (pair/impair)",
+    short: "Pair/Impair",
+    outcomes: [
+      { key: "pair", label: "Total de buts pair", short: "Pair" },
+      { key: "impair", label: "Total de buts impair", short: "Impair" },
+    ],
+  },
+  {
+    key: "score_exact",
+    label: "Score exact",
+    short: "Score exact",
+    outcomes: [
+      { key: "1_0", label: "Score exact 1-0", short: "1-0" },
+      { key: "2_0", label: "Score exact 2-0", short: "2-0" },
+      { key: "2_1", label: "Score exact 2-1", short: "2-1" },
+      { key: "0_0", label: "Score exact 0-0", short: "0-0" },
+      { key: "1_1", label: "Score exact 1-1", short: "1-1" },
+      { key: "0_1", label: "Score exact 0-1", short: "0-1" },
+      { key: "0_2", label: "Score exact 0-2", short: "0-2" },
+      { key: "1_2", label: "Score exact 1-2", short: "1-2" },
+    ],
+  },
+];
+
 const fmtEur = (n: number) => eur(n);
 
 export default function AdminPage() {
@@ -148,6 +220,15 @@ export default function AdminPage() {
     oddsDraw: "3.30",
     oddsAway: "3.10",
     status: "upcoming",
+    startsAt: "",
+    homeLogo: "",
+    awayLogo: "",
+    markets: MARKET_CATALOG.map((m) => ({
+      key: m.key,
+      label: m.label,
+      short: m.short,
+      outcomes: m.outcomes.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: "" })),
+    })),
   });
   const [questionForm, setQuestionForm] = useState({ question: "", category: "Sport", oddsYes: "1.90", oddsNo: "1.80", hours: "72" });
   const [balanceForm, setBalanceForm] = useState<Record<number, string>>({});
@@ -197,6 +278,14 @@ export default function AdminPage() {
 
   const onAddMatch = async (e: FormEvent) => {
     e.preventDefault();
+    const builtMarkets = matchForm.markets
+      .map((g) => {
+        const outcomes = g.outcomes
+          .map((o) => ({ ...o, odds: Number(o.odds) || 0 }))
+          .filter((o) => o.odds > 1);
+        return outcomes.length > 0 ? { key: g.key, label: g.label, short: g.short, outcomes } : null;
+      })
+      .filter((g): g is NonNullable<typeof g> => g !== null);
     const ok = await act(
       {
         action: "addMatch",
@@ -207,12 +296,20 @@ export default function AdminPage() {
         oddsDraw: Number(matchForm.oddsDraw),
         oddsAway: Number(matchForm.oddsAway),
         status: matchForm.status,
+        startsAt: matchForm.startsAt || undefined,
+        homeLogo: matchForm.homeLogo,
+        awayLogo: matchForm.awayLogo,
+        markets: builtMarkets,
       },
       "add-match",
       "Match créé"
     );
     if (ok) {
-      setMatchForm({ home: "", away: "", league: "Football", oddsHome: "1.90", oddsDraw: "3.30", oddsAway: "3.10", status: "upcoming" });
+      setMatchForm({
+        home: "", away: "", league: "Football", oddsHome: "1.90", oddsDraw: "3.30", oddsAway: "3.10",
+        status: "upcoming", startsAt: "", homeLogo: "", awayLogo: "",
+        markets: MARKET_CATALOG.map((m) => ({ key: m.key, label: m.label, short: m.short, outcomes: m.outcomes.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: "" })) })),
+      });
     }
   };
 
@@ -415,6 +512,15 @@ function MatchesTab({
     oddsDraw: string;
     oddsAway: string;
     status: string;
+    startsAt: string;
+    homeLogo: string;
+    awayLogo: string;
+    markets: Array<{
+      key: string;
+      label: string;
+      short: string;
+      outcomes: Array<{ key: string; label: string; short: string; odds: string }>;
+    }>;
   };
   setForm: (f: typeof form) => void;
   onAdd: (e: FormEvent) => void;
@@ -431,6 +537,16 @@ function MatchesTab({
           <AdminInput placeholder="Équipe extérieure" value={form.away} onChange={(v) => setForm({ ...form, away: v })} />
         </div>
         <AdminInput label="Championnat" value={form.league} className="mt-2" onChange={(v) => setForm({ ...form, league: v })} />
+
+        <div className="mt-2 grid grid-cols-1 gap-2">
+          <AdminInput label="Date & heure de coup d'envoi" type="datetime-local" value={form.startsAt} onChange={(v) => setForm({ ...form, startsAt: v })} />
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <AdminInput label="Logo domicile (URL)" placeholder="https://…" value={form.homeLogo} onChange={(v) => setForm({ ...form, homeLogo: v })} />
+          <AdminInput label="Logo extérieur (URL)" placeholder="https://…" value={form.awayLogo} onChange={(v) => setForm({ ...form, awayLogo: v })} />
+        </div>
+
         <div className="mt-2 grid grid-cols-3 gap-2">
           <AdminInput label="Cote domicile" value={form.oddsHome} onChange={(v) => setForm({ ...form, oddsHome: v })} />
           <AdminInput label="Cote nul" value={form.oddsDraw} onChange={(v) => setForm({ ...form, oddsDraw: v })} />
@@ -467,6 +583,64 @@ function MatchesTab({
             })}
           </div>
         </label>
+
+        {/* Marchés avec cotes libres */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-dim">MARCHÉS & COTES</span>
+            <span className="text-[10px] text-dim">Laisse une cote vide pour masquer le marché</span>
+          </div>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {form.markets.map((g, gi) => {
+              const anyOdds = g.outcomes.some((o) => Number(o.odds) > 1);
+              return (
+                <div
+                  key={g.key}
+                  className={cn(
+                    "rounded-xl border border-edge bg-elev/60 p-2 transition-colors",
+                    anyOdds && "border-betclic-red/30 bg-elev"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[11.5px] font-semibold">{g.label}</span>
+                    <span className="ml-auto shrink-0 rounded-md bg-edge px-1.5 py-0.5 text-[9px] font-bold text-mist">{g.short}</span>
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                    {g.outcomes.map((o, oi) => {
+                      const filled = Number(o.odds) > 1;
+                      return (
+                        <label key={o.key} className="block">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="1.01"
+                            placeholder={o.short}
+                            value={o.odds}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                markets: form.markets.map((mg, mgi) =>
+                                  mgi === gi
+                                    ? { ...mg, outcomes: mg.outcomes.map((mo, moi) => (moi === oi ? { ...mo, odds: e.target.value } : mo)) }
+                                    : mg
+                                ),
+                              })
+                            }
+                            className={cn(
+                              "w-full rounded-lg border border-edge bg-white px-1.5 py-1.5 text-center text-[11px] font-semibold tabular-nums text-ink outline-none transition-colors placeholder:text-dim focus:border-betclic-red/50",
+                              filled && "border-betclic-red/40"
+                            )}
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <button
           type="submit"
           disabled={!form.home || !form.away || busy["add-match"]}
@@ -482,20 +656,21 @@ function MatchesTab({
         <div className="mt-2.5 flex flex-col gap-2">
           {matches.map((m) => (
             <div key={m.id} className={cn("glass-card flex items-center gap-3 rounded-2xl px-3.5 py-3", m.suspended && "opacity-60")}>
-              <span
-                className={cn(
-                  "grid h-9 w-9 shrink-0 place-items-center rounded-xl font-display text-[12px] font-bold text-white",
-                  m.status === "live" ? "bg-live" : m.status === "upcoming" ? "bg-betclic-red" : "bg-mist"
-                )}
-              >
-                {m.status === "live" ? "L" : m.status === "upcoming" ? "U" : "T"}
-              </span>
+              <div className="flex shrink-0 -space-x-2">
+                <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} size="sm" />
+                <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} size="sm" />
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-display text-[13px] font-semibold">
                   {m.homeTeam} · {m.awayTeam}
                 </p>
                 <p className="truncate text-[11px] text-dim">
-                  {m.league} · {formatOdds(m.oddsHome)} — {formatOdds(m.oddsAway)}
+                  {m.league}
+                  {m.status === "live" ? " · LIVE" : ` · ${formatKickoff(new Date(m.startsAt))}`}
+                  {m.homeScore != null && ` · ${m.homeScore}–${m.awayScore}`}
+                </p>
+                <p className="truncate text-[10px] text-mist">
+                  {formatOdds(m.oddsHome)} — {formatOdds(m.oddsAway)}
                   {m.suspended && " · suspendu"}
                 </p>
               </div>
@@ -783,6 +958,30 @@ function StatusBadge({ status }: { status: string }) {
   };
   const s = map[status] ?? { label: status, cls: "bg-elev text-mist" };
   return <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold", s.cls)}>{s.label}</span>;
+}
+
+/** Logo du club (URL) avec repli avatar initiales. */
+function LogoOrAvatar({ logo, name, size }: { logo?: string | null; name: string; size?: "sm" | "md" }) {
+  const hue = teamHue(name);
+  const dim = size === "sm" ? "h-8 w-8 text-[10px]" : "h-10 w-10 text-[12px]";
+  if (logo) {
+    return (
+      <span className={cn("grid shrink-0 place-items-center overflow-hidden rounded-xl bg-white ring-2 ring-card", dim)}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo} alt="" loading="lazy" className="h-full w-full object-contain p-1" />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn("grid shrink-0 place-items-center rounded-xl font-display font-bold text-white/95", dim)}
+      style={{
+        background: `linear-gradient(140deg, hsl(${hue} 62% 46% / 0.9), hsl(${(hue + 40) % 360} 70% 30% / 0.95))`,
+      }}
+    >
+      {initials(name)}
+    </span>
+  );
 }
 
 function AdminInput({

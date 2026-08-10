@@ -17,30 +17,32 @@ const SIZES = {
  */
 export function TeamAvatar({
   name,
+  logo,
   size = "md",
   className,
 }: {
   name: string;
+  logo?: string | null;
   size?: "xs" | "sm" | "md" | "lg";
   className?: string;
 }) {
   const hue = teamHue(name);
-  const logo = teamLogo(name);
+  const logoUrl = logo || teamLogo(name);
   const [broken, setBroken] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const s = SIZES[size];
 
   // Précharger l'image pour éviter le flash
   useEffect(() => {
-    if (logo && !broken) {
+    if (logoUrl && !broken) {
       const img = new Image();
-      img.src = logo;
+      img.src = logoUrl;
       img.onload = () => setLoaded(true);
       img.onerror = () => setBroken(true);
     }
-  }, [logo, broken]);
+  }, [logoUrl, broken]);
 
-  if (logo && !broken && loaded) {
+  if (logoUrl && !broken && loaded) {
     return (
       <span
         className={cn(
@@ -56,7 +58,7 @@ export function TeamAvatar({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={logo}
+          src={logoUrl}
           alt=""
           loading="lazy"
           onError={() => setBroken(true)}

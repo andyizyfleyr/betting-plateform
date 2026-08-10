@@ -50,12 +50,14 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
       <div className="relative flex flex-col gap-1.5 px-3 pb-2.5 pt-2">
         <TeamRow
           name={match.homeTeam}
+          logo={match.homeLogo}
           score={match.homeScore}
           winner={isFinished && (match.homeScore ?? 0) > (match.awayScore ?? 0)}
           isLive={isLive}
         />
         <TeamRow
           name={match.awayTeam}
+          logo={match.awayLogo}
           score={match.awayScore}
           winner={isFinished && (match.awayScore ?? 0) > (match.homeScore ?? 0)}
           isLive={isLive}
@@ -81,11 +83,13 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
 
 function TeamRow({
   name,
+  logo,
   score,
   winner,
   isLive,
 }: {
   name: string;
+  logo?: string | null;
   score: number | null;
   winner: boolean;
   isLive: boolean;
@@ -93,7 +97,7 @@ function TeamRow({
   const isFinished = score != null && !isLive;
 return (
     <div className="flex items-center gap-2.5">
-      <TeamAvatar name={name} size="xs" />
+      <TeamAvatar name={name} logo={logo} size="xs" />
       <span
         className={cn(
           "font-display text-[14px] font-semibold tracking-tight",

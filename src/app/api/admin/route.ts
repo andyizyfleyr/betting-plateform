@@ -113,7 +113,20 @@ export async function GET(req: NextRequest) {
 
 type Action =
   | { action: "setBalance"; userId: number; amount: number }
-  | { action: "addMatch"; home: string; away: string; league?: string; oddsHome?: number; oddsDraw?: number; oddsAway?: number }
+  | {
+      action: "addMatch";
+      home: string;
+      away: string;
+      league?: string;
+      oddsHome?: number;
+      oddsDraw?: number;
+      oddsAway?: number;
+      startsAt?: string;
+      status?: "upcoming" | "live";
+      homeLogo?: string | null;
+      awayLogo?: string | null;
+      markets?: unknown;
+    }
   | { action: "deleteMatch"; matchId: number }
   | { action: "toggleMatch"; matchId: number; suspended: boolean }
   | { action: "addQuestion"; question: string; category?: string; oddsYes?: number; oddsNo?: number; hours?: number }
@@ -160,7 +173,62 @@ export async function POST(req: NextRequest) {
     const oddsDraw = roundNumber(body.oddsDraw) ?? 3.3;
     const oddsAway = roundNumber(body.oddsAway) ?? 3.1;
     const status = body.status === "live" ? "live" : "upcoming";
-    const startsAt = status === "live" ? new Date() : new Date(Date.now() + 10 * 60_000);
+    // Date/heure de coup d'envoi saisie par l'admin (défaut : dans 10 min).
+    let startsAt = new Date(Date.now() + 10 * 60_000);
+    if (typeof body.startsAt === "string") {
+      const parsed = new Date(body.startsAt);
+      if (!Number.isNaN(parsed.getTime())) startsAt = parsed;
+    }
+    // Marchés personnalisés : validation légère + cotes par défaut si absentes.
+    const rawMarkets = Array.isArray(body.markets) ? (body.markets as unknown[]) : null;
+    const markets = rawMarkets
+      ? rawMarkets.map((mm) => {
+          const g = mm as {
+            key?: string;
+            label?: string;
+            short?: string;
+            outcomes?: unknown[];
+            rows?: unknown[];
+          };
+          return {
+            key: String(g.key ?? ""),
+            label: String(g.label ?? ""),
+            short: String(g.short ?? ""),
+            outcomes: Array.isArray(g.outcomes)
+              ? g.outcomes.map((oo) => {
+                  const o = oo as { key?: string; label?: string; short?: string; odds?: number };
+                  return { key: String(o.key ?? ""), label: String(o.label ?? ""), short: String(o.short ?? ""), odds: roundNumber(o.odds) ?? 2 };
+                })
+              : [],
+            rows: Array.isArray(g.rows)
+              ? g.rows.map((rr) => {
+                  const r = rr as { label?: string; outcomes?: unknown[] };
+                  return {
+                    label: String(r.label ?? ""),
+                    outcomes: Array.isArray(r.outcomes)
+                      ? r.outcomes.map((oo) => {
+                          const o = oo as { key?: string; label?: string; short?: string; odds?: number };
+                          return { key: String(o.key ?? ""), label: String(o.label ?? ""), short: String(o.short ?? ""), odds: roundNumber(o.odds) ?? 2 };
+                        })
+                      : [],
+                  };
+                })
+              : undefined,
+          };
+        })
+      : null;
+
+    // Synchronise les cotes 1/N/2 du match avec le marché "result" perso si présent.
+    let h = oddsHome, d = oddsDraw, a = oddsAway;
+    if (markets) {
+      const res = markets.find((m) => m.key === "result");
+      const pick = (k: string) => res?.outcomes.find((o) => o.key === k)?.odds;
+      const vh = pick("home"), vd = pick("draw"), va = pick("away");
+      if (vh) h = vh;
+      if (vd) d = vd;
+      if (va) a = va;
+    }
+
     const [m] = await db
       .insert(matches)
       .values({
@@ -168,14 +236,16 @@ export async function POST(req: NextRequest) {
         league,
         homeTeam: home,
         awayTeam: away,
+        homeLogo: typeof body.homeLogo === "string" && body.homeLogo.trim() ? body.homeLogo.trim() : null,
+        awayLogo: typeof body.awayLogo === "string" && body.awayLogo.trim() ? body.awayLogo.trim() : null,
         homeScore: null,
         awayScore: null,
         status,
         minute: status === "live" ? "30'" : null,
         startsAt,
-        oddsHome,
-        oddsDraw,
-        oddsAway,
+        oddsHome: h,
+        oddsDraw: d,
+        oddsAway: a,
         suspended: false,
         redHome: 0,
         redAway: 0,
@@ -184,6 +254,7 @@ export async function POST(req: NextRequest) {
         regime: "balanced",
         homeForm: 1,
         awayForm: 1,
+        markets,
         source: "manual",
       })
       .returning();

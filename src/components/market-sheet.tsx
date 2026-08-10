@@ -94,8 +94,8 @@ export function MarketSheet() {
 
               <div className="mt-2.5 flex items-center gap-2.5 rounded-2xl border border-edge bg-elev px-3 py-2.5">
                 <div className="flex shrink-0 -space-x-2">
-                  <TeamAvatar name={match.homeTeam} size="sm" className="ring-2 ring-card" />
-                  <TeamAvatar name={match.awayTeam} size="sm" className="ring-2 ring-card" />
+                  <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" className="ring-2 ring-card" />
+                  <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="sm" className="ring-2 ring-card" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-display text-[12.5px] font-semibold leading-tight">

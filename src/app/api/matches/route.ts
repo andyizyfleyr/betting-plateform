@@ -27,9 +27,10 @@ export async function GET() {
     );
 
   const withMarkets = rows.map((m) => {
-    // En direct : cotes live sur TOUS les marchés, issues déjà décidées retirées.
-    const markets =
-      m.status === "live"
+    // Match manuel avec marchés saisis par l'admin : servis tels quels.
+    const markets = m.source === "manual" && m.markets && m.markets.length > 0
+      ? m.markets
+      : m.status === "live"
         ? buildLiveMarkets(
             m.homeTeam,
             m.awayTeam,

@@ -48,6 +48,24 @@ export const matches = pgTable("matches", {
   awayForm: doublePrecision("away_form").notNull().default(1),
   /** Ligne de handicap asiatique courante (null = pas de handicap). */
   asianHandicapLine: doublePrecision("asian_handicap_line"),
+  /** Logo du club à domicile (URL d'image, optionnel). */
+  homeLogo: text("home_logo"),
+  /** Logo du club à l'extérieur (URL d'image, optionnel). */
+  awayLogo: text("away_logo"),
+  /**
+   * Marchés personnalisés (source = "manual") saisis par l'admin :
+   * cotes libres sur des marchés existants. Si présent, ce tableau est
+   * servi tel quel au client — sinon on construit les marchés au Poisson.
+   */
+  markets: jsonb("markets").$type<
+    Array<{
+      key: string;
+      label: string;
+      short: string;
+      outcomes: Array<{ key: string; label: string; short: string; odds: number }>;
+      rows?: Array<{ label: string; outcomes: Array<{ key: string; label: string; short: string; odds: number }> }>;
+    }>
+  >(),
   /** Marqueur du moteur virtuel : seules les lignes "virtual" sont affichées. */
   source: text("source").notNull().default("virtual"),
 });

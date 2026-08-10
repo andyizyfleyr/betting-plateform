@@ -29,6 +29,8 @@ export interface ClientMatch {
   league: string;
   homeTeam: string;
   awayTeam: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   homeScore: number | null;
   awayScore: number | null;
   status: MatchStatus;

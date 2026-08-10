@@ -138,8 +138,8 @@ export function BetModal() {
                 {/* Bandeau match + sélection */}
                 <div className="glass-card mt-2.5 flex items-center gap-2.5 rounded-2xl px-3 py-2.5">
                   <div className="flex shrink-0 -space-x-2">
-                    <TeamAvatar name={target.match.homeTeam} size="sm" className="ring-2 ring-card" />
-                    <TeamAvatar name={target.match.awayTeam} size="sm" className="ring-2 ring-card" />
+                    <TeamAvatar name={target.match.homeTeam} logo={target.match.homeLogo} size="sm" className="ring-2 ring-card" />
+                    <TeamAvatar name={target.match.awayTeam} logo={target.match.awayLogo} size="sm" className="ring-2 ring-card" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-display text-[12.5px] font-semibold leading-tight">
@@ -424,8 +424,8 @@ function SuccessView({
           <div className="px-3.5 pt-3">
             <div className="flex items-center gap-2.5 pr-16">
               <div className="flex shrink-0 -space-x-2">
-                <TeamAvatar name={target.match.homeTeam} size="sm" className="ring-2 ring-card" />
-                <TeamAvatar name={target.match.awayTeam} size="sm" className="ring-2 ring-card" />
+                <TeamAvatar name={target.match.homeTeam} logo={target.match.homeLogo} size="sm" className="ring-2 ring-card" />
+                <TeamAvatar name={target.match.awayTeam} logo={target.match.awayLogo} size="sm" className="ring-2 ring-card" />
               </div>
               <p className="min-w-0 flex-1 truncate font-display text-[13px] font-semibold">
                 {target.match.homeTeam} <span className="text-dim">–</span> {target.match.awayTeam}
