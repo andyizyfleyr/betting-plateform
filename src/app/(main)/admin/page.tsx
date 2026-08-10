@@ -6,6 +6,7 @@ import {
   BarChart3,
   CalendarPlus,
   CheckCircle2,
+  ChevronDown,
   CircleDollarSign,
   HelpCircle,
   Loader2,
@@ -528,6 +529,9 @@ function MatchesTab({
 }) {
   const activeLeague = findLeague(form.league);
   const clubOptions = (activeLeague?.clubs ?? []).map((c) => c.name);
+  const [openLogos, setOpenLogos] = useState(false);
+  const [openMarkets, setOpenMarkets] = useState(false);
+  const activeMarkets = form.markets.filter((g) => g.outcomes.some((o) => Number(o.odds) > 1));
 
   return (
     <div>
@@ -581,13 +585,39 @@ function MatchesTab({
           />
         </div>
 
-        <div className="mt-2 grid grid-cols-1 gap-2">
-          <AdminInput label="Date & heure de coup d'envoi" type="datetime-local" value={form.startsAt} onChange={(v) => setForm({ ...form, startsAt: v })} />
-        </div>
-
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <AdminInput label="Logo domicile (URL)" placeholder="https://…" value={form.homeLogo} onChange={(v) => setForm({ ...form, homeLogo: v })} />
-          <AdminInput label="Logo extérieur (URL)" placeholder="https://…" value={form.awayLogo} onChange={(v) => setForm({ ...form, awayLogo: v })} />
+          <AdminInput label="Date & heure de coup d'envoi" type="datetime-local" value={form.startsAt} onChange={(v) => setForm({ ...form, startsAt: v })} />
+          <div className="flex flex-col">
+            <span className="mb-1 block text-[10px] font-semibold tracking-[0.14em] text-dim">STATUT</span>
+            <div className="grid flex-1 grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
+              {[
+                { v: "upcoming", label: "À venir" },
+                { v: "live", label: "En direct" },
+              ].map(({ v, label }) => {
+                const active = form.status === v;
+                return (
+                  <button
+                    type="button"
+                    key={v}
+                    onClick={() => setForm({ ...form, status: v })}
+                    className={cn(
+                      "relative rounded-lg py-1.5 font-display text-[11px] transition-colors",
+                      active ? "font-bold text-white" : "font-medium text-mist"
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="add-match-status"
+                        transition={{ type: "spring", stiffness: 480, damping: 38 }}
+                        className="absolute inset-0 rounded-lg bg-betclic-red"
+                      />
+                    )}
+                    <span className="relative z-10">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="mt-2 grid grid-cols-3 gap-2">
@@ -595,93 +625,120 @@ function MatchesTab({
           <AdminInput label="Cote nul" value={form.oddsDraw} onChange={(v) => setForm({ ...form, oddsDraw: v })} />
           <AdminInput label="Cote ext." value={form.oddsAway} onChange={(v) => setForm({ ...form, oddsAway: v })} />
         </div>
-        <label className="mt-3 block">
-          <span className="mb-1 block text-[10px] font-semibold tracking-[0.14em] text-dim">STATUT</span>
-          <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
-            {[
-              { v: "upcoming", label: "À venir" },
-              { v: "live", label: "En direct" },
-            ].map(({ v, label }) => {
-              const active = form.status === v;
-              return (
-                <button
-                  type="button"
-                  key={v}
-                  onClick={() => setForm({ ...form, status: v })}
-                  className={cn(
-                    "relative rounded-lg py-2 font-display text-[11.5px] transition-colors",
-                    active ? "font-bold text-white" : "font-medium text-mist"
-                  )}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="add-match-status"
-                      transition={{ type: "spring", stiffness: 480, damping: 38 }}
-                      className="absolute inset-0 rounded-lg bg-betclic-red"
-                    />
-                  )}
-                  <span className="relative z-10">{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </label>
+
+        {/* Logos (URL) */}
+        <div className="mt-2 overflow-hidden rounded-xl border border-edge bg-elev/40">
+          <button
+            type="button"
+            onClick={() => setOpenLogos((s) => !s)}
+            className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+          >
+            <span className="flex-1 text-[10.5px] font-semibold tracking-[0.14em] text-dim">LOGOS DES ÉQUIPES (URL)</span>
+            <span className="text-[10px] text-dim">Auto selon le club</span>
+            <motion.span animate={{ rotate: openLogos ? 180 : 0 }} transition={{ duration: 0.18 }} className="text-mist">
+              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.4} />
+            </motion.span>
+          </button>
+          <AnimatePresence initial={false}>
+            {openLogos && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="grid grid-cols-2 gap-2 px-2.5 pb-2.5">
+                  <AdminInput label="Logo domicile" placeholder="https://…" value={form.homeLogo} onChange={(v) => setForm({ ...form, homeLogo: v })} />
+                  <AdminInput label="Logo extérieur" placeholder="https://…" value={form.awayLogo} onChange={(v) => setForm({ ...form, awayLogo: v })} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Marchés avec cotes libres */}
-        <div className="mt-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-semibold tracking-[0.14em] text-dim">MARCHÉS & COTES</span>
-            <span className="text-[10px] text-dim">Laisse une cote vide pour masquer le marché</span>
-          </div>
-          <div className="mt-2 flex flex-col gap-1.5">
-            {form.markets.map((g, gi) => {
-              const anyOdds = g.outcomes.some((o) => Number(o.odds) > 1);
-              return (
-                <div
-                  key={g.key}
-                  className={cn(
-                    "rounded-xl border border-edge bg-elev/60 p-2 transition-colors",
-                    anyOdds && "border-betclic-red/30 bg-elev"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-[11.5px] font-semibold">{g.label}</span>
-                    <span className="ml-auto shrink-0 rounded-md bg-edge px-1.5 py-0.5 text-[9px] font-bold text-mist">{g.short}</span>
-                  </div>
-                  <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                    {g.outcomes.map((o, oi) => {
-                      const filled = Number(o.odds) > 1;
+        <div className="mt-2 overflow-hidden rounded-xl border bg-elev/40 transition-colors">
+          <button
+            type="button"
+            onClick={() => setOpenMarkets((s) => !s)}
+            className={cn("flex w-full items-center gap-2 px-2.5 py-2 text-left", activeMarkets.length > 0 && "border-b border-edge bg-white/50")}
+          >
+            <span className="flex-1 text-[10.5px] font-semibold tracking-[0.14em] text-dim">MARCHÉS & COTES LIBRES</span>
+            {activeMarkets.length > 0 && (
+              <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-[9.5px] font-bold text-betclic-red">
+                {activeMarkets.length} marché{activeMarkets.length > 1 ? "s" : ""} rempli{activeMarkets.length > 1 ? "s" : ""}
+              </span>
+            )}
+            <span className="text-[10px] text-dim">Optionnel</span>
+            <motion.span animate={{ rotate: openMarkets ? 180 : 0 }} transition={{ duration: 0.18 }} className="text-mist">
+              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.4} />
+            </motion.span>
+          </button>
+          <AnimatePresence initial={false}>
+            {openMarkets && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="px-2.5 pb-2.5 pt-2">
+                  <p className="mb-2 text-[10px] text-dim">Laisse une cote vide pour masquer le marché</p>
+                  <div className="flex flex-col gap-1.5">
+                    {form.markets.map((g, gi) => {
+                      const anyOdds = g.outcomes.some((o) => Number(o.odds) > 1);
                       return (
-                        <label key={o.key} className="block">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="1.01"
-                            placeholder={o.short}
-                            value={o.odds}
-                            onChange={(e) =>
-                              setForm({
-                                ...form,
-                                markets: form.markets.map((mg, mgi) =>
-                                  mgi === gi
-                                    ? { ...mg, outcomes: mg.outcomes.map((mo, moi) => (moi === oi ? { ...mo, odds: e.target.value } : mo)) }
-                                    : mg
-                                ),
-                              })
-                            }
-                            className={cn(
-                              "w-full rounded-lg border border-edge bg-white px-1.5 py-1.5 text-center text-[11px] font-semibold tabular-nums text-ink outline-none transition-colors placeholder:text-dim focus:border-betclic-red/50",
-                              filled && "border-betclic-red/40"
-                            )}
-                          />
-                        </label>
+                        <div
+                          key={g.key}
+                          className={cn(
+                            "rounded-xl border border-edge bg-elev/60 p-2 transition-colors",
+                            anyOdds && "border-betclic-red/30 bg-elev"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-[11.5px] font-semibold">{g.label}</span>
+                            <span className="ml-auto shrink-0 rounded-md bg-edge px-1.5 py-0.5 text-[9px] font-bold text-mist">{g.short}</span>
+                          </div>
+                          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                            {g.outcomes.map((o, oi) => {
+                              const filled = Number(o.odds) > 1;
+                              return (
+                                <label key={o.key} className="block">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="1.01"
+                                    placeholder={o.short}
+                                    value={o.odds}
+                                    onChange={(e) =>
+                                      setForm({
+                                        ...form,
+                                        markets: form.markets.map((mg, mgi) =>
+                                          mgi === gi
+                                            ? { ...mg, outcomes: mg.outcomes.map((mo, moi) => (moi === oi ? { ...mo, odds: e.target.value } : mo)) }
+                                            : mg
+                                        ),
+                                      })
+                                    }
+                                    className={cn(
+                                      "w-full rounded-lg border border-edge bg-white px-1.5 py-1.5 text-center text-[11px] font-semibold tabular-nums text-ink outline-none transition-colors placeholder:text-dim focus:border-betclic-red/50",
+                                      filled && "border-betclic-red/40"
+                                    )}
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <button
