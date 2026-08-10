@@ -216,7 +216,7 @@ export default function AdminPage() {
   const [matchForm, setMatchForm] = useState({
     home: "",
     away: "",
-    league: "Football",
+    league: "Premier League",
     oddsHome: "1.90",
     oddsDraw: "3.30",
     oddsAway: "3.10",
@@ -307,7 +307,7 @@ export default function AdminPage() {
     );
     if (ok) {
       setMatchForm({
-        home: "", away: "", league: "Football", oddsHome: "1.90", oddsDraw: "3.30", oddsAway: "3.10",
+        home: "", away: "", league: "Premier League", oddsHome: "1.90", oddsDraw: "3.30", oddsAway: "3.10",
         status: "upcoming", startsAt: "", homeLogo: "", awayLogo: "",
         markets: MARKET_CATALOG.map((m) => ({ key: m.key, label: m.label, short: m.short, outcomes: m.outcomes.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: "" })) })),
       });
