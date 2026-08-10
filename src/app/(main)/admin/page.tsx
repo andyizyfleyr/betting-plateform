@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/providers";
 import { Toggle } from "@/components/toggle";
+import { LEAGUES, findLeague } from "@/lib/leagues";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 type TabKey = "dashboard" | "matches" | "questions" | "users" | "bets" | "deposits";
@@ -525,6 +526,9 @@ function MatchesTab({
   setForm: (f: typeof form) => void;
   onAdd: (e: FormEvent) => void;
 }) {
+  const activeLeague = findLeague(form.league);
+  const clubOptions = (activeLeague?.clubs ?? []).map((c) => c.name);
+
   return (
     <div>
       <form onSubmit={onAdd} className="glass-card rounded-[20px] p-3.5">
@@ -532,11 +536,50 @@ function MatchesTab({
           <Plus className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
           Ajouter un match réel manuellement
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <AdminInput placeholder="Équipe domicile" value={form.home} onChange={(v) => setForm({ ...form, home: v })} />
-          <AdminInput placeholder="Équipe extérieure" value={form.away} onChange={(v) => setForm({ ...form, away: v })} />
+
+        {/* Ligue (suggestions) */}
+        <div className="mt-3">
+          <ComboBox
+            label="Championnat"
+            placeholder="Choisir une ligue…"
+            value={form.league}
+            onChange={(v) => {
+              if (findLeague(v)) {
+                setForm({ ...form, league: v, home: "", away: "", homeLogo: "", awayLogo: "" });
+              } else {
+                setForm({ ...form, league: v });
+              }
+            }}
+            options={LEAGUES.map((l) => ({ label: l.name, hint: l.country }))}
+          />
         </div>
-        <AdminInput label="Championnat" value={form.league} className="mt-2" onChange={(v) => setForm({ ...form, league: v })} />
+
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <ComboBox
+            placeholder="Équipe domicile"
+            value={form.home}
+            onChange={(v, logo) =>
+              setForm({
+                ...form,
+                home: v,
+                homeLogo: typeof logo === "string" && logo !== "" ? logo : form.homeLogo,
+              })
+            }
+            options={clubOptions.map((name) => ({ label: name, logo: activeLeague ? activeLeague.clubs.find((c) => c.name === name)?.logo ?? null : null }))}
+          />
+          <ComboBox
+            placeholder="Équipe extérieure"
+            value={form.away}
+            onChange={(v, logo) =>
+              setForm({
+                ...form,
+                away: v,
+                awayLogo: typeof logo === "string" && logo !== "" ? logo : form.awayLogo,
+              })
+            }
+            options={clubOptions.map((name) => ({ label: name, logo: activeLeague ? activeLeague.clubs.find((c) => c.name === name)?.logo ?? null : null }))}
+          />
+        </div>
 
         <div className="mt-2 grid grid-cols-1 gap-2">
           <AdminInput label="Date & heure de coup d'envoi" type="datetime-local" value={form.startsAt} onChange={(v) => setForm({ ...form, startsAt: v })} />
@@ -1022,6 +1065,120 @@ function AdminSectionTitle({ label, count }: { label: string; count?: number }) 
       {count != null && (
         <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold text-mist">{count}</span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Champ avec autocomplétion façon combobox :
+ * - tape pour filtrer les options (ligues ou clubs) ;
+ * - affiche le logo quand il est fourni ;
+ * - `onChange(valeur, logo?)` est appelé à la saisie ET à la sélection.
+ */
+function ComboBox({
+  label,
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  label?: string;
+  value: string;
+  onChange: (v: string, logo?: string | null) => void;
+  placeholder?: string;
+  options: Array<{ label: string; hint?: string; logo?: string | null }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  useEffect(() => {
+    if (open) setQuery(value);
+  }, [open, value]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? options.filter((o) => o.label.toLowerCase().includes(q) || (o.hint ?? "").toLowerCase().includes(q))
+    : options;
+  const highlighted = filtered[0];
+
+  return (
+    <div className="relative" ref={boxRef}>
+      {label && <span className="mb-1 block text-[10px] font-semibold tracking-[0.14em] text-dim">{label.toUpperCase()}</span>}
+      <div className="relative">
+        <input
+          ref={inputRef}
+          value={open ? query : value}
+          placeholder={placeholder}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setQuery(v);
+            onChange(v);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" && filtered[0]) {
+              e.preventDefault();
+              onChange(filtered[0].label, highlighted?.logo);
+              setQuery(filtered[0].label);
+            }
+            if (e.key === "Enter" && highlighted) {
+              e.preventDefault();
+              onChange(highlighted.label, highlighted.logo);
+              setOpen(false);
+            }
+            if (e.key === "Escape") setOpen(false);
+          }}
+          className="w-full rounded-xl border border-edge bg-elev/50 px-3 py-2.5 text-[13px] text-ink outline-none transition-colors placeholder:text-dim focus:border-betclic-red/50 focus:bg-white"
+        />
+      </div>
+
+      <AnimatePresence>
+        {open && options.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            transition={{ duration: 0.16 }}
+            className="absolute z-40 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-edge bg-white p-1 shadow-lg"
+          >
+            {filtered.length === 0 && (
+              <p className="px-2.5 py-2 text-[11.5px] text-dim">Aucun résultat</p>
+            )}
+            {filtered.map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                onClick={() => {
+                  onChange(o.label, o.logo);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-elev active:bg-elev"
+              >
+                {o.logo != null && (
+                  <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-md bg-white ring-1 ring-edge">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={o.logo} alt="" loading="lazy" className="h-full w-full object-contain p-0.5" />
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-display text-[12.5px] font-semibold text-ink">{o.label}</span>
+                  {o.hint && <span className="block text-[10.5px] text-dim">{o.hint}</span>}
+                </span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
