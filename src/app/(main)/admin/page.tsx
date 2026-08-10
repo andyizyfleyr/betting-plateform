@@ -8,10 +8,14 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleDollarSign,
+  Flag,
+  Goal,
   HelpCircle,
   Loader2,
+  Play,
   Plus,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Ticket,
   Trash2,
@@ -78,6 +82,7 @@ interface AdminMatch {
   oddsDraw: number | null;
   oddsAway: number;
   suspended: boolean;
+  source?: string | null;
 }
 
 interface AdminQuestion {
@@ -755,44 +760,209 @@ function MatchesTab({
         <AdminSectionTitle label="Matchs" count={matches.length} />
         <div className="mt-2.5 flex flex-col gap-2">
           {matches.map((m) => (
-            <div key={m.id} className={cn("glass-card flex items-center gap-3 rounded-2xl px-3.5 py-3", m.suspended && "opacity-60")}>
-              <div className="flex shrink-0 -space-x-2">
-                <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} size="sm" />
-                <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} size="sm" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-[13px] font-semibold">
-                  {m.homeTeam} · {m.awayTeam}
-                </p>
-                <p className="truncate text-[11px] text-dim">
-                  {m.league}
-                  {m.status === "live" ? " · LIVE" : ` · ${formatKickoff(new Date(m.startsAt))}`}
-                  {m.homeScore != null && ` · ${m.homeScore}–${m.awayScore}`}
-                </p>
-                <p className="truncate text-[10px] text-mist">
-                  {formatOdds(m.oddsHome)} — {formatOdds(m.oddsAway)}
-                  {m.suspended && " · suspendu"}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Toggle
-                  checked={!m.suspended}
-                  onChange={(v) =>
-                    act({ action: "toggleMatch", matchId: m.id, suspended: !v }, `tg-${m.id}`, v ? "Match réactivé" : "Match suspendu")
-                  }
-                />
-                <button
-                  onClick={() => act({ action: "deleteMatch", matchId: m.id }, `del-${m.id}`, "Match supprimé")}
-                  className="grid h-8 w-8 place-items-center rounded-lg bg-bittersweet/10 text-bittersweet transition-transform active:scale-90"
-                  aria-label="Supprimer"
-                >
-                  {busy[`del-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
-                </button>
-              </div>
-            </div>
+            <MatchCard key={m.id} m={m} busy={busy} act={act} />
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+/* ---------------- Carte match (score manuel / lifecycle) ---------------- */
+
+function MatchCard({
+  m,
+  busy,
+  act,
+}: {
+  m: AdminMatch;
+  busy: Record<string, boolean>;
+  act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
+}) {
+  const isManual = m.source === "manual";
+
+  return (
+    <div className={cn("glass-card rounded-2xl px-3.5 py-3", m.suspended && "opacity-60")}>
+      <div className="flex items-center gap-3">
+        <div className="flex shrink-0 -space-x-2">
+          <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} size="sm" />
+          <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} size="sm" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[13px] font-semibold">
+            {m.homeTeam} · {m.awayTeam}
+          </p>
+          <p className="truncate text-[11px] text-dim">
+            {m.league}
+            {m.status === "live" ? ` · LIVE · ${m.minute ?? ""}` : m.status === "finished" ? " · Terminé" : ` · ${formatKickoff(new Date(m.startsAt))}`}
+            {m.homeScore != null && ` · ${m.homeScore}–${m.awayScore}`}
+          </p>
+          {isManual && (
+            <span
+              className={cn(
+                "mt-1 inline-block rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-[0.12em]",
+                m.status === "live" ? "bg-betclic-red/10 text-betclic-red" : m.status === "finished" ? "bg-elev text-mist" : "bg-elev/70 text-dim"
+              )}
+            >
+              RÉEL
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Toggle
+            checked={!m.suspended}
+            onChange={(v) =>
+              act({ action: "toggleMatch", matchId: m.id, suspended: !v }, `tg-${m.id}`, v ? "Match réactivé" : "Match suspendu")
+            }
+          />
+          <button
+            onClick={() => act({ action: "deleteMatch", matchId: m.id }, `del-${m.id}`, "Match supprimé")}
+            className="grid h-8 w-8 place-items-center rounded-lg bg-bittersweet/10 text-bittersweet transition-transform active:scale-90"
+            aria-label="Supprimer"
+          >
+            {busy[`del-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Commandes score / cycle de vie (uniquement matchs réels) */}
+      {isManual && <MatchControls m={m} busy={busy} act={act} />}
+    </div>
+  );
+}
+
+function MatchControls({
+  m,
+  busy,
+  act,
+}: {
+  m: AdminMatch;
+  busy: Record<string, boolean>;
+  act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
+}) {
+  const [home, setHome] = useState(String(m.homeScore ?? 0));
+  const [away, setAway] = useState(String(m.awayScore ?? 0));
+  const [mp, setMp] = useState("");
+  const settled = m.status === "finished" && (m.homeScore ?? 0) + (m.awayScore ?? 0) >= 0;
+
+  const go = (p: Record<string, unknown>, key: string, msg: string) => act(p, key, msg);
+
+  if (m.status === "upcoming") {
+    return (
+      <div className="mt-3 flex items-center gap-2 rounded-xl border border-edge bg-elev/40 p-2">
+        <button
+          onClick={() => go({ action: "startMatch", matchId: m.id }, `start-${m.id}`, "Match passé en direct")}
+          disabled={busy[`start-${m.id}`]}
+          className="flex items-center gap-1.5 rounded-lg bg-betclic-red px-3 py-1.5 text-[10.5px] font-bold text-white disabled:opacity-60"
+        >
+          {busy[`start-${m.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" strokeWidth={2.4} />}
+          Passer en direct
+        </button>
+        <span className="text-[10px] text-mist">Le match débutera automatiquement si vous ignorez.</span>
+      </div>
+    );
+  }
+
+  if (m.status === "finished") {
+    return (
+      <div className="mt-3 flex items-center gap-2 rounded-xl border border-edge bg-elev/40 p-2">
+        <button
+          onClick={() => go({ action: "reopenMatch", matchId: m.id }, `reopen-${m.id}`, "Match rouvert")}
+          disabled={busy[`reopen-${m.id}`]}
+          className="flex items-center gap-1.5 rounded-lg bg-elev px-3 py-1.5 text-[10.5px] font-bold text-dim disabled:opacity-60"
+        >
+          {busy[`reopen-${m.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" strokeWidth={2.4} />}
+          Rouvrir
+        </button>
+        <span className="text-[10px] text-mist">Paris réglés : {settled ? "oui" : "non"} · résultat final {m.homeScore}–{m.awayScore}</span>
+      </div>
+    );
+  }
+
+  // live
+  return (
+    <div className="mt-3 rounded-xl border border-edge bg-elev/40 p-2">
+      <div className="flex items-center justify-between gap-2">
+        {/* But domicile */}
+        <div className="flex flex-1 flex-col items-center gap-1">
+          <button
+            onClick={() => go({ action: "markGoal", matchId: m.id, team: "home" }, `gh-${m.id}`, "But domicile ajouté")}
+            disabled={busy[`gh-${m.id}`]}
+            className="flex w-full items-center justify-center gap-1 rounded-lg border border-win/30 bg-win/10 py-1.5 text-[11px] font-bold text-win disabled:opacity-60 active:scale-95"
+          >
+            {busy[`gh-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" strokeWidth={2.4} />}
+            + BUT
+          </button>
+          <span className="text-[9.5px] text-mist">{m.homeTeam}</span>
+        </div>
+
+        {/* Score */}
+        <div className="flex items-center gap-1">
+          <input
+            inputMode="numeric"
+            value={home}
+            onChange={(e) => setHome(e.target.value.replace(/[^\d]/g, ""))}
+            className="h-9 w-9 rounded-lg border border-edge bg-white/70 text-center font-display text-[15px] font-bold outline-none focus:border-win"
+          />
+          <span className="font-display text-[13px] text-dim">–</span>
+          <input
+            inputMode="numeric"
+            value={away}
+            onChange={(e) => setAway(e.target.value.replace(/[^\d]/g, ""))}
+            className="h-9 w-9 rounded-lg border border-edge bg-white/70 text-center font-display text-[15px] font-bold outline-none focus:border-win"
+          />
+        </div>
+
+        {/* But extérieur */}
+        <div className="flex flex-1 flex-col items-center gap-1">
+          <button
+            onClick={() => go({ action: "markGoal", matchId: m.id, team: "away" }, `ga-${m.id}`, "But extérieur ajouté")}
+            disabled={busy[`ga-${m.id}`]}
+            className="flex w-full items-center justify-center gap-1 rounded-lg border border-win/30 bg-win/10 py-1.5 text-[11px] font-bold text-win disabled:opacity-60 active:scale-95"
+          >
+            {busy[`ga-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" strokeWidth={2.4} />}
+            + BUT
+          </button>
+          <span className="text-[9.5px] text-mist">{m.awayTeam}</span>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-mist">Min</span>
+          <input
+            inputMode="numeric"
+            value={mp}
+            onChange={(e) => setMp(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder={m.minute ?? "0"}
+            className="h-7 w-12 rounded-lg border border-edge bg-white/70 px-1.5 text-center text-[11px] font-semibold outline-none focus:border-win"
+          />
+          <button
+            onClick={() => go({ action: "setMinute", matchId: m.id, minute: `${mp || "0"}'` }, `min-${m.id}`, `Minute ${mp}' enregistrée`)}
+            disabled={busy[`min-${m.id}`] || !mp}
+            className="rounded-lg bg-elev px-2.5 py-1.5 text-[10px] font-bold text-dim disabled:opacity-50"
+          >
+            OK
+          </button>
+        </div>
+
+        <div className="flex-1" />
+
+        <button
+          onClick={() =>
+            go(
+              { action: "finishMatch", matchId: m.id, homeScore: Number(home) || 0, awayScore: Number(away) || 0 },
+              `fin-${m.id}`,
+              "Match terminé, paris réglés"
+            )
+          }
+          disabled={busy[`fin-${m.id}`]}
+          className="flex items-center gap-1.5 rounded-lg border border-betclic-red/40 bg-betclic-red/10 px-3 py-1.5 text-[10.5px] font-bold text-betclic-red disabled:opacity-60 active:scale-95"
+        >
+          {busy[`fin-${m.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" strokeWidth={2.4} />}
+          Terminer
+        </button>
+      </div>
     </div>
   );
 }

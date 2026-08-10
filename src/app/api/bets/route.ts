@@ -5,9 +5,10 @@ import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { appUser, bets, matches, predictionBets } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
-import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, marketLabelFor, marketOddsFor, marketOutcomeSettled, marketWin, minuteNumber } from "@/lib/markets";
+import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { settleResolvedQuestions } from "@/lib/predictions";
 import { getAuthUserId } from "@/lib/session";
+import { settleFinishedBets } from "@/lib/settle";
 
 export const dynamic = "force-dynamic";
 
@@ -17,40 +18,6 @@ const MAX_STAKE = 500;
 const BET_COOLDOWN_MS = 700;
 /** Délai de validation des paris en direct (recotation serveur + état du marché). */
 const LIVE_VALIDATION_MS = 2500;
-
-/** Règle tous les paris en cours dont le match est terminé (déterministe, basé sur le score). */
-async function settleFinishedBets() {
-  const pending = await db
-    .select({ bet: bets, match: matches })
-    .from(bets)
-    .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(and(eq(bets.status, "pending"), eq(matches.status, "finished")));
-
-  for (const { bet, match } of pending) {
-    if (!match || match.status !== "finished") continue;
-    const home = match.homeScore ?? 0;
-    const away = match.awayScore ?? 0;
-    const won = marketWin(bet.market, bet.selection, home, away);
-
-    const payoutMultiplier = bet.payoutMultiplier ?? 1;
-    const stakeReturned = bet.stakeReturned ?? 0;
-    const payout = won
-      ? Math.round((bet.stake * bet.odds * payoutMultiplier + stakeReturned) * 100) / 100
-      : 0;
-
-    await db
-      .update(bets)
-      .set({ status: won ? "won" : "lost" })
-      .where(eq(bets.id, bet.id));
-
-    if (payout > 0) {
-      await db
-        .update(appUser)
-        .set({ balance: sql`${appUser.balance} + ${payout}` })
-        .where(eq(appUser.id, bet.userId));
-    }
-  }
-}
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();

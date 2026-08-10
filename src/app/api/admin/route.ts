@@ -4,7 +4,9 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser, bets, deposits, matches, predictionBets, predictionQuestions } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
+import { minuteNumber } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
+import { settleMatchBets } from "@/lib/settle";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +131,11 @@ type Action =
     }
   | { action: "deleteMatch"; matchId: number }
   | { action: "toggleMatch"; matchId: number; suspended: boolean }
+  | { action: "markGoal"; matchId: number; team: "home" | "away"; minute?: number | string }
+  | { action: "setMinute"; matchId: number; minute: string }
+  | { action: "startMatch"; matchId: number }
+  | { action: "finishMatch"; matchId: number; homeScore?: number; awayScore?: number }
+  | { action: "reopenMatch"; matchId: number }
   | { action: "addQuestion"; question: string; category?: string; oddsYes?: number; oddsNo?: number; hours?: number }
   | { action: "resolveQuestion"; questionId: number; resolution: "yes" | "no" }
   | { action: "deleteQuestion"; questionId: number }
@@ -277,6 +284,130 @@ export async function POST(req: NextRequest) {
     const suspended = Boolean(body.suspended);
     await db.update(matches).set({ suspended }).where(eq(matches.id, matchId));
     return NextResponse.json({ ok: true });
+  }
+
+  if (action === "markGoal") {
+    const matchId = Number(body.matchId);
+    const team = body.team === "away" ? "away" : "home";
+    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+
+    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+    if (m.source !== "manual") {
+      return NextResponse.json({ error: "Le score d'un match virtuel est géré automatiquement" }, { status: 400 });
+    }
+    if (m.status === "finished") {
+      return NextResponse.json({ error: "Impossible de marquer un but : match déjà terminé" }, { status: 400 });
+    }
+
+    const currentHome = m.homeScore ?? 0;
+    const currentAway = m.awayScore ?? 0;
+    const homeScore = team === "home" ? currentHome + 1 : currentHome;
+    const awayScore = team === "away" ? currentAway + 1 : currentAway;
+
+    let gameMinute = minuteNumber(m.minute);
+    if (typeof body.minute === "number" && Number.isFinite(body.minute)) {
+      gameMinute = Math.max(1, Math.min(90, body.minute));
+    }
+
+    const events = [...(m.events ?? [])];
+    events.push({ type: "goal", team, minute: gameMinute });
+
+    const [updated] = await db
+      .update(matches)
+      .set({
+        homeScore,
+        awayScore,
+        minute: `${gameMinute}'`,
+        status: "live",
+        events,
+        ...(m.status !== "live" ? { startsAt: new Date() } : {}),
+      })
+      .where(eq(matches.id, matchId))
+      .returning();
+
+    return NextResponse.json({ ok: true, match: updated });
+  }
+
+  if (action === "setMinute") {
+    const matchId = Number(body.matchId);
+    const minute = String(body.minute ?? "").trim();
+    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+    if (m.source !== "manual" || m.status === "finished") {
+      return NextResponse.json({ error: "Minute modifiable uniquement sur un match réel en cours" }, { status: 400 });
+    }
+    const [updated] = await db
+      .update(matches)
+      .set({ minute: minute || null, status: m.status === "upcoming" ? "live" : m.status, ...(m.status !== "live" ? { startsAt: new Date() } : {}) })
+      .where(eq(matches.id, matchId))
+      .returning();
+    return NextResponse.json({ ok: true, match: updated });
+  }
+
+  if (action === "startMatch") {
+    const matchId = Number(body.matchId);
+    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+    if (m.source !== "manual") {
+      return NextResponse.json({ error: "Un match virtuel débute automatiquement" }, { status: 400 });
+    }
+    const [updated] = await db
+      .update(matches)
+      .set({ status: "live", minute: `${minuteNumber(m.minute) || 1}'`, startsAt: m.status === "live" ? m.startsAt : new Date() })
+      .where(eq(matches.id, matchId))
+      .returning();
+    return NextResponse.json({ ok: true, match: updated });
+  }
+
+  if (action === "finishMatch") {
+    const matchId = Number(body.matchId);
+    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+    if (m.source !== "manual") {
+      return NextResponse.json({ error: "Un match virtuel se termine automatiquement" }, { status: 400 });
+    }
+    if (m.status === "finished") {
+      return NextResponse.json({ error: "Le match est déjà terminé" }, { status: 400 });
+    }
+
+    const givenHome = roundNumber(body.homeScore);
+    const givenAway = roundNumber(body.awayScore);
+    const homeScore = givenHome != null ? Math.round(givenHome) : m.homeScore ?? 0;
+    const awayScore = givenAway != null ? Math.round(givenAway) : m.awayScore ?? 0;
+
+    const [updated] = await db
+      .update(matches)
+      .set({ status: "finished", minute: "Terminé", homeScore, awayScore, finishedAt: new Date() })
+      .where(eq(matches.id, matchId))
+      .returning();
+
+    // Bascule immédiate des paris : tous les paris en cours du match sont réglés selon le score.
+    await settleMatchBets(matchId);
+
+    return NextResponse.json({ ok: true, match: updated, settled: true });
+  }
+
+  if (action === "reopenMatch") {
+    const matchId = Number(body.matchId);
+    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+    if (m.source !== "manual") {
+      return NextResponse.json({ error: "Un match virtuel ne peut pas être rouvert" }, { status: 400 });
+    }
+    if (m.status !== "finished") {
+      return NextResponse.json({ error: "Seul un match terminé peut être rouvert" }, { status: 400 });
+    }
+    const [updated] = await db
+      .update(matches)
+      .set({ status: "live", minute: `${minuteNumber(m.minute) || 90}'`, finishedAt: null })
+      .where(eq(matches.id, matchId))
+      .returning();
+    return NextResponse.json({ ok: true, match: updated });
   }
 
   if (action === "addQuestion") {
