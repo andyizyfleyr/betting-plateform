@@ -62,6 +62,9 @@ export function useApp() {
 
 let toastId = 0;
 
+/** Rafraîchissement global : solde + paris en cours, sur toutes les pages. */
+const POLL_INTERVAL = 5_000;
+
 export function Providers({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<ClientUser | null>(null);
   const [target, setTarget] = useState<BetTarget | null>(null);
@@ -83,12 +86,31 @@ export function Providers({ children }: { children: ReactNode }) {
       .catch(() => setSplashVisible(false));
   }, []);
 
+  // Sync globale : le GET /api/bets fait tourner le moteur (buts, cotes, règlement)
+  // et renvoie le solde à jour. On l'interroge partout pour que tout se rafraîchisse.
+  const loggedIn = user !== null;
+
   useEffect(() => {
-    api
-      .bets("ongoing")
-      .then((r) => setPendingCount(r.bets.length))
-      .catch(() => undefined);
-  }, [betsVersion]);
+    if (!loggedIn) return;
+    let active = true;
+    const poll = () => {
+      api
+        .bets("ongoing")
+        .then((r) => {
+          if (!active) return;
+          setPendingCount(r.bets.length);
+          const bal = r.balance;
+          if (typeof bal === "number") setUser((u) => (u ? { ...u, balance: bal } : u));
+        })
+        .catch(() => undefined);
+    };
+    poll();
+    const id = setInterval(poll, POLL_INTERVAL);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [loggedIn, betsVersion]);
 
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 

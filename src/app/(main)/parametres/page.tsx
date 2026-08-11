@@ -37,6 +37,8 @@ const listAnim = {
   animate: { opacity: 1, y: 0 },
 };
 
+const POLL_INTERVAL = 5_000;
+
 export default function ParametresPage() {
   const { user, applyUser, toast } = useApp();
   const router = useRouter();
@@ -45,10 +47,21 @@ export default function ParametresPage() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    api
-      .allBets()
-      .then((r) => setBets(r.bets))
-      .catch(() => setBets([]));
+    let active = true;
+    const load = () => {
+      api
+        .allBets()
+        .then((r) => {
+          if (active) setBets(r.bets);
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const id = setInterval(load, POLL_INTERVAL);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
   }, []);
 
   // Retour de paiement (Stripe/PayPal) via les params d'URL.

@@ -136,8 +136,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   matches: () => request<{ matches: ClientMatch[] }>("/api/matches"),
   bets: (filter: "ongoing" | "finished") =>
-    request<{ bets: ClientBet[] }>(`/api/bets?filter=${filter}`),
-  allBets: () => request<{ bets: ClientBet[] }>("/api/bets?filter=all"),
+    request<{ bets: ClientBet[]; balance: number | null }>(`/api/bets?filter=${filter}`),
+  allBets: () => request<{ bets: ClientBet[]; balance: number | null }>("/api/bets?filter=all"),
   placeBet: (payload: {
     matchId: number;
     selection: string;

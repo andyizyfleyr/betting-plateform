@@ -11,6 +11,7 @@ import { AnimatedNumber } from "./animated-number";
 import { cn, eur, formatOdds } from "@/lib/format";
 
 const CHIP_AMOUNTS = [5, 10, 25, 50];
+const POLL_INTERVAL = 5_000;
 
 export function BetModal() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export function BetModal() {
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
   const [placed, setPlaced] = useState<{ id: number; potentialWin: number } | null>(null);
+  const [live, setLive] = useState<{ matchId: number; odds: number; minute: string | null } | null>(null);
 
   useEffect(() => {
     if (target) {
@@ -28,6 +30,37 @@ export function BetModal() {
       setError(null);
       setPlaced(null);
     }
+  }, [target]);
+
+  // Refresh en temps réel des cotes/minute du match ciblé pendant la saisie.
+  useEffect(() => {
+    if (!target || target.match.status !== "live") return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await api.matches();
+        if (!active) return;
+        const fresh = r.matches.find((m) => m.id === target.match.id);
+        if (!fresh) return;
+        if (target.market === "result") {
+          const map = { home: fresh.oddsHome, draw: fresh.oddsDraw, away: fresh.oddsAway } as const;
+          const od = map[target.selection as keyof typeof map];
+          if (od != null) setLive({ matchId: target.match.id, odds: od, minute: fresh.minute });
+        } else {
+          const grp = (fresh.markets ?? []).find((g) => g.key === target.market);
+          const outcome = grp?.outcomes.find((o) => o.key === target.selection);
+          if (outcome?.odds) setLive({ matchId: target.match.id, odds: outcome.odds, minute: fresh.minute });
+        }
+      } catch {
+        /* silencieux */
+      }
+    };
+    poll();
+    const id = setInterval(poll, POLL_INTERVAL);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
   }, [target]);
 
   useEffect(() => {
@@ -39,7 +72,10 @@ export function BetModal() {
 
   const stake = cents / 100;
   const overBalance = stake > balance;
-  const payout = target ? stake * target.odds : 0;
+  const liveActive = target && live && live.matchId === target.match.id;
+  const displayOdds = target ? (liveActive ? live.odds : target.odds) : 0;
+  const liveMinute = liveActive ? live.minute : null;
+  const payout = target ? stake * displayOdds : 0;
   const profit = payout - stake;
 
   const sliderMax = Math.max(1, Math.floor(balance));
@@ -149,7 +185,7 @@ export function BetModal() {
                       {target.match.status === "live" ? (
                         <span className="inline-flex items-center gap-1 font-bold text-betclic-red">
                           <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                          LIVE {target.match.minute ?? ""}
+                          LIVE {liveMinute ?? target.match.minute ?? ""}
                         </span>
                       ) : (
                         target.match.league
@@ -163,7 +199,7 @@ export function BetModal() {
                     </p>
                   </div>
                   <span className="shrink-0 rounded-lg bg-betclic-red/10 px-2.5 py-1.5 font-display text-[17px] font-bold tabular-nums text-betclic-red">
-                    {formatOdds(target.odds, oddsFormat)}
+                    {formatOdds(displayOdds, oddsFormat)}
                   </span>
                 </div>
 

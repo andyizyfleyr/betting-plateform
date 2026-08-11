@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ChevronDown, Lock, X } from "lucide-react";
-import type { ClientMatch, MarketGroup, MarketOutcome } from "@/lib/api";
+import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { cn, formatOdds } from "@/lib/format";
+
+const POLL_INTERVAL = 5_000;
 
 /** Feuille des marchés façon 1xbet : accordéon mobile avec market-box / market-head / odd-btn. */
 export function MarketSheet() {
@@ -16,7 +18,30 @@ export function MarketSheet() {
   const dragControls = useDragControls();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
-  const match = marketMatch;
+  const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
+  const match = liveMatch && marketMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
+
+  // Refresh en temps réel de la feuille ouverte (buts, minute, cotes).
+  useEffect(() => {
+    if (!marketMatch) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await api.matches();
+        if (!active) return;
+        const fresh = r.matches.find((m) => m.id === marketMatch.id);
+        if (fresh) setLiveMatch(fresh);
+      } catch {
+        /* silencieux */
+      }
+    };
+    poll();
+    const id = setInterval(poll, POLL_INTERVAL);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [marketMatch]);
 
   if (match && match.id !== prevMatchId) {
     setPrevMatchId(match.id);

@@ -31,6 +31,8 @@ import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue }
 
 type TabKey = "dashboard" | "matches" | "questions" | "users" | "bets" | "deposits";
 
+const POLL_INTERVAL = 5_000;
+
 interface AdminUser {
   id: number;
   name: string;
@@ -242,7 +244,7 @@ export default function AdminPage() {
   const [questionForm, setQuestionForm] = useState({ question: "", category: "Sport", oddsYes: "1.90", oddsNo: "1.80", hours: "72" });
   const [balanceForm, setBalanceForm] = useState<Record<number, string>>({});
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isBackground = false) => {
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
     try {
@@ -252,7 +254,7 @@ export default function AdminPage() {
       setPanel(data);
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") return;
-      setNotice({ kind: "err", msg: "Impossible de charger le tableau de bord" });
+      if (!isBackground) setNotice({ kind: "err", msg: "Impossible de charger le tableau de bord" });
     } finally {
       setLoading(false);
     }
@@ -260,7 +262,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     load();
-    return () => abortRef.current?.abort();
+    const id = setInterval(() => load(true), POLL_INTERVAL);
+    return () => {
+      clearInterval(id);
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, [load]);
 
   const act = async (payload: Record<string, unknown>, key: string, okMsg: string): Promise<boolean> => {
