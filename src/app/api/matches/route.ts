@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { bets, matches } from "@/db/schema";
@@ -16,7 +16,7 @@ export async function GET() {
   const rows = await db
     .select()
     .from(matches)
-    .where(inArray(matches.source, ["virtual", "manual"]))
+    .where(eq(matches.source, "manual"))
     .orderBy(
       // Live d'abord, puis à venir, puis terminés
       asc(

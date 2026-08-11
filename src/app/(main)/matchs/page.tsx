@@ -86,37 +86,19 @@ export default function MatchsPage() {
     return all.filter((m) => m.sport === filter);
   }, [matches, filter]);
 
-  const real = visible.filter((m) => m.source === "manual");
-  const virtual = visible.filter((m) => m.source !== "manual");
+  const featured = visible.find((m) => m.status === "live") ?? visible.find((m) => m.status === "upcoming") ?? null;
 
-  // Une affiche réelle en vedette si possible, sinon une virtuelle.
-  const featured =
-    real.find((m) => m.status === "live") ??
-    virtual.find((m) => m.status === "live") ??
-    real.find((m) => m.status === "upcoming") ??
-    virtual.find((m) => m.status === "upcoming") ??
-    null;
+  const liveRest = visible.filter((m) => m.status === "live" && m.id !== featured?.id);
 
-  const groupUpcoming = (list: ClientMatch[], featuredId: number | null) => {
+  const upcomingByLeague = useMemo(() => {
     const map = new Map<string, ClientMatch[]>();
-    for (const m of list) {
+    for (const m of visible) {
       if (m.status !== "upcoming") continue;
-      if (featuredId != null && m.id === featuredId) continue;
+      if (featured && m.id === featured.id) continue;
       map.set(m.league, [...(map.get(m.league) ?? []), m]);
     }
     return [...map.entries()];
-  };
-
-  const realLive = real.filter((m) => m.status === "live" && m.id !== featured?.id);
-  const virtualLive = virtual.filter((m) => m.status === "live" && m.id !== featured?.id);
-  const realUpcomingByLeague = useMemo(
-    () => groupUpcoming(real, featured?.id ?? null),
-    [real, featured]
-  );
-  const virtualUpcomingByLeague = useMemo(
-    () => groupUpcoming(virtual, featured?.id ?? null),
-    [virtual, featured]
-  );
+  }, [visible, featured]);
 
   return (
     <div className="px-3 pb-24 pt-5">
@@ -208,20 +190,46 @@ export default function MatchsPage() {
           >
             {featured && <FeaturedMatch match={featured} />}
 
-            <MatchGroup
-              title="Matchs réels · Aujourd'hui"
-              live={realLive}
-              upcomingByLeague={realUpcomingByLeague}
-              startIndex={0}
-            />
+            {liveRest.length > 0 && (
+              <section className="mt-6">
+                <SectionHeader label="Aussi en direct" count={liveRest.length} pulse />
+                <div className="mt-2.5 flex flex-col gap-2.5">
+                  {liveRest.map((m, i) => (
+                    <MatchCard key={m.id} match={m} index={i} />
+                  ))}
+                </div>
+              </section>
+            )}
 
-            <MatchGroup
-              title="Matchs virtuels"
-              live={virtualLive}
-              upcomingByLeague={virtualUpcomingByLeague}
-              startIndex={realLive.length}
-              virtual
-            />
+            {upcomingByLeague.length > 0 && (
+              <section className="mt-6">
+                <SectionHeader
+                  label="À venir"
+                  count={upcomingByLeague.reduce((n, [, g]) => n + g.length, 0)}
+                />
+                <div className="mt-3 flex flex-col gap-5">
+                  {upcomingByLeague.map(([league, group]) => (
+                    <div key={league}>
+                      <div className="mb-2 flex items-center gap-2 px-1">
+                        <SportIcon sport={group[0].sport} className="h-3.5 w-3.5 text-dim" />
+                        <span className="text-[11px] font-semibold tracking-wide text-mist">
+                          {league}
+                        </span>
+                        <span className="h-px flex-1 bg-elev" />
+                        <span className="font-display text-[10px] font-bold text-dim">
+                          {group.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        {group.map((m, i) => (
+                          <MatchCard key={m.id} match={m} index={i + liveRest.length} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </motion.div>
         </AnimatePresence>
       )}
@@ -233,75 +241,21 @@ export default function MatchsPage() {
   );
 }
 
-function MatchGroup({
-  title,
-  live,
-  upcomingByLeague,
-  startIndex,
-  virtual,
-}: {
-  title: string;
-  live: ClientMatch[];
-  upcomingByLeague: [string, ClientMatch[]][];
-  startIndex: number;
-  virtual?: boolean;
-}) {
-  if (live.length === 0 && upcomingByLeague.length === 0) return null;
-
-  return (
-    <section className="mt-6">
-      <SectionHeader label={title} count={live.length + upcomingByLeague.reduce((n, [, g]) => n + g.length, 0)} pulse={live.length > 0} virtual={virtual} />
-      {live.length > 0 && (
-        <div className="mt-2.5 flex flex-col gap-2.5">
-          {live.map((m, i) => (
-            <MatchCard key={m.id} match={m} index={startIndex + i} />
-          ))}
-        </div>
-      )}
-      {upcomingByLeague.length > 0 && (
-        <div className="mt-3 flex flex-col gap-5">
-          {upcomingByLeague.map(([league, group]) => (
-            <div key={league}>
-              <div className="mb-2 flex items-center gap-2 px-1">
-                <SportIcon sport={group[0].sport} className="h-3.5 w-3.5 text-dim" />
-                <span className="text-[11px] font-semibold tracking-wide text-mist">
-                  {league}
-                </span>
-                <span className="h-px flex-1 bg-elev" />
-                <span className="font-display text-[10px] font-bold text-dim">
-                  {group.length}
-                </span>
-              </div>
-              <div className="flex flex-col gap-2.5">
-                {group.map((m, i) => (
-                  <MatchCard key={m.id} match={m} index={startIndex + live.length + i} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function SectionHeader({
   label,
   count,
   pulse,
-  virtual,
 }: {
   label: string;
   count: number;
   pulse?: boolean;
-  virtual?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2 px-1">
       {pulse ? (
         <span className="live-dot h-2 w-2 rounded-full bg-live" />
       ) : (
-        <span className={cn("h-2 w-2 rounded-full", virtual ? "bg-mist/50" : "bg-betclic-red/70")} />
+        <span className="h-2 w-2 rounded-full bg-betclic-red/70" />
       )}
       <h2 className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-ink">
         {label}

@@ -167,12 +167,6 @@ export const appUser = pgTable("app_user", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-/** État du moteur de simulation live (une seule ligne, id = 1). */
-export const simState = pgTable("sim_state", {
-  id: serial("id").primaryKey(),
-  lastTick: timestamp("last_tick", { mode: "date" }).notNull().defaultNow(),
-});
-
 /**
  * Historique des parties du jeu Tap Win (profil joueur + santé du système).
  */
