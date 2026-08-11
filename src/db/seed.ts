@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches, predictionBets, predictionQuestions } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
+import { findLeague, clubLogo } from "@/lib/leagues";
 import {
   ALL_PAIRS,
   ROUND_MS,
@@ -245,6 +246,86 @@ export async function ensureSeeded() {
         .set({ balance: 250 - totalStake + totalWon })
         .where(sql`id = 1`);
     }
+  }
+
+  // Matchs réels du jour (source "manual") — idempotent : la première affiche du
+  // programme sert de sentinelle, avec des heures de coup d'envoi variées.
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const [{ manualToday }] = await db
+    .select({ manualToday: sql<number>`count(*)::int` })
+    .from(matches)
+    .where(
+      and(
+        eq(matches.source, "manual"),
+        eq(matches.homeTeam, "Paris SG"),
+        eq(matches.awayTeam, "Marseille"),
+        gte(matches.startsAt, todayStart)
+      )
+    );
+
+  if (manualToday === 0) {
+    const now = Date.now();
+    const MIN = 60_000;
+    const HOUR = 3_600_000;
+    const endOfToday = new Date(todayStart.getTime() + 86_400_000);
+
+    // Affichages réels, heures variées : deux déjà en cours (passées il y a quelques
+    // minutes → l'engine les démarre en live au prochain tick) puis le reste de la
+    // journée à venir, sans jamais déborder sur demain.
+    const realFixtures: Array<{
+      league: string;
+      home: string;
+      away: string;
+      offsetMs: number;
+    }> = [
+      { league: "Ligue 1", home: "Paris SG", away: "Marseille", offsetMs: -18 * MIN },
+      { league: "Premier League", home: "Arsenal", away: "Chelsea", offsetMs: -7 * MIN },
+      { league: "Ligue 1", home: "Lyon", away: "Monaco", offsetMs: 25 * MIN },
+      { league: "Liga", home: "Real Betis", away: "Villarreal", offsetMs: 55 * MIN },
+      { league: "Premier League", home: "Liverpool", away: "Manchester City", offsetMs: 1 * HOUR + 40 * MIN },
+      { league: "Bundesliga", home: "Bayern Munich", away: "Dortmund", offsetMs: 2 * HOUR + 30 * MIN },
+      { league: "Serie A", home: "Inter Milan", away: "AC Milan", offsetMs: 3 * HOUR + 20 * MIN },
+      { league: "Liga", home: "Atlético Madrid", away: "FC Séville", offsetMs: 4 * HOUR + 10 * MIN },
+      { league: "Bundesliga", home: "Leverkusen", away: "RB Leipzig", offsetMs: 5 * HOUR },
+      { league: "Serie A", home: "Juventus", away: "Naples", offsetMs: 6 * HOUR },
+    ];
+
+    const manualSeed = realFixtures.map((f) => {
+      const leagueDef = findLeague(f.league);
+      const startsAt = new Date(Math.min(now + f.offsetMs, endOfToday.getTime() - 30 * MIN));
+      const o = oddsFor(f.home, f.away);
+      const homeLogo = leagueDef ? clubLogo(leagueDef, f.home) : null;
+      const awayLogo = leagueDef ? clubLogo(leagueDef, f.away) : null;
+      return {
+        sport: "football",
+        league: f.league,
+        homeTeam: f.home,
+        awayTeam: f.away,
+        homeLogo,
+        awayLogo,
+        homeScore: null,
+        awayScore: null,
+        status: "upcoming" as const,
+        minute: null,
+        startsAt,
+        oddsHome: o.oddsHome,
+        oddsDraw: o.oddsDraw,
+        oddsAway: o.oddsAway,
+        suspended: false,
+        redHome: 0,
+        redAway: 0,
+        events: [],
+        tickHistory: [],
+        regime: "balanced",
+        homeForm: 1,
+        awayForm: 1,
+        markets: null,
+        source: "manual",
+      };
+    });
+
+    await db.insert(matches).values(manualSeed);
   }
 
   const [user] = await db.select().from(appUser).limit(1);

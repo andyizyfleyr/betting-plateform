@@ -27,6 +27,7 @@ export interface ClientMatch {
   id: number;
   sport: string;
   league: string;
+  source: "virtual" | "manual";
   homeTeam: string;
   awayTeam: string;
   homeLogo?: string | null;
