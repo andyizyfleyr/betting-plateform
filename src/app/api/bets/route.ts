@@ -5,8 +5,9 @@ import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { appUser, bets, matches, predictionBets } from "@/db/schema";
 import { computeCashOut } from "@/lib/cashout";
-import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
+import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { settleResolvedQuestions } from "@/lib/predictions";
+import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile, type BetLike } from "@/lib/risk";
 import { getAuthUserId } from "@/lib/session";
 import { settleFinishedBets } from "@/lib/settle";
 
@@ -14,7 +15,6 @@ export const dynamic = "force-dynamic";
 
 /** Anti-triche : limites de mise (€) et intervalle minimal entre deux paris. */
 const MIN_STAKE = 0.5;
-const MAX_STAKE = 500;
 const BET_COOLDOWN_MS = 700;
 /** Délai de validation des paris en direct (recotation serveur + état du marché). */
 const LIVE_VALIDATION_MS = 2500;
@@ -59,6 +59,9 @@ export async function GET(req: NextRequest) {
       stake: bet.stake,
       potentialWin: bet.potentialWin,
       status: bet.status,
+      closingOdds: bet.closingOdds ?? null,
+      riskFlag: bet.riskFlag ?? null,
+      clv: clvOf(bet.odds, bet.closingOdds),
       cashOutAmount: bet.cashOutAmount ?? null,
       cashOut:
         livePending && bet.market === "result"
@@ -148,9 +151,33 @@ export async function POST(req: NextRequest) {
   if (!isKnownMarket(market)) {
     return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
   }
-  if (stake < MIN_STAKE || stake > MAX_STAKE) {
+  if (stake < MIN_STAKE) {
     return NextResponse.json(
-      { error: `Mise hors limites (${MIN_STAKE} € – ${MAX_STAKE} €)` },
+      { error: `Mise hors limites (minimum ${MIN_STAKE} €)` },
+      { status: 400 }
+    );
+  }
+
+  // Profil joueur (ROI/CLV sur la fenêtre) → limite de mise dynamique.
+  // Un profil « sharp » voit sa limite réduite (jamais bloqué).
+  const recentRows = await db
+    .select({ odds: bets.odds, stake: bets.stake, closingOdds: bets.closingOdds, status: bets.status })
+    .from(bets)
+    .where(eq(bets.userId, uid))
+    .orderBy(desc(bets.placedAt))
+    .limit(40);
+  const profile = playerRiskProfile(
+    recentRows.map((b) => ({
+      odds: b.odds,
+      stake: b.stake,
+      payout: b.status === "won" ? Math.round(b.stake * b.odds * 100) / 100 : 0,
+      closingOdds: b.closingOdds ?? null,
+    }))
+  );
+  const maxStake = maxStakeFor(profile);
+  if (stake > maxStake) {
+    return NextResponse.json(
+      { error: `Mise plafonnée à ${maxStake} € pour votre profil de risque` },
       { status: 400 }
     );
   }
@@ -220,6 +247,13 @@ export async function POST(req: NextRequest) {
 
   // Recotation serveur : en direct = grille de scores finaux, sinon cotes d'avant-match.
   // Match manuel = marchés/cotes personnalisés saisis par l'admin, utilisés tels quels.
+  // L'exposition courante du bookmaker (paris en cours sur ce marché) resserre la cote.
+  const pendingBets = await db
+    .select({ market: bets.market, selection: bets.selection, stake: bets.stake, odds: bets.odds })
+    .from(bets)
+    .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
+  const exposureBets: BetLike[] = pendingBets.map((b) => b);
+
   let odds: number | null = null;
   let selectionLabel: string | null = null;
   if (pricedMatch.source === "manual" && pricedMatch.markets && pricedMatch.markets.length > 0) {
@@ -244,14 +278,43 @@ export async function POST(req: NextRequest) {
               awayForm: pricedMatch.awayForm ?? 1,
               redHome: pricedMatch.redHome ?? 0,
               redAway: pricedMatch.redAway ?? 0,
-            }
+            },
+            exposureBets
           )
-        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
+        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam, exposureBets);
     selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
     if (odds == null || selectionLabel == null) {
       return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
     }
   }
+
+  // Cote obsolète / pari « quasi joué » : si l'issue a une probabilité modèle
+  // quasi certaine au score courant (ex. 0-0 à la 89' sur le « moins de 2,5 »),
+  // on flag le pari pour revue manuelle a posteriori (latence admin-clic sur un
+  // markGoal). Le modèle live est la même source que la cotation serveur.
+  const liveProb =
+    pricedMatch.status === "live" && pricedMatch.source !== "manual"
+      ? liveOutcomeProbability(
+          market,
+          selection,
+          pricedMatch.homeTeam,
+          pricedMatch.awayTeam,
+          homeScore,
+          awayScore,
+          minuteNumber(pricedMatch.minute),
+          {
+            homeForm: pricedMatch.homeForm ?? 1,
+            awayForm: pricedMatch.awayForm ?? 1,
+            redHome: pricedMatch.redHome ?? 0,
+            redAway: pricedMatch.redAway ?? 0,
+          }
+        )
+      : null;
+  const riskFlag =
+    pricedMatch.status === "live" &&
+    isNearDecided(market, selection, homeScore, awayScore, minuteNumber(pricedMatch.minute), liveProb)
+      ? "stale_near_decided"
+      : null;
 
   const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
   if (!user || user.balance < stake) {
@@ -279,6 +342,7 @@ export async function POST(req: NextRequest) {
         stake: roundedStake,
         potentialWin,
         status: "pending",
+        riskFlag,
       })
       .returning();
 

@@ -94,6 +94,10 @@ export const bets = pgTable("bets", {
   payoutMultiplier: doublePrecision("payout_multiplier").notNull().default(1),
   /** Mise remboursée sur push (handicap asiatique quarter-ball). */
   stakeReturned: doublePrecision("stake_returned").notNull().default(0),
+  /** Cote de clôture du marché au moment du règlement (CLV tracking). */
+  closingOdds: doublePrecision("closing_odds"),
+  /** Flag risque (latence admin-clic, marché quasi décidé…) pour revue manuelle. */
+  riskFlag: text("risk_flag"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
 });
 

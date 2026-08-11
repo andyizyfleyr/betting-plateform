@@ -38,6 +38,12 @@ export async function ensureSeeded() {
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "markets" jsonb;
   `);
 
+  // Colonnes de la couche trading/risk sur les paris (CLV + flags d'audit).
+  await db.execute(sql`
+    ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "closing_odds" double precision;
+    ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "risk_flag" text;
+  `);
+
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(matches);

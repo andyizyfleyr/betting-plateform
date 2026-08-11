@@ -339,15 +339,14 @@ function modifiedBesselI(n: number, x: number): number {
   return result;
 }
 
-function skellamPMF(k: number, lambda1: number, lambda2: number): number {
-  const mu = lambda1 + lambda2;
+export function skellamPMF(k: number, lambda1: number, lambda2: number): number {  const mu = lambda1 + lambda2;
   const ratio = lambda1 / Math.max(lambda2, 0.001);
   const x = 2 * Math.sqrt(Math.max(lambda1, 0.001) * Math.max(lambda2, 0.001));
   const bessel = modifiedBesselI(k, x);
   return Math.exp(-mu) * Math.pow(ratio, k / 2) * bessel;
 }
 
-function skellamCDF(k: number, lambda1: number, lambda2: number): number {
+export function skellamCDF(k: number, lambda1: number, lambda2: number): number {
   let sum = 0;
   for (let i = -200; i <= k; i++) {
     const p = skellamPMF(i, lambda1, lambda2);
@@ -400,9 +399,15 @@ export function liveResultProbs(
   const remH = postH * Math.max(remaining, 0.02);
   const remA = postA * Math.max(remaining, 0.02);
 
-  const pHomeWin = 1 - skellamCDF(0, remH, remA);
-  const pAwayWin = skellamCDF(-1, remH, remA);
-  const pDraw = skellamPMF(0, remH, remA);
+  // Skellam sur les buts RESTANTS, décalé du score courant : D = H_rem − A_rem.
+  //   home gagne si homeScore + H_rem > awayScore + A_rem ⇔ D > −offset
+  //   nul        si D = −offset
+  //   away gagne si D < −offset
+  // (La distribution ne dépend que des buts restants ; le score courant décale le
+  // seuil. Le résultat « 0-0 en cours » correspond à offset = 0.)
+  const pHomeWin = 1 - skellamCDF(-offset, remH, remA);
+  const pDraw = skellamPMF(-offset, remH, remA);
+  const pAwayWin = skellamCDF(-offset - 1, remH, remA);
 
   const total = pHomeWin + pDraw + pAwayWin;
   return {

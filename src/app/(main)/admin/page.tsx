@@ -53,6 +53,8 @@ interface AdminBet {
   stake: number;
   potentialWin: number;
   status: string;
+  closingOdds?: number | null;
+  riskFlag?: string | null;
   placedAt: string;
 }
 
@@ -1133,7 +1135,7 @@ function BetsTab({
   bets: AdminBet[];
   predBets: PanelData["predictionBets"];
 }) {
-  const rows: Array<{ id: number; kind: string; label: string; detail: string; stake: number; win: number; status: string; placedAt: string }> = [
+  const rows: Array<{ id: number; kind: string; label: string; detail: string; stake: number; win: number; status: string; riskFlag: string | null; clv: number | null; placedAt: string }> = [
     ...bets.map((b) => ({
       id: b.id,
       kind: "Sport",
@@ -1142,6 +1144,8 @@ function BetsTab({
       stake: b.stake,
       win: b.potentialWin,
       status: b.status,
+      riskFlag: b.riskFlag ?? null,
+      clv: b.closingOdds != null && b.closingOdds > 0 ? b.odds / b.closingOdds - 1 : null,
       placedAt: b.placedAt,
     })),
     ...predBets.map((p) => ({
@@ -1152,9 +1156,18 @@ function BetsTab({
       stake: p.stake,
       win: p.potentialWin,
       status: p.status,
+      riskFlag: null,
+      clv: null,
       placedAt: p.placedAt,
     })),
   ].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
+
+  const riskLabel = (flag: string) =>
+    flag === "stale_mark_goal"
+      ? "Latence but"
+      : flag === "stale_near_decided"
+        ? "Quasi décidé"
+        : flag ?? "";
 
   return (
     <div>
@@ -1168,6 +1181,25 @@ function BetsTab({
                 <p className="mt-0.5 truncate text-[11px] text-dim">
                   {b.detail} · {formatPlacedAt(b.placedAt)}
                 </p>
+                {(b.riskFlag || b.clv != null) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {b.riskFlag && (
+                      <span className="rounded-md bg-betclic-red/15 px-1.5 py-0.5 text-[10px] font-semibold text-betclic-red">
+                        {riskLabel(b.riskFlag)}
+                      </span>
+                    )}
+                    {b.clv != null && (
+                      <span
+                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                          b.clv >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-dim"
+                        }`}
+                      >
+                        CLV {b.clv >= 0 ? "+" : ""}
+                        {(b.clv * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <StatusBadge status={b.status} />
             </div>

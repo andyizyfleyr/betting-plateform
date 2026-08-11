@@ -1,7 +1,7 @@
-import { asc, desc, inArray, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { matches } from "@/db/schema";
+import { bets, matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
@@ -26,8 +26,23 @@ export async function GET() {
       desc(matches.id)
     );
 
+  // Exposition du bookmaker par match : les paris en cours resserrent les cotes
+  // affichées de la même façon que lors de la validation serveur d'un pari.
+  const pending = await db
+    .select({ matchId: bets.matchId, market: bets.market, selection: bets.selection, stake: bets.stake, odds: bets.odds })
+    .from(bets)
+    .where(eq(bets.status, "pending"));
+  const pendingByMatch = new Map<number, typeof pending>();
+  for (const b of pending) {
+    if (b.matchId == null) continue;
+    const arr = pendingByMatch.get(b.matchId) ?? [];
+    arr.push(b);
+    pendingByMatch.set(b.matchId, arr);
+  }
+
   const withMarkets = rows.map((m) => {
     // Match manuel avec marchés saisis par l'admin : servis tels quels.
+    const exposure = pendingByMatch.get(m.id) ?? [];
     const markets = m.source === "manual" && m.markets && m.markets.length > 0
       ? m.markets
       : m.status === "live"
@@ -42,9 +57,10 @@ export async function GET() {
               awayForm: m.awayForm ?? 1,
               redHome: m.redHome ?? 0,
               redAway: m.redAway ?? 0,
-            }
+            },
+            exposure
           )
-        : buildMarkets(m.homeTeam, m.awayTeam);
+        : buildMarkets(m.homeTeam, m.awayTeam, exposure);
     return { ...m, markets };
   });
 

@@ -4,10 +4,11 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser, bets, deposits, matches, predictionBets, predictionQuestions } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
-import { minuteNumber } from "@/lib/markets";
+import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
 import { settleMatchBets } from "@/lib/settle";
 import { MANUAL_MINUTE_REAL_MS } from "@/db/engine";
+import { STALE_LATENCY_MS } from "@/lib/risk";
 
 export const dynamic = "force-dynamic";
 
@@ -332,6 +333,25 @@ export async function POST(req: NextRequest) {
       })
       .where(eq(matches.id, matchId))
       .returning();
+
+    // Latence admin-clic : les paris « pending » placés dans la fenêtre précédant le
+    // but, sur une issue que ce but vient de rendre mathématiquement décidée, sont
+    // flaggés pour revue manuelle a posteriori (audit risque).
+    const staleCutoff = new Date(Date.now() - STALE_LATENCY_MS);
+    const staleBets = await db
+      .select({ id: bets.id, market: bets.market, selection: bets.selection })
+      .from(bets)
+      .where(and(eq(bets.matchId, matchId), eq(bets.status, "pending"), sql`${bets.placedAt} >= ${staleCutoff}`));
+    for (const sb of staleBets) {
+      const settledAfterGoal = marketOutcomeSettled(sb.market, sb.selection, homeScore, awayScore, gameMinute);
+      const settledBeforeGoal = marketOutcomeSettled(sb.market, sb.selection, currentHome, currentAway, gameMinute);
+      if (settledAfterGoal && !settledBeforeGoal) {
+        await db
+          .update(bets)
+          .set({ riskFlag: "stale_mark_goal" })
+          .where(eq(bets.id, sb.id));
+      }
+    }
 
     return NextResponse.json({ ok: true, match: reprice[0] });
   }

@@ -1,4 +1,5 @@
-import { expectedGoals, liveOddsFor, liveScoreModel, poissonPmf } from "@/db/fixtures";
+import { expectedGoals, liveOddsFor, liveResultProbs, liveScoreModel, poissonPmf } from "@/db/fixtures";
+import { adjustOddsForExposure, marginOverround, netExposure, type BetLike } from "./risk";
 
 /**
  * Catalogue des marchés de pari (terminologie façon 1xbet).
@@ -69,6 +70,23 @@ function clamp(n: number, min: number, max: number) {
 
 function oddsFromProb(p: number, margin = MARGIN, cap = ODDS_MAX) {
   return round2(clamp(1 / (clamp(p, 0.0005, 1) * margin), ODDS_MIN, cap));
+}
+
+/** Marge effective d'un marché : la marge live (dynamique) × la table de marge par marché. */
+function effectiveMargin(market: string, liveMargin = MARGIN): number {
+  // La table est exprimée en multiplicateur relatif au marché « result » (le plus liquide).
+  return round2(liveMargin * (marginOverround(market) / marginOverround("result")));
+}
+
+/** Applique la correction d'exposition après marges : cote finale du marché. */
+function exposureAdjustedOdds(
+  market: string,
+  outcome: string,
+  modelOdds: number,
+  bets?: BetLike[]
+): number {
+  if (!bets || bets.length === 0) return modelOdds;
+  return adjustOddsForExposure(modelOdds, netExposure(bets, market, outcome));
 }
 
 /** Distribution de Poisson tronquée + somme cumulée (pour les probabilités). */
@@ -434,13 +452,13 @@ export function marketWin(market: string, outcome: string, home: number, away: n
 }
 
 /** Construit tous les marchés avec leurs cotes pour une affiche. */
-export function buildMarkets(home: string, away: string): MarketGroup[] {
+export function buildMarkets(home: string, away: string, bets?: BetLike[]): MarketGroup[] {
   const { lambdaHome, lambdaAway } = expectedGoals(home, away);
   return MARKETS.map((m) => {
     const probs = m.probs(lambdaHome, lambdaAway);
     const outcomes = m.outcomes(home, away).map((o, i) => ({
       ...o,
-      odds: oddsFromProb(probs[i] ?? 0),
+      odds: exposureAdjustedOdds(m.key, o.key, oddsFromProb(probs[i] ?? 0, effectiveMargin(m.key)), bets),
     }));
     const rows = m.rows
       ? m.rows(home, away).map((r) => ({
@@ -455,14 +473,20 @@ export function buildMarkets(home: string, away: string): MarketGroup[] {
 }
 
 /** Cote d'une issue précise (pour la validation serveur d'un pari). */
-export function marketOddsFor(market: string, outcome: string, home: string, away: string) {
+export function marketOddsFor(
+  market: string,
+  outcome: string,
+  home: string,
+  away: string,
+  bets?: BetLike[]
+) {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
   const { lambdaHome, lambdaAway } = expectedGoals(home, away);
   const probs = def.probs(lambdaHome, lambdaAway);
   const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
   if (idx < 0) return null;
-  return oddsFromProb(probs[idx] ?? 0);
+  return exposureAdjustedOdds(market, outcome, oddsFromProb(probs[idx] ?? 0, effectiveMargin(market)), bets);
 }
 
 /** Libellé d'une issue précise. */
@@ -579,7 +603,8 @@ export function buildLiveMarkets(
   homeScore: number,
   awayScore: number,
   minute: number,
-  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number },
+  bets?: BetLike[]
 ): MarketGroup[] {
   const live = liveOddsFor(home, away, homeScore, awayScore, minute, opts);
   const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
@@ -593,11 +618,17 @@ export function buildLiveMarkets(
     const priced: MarketOutcome[] = open.map((o) => {
       let odds: number;
       if (m.key === "result") {
-        odds =
+        const base =
           o.key === "home" ? live.oddsHome : o.key === "draw" ? live.oddsDraw : live.oddsAway;
+        odds = exposureAdjustedOdds(m.key, o.key, base, bets);
       } else {
         const p = sumOverLive((i, j) => m.win(o.key, i, j), grid);
-        odds = oddsFromProb(p, margin);
+        odds = exposureAdjustedOdds(
+          m.key,
+          o.key,
+          oddsFromProb(p, effectiveMargin(m.key, margin)),
+          bets
+        );
       }
       return { ...o, odds };
     });
@@ -629,7 +660,8 @@ export function liveMarketOddsFor(
   homeScore: number,
   awayScore: number,
   minute: number,
-  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number },
+  bets?: BetLike[]
 ): number | null {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
@@ -639,12 +671,76 @@ export function liveMarketOddsFor(
 
   if (market === "result") {
     const live = liveOddsFor(home, away, homeScore, awayScore, minute, opts);
-    return outcome === "home" ? live.oddsHome : outcome === "draw" ? live.oddsDraw : live.oddsAway;
+    const base =
+      outcome === "home" ? live.oddsHome : outcome === "draw" ? live.oddsDraw : live.oddsAway;
+    return exposureAdjustedOdds(market, outcome, base, bets);
   }
 
   const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
   const p = sumOverLive((i, j) => def.win(outcome, i, j), grid);
-  return oddsFromProb(p, margin);
+  return exposureAdjustedOdds(market, outcome, oddsFromProb(p, effectiveMargin(market, margin)), bets);
+}
+
+/**
+ * Cote de clôture d'une issue au moment où le marché se ferme (CLV tracking).
+ * Contrairement à liveMarketOddsFor, elle ignore l'état « décidé » : au score
+ * final le marché est fermé, mais on a besoin du dernier prix pour mesurer la
+ * valeur (closing line value) de chaque pari pris pendant le match.
+ */
+export function closingOddsFor(
+  market: string,
+  outcome: string,
+  home: string,
+  away: string,
+  homeScore: number,
+  awayScore: number,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+): number | null {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return null;
+  const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
+  if (idx < 0) return null;
+
+  if (market === "result") {
+    // Cote de clôture juste : probabilité Skellam décalée du score final + marge.
+    const p = liveResultProbs(home, away, homeScore, awayScore, 90, opts);
+    const prob = outcome === "home" ? p.home : outcome === "draw" ? p.draw : p.away;
+    return oddsFromProb(prob, effectiveMargin(market));
+  }
+
+  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, 90, opts);
+  const p = sumOverLive((i, j) => def.win(outcome, i, j), grid);
+  return oddsFromProb(p, effectiveMargin(market, margin));
+}
+
+/**
+ * Probabilité (0-1) que l'issue se réalise selon le modèle live, au score/minute
+ * courant. Sert à détecter les paris placés sur une issue « quasi jouée »
+ * (probabilité très proche de 1) juste avant un markGoal manuel.
+ */
+export function liveOutcomeProbability(
+  market: string,
+  outcome: string,
+  home: string,
+  away: string,
+  homeScore: number,
+  awayScore: number,
+  minute: number,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+): number | null {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return null;
+  const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
+  if (idx < 0) return null;
+
+  if (market === "result") {
+    // Skellam sur les buts RESTANTS, décalé du score courant (liveResultProbs).
+    const p = liveResultProbs(home, away, homeScore, awayScore, minute, opts);
+    return outcome === "home" ? p.home : outcome === "draw" ? p.draw : p.away;
+  }
+
+  const { grid } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
+  return sumOverLive((i, j) => def.win(outcome, i, j), grid);
 }
 
 /** Minute numérique depuis le libellé du moteur (« 37' » → 37, null → 0). */
