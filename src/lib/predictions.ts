@@ -5,13 +5,38 @@ import { adjustOddsForExposure, netExposure, type BetLike } from "@/lib/risk";
 
 export const PRED_MIN_STAKE = 0.5;
 export const PRED_MAX_STAKE = 500;
-/** Bankroll / liquidité virtuelle de référence (€) pour la gestion d'exposition. */
+/** Bankroll / liquidité virtuelle de référence (€). */
 export const PRED_BANKROLL = 1_000;
 /** Plafond d'exposition nette par question (€) : au-delà, on refuse la mise. */
 export const PRED_EXPOSURE_CAP = 3_000;
+/** Marge / Rake de la maison (15%) : garantit 0% de perte pour la maison (zéro faillite). */
+export const PRED_RAKE = 0.15;
 
 export function round2(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+/** Cotes dynamiques Pari-Mutuel (Pool-share avec rake 15% pour la maison). */
+export function pariMutuelOdds(
+  poolYes: number,
+  poolNo: number,
+  initialOddsYes: number,
+  initialOddsNo: number
+) {
+  const V = 200; // Liquidité virtuelle pour stabiliser les cotes à vide
+  const pYes = (1 / initialOddsYes) / ((1 / initialOddsYes) + (1 / initialOddsNo));
+  const vYes = V * pYes;
+  const vNo = V * (1 - pYes);
+
+  const totalYes = poolYes + vYes;
+  const totalNo = poolNo + vNo;
+  const totalPool = totalYes + totalNo;
+  const netPool = totalPool * (1 - PRED_RAKE);
+
+  return {
+    oddsYes: round2(Math.max(1.05, netPool / totalYes)),
+    oddsNo: round2(Math.max(1.05, netPool / totalNo)),
+  };
 }
 
 /** PRNG déterministe (mulberry32) : résolution stable, non déductible depuis l'UI. */
@@ -59,17 +84,30 @@ export async function settleQuestion(questionId: number, resolution: "yes" | "no
         )
       );
 
+    const poolYes = pending.filter((b) => b.selection === "yes").reduce((s, b) => s + b.stake, 0);
+    const poolNo = pending.filter((b) => b.selection === "no").reduce((s, b) => s + b.stake, 0);
+    const V = 200;
+    const totalPool = poolYes + poolNo + V;
+    const netPool = totalPool * (1 - PRED_RAKE);
+    const winningStakes = resolution === "yes" ? poolYes + (V * 0.5) : poolNo + (V * 0.5);
+
     for (const b of pending) {
       const won = b.selection === resolution;
-      await tx
-        .update(predictionBets)
-        .set({ status: won ? "won" : "lost" })
-        .where(eq(predictionBets.id, b.id));
       if (won) {
+        const payout = winningStakes > 0 ? round2((b.stake / winningStakes) * netPool) : 0;
+        await tx
+          .update(predictionBets)
+          .set({ status: "won", potentialWin: payout })
+          .where(eq(predictionBets.id, b.id));
         await tx
           .update(appUser)
-          .set({ balance: sql`${appUser.balance} + ${b.potentialWin}` })
+          .set({ balance: sql`${appUser.balance} + ${payout}` })
           .where(eq(appUser.id, b.userId));
+      } else {
+        await tx
+          .update(predictionBets)
+          .set({ status: "lost" })
+          .where(eq(predictionBets.id, b.id));
       }
     }
   });
@@ -105,21 +143,22 @@ export function driftOdds(oddsA: number, oddsB: number): [number, number] {
 }
 
 /**
- * Recotation Hybride par exposition (Modèle Bookmaker) :
- * les paris en attente sur chaque côté resserrent la cote du côté surchargé.
- * La maison encaisse 100% des mises des perdants.
+ * Recotation Pari-Mutuel avec Rake 15% :
+ * Les cotes évoluent dynamiquement selon les pools de mises en attente (Oui vs Non),
+ * garantissant que la maison empoche toujours ses 15% et ne perd jamais d'argent (0% de faillite).
  */
 export function exposureAdjustedOdds(
   oddsYes: number,
   oddsNo: number,
   pending: BetLike[]
 ): { oddsYes: number; oddsNo: number } {
-  const expYes = netExposure(pending, "yesno", "yes");
-  const expNo = netExposure(pending, "yesno", "no");
-  return {
-    oddsYes: adjustOddsForExposure(oddsYes, expYes, PRED_BANKROLL),
-    oddsNo: adjustOddsForExposure(oddsNo, expNo, PRED_BANKROLL),
-  };
+  let poolYes = 0;
+  let poolNo = 0;
+  for (const b of pending) {
+    if (b.selection === "yes") poolYes += b.stake;
+    else if (b.selection === "no") poolNo += b.stake;
+  }
+  return pariMutuelOdds(poolYes, poolNo, oddsYes, oddsNo);
 }
 
 /**
