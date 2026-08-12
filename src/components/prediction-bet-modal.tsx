@@ -26,6 +26,7 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
   const [placed, setPlaced] = useState<{ id: number; potentialWin: number } | null>(null);
+  const [liveOdds, setLiveOdds] = useState<number | null>(null);
 
   const open = question !== null && selection !== null;
 
@@ -39,13 +40,36 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
   }, [open, question?.id, selection]);
 
   useEffect(() => {
+    setLiveOdds(null);
+    if (!open || !question || !selection) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await api.predictions();
+        if (!active) return;
+        const fresh = r.questions.find((q) => q.id === question.id);
+        if (fresh) {
+          setLiveOdds(selection === "yes" ? fresh.oddsYes : fresh.oddsNo);
+        }
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [open, question?.id, selection]);
+
+  useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
   }, [open]);
 
-  const odds = selection === "yes" ? question?.oddsYes ?? 0 : question?.oddsNo ?? 0;
+  const baseOdds = selection === "yes" ? question?.oddsYes ?? 0 : question?.oddsNo ?? 0;
+  const odds = liveOdds ?? baseOdds;
   const stake = cents / 100;
   const overBalance = stake > balance;
   const payout = stake * odds;

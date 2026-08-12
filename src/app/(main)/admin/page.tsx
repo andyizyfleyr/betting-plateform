@@ -992,6 +992,23 @@ function QuestionsTab({
   setForm: (f: { question: string; category: string; oddsYes: string; oddsNo: string; hours: string }) => void;
   onAdd: (e: FormEvent) => void;
 }) {
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ question: "", category: "Sport", oddsYes: "1.90", oddsNo: "1.80" });
+
+  const startEdit = (q: AdminQuestion) => {
+    setEditingId(q.id);
+    setEditForm({ question: q.question, category: q.category, oddsYes: String(q.oddsYes), oddsNo: String(q.oddsNo) });
+  };
+
+  const saveEdit = async (id: number) => {
+    const ok = await act(
+      { action: "editQuestion", questionId: id, ...editForm, oddsYes: Number(editForm.oddsYes), oddsNo: Number(editForm.oddsNo) },
+      `edit-q-${id}`,
+      "Question mise à jour"
+    );
+    if (ok) setEditingId(null);
+  };
+
   return (
     <div>
       <form onSubmit={onAdd} className="glass-card rounded-[20px] p-3.5">
@@ -1001,7 +1018,20 @@ function QuestionsTab({
         </p>
         <AdminInput label="Question (Oui/Non)" value={form.question} className="mt-2" onChange={(v) => setForm({ ...form, question: v })} />
         <div className="mt-2 grid grid-cols-3 gap-2">
-          <AdminInput label="Catégorie" value={form.category} onChange={(v) => setForm({ ...form, category: v })} />
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-dim">Catégorie</label>
+            <select
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              aria-label="Catégorie"
+              className="mt-1 w-full rounded-xl border border-edge bg-elev px-3 py-2 text-[12px] font-medium text-ink focus:border-betclic-red focus:outline-none"
+            >
+              <option value="Sport">Sport</option>
+              <option value="Actus">Actus</option>
+              <option value="Crypto">Crypto</option>
+              <option value="Culture">Culture</option>
+            </select>
+          </div>
           <AdminInput label="Cote Oui" value={form.oddsYes} onChange={(v) => setForm({ ...form, oddsYes: v })} />
           <AdminInput label="Cote Non" value={form.oddsNo} onChange={(v) => setForm({ ...form, oddsNo: v })} />
         </div>
@@ -1019,49 +1049,103 @@ function QuestionsTab({
       <section className="mt-4">
         <AdminSectionTitle label="Questions" count={questions.length} />
         <div className="mt-2.5 flex flex-col gap-2">
-          {questions.map((q) => (
-            <div key={q.id} className="glass-card rounded-2xl px-3.5 py-3">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[13px] font-medium leading-snug">{q.question}</p>
-                <span
-                  className={cn(
-                    "shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold",
-                    q.status === "open" ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-mist"
-                  )}
-                >
-                  {q.status === "open" ? "En cours" : `Résolue · ${q.resolution === "yes" ? "Oui" : "Non"}`}
-                </span>
-              </div>
-              <p className="mt-1 text-[11px] text-dim">
-                {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · {fmtEur(q.volume)} misés
-              </p>
-              <div className="mt-2.5 flex items-center gap-2">
-                {q.status === "open" && (
+          {questions.map((q) => {
+            const isEditing = editingId === q.id;
+            return (
+              <div key={q.id} className="glass-card rounded-2xl px-3.5 py-3">
+                {isEditing ? (
+                  <div className="flex flex-col gap-2">
+                    <AdminInput label="Question" value={editForm.question} onChange={(v) => setEditForm({ ...editForm, question: v })} />
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        value={editForm.category}
+                        onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                        aria-label="Catégorie"
+                        className="rounded-xl border border-edge bg-elev px-3 py-2 text-[12px] font-medium text-ink"
+                      >
+                        <option value="Sport">Sport</option>
+                        <option value="Actus">Actus</option>
+                        <option value="Crypto">Crypto</option>
+                        <option value="Culture">Culture</option>
+                      </select>
+                      <AdminInput label="Oui" value={editForm.oddsYes} onChange={(v) => setEditForm({ ...editForm, oddsYes: v })} />
+                      <AdminInput label="Non" value={editForm.oddsNo} onChange={(v) => setEditForm({ ...editForm, oddsNo: v })} />
+                    </div>
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        onClick={() => saveEdit(q.id)}
+                        disabled={busy[`edit-q-${q.id}`]}
+                        className="flex-1 rounded-lg bg-betclic-red py-1.5 text-[11px] font-bold text-white"
+                      >
+                        Enregistrer
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="rounded-lg bg-elev px-3 py-1.5 text-[11px] font-bold text-mist"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                   <>
-                    <button
-                      onClick={() => act({ action: "resolveQuestion", questionId: q.id, resolution: "yes" }, `ry-${q.id}`, "Résolu : Oui")}
-                      className="flex-1 rounded-lg bg-win/10 py-1.5 text-[11px] font-bold text-win"
-                    >
-                      Résoudre Oui
-                    </button>
-                    <button
-                      onClick={() => act({ action: "resolveQuestion", questionId: q.id, resolution: "no" }, `rn-${q.id}`, "Résolu : Non")}
-                      className="flex-1 rounded-lg bg-bittersweet/10 py-1.5 text-[11px] font-bold text-bittersweet"
-                    >
-                      Résoudre Non
-                    </button>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[13px] font-medium leading-snug">{q.question}</p>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold",
+                          q.status === "open" ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-mist"
+                        )}
+                      >
+                        {q.status === "open" ? "En cours" : `Résolue · ${q.resolution === "yes" ? "Oui" : "Non"}`}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-dim">
+                      {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · {fmtEur(q.volume)} misés
+                    </p>
+                    <div className="mt-2.5 flex items-center gap-2">
+                      {q.status === "open" ? (
+                        <>
+                          <button
+                            onClick={() => act({ action: "resolveQuestion", questionId: q.id, resolution: "yes" }, `ry-${q.id}`, "Résolu : Oui")}
+                            className="flex-1 rounded-lg bg-win/10 py-1.5 text-[11px] font-bold text-win"
+                          >
+                            Résoudre Oui
+                          </button>
+                          <button
+                            onClick={() => act({ action: "resolveQuestion", questionId: q.id, resolution: "no" }, `rn-${q.id}`, "Résolu : Non")}
+                            className="flex-1 rounded-lg bg-bittersweet/10 py-1.5 text-[11px] font-bold text-bittersweet"
+                          >
+                            Résoudre Non
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => act({ action: "reopenQuestion", questionId: q.id }, `reopen-${q.id}`, "Question réouverte")}
+                          className="flex-1 rounded-lg bg-sky-500/10 py-1.5 text-[11px] font-bold text-sky-600"
+                        >
+                          Réouvrir
+                        </button>
+                      )}
+                      <button
+                        onClick={() => startEdit(q)}
+                        className="rounded-lg bg-elev px-3 py-1.5 text-[11px] font-bold text-mist"
+                      >
+                        Éditer
+                      </button>
+                      <button
+                        onClick={() => act({ action: "deleteQuestion", questionId: q.id }, `dq-${q.id}`, "Question supprimée")}
+                        className="grid h-7 w-7 place-items-center rounded-md bg-elev text-mist"
+                        aria-label="Supprimer"
+                      >
+                        {busy[`dq-${q.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
+                      </button>
+                    </div>
                   </>
                 )}
-                <button
-                  onClick={() => act({ action: "deleteQuestion", questionId: q.id }, `dq-${q.id}`, "Question supprimée")}
-                  className="grid h-7 w-7 place-items-center rounded-md bg-elev text-mist"
-                  aria-label="Supprimer"
-                >
-                  {busy[`dq-${q.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>

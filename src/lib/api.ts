@@ -86,6 +86,13 @@ export interface ClientPrediction {
   noCount: number;
   resolvesAt: string;
   resolvedAt: string | null;
+  myBet?: {
+    selection: string;
+    status: string;
+    stake: number;
+    potentialWin: number;
+    odds: number;
+  } | null;
 }
 
 export interface ClientPredictionBet {

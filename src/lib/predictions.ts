@@ -1,9 +1,14 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, predictionBets, predictionQuestions } from "@/db/schema";
+import { adjustOddsForExposure, netExposure, type BetLike } from "@/lib/risk";
 
 export const PRED_MIN_STAKE = 0.5;
 export const PRED_MAX_STAKE = 500;
+/** Bankroll alloué à une question (€) — seuil de resserrement des cotes. */
+export const PRED_BANKROLL = 1_000;
+/** Plafond d'exposition nette par question (€) : au-delà, on refuse la mise. */
+export const PRED_EXPOSURE_CAP = 3_000;
 
 export function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -93,4 +98,48 @@ export function driftOdds(oddsA: number, oddsB: number): [number, number] {
     round2(Math.max(1.05, Math.min(99, oddsA * 0.995))),
     round2(Math.max(1.05, Math.min(99, oddsB * 1.005))),
   ];
+}
+
+/**
+ * Recotation par exposition (mêmes primitives que le sport) :
+ * les paris en attente sur chaque côté resserrent la cote du côté surchargé.
+ * Retourne les cotes affichées ET de validation pour une question.
+ */
+export function exposureAdjustedOdds(
+  oddsYes: number,
+  oddsNo: number,
+  pending: BetLike[]
+): { oddsYes: number; oddsNo: number } {
+  const expYes = netExposure(pending, "yesno", "yes");
+  const expNo = netExposure(pending, "yesno", "no");
+  return {
+    oddsYes: adjustOddsForExposure(oddsYes, expYes, PRED_BANKROLL),
+    oddsNo: adjustOddsForExposure(oddsNo, expNo, PRED_BANKROLL),
+  };
+}
+
+/**
+ * Exposition nette totale du bookmaker sur une question (les deux côtés) :
+ * sert de garde-fou — on refuse de nouveaux paris au-delà de PRED_EXPOSURE_CAP.
+ */
+export function totalExposure(pending: BetLike[]): number {
+  const yes = netExposure(pending, "yesno", "yes");
+  const no = netExposure(pending, "yesno", "no");
+  return Math.max(0, yes) + Math.max(0, no);
+}
+
+export function netExposureWith(
+  pending: BetLike[],
+  oddsYes: number,
+  oddsNo: number,
+  newSelection: string,
+  newStake: number
+): number {
+  const simulated: BetLike[] = [
+    ...pending,
+    { market: "yesno", selection: newSelection, stake: newStake, odds: newSelection === "yes" ? oddsYes : oddsNo },
+  ];
+  const yesExp = netExposure(simulated, "yesno", "yes");
+  const noExp = netExposure(simulated, "yesno", "no");
+  return Math.max(yesExp, noExp);
 }

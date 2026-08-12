@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
-import { appUser, bets, matches, predictionBets } from "@/db/schema";
-import { computeCashOut } from "@/lib/cashout";
+import { appUser, bets, matches, predictionBets, predictionQuestions } from "@/db/schema";
+import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { settleResolvedQuestions } from "@/lib/predictions";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile, type BetLike } from "@/lib/risk";
@@ -85,37 +85,57 @@ export async function GET(req: NextRequest) {
   });
 
   const predRows = await db
-    .select()
+    .select({ bet: predictionBets, question: predictionQuestions })
     .from(predictionBets)
+    .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
     .where(eq(predictionBets.userId, uid))
     .orderBy(desc(predictionBets.placedAt));
 
-  const predMapped = predRows.map((pb) => ({
-    id: pb.id,
-    kind: "prediction" as const,
-    matchId: null,
-    sport: "prédiction",
-    league: pb.category,
-    homeTeam: "",
-    awayTeam: "",
-    question: pb.question,
-    questionId: pb.questionId,
-    market: "yesno",
-    selection: pb.selection,
-    selectionLabel: pb.selectionLabel,
-    odds: pb.odds,
-    stake: pb.stake,
-    potentialWin: pb.potentialWin,
-    status: pb.status,
-    cashOutAmount: null,
-    cashOut: null,
-    placedAt: pb.placedAt,
-    matchStatus: null,
-    matchHomeScore: null,
-    matchAwayScore: null,
-    matchMinute: null,
-    matchStartsAt: null,
-  }));
+  const predMapped = predRows.map(({ bet: pb, question: q }) => {
+    const livePending = pb.status === "pending" && q && q.status === "open" && q.resolvesAt.getTime() > Date.now();
+    const cashOutVal = livePending && q
+      ? computePredictionCashOut({
+          stake: pb.stake,
+          odds: pb.odds,
+          potentialWin: pb.potentialWin,
+          placedAt: pb.placedAt,
+          resolvesAt: q.resolvesAt,
+          currentOddsYes: q.oddsYes,
+          currentOddsNo: q.oddsNo,
+          selection: pb.selection as "yes" | "no",
+        })
+      : null;
+
+    return {
+      id: pb.id,
+      kind: "prediction" as const,
+      matchId: null,
+      sport: "prédiction",
+      league: pb.category,
+      homeTeam: "",
+      awayTeam: "",
+      question: pb.question,
+      questionId: pb.questionId,
+      market: "yesno",
+      selection: pb.selection,
+      selectionLabel: pb.selectionLabel,
+      odds: pb.odds,
+      stake: pb.stake,
+      potentialWin: pb.potentialWin,
+      status: pb.status,
+      closingOdds: null,
+      riskFlag: null,
+      clv: null,
+      cashOutAmount: pb.cashOutAmount ?? null,
+      cashOut: cashOutVal,
+      placedAt: pb.placedAt,
+      matchStatus: null,
+      matchHomeScore: null,
+      matchAwayScore: null,
+      matchMinute: null,
+      matchStartsAt: null,
+    };
+  });
 
   const combined = [...predMapped, ...mapped].sort(
     (a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime()

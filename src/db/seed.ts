@@ -175,8 +175,14 @@ export async function ensureSeeded() {
       "stake" double precision NOT NULL,
       "potential_win" double precision NOT NULL,
       "status" text DEFAULT 'pending' NOT NULL,
+      "cash_out_amount" double precision,
       "placed_at" timestamp DEFAULT now() NOT NULL
     );
+  `);
+
+  // Migration idempotente : ajoute la colonne de cash-out si elle manque (bases existantes).
+  await db.execute(sql`
+    ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
   `);
 
   // Table des dépôts (Stripe / PayPal) — sécurise le déploiement Vercel.

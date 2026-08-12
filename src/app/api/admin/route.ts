@@ -455,6 +455,16 @@ export async function POST(req: NextRequest) {
     const oddsNo = roundNumber(body.oddsNo) ?? 1.8;
     const hours = Math.max(1, Number(body.resolvesAt) || 72);
     const resolvesAt = new Date(Date.now() + hours * 3_600_000);
+
+    const existingSeeds = await db.select({ seedValue: predictionQuestions.seedValue }).from(predictionQuestions);
+    const usedSeeds = new Set(existingSeeds.map((s) => s.seedValue));
+    let seedValue = Math.floor(Math.random() * 10000) + 1;
+    let attempts = 0;
+    while (usedSeeds.has(seedValue) && attempts < 100) {
+      seedValue = Math.floor(Math.random() * 10000) + 1;
+      attempts++;
+    }
+
     const [q] = await db
       .insert(predictionQuestions)
       .values({
@@ -462,7 +472,7 @@ export async function POST(req: NextRequest) {
         category,
         status: "open",
         resolution: null,
-        seedValue: Math.floor(Math.random() * 100) + 1,
+        seedValue,
         oddsYes,
         oddsNo,
         volume: 0,
@@ -474,6 +484,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, question: q });
   }
 
+  if (action === "editQuestion") {
+    const questionId = Number(body.questionId);
+    const question = String(body.question ?? "").trim();
+    const category = String(body.category ?? "Sport").trim();
+    const oddsYes = roundNumber(body.oddsYes) ?? 1.9;
+    const oddsNo = roundNumber(body.oddsNo) ?? 1.8;
+    const [updated] = await db
+      .update(predictionQuestions)
+      .set({
+        ...(question ? { question } : {}),
+        category,
+        oddsYes,
+        oddsNo,
+      })
+      .where(eq(predictionQuestions.id, questionId))
+      .returning();
+    if (!updated) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
+    return NextResponse.json({ ok: true, question: updated });
+  }
+
   if (action === "resolveQuestion") {
     const questionId = Number(body.questionId);
     const resolution = body.resolution === "yes" ? "yes" : "no";
@@ -483,6 +513,17 @@ export async function POST(req: NextRequest) {
       .where(eq(predictionQuestions.id, questionId))
       .returning();
     if (!q) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "reopenQuestion") {
+    const questionId = Number(body.questionId);
+    const [updated] = await db
+      .update(predictionQuestions)
+      .set({ status: "open", resolution: null, resolvedAt: null })
+      .where(eq(predictionQuestions.id, questionId))
+      .returning();
+    if (!updated) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
     return NextResponse.json({ ok: true });
   }
 

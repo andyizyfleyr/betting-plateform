@@ -33,6 +33,7 @@ function dayLabel(iso: string) {
 export default function ParisPage() {
   const { betsVersion, pendingCount, user, toast } = useApp();
   const [tab, setTab] = useState<Tab>("ongoing");
+  const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction">("all");
   const [bets, setBets] = useState<ClientBet[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -104,8 +105,14 @@ export default function ParisPage() {
     };
   }, [load]);
 
-  const ongoing = useMemo(() => (bets ?? []).filter((b) => b.status === "pending"), [bets]);
-  const finished = useMemo(() => (bets ?? []).filter((b) => b.status !== "pending"), [bets]);
+  const filtered = useMemo(() => {
+    const all = bets ?? [];
+    if (kindFilter === "all") return all;
+    return all.filter((b) => b.kind === kindFilter);
+  }, [bets, kindFilter]);
+
+  const ongoing = useMemo(() => filtered.filter((b) => b.status === "pending"), [filtered]);
+  const finished = useMemo(() => filtered.filter((b) => b.status !== "pending"), [filtered]);
 
   const staked = ongoing.reduce((s, b) => s + b.stake, 0);
   const potential = ongoing.reduce((s, b) => s + b.potentialWin, 0);
@@ -211,6 +218,28 @@ export default function ParisPage() {
         <MiniStat label="À gagner" value={eur(potential)} accent />
         <MiniStat label="Réussite" value={settled ? `${winRate}%` : "—"} />
       </motion.div>
+
+      {/* Filtres type de pari */}
+      <div className="mt-4 flex gap-1.5 overflow-x-auto no-scrollbar">
+        {[
+          { key: "all", label: "Tous" },
+          { key: "sport", label: "Sport" },
+          { key: "prediction", label: "Pronostics" },
+        ].map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setKindFilter(key as "all" | "sport" | "prediction")}
+            className={cn(
+              "rounded-full border px-3.5 py-1.5 font-display text-[11.5px] transition-colors",
+              kindFilter === key
+                ? "border-betclic-red bg-betclic-red text-white"
+                : "border-edge bg-white text-mist"
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Onglets soulignés */}
       <div className="mt-5 flex border-b border-edge">

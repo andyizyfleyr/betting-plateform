@@ -143,6 +143,7 @@ export const predictionBets = pgTable("prediction_bets", {
   stake: doublePrecision("stake").notNull(),
   potentialWin: doublePrecision("potential_win").notNull(),
   status: text("status").notNull().default("pending"),
+  cashOutAmount: doublePrecision("cash_out_amount"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
 });
 

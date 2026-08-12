@@ -243,6 +243,9 @@ function QuestionCard({
   const { oddsFormat } = useApp();
   const expired = new Date(q.resolvesAt).getTime() <= Date.now();
 
+  const totalVotes = q.yesCount + q.noCount;
+  const pYes = totalVotes > 0 ? Math.round((q.yesCount / totalVotes) * 100) : 50;
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 18 }}
@@ -254,6 +257,11 @@ function QuestionCard({
         <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
           {q.category.toUpperCase()}
         </span>
+        {q.myBet && (
+          <span className="rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold text-betclic-red">
+            Votre pari : {q.myBet.selection === "yes" ? "Oui" : "Non"} ({eur(q.myBet.stake)})
+          </span>
+        )}
         <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-semibold text-dim">
           <Clock className="h-3 w-3" strokeWidth={2.2} />
           {expired ? "Paris clos" : formatResolves(q.resolvesAt)}
@@ -264,9 +272,17 @@ function QuestionCard({
         {q.question}
       </h3>
 
-      <p className="mt-1.5 text-[10.5px] font-medium text-dim">
-        Volume · {eur(q.volume)} · {q.yesCount} Oui / {q.noCount} Non
-      </p>
+      <div className="mt-2">
+        <div className="flex justify-between text-[10.5px] font-medium text-dim">
+          <span>Oui {pYes}%</span>
+          <span>Volume · {eur(q.volume)}</span>
+          <span>Non {100 - pYes}%</span>
+        </div>
+        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-elev flex">
+          <div className="bg-betclic-red transition-all duration-500" style={{ width: `${pYes}%` }} />
+          <div className="bg-mist/30 flex-1" />
+        </div>
+      </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <SideButton
@@ -275,6 +291,7 @@ function QuestionCard({
           oddsFormat={oddsFormat}
           onClick={expired ? undefined : () => onSelect("yes")}
           disabled={expired}
+          selected={q.myBet?.selection === "yes"}
         />
         <SideButton
           label="Non"
@@ -282,6 +299,7 @@ function QuestionCard({
           oddsFormat={oddsFormat}
           onClick={expired ? undefined : () => onSelect("no")}
           disabled={expired}
+          selected={q.myBet?.selection === "no"}
         />
       </div>
     </motion.article>
@@ -291,6 +309,8 @@ function QuestionCard({
 function ResolvedCard({ q, index }: { q: ClientPrediction; index: number }) {
   const { oddsFormat } = useApp();
   const answer = q.resolution === "yes" ? "Oui" : "Non";
+  const userWon = q.myBet && q.myBet.status === "won";
+  const userLost = q.myBet && q.myBet.status === "lost";
 
   return (
     <motion.article
@@ -303,6 +323,11 @@ function ResolvedCard({ q, index }: { q: ClientPrediction; index: number }) {
         <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
           {q.category.toUpperCase()}
         </span>
+        {q.myBet && (
+          <span className={cn("rounded-md px-2 py-0.5 font-display text-[9px] font-bold", userWon ? "bg-win/10 text-win" : userLost ? "bg-bittersweet/10 text-bittersweet" : "bg-elev text-mist")}>
+            Votre pari : {q.myBet.selection === "yes" ? "Oui" : "Non"} ({userWon ? `+${eur(q.myBet.potentialWin)}` : "Perdu"})
+          </span>
+        )}
         <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-semibold text-win">
           <CheckCircle2 className="h-3 w-3" strokeWidth={2.4} />
           Résolue · {answer}
@@ -318,8 +343,8 @@ function ResolvedCard({ q, index }: { q: ClientPrediction; index: number }) {
       </p>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <SideButton label="Oui" odds={q.oddsYes} oddsFormat={oddsFormat} winner={answer === "Oui"} />
-        <SideButton label="Non" odds={q.oddsNo} oddsFormat={oddsFormat} winner={answer === "Non"} />
+        <SideButton label="Oui" odds={q.oddsYes} oddsFormat={oddsFormat} winner={answer === "Oui"} selected={q.myBet?.selection === "yes"} />
+        <SideButton label="Non" odds={q.oddsNo} oddsFormat={oddsFormat} winner={answer === "Non"} selected={q.myBet?.selection === "no"} />
       </div>
     </motion.article>
   );
@@ -332,6 +357,7 @@ function SideButton({
   onClick,
   winner,
   disabled,
+  selected,
 }: {
   label: string;
   odds: number;
@@ -339,6 +365,7 @@ function SideButton({
   onClick?: () => void;
   winner?: boolean;
   disabled?: boolean;
+  selected?: boolean;
 }) {
   return (
     <motion.button
@@ -353,7 +380,9 @@ function SideButton({
             ? "border-win/50 bg-win/10"
             : winner === false
               ? "border-edge bg-elev/50 text-mist"
-              : "border-edge bg-white text-ink active:border-betclic-red/50 active:bg-betclic-red/5"
+              : selected
+                ? "border-betclic-red bg-betclic-red/10 text-betclic-red"
+                : "border-edge bg-white text-ink active:border-betclic-red/50 active:bg-betclic-red/5"
       )}
     >
       <span className="flex min-w-0 items-center gap-1.5">
