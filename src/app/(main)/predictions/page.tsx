@@ -73,19 +73,10 @@ export default function PredictionsPage() {
     () => (questions ?? []).filter((q) => q.status === "open"),
     [questions]
   );
-  const resolved = useMemo(
-    () => (questions ?? []).filter((q) => q.status === "resolved"),
-    [questions]
-  );
 
   const visibleOpen = useMemo(
     () => (category === "Tous" ? open : open.filter((q) => q.category === category)),
     [open, category]
-  );
-  const visibleResolved = useMemo(
-    () =>
-      category === "Tous" ? resolved : resolved.filter((q) => q.category === category),
-    [resolved, category]
   );
 
   const visibleOpenVolume = useMemo(
@@ -179,17 +170,6 @@ export default function PredictionsPage() {
                 </div>
               </section>
             )}
-
-            {visibleResolved.length > 0 && (
-              <section className="mt-6">
-                <SectionHeader label="Résolues" count={visibleResolved.length} />
-                <div className="mt-2.5 flex flex-col gap-2.5">
-                  {visibleResolved.map((q, i) => (
-                    <ResolvedCard key={q.id} q={q} index={i} />
-                  ))}
-                </div>
-              </section>
-            )}
           </motion.div>
         </AnimatePresence>
       )}
@@ -268,7 +248,7 @@ function QuestionCard({
         </span>
       </div>
 
-      <h3 className="mt-2.5 font-display text-[15px] font-bold leading-snug tracking-tight">
+      <h3 className="mt-2.5 font-display text-[12px] font-bold leading-snug tracking-tight">
         {q.question}
       </h3>
 
@@ -301,50 +281,6 @@ function QuestionCard({
           disabled={expired}
           selected={q.myBet?.selection === "no"}
         />
-      </div>
-    </motion.article>
-  );
-}
-
-function ResolvedCard({ q, index }: { q: ClientPrediction; index: number }) {
-  const { oddsFormat } = useApp();
-  const answer = q.resolution === "yes" ? "Oui" : "Non";
-  const userWon = q.myBet && q.myBet.status === "won";
-  const userLost = q.myBet && q.myBet.status === "lost";
-
-  return (
-    <motion.article
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: Math.min(index * 0.06, 0.4), ease: [0.22, 1, 0.36, 1] }}
-      className="glass-card rounded-[20px] p-4"
-    >
-      <div className="flex items-center gap-2">
-        <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
-          {q.category.toUpperCase()}
-        </span>
-        {q.myBet && (
-          <span className={cn("rounded-md px-2 py-0.5 font-display text-[9px] font-bold", userWon ? "bg-win/10 text-win" : userLost ? "bg-bittersweet/10 text-bittersweet" : "bg-elev text-mist")}>
-            Votre pari : {q.myBet.selection === "yes" ? "Oui" : "Non"} ({userWon ? `+${eur(q.myBet.potentialWin)}` : "Perdu"})
-          </span>
-        )}
-        <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] font-semibold text-win">
-          <CheckCircle2 className="h-3 w-3" strokeWidth={2.4} />
-          Résolue · {answer}
-        </span>
-      </div>
-
-      <h3 className="mt-2.5 font-display text-[15px] font-bold leading-snug tracking-tight">
-        {q.question}
-      </h3>
-
-      <p className="mt-1.5 text-[10.5px] font-medium text-dim">
-        Volume · {eur(q.volume)} · {q.yesCount} Oui / {q.noCount} Non
-      </p>
-
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <SideButton label="Oui" odds={q.oddsYes} oddsFormat={oddsFormat} winner={answer === "Oui"} selected={q.myBet?.selection === "yes"} />
-        <SideButton label="Non" odds={q.oddsNo} oddsFormat={oddsFormat} winner={answer === "Non"} selected={q.myBet?.selection === "no"} />
       </div>
     </motion.article>
   );
