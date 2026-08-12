@@ -200,190 +200,185 @@ export async function ensureSeeded() {
     );
   `);
 
-  // Questions de prédiction (idempotent, indépendant des matchs).
-  const [{ predictionCount }] = await db
-    .select({ predictionCount: sql<number>`count(*)::int` })
-    .from(predictionQuestions);
+  // Questions de prédiction (idempotent, insère les nouvelles questions si elles manquent).
+  const day = 86_400_000;
+  const hour = 3_600_000;
+  const now = Date.now();
+  const endOfMonth = new Date(now);
+  endOfMonth.setDate(1);
+  endOfMonth.setMonth(endOfMonth.getMonth() + 1, 0);
+  endOfMonth.setHours(18, 0, 0, 0);
 
-  if (predictionCount === 0) {
-    const day = 86_400_000;
-    const hour = 3_600_000;
-    const now = Date.now();
-    const endOfMonth = new Date(now);
-    endOfMonth.setDate(1);
-    endOfMonth.setMonth(endOfMonth.getMonth() + 1, 0);
-    endOfMonth.setHours(18, 0, 0, 0);
+  const questionsSeed = [
+    {
+      question: "Le PSG remportera-t-il son prochain match de Ligue 1 ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 7,
+      oddsYes: 1.55,
+      oddsNo: 2.3,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 3 * day),
+    },
+    {
+      question: "L'équipe de France gagnera-t-elle son prochain match officiel ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 21,
+      oddsYes: 1.45,
+      oddsNo: 2.6,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 6 * hour),
+    },
+    {
+      question: "Le prix de l'essence baissera-t-il avant la fin du mois ?",
+      category: "Actus",
+      status: "open" as const,
+      seedValue: 42,
+      oddsYes: 2.1,
+      oddsNo: 1.68,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: endOfMonth,
+    },
+    {
+      question: "Le Bitcoin dépassera-t-il 100 000 € avant la fin de l'année ?",
+      category: "Crypto",
+      status: "open" as const,
+      seedValue: 13,
+      oddsYes: 1.4,
+      oddsNo: 2.75,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(Date.UTC(2026, 11, 31, 18, 0, 0)),
+    },
+    {
+      question: "Le prochain Ballon d'Or sera-t-il remporté par un joueur de Liga ?",
+      category: "Culture",
+      status: "open" as const,
+      seedValue: 29,
+      oddsYes: 1.9,
+      oddsNo: 1.8,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 120 * day),
+    },
+    {
+      question: "L'OM terminera-t-il dans le top 3 de la Ligue 1 ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 55,
+      oddsYes: 2.2,
+      oddsNo: 1.62,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 21 * day),
+    },
+    {
+      question: "L'Ether (ETH) atteindra-t-il un nouveau record historique ce trimestre ?",
+      category: "Crypto",
+      status: "open" as const,
+      seedValue: 108,
+      oddsYes: 1.75,
+      oddsNo: 2.05,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 45 * day),
+    },
+    {
+      question: "Le Real Madrid remportera-t-il la Ligue des Champions cette saison ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 142,
+      oddsYes: 2.5,
+      oddsNo: 1.5,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 60 * day),
+    },
+    {
+      question: "Apple lancera-t-il un iPhone entièrement pliable cette année ?",
+      category: "Actus",
+      status: "open" as const,
+      seedValue: 204,
+      oddsYes: 3.1,
+      oddsNo: 1.35,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 90 * day),
+    },
+    {
+      question: "Un équipage habité posera-t-il le pied sur Mars avant 2030 ?",
+      category: "Actus",
+      status: "open" as const,
+      seedValue: 312,
+      oddsYes: 4.5,
+      oddsNo: 1.18,
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 365 * day),
+    },
+    {
+      question: "Mbappé marquera-t-il lors du prochain Classico ?",
+      category: "Sport",
+      status: "resolved" as const,
+      resolution: "yes" as const,
+      seedValue: 3,
+      oddsYes: 1.9,
+      oddsNo: 1.8,
+      volume: 340,
+      yesCount: 12,
+      noCount: 4,
+      resolvesAt: new Date(now - 2 * day),
+      resolvedAt: new Date(now - 2 * day),
+    },
+  ];
 
-    const questionsSeed = [
-      {
-        question: "Le PSG remportera-t-il son prochain match de Ligue 1 ?",
-        category: "Sport",
-        status: "open" as const,
-        seedValue: 7,
-        oddsYes: 1.55,
-        oddsNo: 2.3,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 3 * day),
-      },
-      {
-        question: "L'équipe de France gagnera-t-elle son prochain match officiel ?",
-        category: "Sport",
-        status: "open" as const,
-        seedValue: 21,
-        oddsYes: 1.45,
-        oddsNo: 2.6,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 6 * hour),
-      },
-      {
-        question: "Le prix de l'essence baissera-t-il avant la fin du mois ?",
-        category: "Actus",
-        status: "open" as const,
-        seedValue: 42,
-        oddsYes: 2.1,
-        oddsNo: 1.68,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: endOfMonth,
-      },
-      {
-        question: "Le Bitcoin dépassera-t-il 100 000 € avant la fin de l'année ?",
-        category: "Crypto",
-        status: "open" as const,
-        seedValue: 13,
-        oddsYes: 1.4,
-        oddsNo: 2.75,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(Date.UTC(2026, 11, 31, 18, 0, 0)),
-      },
-      {
-        question: "Le prochain Ballon d'Or sera-t-il remporté par un joueur de Liga ?",
-        category: "Culture",
-        status: "open" as const,
-        seedValue: 29,
-        oddsYes: 1.9,
-        oddsNo: 1.8,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 120 * day),
-      },
-      {
-        question: "L'OM terminera-t-il dans le top 3 de la Ligue 1 ?",
-        category: "Sport",
-        status: "open" as const,
-        seedValue: 55,
-        oddsYes: 2.2,
-        oddsNo: 1.62,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 21 * day),
-      },
-      {
-        question: "L'Ether (ETH) atteindra-t-il un nouveau record historique ce trimestre ?",
-        category: "Crypto",
-        status: "open" as const,
-        seedValue: 108,
-        oddsYes: 1.75,
-        oddsNo: 2.05,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 45 * day),
-      },
-      {
-        question: "Le Real Madrid remportera-t-il la Ligue des Champions cette saison ?",
-        category: "Sport",
-        status: "open" as const,
-        seedValue: 142,
-        oddsYes: 2.5,
-        oddsNo: 1.5,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 60 * day),
-      },
-      {
-        question: "Apple lancera-t-il un iPhone entièrement pliable cette année ?",
-        category: "Actus",
-        status: "open" as const,
-        seedValue: 204,
-        oddsYes: 3.1,
-        oddsNo: 1.35,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 90 * day),
-      },
-      {
-        question: "Un équipage habité posera-t-il le pied sur Mars avant 2030 ?",
-        category: "Actus",
-        status: "open" as const,
-        seedValue: 312,
-        oddsYes: 4.5,
-        oddsNo: 1.18,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt: new Date(now + 365 * day),
-      },
-      {
-        question: "Mbappé marquera-t-il lors du prochain Classico ?",
-        category: "Sport",
-        status: "resolved" as const,
-        resolution: "yes" as const,
-        seedValue: 3,
-        oddsYes: 1.9,
-        oddsNo: 1.8,
-        volume: 340,
-        yesCount: 12,
-        noCount: 4,
-        resolvesAt: new Date(now - 2 * day),
-        resolvedAt: new Date(now - 2 * day),
-      },
-    ];
+  for (const q of questionsSeed) {
+    const [existing] = await db
+      .select({ id: predictionQuestions.id })
+      .from(predictionQuestions)
+      .where(eq(predictionQuestions.question, q.question));
 
-    const insertedQuestions = await db
-      .insert(predictionQuestions)
-      .values(questionsSeed)
-      .returning();
-
-    // Paris démo sur la question résolue (base fraîche uniquement) : net +8 € pour le joueur.
-    if (freshDb) {
-      const resolved = insertedQuestions.find((q) => q.status === "resolved");
-      if (resolved) {
+    if (!existing) {
+      const [inserted] = await db.insert(predictionQuestions).values(q).returning();
+      if (q.status === "resolved" && freshDb) {
         await db.insert(predictionBets).values([
           {
             userId: 1,
-            questionId: resolved.id,
+            questionId: inserted.id,
             selection: "yes",
             selectionLabel: "Oui",
-            question: resolved.question,
-            category: resolved.category,
-            odds: resolved.oddsYes,
+            question: inserted.question,
+            category: inserted.category,
+            odds: inserted.oddsYes,
             stake: 20,
-            potentialWin: round2(20 * resolved.oddsYes),
+            potentialWin: round2(20 * inserted.oddsYes),
             status: "won",
             placedAt: new Date(now - 3 * day),
           },
           {
             userId: 1,
-            questionId: resolved.id,
+            questionId: inserted.id,
             selection: "no",
             selectionLabel: "Non",
-            question: resolved.question,
-            category: resolved.category,
-            odds: resolved.oddsNo,
+            question: inserted.question,
+            category: inserted.category,
+            odds: inserted.oddsNo,
             stake: 10,
-            potentialWin: round2(10 * resolved.oddsNo),
+            potentialWin: round2(10 * inserted.oddsNo),
             status: "lost",
             placedAt: new Date(now - 2.5 * day),
           },
