@@ -42,6 +42,39 @@ export function resolveQuestion(q: {
   return mulberry32(q.seedValue)() < impliedYes(q.oddsYes, q.oddsNo) ? "yes" : "no";
 }
 
+export async function settleQuestion(questionId: number, resolution: "yes" | "no") {
+  await db.transaction(async (tx) => {
+    await tx
+      .update(predictionQuestions)
+      .set({ status: "resolved", resolution, resolvedAt: new Date() })
+      .where(eq(predictionQuestions.id, questionId));
+
+    const pending = await tx
+      .select()
+      .from(predictionBets)
+      .where(
+        and(
+          eq(predictionBets.questionId, questionId),
+          eq(predictionBets.status, "pending")
+        )
+      );
+
+    for (const b of pending) {
+      const won = b.selection === resolution;
+      await tx
+        .update(predictionBets)
+        .set({ status: won ? "won" : "lost" })
+        .where(eq(predictionBets.id, b.id));
+      if (won) {
+        await tx
+          .update(appUser)
+          .set({ balance: sql`${appUser.balance} + ${b.potentialWin}` })
+          .where(eq(appUser.id, b.userId));
+      }
+    }
+  });
+}
+
 /**
  * Résout les questions échues (resolvesAt dépassé) et règle les paris en attente.
  * Transactionnel : statut question, statut des paris et crédit des gains atomiques.
@@ -59,36 +92,7 @@ export async function settleResolvedQuestions() {
 
   for (const q of due) {
     const resolution = resolveQuestion(q);
-    await db.transaction(async (tx) => {
-      await tx
-        .update(predictionQuestions)
-        .set({ status: "resolved", resolution, resolvedAt: new Date() })
-        .where(eq(predictionQuestions.id, q.id));
-
-      const pending = await tx
-        .select()
-        .from(predictionBets)
-        .where(
-          and(
-            eq(predictionBets.questionId, q.id),
-            eq(predictionBets.status, "pending")
-          )
-        );
-
-      for (const b of pending) {
-        const won = b.selection === resolution;
-        await tx
-          .update(predictionBets)
-          .set({ status: won ? "won" : "lost" })
-          .where(eq(predictionBets.id, b.id));
-        if (won) {
-          await tx
-            .update(appUser)
-            .set({ balance: sql`${appUser.balance} + ${b.potentialWin}` })
-            .where(eq(appUser.id, b.userId));
-        }
-      }
-    });
+    await settleQuestion(q.id, resolution);
   }
 }
 

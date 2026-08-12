@@ -6,6 +6,7 @@ import { appUser, bets, deposits, matches, predictionBets, predictionQuestions }
 import { publicUser } from "@/lib/auth";
 import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
+import { settleQuestion } from "@/lib/predictions";
 import { settleMatchBets } from "@/lib/settle";
 import { MANUAL_MINUTE_REAL_MS } from "@/db/engine";
 import { STALE_LATENCY_MS } from "@/lib/risk";
@@ -508,11 +509,12 @@ export async function POST(req: NextRequest) {
     const questionId = Number(body.questionId);
     const resolution = body.resolution === "yes" ? "yes" : "no";
     const [q] = await db
-      .update(predictionQuestions)
-      .set({ status: "resolved", resolution, resolvedAt: new Date() })
-      .where(eq(predictionQuestions.id, questionId))
-      .returning();
+      .select()
+      .from(predictionQuestions)
+      .where(eq(predictionQuestions.id, questionId));
     if (!q) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
+
+    await settleQuestion(questionId, resolution);
     return NextResponse.json({ ok: true });
   }
 
