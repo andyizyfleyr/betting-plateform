@@ -136,7 +136,7 @@ export default function PredictionsPage() {
             <div key={i} className="shimmer h-[150px] rounded-[20px]" />
           ))}
         </div>
-      ) : visibleOpen.length === 0 && visibleResolved.length === 0 ? (
+      ) : visibleOpen.length === 0 ? (
         <div className="mt-16 flex flex-col items-center text-center">
           <div className="glass-card grid h-16 w-16 place-items-center rounded-full text-dim">
             <TrendingUp className="h-6 w-6" strokeWidth={1.8} />
