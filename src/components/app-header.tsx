@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Gamepad2, Gauge, Ticket, Zap } from "lucide-react";
+import { Ticket, Zap } from "lucide-react";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
 import { eur } from "@/lib/format";
@@ -12,7 +12,7 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl">
       <div className="flex h-12 items-center justify-between px-3.5">
-        <Link href="/matchs" className="group flex items-center gap-2">
+        <Link href="/predictions" className="group flex items-center gap-2">
           <span className="relative grid h-7 w-7 rotate-45 place-items-center rounded-[7px] bg-betclic-red shadow-[0_6px_20px_-4px_rgba(225,0,20,0.55)] transition-transform duration-300 group-active:scale-90 group-active:rotate-[135deg]">
             <Zap className="h-3.5 w-3.5 -rotate-45 fill-white text-white transition-transform duration-300 group-active:-rotate-[135deg]" strokeWidth={2.4} />
           </span>
@@ -25,22 +25,6 @@ export function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-1.5">
-          <Link
-            href="/tap"
-            className="glass-pill grid h-8 w-8 place-items-center rounded-lg transition-transform active:scale-90"
-            aria-label="Jeu Tap Win"
-          >
-            <Gamepad2 className="h-4 w-4 text-mist" strokeWidth={2} />
-          </Link>
-
-          <Link
-            href="/accelerator"
-            className="glass-pill grid h-8 w-8 place-items-center rounded-lg transition-transform active:scale-90"
-            aria-label="Jeu Accelerator Pro"
-          >
-            <Gauge className="h-4 w-4 text-mist" strokeWidth={2} />
-          </Link>
-
           <Link
             href="/paris"
             className="glass-pill relative grid h-8 w-8 place-items-center rounded-lg transition-transform active:scale-90"

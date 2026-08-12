@@ -35,7 +35,7 @@ function AuthInner() {
 
   useEffect(() => {
     if (user) {
-      router.replace("/matchs");
+      router.replace("/predictions");
     }
   }, [user, router]);
 
@@ -62,7 +62,7 @@ function AuthInner() {
           description: "Vous êtes connecté",
         });
         const from = params.get("from");
-        router.push(from && from.startsWith("/") ? from : "/matchs");
+        router.push(from && from.startsWith("/") ? from : "/predictions");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Une erreur est survenue");
       } finally {
@@ -126,7 +126,7 @@ function AuthInner() {
         </h1>
         <p className="mt-2 text-[12.5px] leading-relaxed text-mist">
           {mode === "login"
-            ? "Connecte-toi pour retrouver tes paris, ton solde et tes matchs en direct."
+            ? "Connecte-toi pour retrouver tes paris, ton solde et tes prédictions."
             : "Reçois 250,00 € de bonus et mets en jeu tes premières prédictions."}
         </p>
       </motion.div>

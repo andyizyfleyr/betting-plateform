@@ -295,18 +295,18 @@ export default function ParisPage() {
             <p className="mt-5 font-display text-lg font-bold">
               {tab === "ongoing" ? "Aucun pari en cours" : "Aucun pari terminé"}
             </p>
-            <p className="mt-1.5 max-w-[230px] text-[13px] leading-relaxed text-dim">
-              {tab === "ongoing"
-                ? "Explorez les matchs du jour et placez votre premier pari."
-                : "Vos tickets gagnés et perdus apparaîtront ici."}
-            </p>
-            <Link
-              href="/matchs"
-              className="mt-6 flex items-center gap-2 rounded-full bg-[linear-gradient(135deg,#E10014,#FB6962)] px-5 py-3 font-display text-[13px] font-bold text-white shadow-[0_10px_30px_-10px_rgba(225,0,20,0.55)] transition-transform active:scale-95"
-            >
-              Voir les matchs
-              <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-            </Link>
+             <p className="mt-1.5 max-w-[230px] text-[13px] leading-relaxed text-dim">
+               {tab === "ongoing"
+                 ? "Explorez les prédictions et placez votre premier pari."
+                 : "Vos tickets gagnés et perdus apparaîtront ici."}
+             </p>
+             <Link
+               href="/predictions"
+               className="mt-6 flex items-center gap-2 rounded-full bg-[linear-gradient(135deg,#E10014,#FB6962)] px-5 py-3 font-display text-[13px] font-bold text-white shadow-[0_10px_30px_-10px_rgba(225,0,20,0.55)] transition-transform active:scale-95"
+             >
+               Explorer les prédictions
+               <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+             </Link>
           </motion.div>
         </AnimatePresence>
       ) : (

@@ -475,7 +475,7 @@ export default function TapPage() {
               )}
             </button>
           </div>
-          <Link href="/matchs" className={s.btnIcon} title="Retour à l'accueil">
+          <Link href="/predictions" className={s.btnIcon} title="Retour à l'accueil">
             <Trophy className="h-4 w-4" strokeWidth={2} />
           </Link>
         </div>
