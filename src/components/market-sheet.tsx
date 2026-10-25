@@ -12,7 +12,6 @@ import { cn, formatOdds } from "@/lib/format";
 
 const POLL_INTERVAL = 5_000;
 
-/** Feuille des marchés façon 1xbet : accordéon mobile avec market-box / market-head / odd-btn. */
 export function MarketSheet() {
   const { marketMatch, closeMarkets, openBet, oddsFormat, target } = useApp();
   const dragControls = useDragControls();
@@ -21,11 +20,11 @@ export function MarketSheet() {
   const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
   const match = liveMatch && marketMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
 
-  // Refresh en temps réel de la feuille ouverte (buts, minute, cotes).
   useEffect(() => {
     if (!marketMatch) return;
     let active = true;
     const poll = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
         const r = await api.matches();
         if (!active) return;
@@ -73,86 +72,88 @@ export function MarketSheet() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.2 }}
             onClick={closeMarkets}
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
           />
 
           <motion.div
-            initial={{ y: "102%" }}
+            initial={{ y: "100%" }}
             animate={{ y: 0 }}
-            exit={{ y: "102%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 34 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", stiffness: 380, damping: 36 }}
             drag="y"
             dragListener={false}
             dragControls={dragControls}
             dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.55 }}
+            dragElastic={{ top: 0, bottom: 0.5 }}
             onDragEnd={(_, info) => {
-              if (info.offset.y > 130 || info.velocity.y > 600) closeMarkets();
+              if (info.offset.y > 120 || info.velocity.y > 550) closeMarkets();
             }}
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[94dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-edge bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.3)]"
+            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col overflow-hidden rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
           >
-            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-betclic-red/70 to-transparent" />
-
-            {/* En-tête match, collant — zone de drag pour mobile */}
+            {/* En-tête match */}
             <div
               onPointerDown={(e) => dragControls.start(e)}
-              className="shrink-0 cursor-grab border-b border-edge px-4 pb-3 pt-1 active:cursor-grabbing"
+              className="shrink-0 cursor-grab border-b border-edge px-4 pb-3 pt-2 active:cursor-grabbing"
             >
-              <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-elev" />
-              <div className="mt-2 flex items-center justify-between">
+              <div className="mx-auto h-1 w-10 rounded-full bg-edge" />
+              <div className="mt-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <p className="font-display text-[16px] font-bold tracking-tight">Marchés</p>
-                  <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-bold text-mist">
+                  <h2 className="font-display text-[16px] font-bold tracking-tight text-ink">
+                    Tous les marchés
+                  </h2>
+                  <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold text-mist">
                     {groups.length}
                   </span>
                 </div>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
+                <button
+                  type="button"
                   onClick={closeMarkets}
-                  className="glass-pill grid h-8 w-8 place-items-center rounded-full text-mist active:scale-90"
+                  className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
                   aria-label="Fermer"
                 >
                   <X className="h-4 w-4" strokeWidth={2.2} />
-                </motion.button>
+                </button>
               </div>
 
-              <div className="mt-2.5 flex items-center gap-2.5 rounded-2xl border border-edge bg-elev px-3 py-2.5">
+              <div className="mt-2.5 flex items-center gap-3 rounded-2xl bg-elev/70 px-3 py-2.5">
                 <div className="flex shrink-0 -space-x-2">
-                  <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" className="ring-2 ring-card" />
-                  <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="sm" className="ring-2 ring-card" />
+                  <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" className="ring-2 ring-white" />
+                  <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="sm" className="ring-2 ring-white" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-display text-[12.5px] font-semibold leading-tight">
-                    {match.homeTeam} <span className="text-dim">–</span> {match.awayTeam}
+                  <p className="truncate font-display text-[13px] font-semibold text-ink">
+                    {match.homeTeam} – {match.awayTeam}
                   </p>
-                  <p className="mt-0.5 flex items-center gap-1.5 truncate text-[10.5px] font-medium text-mist">
+                  <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-mist">
                     <SportIcon sport={match.sport} className="h-3 w-3 shrink-0 text-dim" />
                     {match.league}
                   </p>
                 </div>
                 {isLive ? (
-                  <span className="shrink-0 font-display text-[16px] font-bold tabular-nums text-betclic-red">
-                    {match.homeScore ?? 0}–{match.awayScore ?? 0}
-                  </span>
+                  <div className="shrink-0 text-right">
+                    <p className="font-display text-[16px] font-bold tabular-nums text-betclic-red">
+                      {match.homeScore ?? 0}–{match.awayScore ?? 0}
+                    </p>
+                    <p className="text-[10px] font-bold text-betclic-red">{match.minute ?? "LIVE"}</p>
+                  </div>
                 ) : (
-                  <span className="shrink-0 text-right font-semibold leading-tight">
-                    <KickoffCountdown startsAt={match.startsAt} />
-                  </span>
+                  <KickoffCountdown startsAt={match.startsAt} />
                 )}
               </div>
             </div>
 
-            {/* Accordéon des marchés – style market-box */}
-            <div className="no-scrollbar flex flex-1 flex-col gap-2.5 overflow-y-auto px-2.5 pb-4 pt-2.5">
-              {groups.map((g, i) => (
+            {/* Liste des marchés */}
+            <div className="no-scrollbar flex flex-1 flex-col gap-2 overflow-y-auto px-3.5 pb-5 pb-safe pt-3">
+              {groups.map((g) => (
                 <AccordionItem
                   key={g.key}
                   group={g}
                   isLive={isLive}
                   suspended={suspended}
                   open={openKey === g.key}
+                  oddsFormat={oddsFormat}
                   onToggle={() => setOpenKey((k) => (k === g.key ? null : g.key))}
                   onPick={(outcome) =>
                     openBet({
@@ -167,10 +168,6 @@ export function MarketSheet() {
                 />
               ))}
             </div>
-
-            <p className="shrink-0 border-t border-edge px-4 py-2 text-center text-[9.5px] text-dim">
-              Cotes fournies à titre indicatif · 18+ · Jouez de manière responsable.
-            </p>
           </motion.div>
         </div>
       )}
@@ -183,6 +180,7 @@ function AccordionItem({
   isLive,
   suspended,
   open,
+  oddsFormat,
   onToggle,
   onPick,
 }: {
@@ -190,66 +188,68 @@ function AccordionItem({
   isLive: boolean;
   suspended: boolean;
   open: boolean;
+  oddsFormat: "decimal" | "fractional";
   onToggle: () => void;
-  onPick: (o: MarketGroup["outcomes"][number]) => void;
+  onPick: (o: MarketOutcome) => void;
 }) {
   const twoCols = !group.rows && (group.outcomes.length === 2 || group.outcomes.length === 4);
 
   return (
-    <div
-      className={cn(
-        "rounded-2xl border border-edge bg-elev p-2.5 transition-colors duration-200",
-        open && "border-betclic-red/20 bg-white",
-      )}
-    >
+    <div className="overflow-hidden rounded-2xl border border-edge bg-elev/50">
       <button
+        type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="relative mb-1.5 flex w-full items-center pr-[30px] text-left"
+        className="flex w-full items-center justify-between px-3.5 py-3 text-left"
       >
-        <span className="text-[11px] font-bold leading-tight tracking-tight text-ink">
-          {group.label}
-        </span>
+        <span className="font-display text-[12.5px] font-bold text-ink">{group.label}</span>
         <ChevronDown
           className={cn(
-            "absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 transition-transform duration-300",
-            open ? "text-betclic-red" : "-rotate-90 text-dim",
+            "h-4 w-4 shrink-0 text-dim transition-transform duration-200",
+            open && "rotate-180 text-ink"
           )}
-          strokeWidth={2.5}
+          strokeWidth={2.2}
         />
       </button>
 
-      {group.rows ? (
-        <div
-          className={cn(
-            "flex flex-col gap-[5px] overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
-            open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0",
-          )}
-        >
-          {group.rows.map((row) => (
-            <div key={row.label} className="flex items-center gap-1.5">
-              <span className="w-10 shrink-0 text-right font-display text-[9.5px] font-bold tabular-nums text-mist">
-                {row.label}
-              </span>
-              <div className="grid flex-1 grid-cols-2 gap-[5px]">
-                {row.outcomes.map((o) => (
-                  <OutcomeCell key={o.key} o={o} isLive={isLive} suspended={suspended} onPick={() => onPick(o)} />
-                ))}
-              </div>
+      {open && (
+        <div className="border-t border-edge/70 bg-white p-2.5">
+          {group.rows ? (
+            <div className="flex flex-col gap-1.5">
+              {group.rows.map((row) => (
+                <div key={row.label} className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-right font-display text-[11px] font-bold tabular-nums text-mist">
+                    {row.label}
+                  </span>
+                  <div className="grid flex-1 grid-cols-2 gap-1.5">
+                    {row.outcomes.map((o) => (
+                      <OutcomeCell
+                        key={o.key}
+                        o={o}
+                        isLive={isLive}
+                        suspended={suspended}
+                        oddsFormat={oddsFormat}
+                        onPick={() => onPick(o)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : (
-        <div
-          className={cn(
-            "grid gap-[5px] overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
-            open ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0",
-            twoCols ? "grid-cols-2" : "grid-cols-3",
+          ) : (
+            <div className={cn("grid gap-1.5", twoCols ? "grid-cols-2" : "grid-cols-3")}>
+              {group.outcomes.map((o) => (
+                <OutcomeCell
+                  key={o.key}
+                  o={o}
+                  isLive={isLive}
+                  suspended={suspended}
+                  oddsFormat={oddsFormat}
+                  onPick={() => onPick(o)}
+                />
+              ))}
+            </div>
           )}
-        >
-          {group.outcomes.map((o) => (
-            <OutcomeCell key={o.key} o={o} isLive={isLive} suspended={suspended} onPick={() => onPick(o)} />
-          ))}
         </div>
       )}
     </div>
@@ -260,40 +260,38 @@ function OutcomeCell({
   o,
   isLive,
   suspended,
+  oddsFormat,
   onPick,
 }: {
   o: MarketOutcome;
   isLive: boolean;
   suspended: boolean;
+  oddsFormat: "decimal" | "fractional";
   onPick: () => void;
 }) {
-  const { oddsFormat } = useApp();
-
   return (
-    <motion.button
-      whileTap={suspended ? undefined : { scale: 0.97 }}
+    <button
+      type="button"
       onClick={suspended ? undefined : onPick}
       aria-disabled={suspended}
       className={cn(
-        "flex h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl border border-edge bg-elev px-1 py-2 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-colors active:border-betclic-red/60 active:bg-betclic-red/[0.14]",
+        "flex h-11 items-center justify-between rounded-xl border border-edge bg-elev/70 px-2.5 transition-colors active:scale-[0.98] active:border-betclic-red/50 active:bg-betclic-red/8",
         suspended && "cursor-not-allowed opacity-50"
       )}
     >
-      <span className="max-w-full truncate text-[9.5px] font-semibold uppercase tracking-wider text-dim">
-        {o.short}
-      </span>
+      <span className="truncate pr-1 text-[11px] font-semibold text-mist">{o.short}</span>
       {suspended ? (
-        <Lock className="h-3.5 w-3.5 text-dim" strokeWidth={2.6} />
+        <Lock className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.3} />
       ) : (
         <span
           className={cn(
-            "font-display text-[13px] font-extrabold tabular-nums leading-none",
+            "shrink-0 font-display text-[13px] font-bold tabular-nums",
             isLive ? "text-betclic-red" : "text-ink"
           )}
         >
           {formatOdds(o.odds, oddsFormat)}
         </span>
       )}
-    </motion.button>
+    </button>
   );
 }

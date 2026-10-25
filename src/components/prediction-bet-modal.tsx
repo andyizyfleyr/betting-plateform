@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ArrowRight, Check, Loader2, Ticket, TrendingUp, X } from "lucide-react";
+import { ArrowRight, Check, Loader2, Plus, Ticket, X } from "lucide-react";
 import { api, type ClientPrediction } from "@/lib/api";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
-const CHIP_AMOUNTS = [5, 10, 25, 50];
+const QUICK_STAKES = [5, 10, 25, 50];
 
 interface Props {
   question: ClientPrediction | null;
@@ -17,49 +17,8 @@ interface Props {
   onClose: () => void;
 }
 
-/** Feuille de pari Oui/Non pour les questions de prédiction. */
 export function PredictionBetModal({ question, selection, onClose }: Props) {
-  const router = useRouter();
-  const { balance, setBalance, bumpBets, oddsFormat, toast } = useApp();
-  const dragControls = useDragControls();
-  const [cents, setCents] = useState(2500);
-  const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
-  const [error, setError] = useState<string | null>(null);
-  const [placed, setPlaced] = useState<{ id: number; potentialWin: number } | null>(null);
-  const [liveOdds, setLiveOdds] = useState<number | null>(null);
-
   const open = question !== null && selection !== null;
-
-  useEffect(() => {
-    if (open) {
-      setCents(2500);
-      setPhase("input");
-      setError(null);
-      setPlaced(null);
-    }
-  }, [open, question?.id, selection]);
-
-  useEffect(() => {
-    setLiveOdds(null);
-    if (!open || !question || !selection) return;
-    let active = true;
-    const poll = async () => {
-      try {
-        const r = await api.predictions();
-        if (!active) return;
-        const fresh = r.questions.find((q) => q.id === question.id);
-        if (fresh) {
-          setLiveOdds(selection === "yes" ? fresh.oddsYes : fresh.oddsNo);
-        }
-      } catch {}
-    };
-    poll();
-    const id = setInterval(poll, 5000);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [open, question?.id, selection]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -68,19 +27,90 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
     };
   }, [open]);
 
-  const baseOdds = selection === "yes" ? question?.oddsYes ?? 0 : question?.oddsNo ?? 0;
+  return (
+    <AnimatePresence>
+      {open && question && selection && (
+        <PredictionBetSheet
+          key={`${question.id}-${selection}`}
+          question={question}
+          selection={selection}
+          onClose={onClose}
+        />
+      )}
+    </AnimatePresence>
+  );
+}
+
+function PredictionBetSheet({
+  question,
+  selection,
+  onClose,
+}: {
+  question: ClientPrediction;
+  selection: "yes" | "no";
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const { balance, setBalance, bumpBets, oddsFormat, toast, openRecharge } = useApp();
+  const dragControls = useDragControls();
+
+  const [stakeText, setStakeText] = useState(() => {
+    const def = balance > 0 ? Math.min(10, Math.max(1, Math.floor(balance))) : 10;
+    return String(def);
+  });
+  const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
+  const [error, setError] = useState<string | null>(null);
+  const [placed, setPlaced] = useState<{
+    id: number;
+    potentialWin: number;
+    stake: number;
+    odds: number;
+  } | null>(null);
+  const [liveOdds, setLiveOdds] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const poll = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const r = await api.predictions();
+        if (!active) return;
+        const fresh = r.questions.find((q) => q.id === question.id);
+        if (fresh) {
+          setLiveOdds(selection === "yes" ? fresh.oddsYes : fresh.oddsNo);
+        }
+      } catch {
+        /* silencieux */
+      }
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [question.id, selection]);
+
+  const baseOdds = selection === "yes" ? question.oddsYes : question.oddsNo;
   const odds = liveOdds ?? baseOdds;
-  const stake = cents / 100;
+  const parsed = Number(stakeText.replace(",", "."));
+  const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
   const overBalance = stake > balance;
+  const belowMin = stake > 0 && stake < 0.5;
   const payout = stake * odds;
   const profit = payout - stake;
 
-  const sliderMax = Math.max(1, Math.floor(balance));
-  const sliderValue = Math.min(stake, sliderMax);
-  const sliderPct = Math.min(100, (sliderValue / sliderMax) * 100);
+  const handleStakeInput = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9.,]/g, "");
+    const parts = cleaned.split(/[.,]/);
+    const normalized =
+      parts.length > 1 ? `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}` : parts[0];
+    setStakeText(normalized);
+    setError(null);
+  };
 
   const confirm = async () => {
-    if (!question || !selection || phase !== "input") return;
+    if (phase !== "input" || stake < 0.5 || overBalance) return;
     setPhase("loading");
     setError(null);
     try {
@@ -91,17 +121,18 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
       });
       setBalance(res.balance);
       bumpBets();
-      setPlaced({ id: res.bet.id, potentialWin: res.bet.potentialWin });
-      setPhase("success");
-      toast({
-        kind: "success",
-        title: "Prédiction placée !",
-        description: `${res.bet.selectionLabel} · ${eur(res.bet.stake)}`,
+      setPlaced({
+        id: res.bet.id,
+        potentialWin: res.bet.potentialWin,
+        stake: res.bet.stake,
+        odds: res.bet.odds,
       });
+      setPhase("success");
     } catch (e) {
       setPhase("input");
-      setError(e instanceof Error ? e.message : "Une erreur est survenue");
-      toast({ kind: "error", title: "Pari refusé", description: "Vérifiez votre mise" });
+      const msg = e instanceof Error ? e.message : "Une erreur est survenue";
+      setError(msg);
+      toast({ kind: "error", title: "Pari refusé", description: msg });
     }
   };
 
@@ -111,225 +142,232 @@ export function PredictionBetModal({ question, selection, onClose }: Props) {
   };
 
   return (
-    <AnimatePresence>
-      {open && question && selection && (
-        <div className="fixed inset-0 z-[70]">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            onClick={phase === "success" ? undefined : onClose}
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+    <div className="fixed inset-0 z-[70]">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={phase === "success" ? undefined : onClose}
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+      />
+
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", stiffness: 380, damping: 36 }}
+        drag={phase === "input" ? "y" : false}
+        dragListener={false}
+        dragControls={dragControls}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.y > 120 || info.velocity.y > 550) onClose();
+        }}
+        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] w-full max-w-[440px] flex-col overflow-hidden rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+      >
+        {phase === "success" && placed ? (
+          <SuccessView
+            betId={placed.id}
+            payout={placed.potentialWin}
+            stake={placed.stake}
+            odds={placed.odds}
+            question={question.question}
+            selection={selection}
+            onGoToBets={goToBets}
+            onContinue={onClose}
           />
+        ) : (
+          <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-2">
+            <div
+              onPointerDown={(e) => dragControls.start(e)}
+              className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing"
+            />
 
-          <motion.div
-            initial={{ y: "102%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "102%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 34 }}
-            drag={phase === "input" ? "y" : false}
-            dragListener={false}
-            dragControls={dragControls}
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.55 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 130 || info.velocity.y > 600) onClose();
-            }}
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[92dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-edge bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.3)]"
-          >
-            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-betclic-red/70 to-transparent" />
+            <div className="mt-3 flex items-center justify-between">
+              <h2 className="font-display text-[17px] font-bold tracking-tight text-ink">
+                Confirmer la prédiction
+              </h2>
+              <button
+                type="button"
+                onClick={onClose}
+                className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
+                aria-label="Fermer"
+              >
+                <X className="h-4 w-4" strokeWidth={2.2} />
+              </button>
+            </div>
 
-            {phase === "success" && placed ? (
-              <SuccessView
-                betId={placed.id}
-                payout={placed.potentialWin}
-                stake={stake}
-                odds={odds}
-                question={question.question}
-                selection={selection}
-                onGoToBets={goToBets}
-                onContinue={onClose}
-              />
-            ) : (
-              <div className="no-scrollbar overflow-y-auto px-4 pb-4 pb-safe">
-                <div
-                  onPointerDown={(e) => dragControls.start(e)}
-                  className="mx-auto mt-2 h-1 w-10 cursor-grab rounded-full bg-elev active:cursor-grabbing"
+            {/* Question & choix */}
+            <div className="mt-3 rounded-2xl border border-edge bg-elev/60 p-3">
+              <div className="flex items-center justify-between text-[11px] text-dim">
+                <span className="rounded-md bg-white px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
+                  {question.category}
+                </span>
+                <span>Clôture · {formatKickoff(question.resolvesAt)}</span>
+              </div>
+              <p className="mt-2 font-display text-[14px] font-semibold leading-snug text-ink">
+                {question.question}
+              </p>
+              <div className="mt-2.5 flex items-center justify-between rounded-xl border border-edge bg-white px-3 py-2">
+                <span className="text-[12.5px] font-semibold text-ink">
+                  Choix :{" "}
+                  <span className="text-betclic-red">{selection === "yes" ? "Oui" : "Non"}</span>
+                </span>
+                <span className="rounded-lg bg-betclic-red px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-white">
+                  {formatOdds(odds, oddsFormat)}
+                </span>
+              </div>
+            </div>
+
+            {/* Saisie directe de la mise */}
+            <div className="mt-3.5">
+              <div className="flex items-center justify-between text-[11.5px]">
+                <label htmlFor="pred-stake-input" className="font-semibold text-mist">
+                  Votre mise
+                </label>
+                <span className="text-dim">
+                  Solde : <strong className="font-semibold text-ink">{eur(balance)}</strong>
+                </span>
+              </div>
+
+              <div
+                className={cn(
+                  "mt-1.5 flex h-13 items-center rounded-2xl border bg-white px-3.5 transition-colors",
+                  overBalance || belowMin
+                    ? "border-betclic-red"
+                    : "border-edge focus-within:border-ink"
+                )}
+              >
+                <input
+                  id="pred-stake-input"
+                  type="text"
+                  inputMode="decimal"
+                  value={stakeText}
+                  onChange={(e) => handleStakeInput(e.target.value)}
+                  placeholder="0"
+                  className="w-full bg-transparent font-display text-[22px] font-bold tabular-nums text-ink outline-none placeholder:text-dim/50"
                 />
-
-                <div className="flex items-center justify-between pt-2.5">
-                  <h2 className="font-display text-base font-bold tracking-tight">
-                    Nouvelle prédiction
-                  </h2>
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={onClose}
-                    className="glass-pill grid h-8 w-8 place-items-center rounded-full text-mist active:scale-90"
-                    aria-label="Fermer"
+                {stakeText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStakeText("");
+                      setError(null);
+                    }}
+                    className="mr-2 rounded-md bg-elev px-2 py-1 text-[11px] font-semibold text-mist active:bg-edge"
                   >
-                    <X className="h-4 w-4" strokeWidth={2.2} />
-                  </motion.button>
-                </div>
+                    Effacer
+                  </button>
+                )}
+                <span className="font-display text-[18px] font-bold text-dim">€</span>
+              </div>
 
-                {/* Question + sélection */}
-                <div className="glass-card mt-2.5 rounded-2xl px-3.5 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9px] font-bold tracking-[0.16em] text-betclic-red">
-                      {question.category.toUpperCase()}
-                    </span>
-                    <span className="ml-auto text-[9.5px] font-medium text-dim">
-                      Résolution · {formatKickoff(question.resolvesAt)}
-                    </span>
-                  </div>
-                  <p className="mt-2 font-display text-[14px] font-bold leading-snug">
-                    {question.question}
-                  </p>
-                  <div className="mt-2.5 flex items-center justify-between rounded-lg bg-elev px-3 py-2">
-                    <span className="text-[12px] font-semibold text-ink">
-                      {selection === "yes" ? "Oui" : "Non"}
-                    </span>
-                    <span className="font-display text-[15px] font-bold tabular-nums text-betclic-red">
-                      {formatOdds(odds, oddsFormat)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Montant */}
-                <div className="mt-3 flex items-end justify-between px-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[9.5px] font-semibold tracking-[0.24em] text-dim">MISE</span>
-                    <div
+              <div className="mt-2 grid grid-cols-5 gap-1.5">
+                {QUICK_STAKES.map((amount) => {
+                  const active = stake === amount;
+                  return (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => {
+                        setStakeText(String(amount));
+                        setError(null);
+                      }}
                       className={cn(
-                        "flex items-baseline font-display text-[32px] font-bold leading-none tracking-tight tabular-nums",
-                        overBalance ? "text-betclic-red" : "text-ink"
+                        "h-9 rounded-xl border font-display text-[12.5px] font-bold transition-colors active:scale-95",
+                        active
+                          ? "border-ink bg-ink text-white"
+                          : "border-edge bg-elev text-ink"
                       )}
                     >
-                      {eur(stake)}
-                      <span className="caret-blink ml-1 inline-block h-7 w-[3px] translate-y-0.5 rounded bg-betclic-red" />
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setCents(0)}
-                    className="mb-0.5 text-[11px] font-medium text-dim underline-offset-2 active:underline"
-                  >
-                    Solde · {eur(balance)}
-                  </button>
-                </div>
-
-                {/* Jetons rapides */}
-                <div className="mt-2.5 grid grid-cols-5 gap-1.5">
-                  {CHIP_AMOUNTS.map((a) => (
-                    <motion.button
-                      key={a}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => setCents((c) => Math.min(c + a * 100, 9_999_999))}
-                      className="glass-pill rounded-lg py-1.5 font-display text-[12px] font-bold text-ink transition-colors active:border-betclic-red/50 active:bg-betclic-red/10 active:text-betclic-red"
-                    >
-                      +{a}€
-                    </motion.button>
-                  ))}
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => setCents(Math.floor(balance * 100))}
-                    className="rounded-lg border border-betclic-red/40 bg-betclic-red/10 py-1.5 font-display text-[12px] font-bold text-betclic-red"
-                  >
-                    MAX
-                  </motion.button>
-                </div>
-
-                {/* Curseur */}
-                <div className="mt-1.5">
-                  <input
-                    type="range"
-                    min={0}
-                    max={sliderMax}
-                    step={0.5}
-                    value={sliderValue}
-                    disabled={balance <= 0}
-                    onChange={(e) => setCents(Math.round(Number(e.target.value) * 100))}
-                    className="pulse-range"
-                    style={{ "--fill": `${sliderPct}%` } as CSSProperties}
-                    aria-label="Montant de la mise"
-                  />
-                  <div className="-mt-1 flex justify-between px-0.5 text-[9.5px] font-semibold text-dim">
-                    <span>0 €</span>
-                    <span>{eur(sliderMax)}</span>
-                  </div>
-                </div>
-
-                {/* Gain potentiel */}
-                <div className="mt-2.5 flex items-center justify-between px-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[9.5px] font-semibold tracking-[0.18em] text-dim">
-                      GAIN POTENTIEL
-                    </span>
-                    <span className="text-[10.5px] font-medium text-betclic-red">
-                      +{eur(Math.max(profit, 0))}
-                    </span>
-                  </div>
-                  <AnimatedNumber
-                    value={payout}
-                    format={eur}
-                    className="font-display text-[22px] font-bold tabular-nums text-betclic-red"
-                  />
-                </div>
-
-                <AnimatePresence>
-                  {overBalance && (
-                    <motion.p
-                      initial={{ opacity: 0, y: 3 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="mt-1.5 px-1 text-[11px] font-semibold text-betclic-red"
-                    >
-                      Solde insuffisant — rechargez ou réduisez la mise
-                    </motion.p>
-                  )}
-                  {error && (
-                    <motion.p
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
-                      exit={{ opacity: 0 }}
-                      className="mt-1.5 text-center text-[11px] font-semibold text-live"
-                    >
-                      {error}
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-
-                {/* CTA */}
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  disabled={stake <= 0 || overBalance || phase === "loading"}
-                  onClick={confirm}
-                  className={cn(
-                    "mt-2.5 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl font-display text-[14.5px] font-bold transition-opacity",
-                    stake > 0 && !overBalance
-                      ? "bg-[linear-gradient(135deg,#E10014,#FB6962)] text-white shadow-[0_14px_38px_-10px_rgba(225,0,20,0.6),inset_0_1px_0_rgba(255,255,255,0.4)]"
-                      : "bg-elev text-dim"
-                  )}
+                      {amount} €
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const maxVal = Math.min(500, Math.max(0, Math.floor(balance * 100) / 100));
+                    setStakeText(String(maxVal));
+                    setError(null);
+                  }}
+                  className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[12px] font-bold text-betclic-red active:scale-95"
                 >
-                  {phase === "loading" ? (
-                    <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.4} />
-                  ) : (
-                    <>
-                      Valider la prédiction
-                      <span className="opacity-60">·</span>
-                      {eur(stake)}
-                      <ArrowRight className="h-4 w-4" strokeWidth={2.6} />
-                    </>
-                  )}
-                </motion.button>
-                <p className="mt-1.5 text-center text-[9.5px] leading-snug text-dim">
-                  18+ · Jouer comporte des risques : endettement, isolement, dépendance.
-                </p>
+                  MAX
+                </button>
+              </div>
+            </div>
+
+            {overBalance && (
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
+                <span className="font-medium text-betclic-red">Solde insuffisant</span>
+                <button
+                  type="button"
+                  onClick={openRecharge}
+                  className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline underline-offset-2"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  Recharger
+                </button>
               </div>
             )}
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+
+            {belowMin && !overBalance && (
+              <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
+                Mise minimale : 0,50 €
+              </p>
+            )}
+
+            {error && !overBalance && (
+              <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+                {error}
+              </p>
+            )}
+
+            {/* Gain estimé */}
+            <div className="mt-3.5 flex items-center justify-between rounded-2xl bg-elev px-3.5 py-3">
+              <div>
+                <p className="text-[11px] font-semibold text-mist">Gain estimé (pool mutuel)</p>
+                <p className="text-[11px] font-medium text-win">
+                  Bénéfice net +{eur(Math.max(profit, 0))}
+                </p>
+              </div>
+              <AnimatedNumber
+                value={payout}
+                format={eur}
+                className="font-display text-[20px] font-bold tabular-nums text-win"
+              />
+            </div>
+
+            <button
+              type="button"
+              disabled={stake < 0.5 || overBalance || phase === "loading"}
+              onClick={confirm}
+              className={cn(
+                "mt-3.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
+                stake >= 0.5 && !overBalance
+                  ? "bg-betclic-red text-white shadow-sm"
+                  : "bg-elev text-dim"
+              )}
+            >
+              {phase === "loading" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
+                  Validation…
+                </>
+              ) : (
+                <>
+                  Valider {stake > 0 ? eur(stake) : "la prédiction"}
+                  <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </motion.div>
+    </div>
   );
 }
 
@@ -355,123 +393,61 @@ function SuccessView({
   const { oddsFormat } = useApp();
 
   return (
-    <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe">
-      <div className="flex flex-col items-center pt-8 text-center">
-        <div className="relative">
-          {[...Array(12)].map((_, i) => (
-            <motion.span
-              key={i}
-              className="absolute left-1/2 top-1/2 h-1.5 w-1.5 rounded-full"
-              style={{ background: i % 3 === 0 ? "#FB6962" : "var(--color-betclic-red)" }}
-              initial={{ x: -3, y: -3, scale: 1, opacity: 1 }}
-              animate={{
-                x: Math.cos((i / 12) * Math.PI * 2) * (70 + (i % 4) * 14),
-                y: Math.sin((i / 12) * Math.PI * 2) * (80 + (i % 3) * 16),
-                scale: 0.3,
-                opacity: 0,
-              }}
-              transition={{ duration: 1.1, delay: 0.18, ease: "easeOut" }}
-            />
-          ))}
-          <motion.div
-            initial={{ scale: 0, rotate: -30 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 16, delay: 0.1 }}
-            className="grid h-[72px] w-[72px] place-items-center rounded-full bg-[linear-gradient(135deg,#E10014,#FB6962)] shadow-[0_0_50px_-8px_rgba(225,0,20,0.75),inset_0_1px_0_rgba(255,255,255,0.5)]"
-          >
-            <Check className="h-8 w-8 text-white" strokeWidth={3} />
-          </motion.div>
+    <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-6">
+      <div className="flex flex-col items-center text-center">
+        <div className="grid h-14 w-14 place-items-center rounded-full bg-win/12 text-win">
+          <Check className="h-7 w-7" strokeWidth={2.8} />
         </div>
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
-          <h3 className="mt-6 font-display text-[22px] font-bold">Prédiction confirmée !</h3>
-          <p className="mt-1 text-[12px] text-mist">
-            Votre ticket est enregistré et suivi en temps réel
-          </p>
-        </motion.div>
+        <h3 className="mt-3 font-display text-[20px] font-bold text-ink">Prédiction validée</h3>
+        <p className="mt-0.5 text-[12.5px] text-mist">Ticket #{String(betId).padStart(5, "0")}</p>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.34 }}
-        className="glass-card relative mt-5 overflow-hidden rounded-2xl"
-      >
-        <span className="pointer-events-none absolute right-3 top-3 rotate-[8deg] rounded border border-betclic-red/50 px-1.5 py-0.5 font-display text-[8px] font-bold tracking-[0.18em] text-betclic-red/80">
-          CONFIRMÉ
-        </span>
-        <div className="px-3.5 pt-3">
-          <div className="flex items-center gap-2.5 pr-16">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-betclic-red/10 text-betclic-red">
-              <TrendingUp className="h-4 w-4" strokeWidth={2.2} />
-            </span>
-            <p className="min-w-0 flex-1 truncate font-display text-[13px] font-semibold">
-              {question}
+      <div className="mt-4 rounded-2xl border border-edge bg-elev/50 p-3.5">
+        <p className="font-display text-[13.5px] font-semibold leading-snug text-ink">{question}</p>
+        <p className="mt-1 text-[12px] font-medium text-mist">
+          Réponse choisie :{" "}
+          <strong className="text-ink">{selection === "yes" ? "Oui" : "Non"}</strong>
+        </p>
+
+        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-edge pt-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase text-dim">Mise</p>
+            <p className="mt-0.5 font-display text-[13.5px] font-bold tabular-nums text-ink">
+              {eur(stake)}
             </p>
           </div>
-          <div className="mt-2.5 flex items-center justify-between rounded-lg bg-elev px-3 py-2">
-            <span className="text-[12px] font-semibold text-ink">
-              {selection === "yes" ? "Oui" : "Non"}
-            </span>
-            <span className="font-display text-[14px] font-bold tabular-nums text-betclic-red">
-              {formatOdds(odds, oddsFormat)}
-            </span>
-          </div>
-        </div>
-
-        <div className="relative mx-3.5 mt-3 border-t border-dashed border-edge">
-          <span className="absolute -left-[24px] -top-[10px] h-5 w-5 rounded-full bg-surface" />
-          <span className="absolute -right-[24px] -top-[10px] h-5 w-5 rounded-full bg-surface" />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2 px-3.5 py-3">
           <div>
-            <p className="text-[8.5px] font-semibold tracking-[0.16em] text-dim">MISE</p>
-            <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums">{eur(stake)}</p>
-          </div>
-          <div>
-            <p className="text-[8.5px] font-semibold tracking-[0.16em] text-dim">COTE</p>
-            <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums">
+            <p className="text-[10px] font-semibold uppercase text-dim">Cote</p>
+            <p className="mt-0.5 font-display text-[13.5px] font-bold tabular-nums text-ink">
               {formatOdds(odds, oddsFormat)}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[8.5px] font-semibold tracking-[0.16em] text-dim">À GAGNER</p>
-            <p className="glow-betclic mt-0.5 font-display text-[13px] font-bold tabular-nums text-betclic-red">
+            <p className="text-[10px] font-semibold uppercase text-dim">Estimé</p>
+            <p className="mt-0.5 font-display text-[13.5px] font-bold tabular-nums text-win">
               {eur(payout)}
             </p>
           </div>
         </div>
+      </div>
 
-        <div className="flex items-center justify-between border-t border-dashed border-edge px-3.5 py-2.5">
-          <div className="barcode h-6 w-28 opacity-60" aria-hidden />
-          <p className="font-display text-[9px] font-semibold tracking-[0.22em] text-dim">
-            N° {String(betId).padStart(5, "0")}
-          </p>
-        </div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.42 }}
-        className="mt-4"
-      >
-        <motion.button
-          whileTap={{ scale: 0.97 }}
+      <div className="mt-4 flex flex-col gap-2">
+        <button
+          type="button"
           onClick={onGoToBets}
-          className="flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] font-display text-[14.5px] font-bold text-white shadow-[0_14px_38px_-10px_rgba(225,0,20,0.6),inset_0_1px_0_rgba(255,255,255,0.4)]"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[14px] font-bold text-white active:opacity-95"
         >
-          <Ticket className="h-4.5 w-4.5" strokeWidth={2.4} />
+          <Ticket className="h-4 w-4" strokeWidth={2.3} />
           Voir mes paris
-        </motion.button>
-        <motion.button
-          whileTap={{ scale: 0.97 }}
+        </button>
+        <button
+          type="button"
           onClick={onContinue}
-          className="glass-card mt-2 flex h-11 w-full items-center justify-center rounded-xl font-display text-[13px] font-semibold text-ink active:bg-elev"
+          className="flex h-11 w-full items-center justify-center rounded-2xl border border-edge bg-white font-display text-[13px] font-semibold text-ink active:bg-elev"
         >
-          Continuer à prédire
-        </motion.button>
-      </motion.div>
+          Continuer
+        </button>
+      </div>
     </div>
   );
 }

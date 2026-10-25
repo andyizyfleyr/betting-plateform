@@ -2,26 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
 import { SlidersHorizontal, Ticket, TrendingUp, Trophy } from "lucide-react";
 import { useApp } from "./providers";
 import { cn } from "@/lib/format";
 
 const ITEMS = [
   { href: "/predictions", label: "Prédictions", Icon: TrendingUp },
+  { href: "/matchs", label: "Matchs", Icon: Trophy },
   { href: "/paris", label: "Mes paris", Icon: Ticket },
-  { href: "/parametres", label: "Réglages", Icon: SlidersHorizontal },
-];
+  { href: "/parametres", label: "Compte", Icon: SlidersHorizontal },
+] as const;
 
-/** Barre attachée — reste collée en bas de l'écran sur mobile. */
 export function BottomNav() {
   const pathname = usePathname();
   const { pendingCount } = useApp();
 
   return (
-    <nav className="sticky bottom-0 z-40 w-full">
+    <nav className="sticky bottom-0 z-40 w-full border-t border-edge bg-white/98 backdrop-blur-md">
       <div
-        className="relative flex border-t border-edge bg-white/95 pb-safe backdrop-blur-2xl"
+        className="pb-safe grid grid-cols-4"
         style={{
           paddingLeft: "env(safe-area-inset-left, 0px)",
           paddingRight: "env(safe-area-inset-right, 0px)",
@@ -34,34 +33,29 @@ export function BottomNav() {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className="relative flex flex-1 flex-col items-center gap-1 rounded-lg pb-2.5 pt-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-betclic-red/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              className="relative flex min-h-[56px] flex-col items-center justify-center gap-1 py-2 transition-colors active:bg-elev/60"
             >
               {active && (
-                <motion.span
-                  layoutId="nav-line"
-                  initial={false}
-                  transition={{ type: "spring", stiffness: 520, damping: 36 }}
-                  className="absolute inset-x-0 top-0 mx-auto h-[3px] w-12 rounded-b-full bg-betclic-red shadow-[0_4px_14px_rgba(225,0,20,0.55)]"
-                />
+                <span className="absolute inset-x-0 top-0 mx-auto h-[2.5px] w-8 rounded-b-full bg-betclic-red" />
               )}
               <span className="relative">
                 <Icon
                   className={cn(
-                    "h-[19px] w-[19px] transition-colors duration-200",
-                    active ? "text-betclic-red" : "text-mist"
+                    "h-[20px] w-[20px] transition-colors",
+                    active ? "text-betclic-red" : "text-dim"
                   )}
-                  strokeWidth={active ? 2.4 : 2}
+                  strokeWidth={active ? 2.4 : 1.9}
                 />
                 {href === "/paris" && pendingCount > 0 && (
-                  <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-md bg-betclic-red px-1 font-display text-[9px] font-bold leading-none text-white">
+                  <span className="absolute -right-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-betclic-red px-1 font-display text-[9.5px] font-bold leading-none text-white">
                     {pendingCount > 99 ? "99+" : pendingCount}
                   </span>
                 )}
               </span>
               <span
                 className={cn(
-                  "whitespace-nowrap font-display text-[10px] tracking-wide transition-colors duration-200",
-                  active ? "font-bold text-betclic-red" : "font-medium text-mist"
+                  "font-display text-[10.5px] leading-none",
+                  active ? "font-bold text-betclic-red" : "font-medium text-dim"
                 )}
               >
                 {label}

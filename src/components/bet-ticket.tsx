@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Check, HandCoins, Loader2, TrendingUp, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { SportIcon } from "./sport-icon";
@@ -9,8 +8,7 @@ import { TeamAvatar } from "./team-avatar";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 import { useApp } from "./providers";
 
-/** Ticket de pari façon "stub" : perforations, tampon, code-barres et cash-out live. */
-export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }) {
+export function BetTicket({ bet }: { bet: ClientBet; index?: number }) {
   const { oddsFormat, setBalance, bumpBets, toast } = useApp();
   const [confirming, setConfirming] = useState(false);
   const [cashing, setCashing] = useState(false);
@@ -47,186 +45,179 @@ export function BetTicket({ bet, index = 0 }: { bet: ClientBet; index?: number }
   };
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 22 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: Math.min(index * 0.07, 0.45), ease: [0.22, 1, 0.36, 1] }}
-      whileTap={{ scale: 0.985 }}
+    <article
       className={cn(
-        "glass-card relative overflow-hidden rounded-[20px]",
+        "glass-card overflow-hidden rounded-2xl p-3.5 transition-opacity",
         won && "ticket-won",
-        lost && "opacity-70"
+        lost && "opacity-75"
       )}
     >
-      {live && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(22rem 9rem at 85% -20%, rgba(255,77,94,0.11), transparent 60%)",
-          }}
-        />
-      )}
-
-      {/* Tampon de résultat */}
-      {(won || lost || cashed) && (
-        <span
-          className={cn(
-            "pointer-events-none absolute right-3 top-6 rotate-[-10deg] rounded-md border-2 px-2 py-0.5 font-display text-[11px] font-bold tracking-[0.2em]",
-            won && "border-win text-win",
-            lost && "border-betclic-red text-betclic-red",
-            cashed && "border-sky-500 text-sky-600"
+      {/* En-tête : ligue/catégorie + badge de statut */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
+          {isPrediction ? (
+            <TrendingUp className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
+          ) : (
+            <SportIcon sport={bet.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
           )}
-        >
-          {won ? "PAYÉ" : lost ? "PERDU" : "CASH-OUT"}
-        </span>
-      )}
+          <span className="truncate">{bet.league}</span>
+          <span className="text-dim">·</span>
+          <span className="shrink-0 text-[11px] text-dim">{formatPlacedAt(bet.placedAt)}</span>
+        </div>
 
-      {/* En-tête du ticket */}
-      <div className="relative flex items-center gap-2 px-3.5 pt-3.5">
-        {isPrediction ? (
-          <>
-            <TrendingUp className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-            <span className="font-display text-[10px] font-bold tracking-[0.16em] text-betclic-red">
-              PRÉDICTION
-            </span>
-            <span className="text-dim">·</span>
-            <span className="truncate text-[11px] font-medium text-mist">{bet.league}</span>
-          </>
-        ) : (
-          <>
-            <SportIcon sport={bet.sport} className="h-3.5 w-3.5 text-dim" />
-            <span className="truncate text-[11px] font-medium text-mist">{bet.league}</span>
-          </>
-        )}
-{!won && !lost && !cashed && (
-          <span
-            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-md bg-betclic-red/15 px-2.5 py-1 font-display text-[9.5px] font-bold tracking-[0.14em] text-betclic-red"
-          >
-            {live && <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />}
-            {live ? `DIRECT · ${bet.matchMinute}` : "EN COURS"}
-          </span>
-        )}
+        <StatusPill status={bet.status} live={live} minute={bet.matchMinute} />
       </div>
 
-      {/* Question / équipes + sélection */}
-      <div className="relative px-3.5 pt-3.5">
+      {/* Événement */}
+      <div className="mt-2.5">
         {isPrediction ? (
-          <div>
-            <p className="font-display text-[14.5px] font-semibold leading-snug">{bet.question}</p>
-            <p className="mt-1 text-[11px] text-dim">
-              {bet.league} · {formatPlacedAt(bet.placedAt)}
-            </p>
-          </div>
+          <p className="font-display text-[14.5px] font-semibold leading-snug text-ink">
+            {bet.question}
+          </p>
         ) : (
-          <div className="flex items-center gap-3">
-            <div className="flex -space-x-2.5">
-              <TeamAvatar name={bet.homeTeam} size="sm" className="ring-2 ring-card" />
-              <TeamAvatar name={bet.awayTeam} size="sm" className="ring-2 ring-card" />
+          <div className="flex items-center gap-2.5">
+            <div className="flex shrink-0 -space-x-2">
+              <TeamAvatar name={bet.homeTeam} size="xs" className="ring-2 ring-white" />
+              <TeamAvatar name={bet.awayTeam} size="xs" className="ring-2 ring-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-display text-[14.5px] font-semibold leading-tight">
-                {bet.homeTeam} <span className="text-dim">vs</span> {bet.awayTeam}
+              <p className="truncate font-display text-[14px] font-semibold text-ink">
+                {bet.homeTeam} <span className="text-dim">–</span> {bet.awayTeam}
               </p>
-              <p className="mt-0.5 text-[11px] tabular-nums text-dim">
-                {bet.matchStatus === "live" && bet.matchHomeScore != null
-                  ? `${bet.matchHomeScore} - ${bet.matchAwayScore} · ${bet.matchMinute}`
-                  : bet.matchStatus === "finished" && bet.matchHomeScore != null
-                    ? `Score final · ${bet.matchHomeScore} - ${bet.matchAwayScore}`
-                    : bet.matchStartsAt
-                      ? formatKickoff(bet.matchStartsAt)
-                      : formatPlacedAt(bet.placedAt)}
-              </p>
+              {(bet.matchHomeScore != null || bet.matchStartsAt) && (
+                <p className="text-[11px] tabular-nums text-dim">
+                  {bet.matchStatus === "live" && bet.matchHomeScore != null
+                    ? `Score live : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
+                    : bet.matchStatus === "finished" && bet.matchHomeScore != null
+                      ? `Score final : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
+                      : bet.matchStartsAt
+                        ? formatKickoff(bet.matchStartsAt)
+                        : null}
+                </p>
+              )}
             </div>
           </div>
         )}
 
-        <div className="mt-3 flex items-center justify-between rounded-lg bg-elev px-3.5 py-2.5">
-          <span className="text-[12.5px] font-semibold text-ink">{bet.selectionLabel}</span>
-          <span className="font-display text-[15px] font-bold tabular-nums text-betclic-red">
+        {/* Sélection choisie */}
+        <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
+          <span className="truncate pr-2 text-[12.5px] font-semibold text-ink">
+            {bet.selectionLabel}
+          </span>
+          <span className="shrink-0 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
             {formatOdds(bet.odds, oddsFormat)}
           </span>
         </div>
       </div>
 
-      {/* Séparateur perforé */}
-      <div className="relative mx-3.5 mt-3.5 border-t border-dashed border-edge">
-        <span className="absolute -left-[25px] -top-[11px] h-[22px] w-[22px] rounded-full bg-ink shadow-[inset_-1px_0_0_rgba(0,0,0,0.075)]" />
-        <span className="absolute -right-[25px] -top-[11px] h-[22px] w-[22px] rounded-full bg-ink shadow-[inset_1px_0_0_rgba(0,0,0,0.075)]" />
-      </div>
-
       {/* Montants */}
-      <div className="relative grid grid-cols-3 gap-2 px-3.5 py-3">
-        <Amount label="MISE" value={eur(bet.stake)} tone="neutral" />
-        <Amount label="COTE" value={formatOdds(bet.odds, oddsFormat)} tone="neutral" />
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-edge pt-2.5">
+        <Amount label="Mise" value={eur(bet.stake)} tone="neutral" />
+        <Amount label="Cote" value={formatOdds(bet.odds, oddsFormat)} tone="neutral" />
         {won ? (
-          <Amount label="GAIN REÇU" value={`+${eur(bet.potentialWin)}`} tone="win" align="right" />
+          <Amount label="Gain reçu" value={`+${eur(bet.potentialWin)}`} tone="win" align="right" />
         ) : lost ? (
-          <Amount label="PERDU" value={`-${eur(bet.stake)}`} tone="lost" align="right" />
+          <Amount label="Résultat" value={`-${eur(bet.stake)}`} tone="lost" align="right" />
         ) : cashed ? (
           <Amount
-            label="ENCAISSÉ"
+            label="Encaissé"
             value={`+${eur(bet.cashOutAmount ?? 0)}`}
             tone="cash"
             align="right"
           />
         ) : (
-          <Amount label="À GAGNER" value={eur(bet.potentialWin)} tone="pot" align="right" />
+          <Amount label="Gain max" value={eur(bet.potentialWin)} tone="pot" align="right" />
         )}
       </div>
 
-      {/* Cash-out live */}
+      {/* Cash-out */}
       {canCashOut && (
-        <div className="relative px-3.5 pb-3">
+        <div className="mt-3">
           {confirming ? (
-            <div className="flex items-center gap-2 rounded-2xl border border-bittersweet/30 bg-bittersweet/[0.08] px-3 py-2">
-              <p className="flex-1 text-[11px] font-medium text-bittersweet/90">
-                Confirmer l'encaissement ?
+            <div className="flex items-center gap-2 rounded-xl border border-edge bg-elev p-2">
+              <p className="flex-1 pl-1 text-[12px] font-medium text-ink">
+                Encaisser {eur(bet.cashOut!)} ?
               </p>
-              <motion.button
-                whileTap={{ scale: 0.94 }}
+              <button
+                type="button"
                 onClick={doCashOut}
                 disabled={cashing}
-                className="flex h-8 items-center gap-1 rounded-full bg-bittersweet px-3 font-display text-[11px] font-bold text-white disabled:opacity-60"
+                className="flex h-8 items-center gap-1 rounded-lg bg-betclic-red px-3 font-display text-[12px] font-bold text-white disabled:opacity-60"
               >
                 {cashing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.6} />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} />
                 ) : (
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.8} />
+                  <Check className="h-3.5 w-3.5" strokeWidth={2.6} />
                 )}
-                Oui
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.94 }}
+                Confirmer
+              </button>
+              <button
+                type="button"
                 onClick={() => setConfirming(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-elev text-mist"
+                className="grid h-8 w-8 place-items-center rounded-lg bg-white text-mist border border-edge"
                 aria-label="Annuler"
               >
-                <X className="h-3.5 w-3.5" strokeWidth={2.4} />
-              </motion.button>
+                <X className="h-3.5 w-3.5" strokeWidth={2.2} />
+              </button>
             </div>
           ) : (
-            <motion.button
-              whileTap={{ scale: 0.97 }}
+            <button
+              type="button"
               onClick={() => setConfirming(true)}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] font-display text-[12.5px] font-bold text-white shadow-[0_10px_26px_-12px_rgba(225,0,20,0.7)]"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-ink font-display text-[12.5px] font-bold text-white active:opacity-90"
             >
-              <HandCoins className="h-4 w-4" strokeWidth={2.2} />
-              Encaisser · {eur(bet.cashOut!)}
-            </motion.button>
+              <HandCoins className="h-4 w-4" strokeWidth={2.1} />
+              Cash-out · {eur(bet.cashOut!)}
+            </button>
           )}
         </div>
       )}
+    </article>
+  );
+}
 
-      {/* Pied stub : code-barres */}
-      <div className="relative flex items-center justify-between border-t border-dashed border-edge px-3.5 py-2.5">
-        <div className="barcode h-6 w-28 opacity-60" aria-hidden />
-        <p className="font-display text-[9px] font-semibold tracking-[0.22em] text-dim">
-          N° {String(bet.id).padStart(5, "0")} · {formatPlacedAt(bet.placedAt).toUpperCase()}
-        </p>
-      </div>
-    </motion.article>
+function StatusPill({
+  status,
+  live,
+  minute,
+}: {
+  status: ClientBet["status"];
+  live: boolean;
+  minute: string | null;
+}) {
+  if (status === "won") {
+    return (
+      <span className="shrink-0 rounded-full bg-win/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-win">
+        Gagné
+      </span>
+    );
+  }
+  if (status === "lost") {
+    return (
+      <span className="shrink-0 rounded-full bg-elev px-2.5 py-0.5 font-display text-[10.5px] font-semibold text-dim">
+        Perdu
+      </span>
+    );
+  }
+  if (status === "cashed") {
+    return (
+      <span className="shrink-0 rounded-full bg-sky-500/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-sky-700">
+        Cash-out
+      </span>
+    );
+  }
+  if (live) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-betclic-red/10 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-betclic-red">
+        <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+        Direct {minute ?? ""}
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 rounded-full bg-elev px-2.5 py-0.5 font-display text-[10.5px] font-semibold text-ink">
+      En cours
+    </span>
   );
 }
 
@@ -243,14 +234,14 @@ function Amount({
 }) {
   return (
     <div className={align === "right" ? "text-right" : "text-left"}>
-      <p className="text-[9px] font-semibold tracking-[0.16em] text-dim">{label}</p>
+      <p className="text-[10px] font-medium text-dim">{label}</p>
       <p
         className={cn(
           "mt-0.5 font-display text-[13.5px] font-bold tabular-nums",
-          tone === "win" && "text-betclic-red",
-          tone === "lost" && "text-mist",
-          tone === "pot" && "text-betclic-red",
-          tone === "cash" && "text-bittersweet",
+          tone === "win" && "text-win",
+          tone === "lost" && "text-dim",
+          tone === "pot" && "text-ink",
+          tone === "cash" && "text-sky-700",
           tone === "neutral" && "text-ink"
         )}
       >

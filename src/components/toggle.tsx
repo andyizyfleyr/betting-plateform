@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { cn } from "@/lib/format";
 
 export function Toggle({
@@ -20,17 +19,15 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-[30px] w-[52px] shrink-0 rounded-full transition-colors duration-300",
-        checked ? "bg-betclic-red" : "bg-elev",
+        "relative h-7 w-12 shrink-0 rounded-full border transition-colors duration-200",
+        checked ? "border-betclic-red bg-betclic-red" : "border-edge bg-elev",
         disabled && "opacity-50"
       )}
     >
-      <motion.span
-        layout
-        transition={{ type: "spring", stiffness: 550, damping: 32 }}
+      <span
         className={cn(
-          "absolute top-[3px] h-6 w-6 rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.35)]",
-          checked ? "left-[23px]" : "left-[3px]"
+          "absolute top-[2px] h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform duration-200",
+          checked ? "translate-x-[22px]" : "translate-x-[2px]"
         )}
       />
     </button>
