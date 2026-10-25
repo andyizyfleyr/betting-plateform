@@ -295,6 +295,8 @@ export interface ComboLeg {
   title: string;
   homeTeam?: string;
   awayTeam?: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   market: string;
   selection: string;
   selectionLabel: string;

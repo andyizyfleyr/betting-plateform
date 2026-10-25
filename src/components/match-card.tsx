@@ -234,6 +234,8 @@ export function MatchCard({
           stats={match.realStats}
           homeTeam={match.homeTeam}
           awayTeam={match.awayTeam}
+          homeLogo={match.homeLogo}
+          awayLogo={match.awayLogo}
           htHomeScore={match.htHomeScore}
           htAwayScore={match.htAwayScore}
           compact
@@ -389,6 +391,10 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
           matchId: match.id,
           matchSource: match.source,
           title: `${match.homeTeam} – ${match.awayTeam}`,
+          homeTeam: match.homeTeam,
+          awayTeam: match.awayTeam,
+          homeLogo: match.homeLogo,
+          awayLogo: match.awayLogo,
           league: match.league,
           market: "result",
           selection: c.key,

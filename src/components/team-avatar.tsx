@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { teamLogo } from "@/lib/team-logos";
+import { useMemo, useState } from "react";
+import { teamLogoCandidates } from "@/lib/team-logos";
 import { cn, initials, teamHue } from "@/lib/format";
 
 const SIZES = {
+  "2xs": { box: "h-6 w-6 rounded-md text-[8.5px]", pad: "p-0.5" },
   xs: { box: "h-7 w-7 rounded-lg text-[9.5px]", pad: "p-1" },
   sm: { box: "h-8 w-8 rounded-[10px] text-[10.5px]", pad: "p-[5px]" },
   md: { box: "h-11 w-11 rounded-xl text-[12px]", pad: "p-1.5" },
   lg: { box: "h-13 w-13 rounded-2xl text-[14px]", pad: "p-1.5" },
 } as const;
 
+export type TeamAvatarSize = keyof typeof SIZES;
+
 /**
- * Affiche l'écusson officiel du club avec bascule automatique :
- * CDN officiel (teamLogo) → URL fournie en base (logo) → blason monogramme.
+ * Affiche l'écusson officiel du club avec bascule automatique multi-CDN :
+ * blason ESPN / URL officielle → CDN de secours API-Sports → monogramme déterministe.
  */
 export function TeamAvatar({
   name,
@@ -23,18 +26,20 @@ export function TeamAvatar({
 }: {
   name: string;
   logo?: string | null;
-  size?: "xs" | "sm" | "md" | "lg";
+  size?: TeamAvatarSize;
   className?: string;
 }) {
-  const [failedUrls, setFailedUrls] = useState<Record<string, true>>({});
-  const s = SIZES[size];
-  const hue = teamHue(name);
+  const candidates = useMemo(() => teamLogoCandidates(name, logo), [name, logo]);
+  const sourcesKey = candidates.join("|");
 
-  const primary = teamLogo(name);
-  const candidates = [primary, logo].filter(
-    (u, idx, arr): u is string => Boolean(u) && arr.indexOf(u) === idx
-  );
-  const activeUrl = candidates.find((u) => !failedUrls[u]) ?? null;
+  const [attempt, setAttempt] = useState<{ key: string; idx: number }>({
+    key: sourcesKey,
+    idx: 0,
+  });
+
+  const s = SIZES[size];
+  const idx = attempt.key === sourcesKey ? attempt.idx : 0;
+  const activeUrl = candidates[idx] ?? null;
 
   if (activeUrl) {
     return (
@@ -48,18 +53,25 @@ export function TeamAvatar({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          key={activeUrl}
           src={activeUrl}
           alt=""
           loading="lazy"
           decoding="async"
+          referrerPolicy="no-referrer"
           onError={() =>
-            setFailedUrls((prev) => (prev[activeUrl] ? prev : { ...prev, [activeUrl]: true }))
+            setAttempt((prev) => ({
+              key: sourcesKey,
+              idx: (prev.key === sourcesKey ? prev.idx : 0) + 1,
+            }))
           }
           className={cn("h-full w-full object-contain", s.pad)}
         />
       </span>
     );
   }
+
+  const hue = teamHue(name);
 
   return (
     <span

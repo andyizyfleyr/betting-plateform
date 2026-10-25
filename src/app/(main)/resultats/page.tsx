@@ -334,6 +334,8 @@ function MatchHistoryCard({
               stats={match.realStats}
               homeTeam={match.homeTeam}
               awayTeam={match.awayTeam}
+              homeLogo={match.homeLogo}
+              awayLogo={match.awayLogo}
               htHomeScore={match.htHome}
               htAwayScore={match.htAway}
               className="bg-white ring-1 ring-edge/70 border-0 shadow-none"

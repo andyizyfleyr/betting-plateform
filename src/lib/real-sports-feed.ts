@@ -721,11 +721,17 @@ export function parseEspnScoreboardEvent(
   const homeLogoUrl =
     asStr(homeTeamObj?.logo) ||
     asStr(asRec(asArr(homeTeamObj?.logos)[0])?.href) ||
-    teamLogo(homeTeam);
+    teamLogo(homeTeam) ||
+    (homeTeamId && /^\d+$/.test(homeTeamId)
+      ? `https://a.espncdn.com/i/teamlogos/soccer/500/${homeTeamId}.png`
+      : null);
   const awayLogoUrl =
     asStr(awayTeamObj?.logo) ||
     asStr(asRec(asArr(awayTeamObj?.logos)[0])?.href) ||
-    teamLogo(awayTeam);
+    teamLogo(awayTeam) ||
+    (awayTeamId && /^\d+$/.test(awayTeamId)
+      ? `https://a.espncdn.com/i/teamlogos/soccer/500/${awayTeamId}.png`
+      : null);
 
   const dateStr = asStr(comp.date || ev.date);
   const startsAt = dateStr ? new Date(dateStr) : new Date();
@@ -938,6 +944,15 @@ export function parseEspnSummaryPayload(
 
     const hMap = extractStatMap(asArr(boxHome?.statistics));
     const aMap = extractStatMap(asArr(boxAway?.statistics));
+    const boxHomeLogo =
+      asStr(asRec(boxHome?.team)?.logo) ||
+      asStr(asRec(asArr(asRec(boxHome?.team)?.logos)[0])?.href);
+    const boxAwayLogo =
+      asStr(asRec(boxAway?.team)?.logo) ||
+      asStr(asRec(asArr(asRec(boxAway?.team)?.logos)[0])?.href);
+    if (!base.homeLogo && boxHomeLogo) base.homeLogo = boxHomeLogo;
+    if (!base.awayLogo && boxAwayLogo) base.awayLogo = boxAwayLogo;
+
     const richStats = buildRealStatsFromMaps(
       hMap,
       aMap,

@@ -11,7 +11,7 @@ import {
   type LivePlayFrame,
   type MatchColors,
 } from "@/lib/live-telemetry";
-import { teamLogo } from "@/lib/team-logos";
+import { teamLogoCandidates } from "@/lib/team-logos";
 import { cn, initials } from "@/lib/format";
 
 type TrackerTab = "pitch" | "momentum" | "stats";
@@ -82,8 +82,14 @@ export function LiveMatchTracker({
   const activePinnedEvent: ClientMatchEvent | null =
     activePinIdx != null ? (events[activePinIdx] ?? null) : null;
 
-  const homeCrest = teamLogo(match.homeTeam) || match.homeLogo || null;
-  const awayCrest = teamLogo(match.awayTeam) || match.awayLogo || null;
+  const homeCrests = useMemo(
+    () => teamLogoCandidates(match.homeTeam, match.homeLogo),
+    [match.homeTeam, match.homeLogo]
+  );
+  const awayCrests = useMemo(
+    () => teamLogoCandidates(match.awayTeam, match.awayLogo),
+    [match.awayTeam, match.awayLogo]
+  );
 
   return (
     <div
@@ -141,8 +147,8 @@ export function LiveMatchTracker({
           match={match}
           frame={frame}
           colors={colors}
-          homeCrest={homeCrest}
-          awayCrest={awayCrest}
+          homeCrests={homeCrests}
+          awayCrests={awayCrests}
           isDanger={isDanger}
         />
       )}
@@ -247,15 +253,15 @@ function PitchRadarView({
   match,
   frame,
   colors,
-  homeCrest,
-  awayCrest,
+  homeCrests,
+  awayCrests,
   isDanger,
 }: {
   match: ClientMatch;
   frame: LivePlayFrame;
   colors: MatchColors;
-  homeCrest: string | null;
-  awayCrest: string | null;
+  homeCrests: string[];
+  awayCrests: string[];
   isDanger: boolean;
 }) {
   const bx = px(frame.ballX);
@@ -398,8 +404,8 @@ function PitchRadarView({
             <FootballSurface
               matchId={match.id}
               colors={colors}
-              homeCrest={homeCrest}
-              awayCrest={awayCrest}
+              homeCrests={homeCrests}
+              awayCrests={awayCrests}
               homeGoalFlash={homeGoalFlash}
               awayGoalFlash={awayGoalFlash}
               dangerSide={isDanger ? frame.side : "neutral"}
@@ -572,19 +578,56 @@ function PitchRadarView({
   );
 }
 
+function SvgClubCrest({
+  candidates,
+  x,
+  y,
+}: {
+  candidates: string[];
+  x: number;
+  y: number;
+}) {
+  const key = candidates.join("|");
+  const [attempt, setAttempt] = useState<{ key: string; idx: number }>({
+    key,
+    idx: 0,
+  });
+  const idx = attempt.key === key ? attempt.idx : 0;
+  const href = candidates[idx];
+  if (!href) return null;
+
+  return (
+    <image
+      href={href}
+      x={x}
+      y={y}
+      width="30"
+      height="30"
+      opacity="0.14"
+      preserveAspectRatio="xMidYMid meet"
+      onError={() =>
+        setAttempt((prev) => ({
+          key,
+          idx: (prev.key === key ? prev.idx : 0) + 1,
+        }))
+      }
+    />
+  );
+}
+
 function FootballSurface({
   matchId,
   colors,
-  homeCrest,
-  awayCrest,
+  homeCrests,
+  awayCrests,
   homeGoalFlash,
   awayGoalFlash,
   dangerSide,
 }: {
   matchId: number;
   colors: MatchColors;
-  homeCrest: string | null;
-  awayCrest: string | null;
+  homeCrests: string[];
+  awayCrests: string[];
   homeGoalFlash: boolean;
   awayGoalFlash: boolean;
   dangerSide: "home" | "away" | "neutral";
@@ -608,28 +651,8 @@ function FootballSurface({
       <rect x="10.2" y="6" width="1.8" height="100" fill={colors.homePrimary} opacity="0.85" />
       <rect x="328" y="6" width="1.8" height="100" fill={colors.awayPrimary} opacity="0.85" />
 
-      {homeCrest && (
-        <image
-          href={homeCrest}
-          x="78"
-          y="41"
-          width="30"
-          height="30"
-          opacity="0.11"
-          preserveAspectRatio="xMidYMid meet"
-        />
-      )}
-      {awayCrest && (
-        <image
-          href={awayCrest}
-          x="232"
-          y="41"
-          width="30"
-          height="30"
-          opacity="0.11"
-          preserveAspectRatio="xMidYMid meet"
-        />
-      )}
+      <SvgClubCrest candidates={homeCrests} x={78} y={41} />
+      <SvgClubCrest candidates={awayCrests} x={232} y={41} />
 
       {dangerSide === "home" && (
         <rect x="284" y="26" width="44" height="60" fill="rgba(239,68,68,0.16)" />

@@ -136,6 +136,13 @@ export function BetTicket({
                     : `${leg.matchHomeScore} - ${leg.matchAwayScore}`
                   : null;
 
+              const titleTeams =
+                leg.kind === "sport" && (!leg.homeTeam || !leg.awayTeam) && leg.title.includes("–")
+                  ? leg.title.split("–").map((s) => s.trim())
+                  : null;
+              const legHome = leg.homeTeam || titleTeams?.[0] || "";
+              const legAway = leg.awayTeam || titleTeams?.[1] || "";
+
               const content = (
                 <>
                   <div className="flex min-w-0 items-center gap-2">
@@ -159,6 +166,22 @@ export function BetTicket({
                             ? "↺"
                             : "•"}
                     </span>
+                    {leg.kind === "sport" && legHome && legAway && (
+                      <div className="flex shrink-0 -space-x-1.5">
+                        <TeamAvatar
+                          name={legHome}
+                          logo={leg.homeLogo}
+                          size="2xs"
+                          className="ring-1 ring-white"
+                        />
+                        <TeamAvatar
+                          name={legAway}
+                          logo={leg.awayLogo}
+                          size="2xs"
+                          className="ring-1 ring-white"
+                        />
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         {leg.kind === "sport" && leg.matchSource && (
@@ -243,8 +266,18 @@ export function BetTicket({
                 className="-mx-1.5 flex items-center gap-2.5 rounded-xl px-1.5 py-1 transition-colors hover:bg-elev/70 active:bg-elev"
               >
                 <div className="flex shrink-0 -space-x-2">
-                  <TeamAvatar name={bet.homeTeam} size="xs" className="ring-2 ring-white" />
-                  <TeamAvatar name={bet.awayTeam} size="xs" className="ring-2 ring-white" />
+                  <TeamAvatar
+                    name={bet.homeTeam}
+                    logo={bet.homeLogo}
+                    size="sm"
+                    className="ring-2 ring-white"
+                  />
+                  <TeamAvatar
+                    name={bet.awayTeam}
+                    logo={bet.awayLogo}
+                    size="sm"
+                    className="ring-2 ring-white"
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-display text-[14px] font-semibold text-ink">
@@ -267,8 +300,18 @@ export function BetTicket({
             ) : (
               <div className="flex items-center gap-2.5">
                 <div className="flex shrink-0 -space-x-2">
-                  <TeamAvatar name={bet.homeTeam} size="xs" className="ring-2 ring-white" />
-                  <TeamAvatar name={bet.awayTeam} size="xs" className="ring-2 ring-white" />
+                  <TeamAvatar
+                    name={bet.homeTeam}
+                    logo={bet.homeLogo}
+                    size="sm"
+                    className="ring-2 ring-white"
+                  />
+                  <TeamAvatar
+                    name={bet.awayTeam}
+                    logo={bet.awayLogo}
+                    size="sm"
+                    className="ring-2 ring-white"
+                  />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-display text-[14px] font-semibold text-ink">

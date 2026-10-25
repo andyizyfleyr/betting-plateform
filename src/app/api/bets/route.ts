@@ -35,6 +35,7 @@ import {
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled, syncLiveMatchesThrottled } from "@/lib/sync-throttle";
+import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,8 @@ export async function GET(req: NextRequest) {
       league: bet.league,
       homeTeam: bet.homeTeam,
       awayTeam: bet.awayTeam,
+      homeLogo: teamLogo(bet.homeTeam, match?.homeLogo),
+      awayLogo: teamLogo(bet.awayTeam, match?.awayLogo),
       question: null,
       questionId: null,
       market: bet.market,
@@ -237,13 +240,31 @@ export async function GET(req: NextRequest) {
     const legs = (cb.legs ?? []).map((l) => {
       const resolvedStatus = resolveComboLegStatus(l, comboMatchMap, comboQuestionMap);
       const m = l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined;
+      const titleParts =
+        l.kind === "sport" && (!l.homeTeam || !l.awayTeam) && l.title.includes("–")
+          ? l.title.split("–").map((s) => s.trim())
+          : null;
+      const homeTeam =
+        l.kind === "sport"
+          ? (l.homeTeam || m?.homeTeam || titleParts?.[0] || undefined)
+          : l.homeTeam;
+      const awayTeam =
+        l.kind === "sport"
+          ? (l.awayTeam || m?.awayTeam || titleParts?.[1] || undefined)
+          : l.awayTeam;
       const resolvedSelLabel =
-        l.kind === "sport" && l.homeTeam && l.awayTeam && isKnownMarket(l.market)
-          ? (marketLabelFor(l.market, l.selection, l.homeTeam, l.awayTeam) ?? l.selectionLabel)
+        l.kind === "sport" && homeTeam && awayTeam && isKnownMarket(l.market)
+          ? (marketLabelFor(l.market, l.selection, homeTeam, awayTeam) ?? l.selectionLabel)
           : l.selectionLabel;
 
       return {
         ...l,
+        homeTeam,
+        awayTeam,
+        homeLogo:
+          l.kind === "sport" ? teamLogo(homeTeam, l.homeLogo ?? m?.homeLogo) : null,
+        awayLogo:
+          l.kind === "sport" ? teamLogo(awayTeam, l.awayLogo ?? m?.awayLogo) : null,
         status: resolvedStatus,
         selectionLabel: resolvedSelLabel,
         matchStatus: m

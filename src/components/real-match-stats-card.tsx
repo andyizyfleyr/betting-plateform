@@ -2,6 +2,7 @@
 
 import { BarChart3 } from "lucide-react";
 import type { ClientRealMatchStats } from "@/lib/api";
+import { TeamAvatar } from "./team-avatar";
 import { cn } from "@/lib/format";
 
 export function hasAnyRealStats(stats?: ClientRealMatchStats | null): boolean {
@@ -116,6 +117,8 @@ export function RealMatchStatsCard({
   stats,
   homeTeam,
   awayTeam,
+  homeLogo,
+  awayLogo,
   htHomeScore,
   htAwayScore,
   compact = false,
@@ -124,6 +127,8 @@ export function RealMatchStatsCard({
   stats?: ClientRealMatchStats | null;
   homeTeam: string;
   awayTeam: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   htHomeScore?: number | null;
   htAwayScore?: number | null;
   compact?: boolean;
@@ -158,9 +163,15 @@ export function RealMatchStatsCard({
         )}
       </div>
 
-      <div className="mb-2 flex items-center justify-between text-[10.5px] font-semibold text-dim">
-        <span className="max-w-[44%] truncate">{homeTeam}</span>
-        <span className="max-w-[44%] truncate text-right">{awayTeam}</span>
+      <div className="mb-2 flex items-center justify-between gap-2 text-[10.5px] font-semibold text-dim">
+        <span className="flex min-w-0 max-w-[46%] items-center gap-1.5">
+          <TeamAvatar name={homeTeam} logo={homeLogo} size="2xs" />
+          <span className="truncate">{homeTeam}</span>
+        </span>
+        <span className="flex min-w-0 max-w-[46%] items-center justify-end gap-1.5 text-right">
+          <span className="truncate">{awayTeam}</span>
+          <TeamAvatar name={awayTeam} logo={awayLogo} size="2xs" />
+        </span>
       </div>
 
       <div className="space-y-2">

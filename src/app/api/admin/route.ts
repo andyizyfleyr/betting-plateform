@@ -202,26 +202,44 @@ export async function GET(req: NextRequest) {
       netRevenue: round2(stake - payouts),
     },
     users: users.map(publicUser),
-    bets: betsRows.map((b) => ({
-      ...b,
-      selectionLabel: isKnownMarket(b.market)
-        ? (marketLabelFor(b.market, b.selection, b.homeTeam, b.awayTeam) ?? b.selectionLabel)
-        : b.selectionLabel,
-    })),
+    bets: (() => {
+      const mById = new Map(matchRows.map((m) => [m.id, m]));
+      return betsRows.map((b) => {
+        const m = b.matchId ? mById.get(b.matchId) : undefined;
+        return {
+          ...b,
+          homeLogo: teamLogo(b.homeTeam, m?.homeLogo),
+          awayLogo: teamLogo(b.awayTeam, m?.awayLogo),
+          selectionLabel: isKnownMarket(b.market)
+            ? (marketLabelFor(b.market, b.selection, b.homeTeam, b.awayTeam) ?? b.selectionLabel)
+            : b.selectionLabel,
+        };
+      });
+    })(),
     predictionBets: predBetsRows,
-    comboBets: comboRows.map((cb) => ({
-      ...cb,
-      legs: (cb.legs ?? []).map((l) =>
-        l.kind === "sport" && l.homeTeam && l.awayTeam && isKnownMarket(l.market)
-          ? {
-              ...l,
-              selectionLabel:
-                marketLabelFor(l.market, l.selection, l.homeTeam, l.awayTeam) ??
-                l.selectionLabel,
-            }
-          : l
-      ),
-    })),
+    comboBets: (() => {
+      const mById = new Map(matchRows.map((m) => [m.id, m]));
+      return comboRows.map((cb) => ({
+        ...cb,
+        legs: (cb.legs ?? []).map((l) => {
+          if (l.kind !== "sport") return l;
+          const m = l.matchId ? mById.get(l.matchId) : undefined;
+          const homeTeam = l.homeTeam || m?.homeTeam;
+          const awayTeam = l.awayTeam || m?.awayTeam;
+          return {
+            ...l,
+            homeTeam,
+            awayTeam,
+            homeLogo: teamLogo(homeTeam, l.homeLogo ?? m?.homeLogo),
+            awayLogo: teamLogo(awayTeam, l.awayLogo ?? m?.awayLogo),
+            selectionLabel:
+              homeTeam && awayTeam && isKnownMarket(l.market)
+                ? (marketLabelFor(l.market, l.selection, homeTeam, awayTeam) ?? l.selectionLabel)
+                : l.selectionLabel,
+          };
+        }),
+      }));
+    })(),
     deposits: depRows.map((d) => ({
       ...d,
       userName: userNameMap.get(d.userId) ?? `Joueur #${d.userId}`,
@@ -232,14 +250,8 @@ export async function GET(req: NextRequest) {
     })),
     matches: matchRows.map((m) => ({
       ...m,
-      homeLogo:
-        m.source === "manual"
-          ? m.homeLogo || teamLogo(m.homeTeam)
-          : teamLogo(m.homeTeam) || m.homeLogo,
-      awayLogo:
-        m.source === "manual"
-          ? m.awayLogo || teamLogo(m.awayTeam)
-          : teamLogo(m.awayTeam) || m.awayLogo,
+      homeLogo: teamLogo(m.homeTeam, m.homeLogo),
+      awayLogo: teamLogo(m.awayTeam, m.awayLogo),
     })),
     questions: uniqueQuestions.map((q) => ({
       ...q,
@@ -419,8 +431,8 @@ export async function POST(req: NextRequest) {
           league,
           homeTeam: home,
           awayTeam: away,
-          homeLogo: customHomeLogo ?? teamLogo(home),
-          awayLogo: customAwayLogo ?? teamLogo(away),
+          homeLogo: teamLogo(home, customHomeLogo),
+          awayLogo: teamLogo(away, customAwayLogo),
           homeScore: status === "live" ? 0 : null,
           awayScore: status === "live" ? 0 : null,
           status,
@@ -716,8 +728,8 @@ export async function POST(req: NextRequest) {
           oddsHome,
           oddsDraw,
           oddsAway,
-          homeLogo: teamLogo(homeTeam) || m.homeLogo,
-          awayLogo: teamLogo(awayTeam) || m.awayLogo,
+          homeLogo: teamLogo(homeTeam, homeTeam === m.homeTeam ? m.homeLogo : null),
+          awayLogo: teamLogo(awayTeam, awayTeam === m.awayTeam ? m.awayLogo : null),
           markets: updatedMarkets,
         })
         .where(eq(matches.id, matchId))

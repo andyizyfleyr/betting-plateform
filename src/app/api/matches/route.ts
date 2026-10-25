@@ -107,8 +107,8 @@ export async function GET() {
       return {
         ...cleanRealMatch,
         source: "manual" as const,
-        homeLogo: m.homeLogo || teamLogo(m.homeTeam),
-        awayLogo: m.awayLogo || teamLogo(m.awayTeam),
+        homeLogo: teamLogo(m.homeTeam, m.homeLogo),
+        awayLogo: teamLogo(m.awayTeam, m.awayLogo),
         oddsHome,
         oddsDraw,
         oddsAway,
@@ -162,8 +162,8 @@ export async function GET() {
     return {
       ...publicMatch,
       source: "virtual" as const,
-      homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
-      awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
+      homeLogo: teamLogo(m.homeTeam, m.homeLogo),
+      awayLogo: teamLogo(m.awayTeam, m.awayLogo),
       oddsHome,
       oddsDraw,
       oddsAway,
