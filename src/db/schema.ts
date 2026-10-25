@@ -37,8 +37,8 @@ export const matches = pgTable("matches", {
   /** Cartons rouges reçus (0 ou 1 par équipe en pratique). */
   redHome: integer("red_home").notNull().default(0),
   redAway: integer("red_away").notNull().default(0),
-  /** Journal d'événements : [{type:"goal","team":"home","minute":23},…]. */
-  events: jsonb("events").$type<Array<{ type: string; team: string; minute: number }>>().default([]),
+  /** Journal d'événements : [{type:"goal","team":"home","minute":23,"player":"O. Dembélé"},…]. */
+  events: jsonb("events").$type<Array<{ type: string; team: string; minute: number; player?: string }>>().default([]),
   /** Historique des mouvements de cote : [{minute,market,selection,from,to}] */
   tickHistory: jsonb("tick_history").$type<Array<{ minute: number; market: string; selection: string; from: number; to: number }>>().default([]),
   /** Régime de match : "open" (match ouvert), "closed" (match fermé), "balanced". */

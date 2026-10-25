@@ -8,7 +8,7 @@ import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
 import { settleQuestion } from "@/lib/predictions";
 import { settleMatchBets } from "@/lib/settle";
-import { MANUAL_MINUTE_REAL_MS } from "@/db/engine";
+import { backdateStartsAtForMinute } from "@/db/engine";
 import { STALE_LATENCY_MS } from "@/lib/risk";
 
 export const dynamic = "force-dynamic";
@@ -549,6 +549,5 @@ function roundNumber(v: unknown): number | null {
  * par l'admin et l'horloge automatique restent synchronisées.
  */
 function backdateStartsAt(targetMinute: number): Date {
-  const minute = Math.max(1, Math.min(90, Math.floor(targetMinute)));
-  return new Date(Date.now() - (minute - 1) * MANUAL_MINUTE_REAL_MS);
+  return backdateStartsAtForMinute(targetMinute, Date.now());
 }

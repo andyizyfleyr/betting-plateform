@@ -1,9 +1,10 @@
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { appUser, bets, matches, predictionBets, predictionQuestions } from "@/db/schema";
+import { appUser, matches, predictionBets, predictionQuestions } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
 import { findLeague, clubLogo } from "@/lib/leagues";
 import { oddsFor } from "@/db/fixtures";
+import { teamLogo } from "@/lib/team-logos";
 
 let seededOnce = false;
 
@@ -11,34 +12,24 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-/**
- * Seed idempotent : ne fait rien si des matchs existent déjà.
- * Tournoi virtuel : journée 0 en direct, journée 1 à venir, deux affiches terminées
- * cohérentes avec les paris démo (1 gagné / 1 perdu). Appelé paresseusement depuis les routes API.
- */
 export async function ensureSeeded() {
   if (seededOnce) return;
 
-  // Colonne role (admin) — idempotent pour les bases déjà en service.
   await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
   `);
 
-  // Colonnes des matchs manuels enrichis (logos + marchés personnalisés).
   await db.execute(sql`
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "home_logo" text;
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "away_logo" text;
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "markets" jsonb;
   `);
 
-  // Colonnes de la couche trading/risk sur les paris (CLV + flags d'audit).
   await db.execute(sql`
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "closing_odds" double precision;
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "risk_flag" text;
   `);
 
-  // Suppression définitive du moteur virtuel : plus aucun match auto, uniquement
-  // des affiches réelles (source "manual"). Idempotent — ne fait rien si déjà vide.
   const virtualLeft = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(matches)
@@ -57,8 +48,6 @@ export async function ensureSeeded() {
 
   const freshDb = count === 0;
 
-  // Matchs réels du jour (source "manual") — idempotent : la première affiche du
-  // programme sert de sentinelle, avec des heures de coup d'envoi variées.
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const [{ manualToday }] = await db
@@ -77,35 +66,31 @@ export async function ensureSeeded() {
     const now = Date.now();
     const MIN = 60_000;
     const HOUR = 3_600_000;
-    const endOfToday = new Date(todayStart.getTime() + 86_400_000);
 
-    // Affichages réels, heures variées : deux déjà en cours (passées il y a quelques
-    // minutes → l'engine les démarre en live au prochain tick) puis le reste de la
-    // journée à venir, sans jamais déborder sur demain.
     const realFixtures: Array<{
       league: string;
       home: string;
       away: string;
       offsetMs: number;
     }> = [
-      { league: "Ligue 1", home: "Paris SG", away: "Marseille", offsetMs: -18 * MIN },
-      { league: "Premier League", home: "Arsenal", away: "Chelsea", offsetMs: -7 * MIN },
-      { league: "Ligue 1", home: "Lyon", away: "Monaco", offsetMs: 25 * MIN },
-      { league: "Liga", home: "Real Betis", away: "Villarreal", offsetMs: 55 * MIN },
-      { league: "Premier League", home: "Liverpool", away: "Manchester City", offsetMs: 1 * HOUR + 40 * MIN },
-      { league: "Bundesliga", home: "Bayern Munich", away: "Dortmund", offsetMs: 2 * HOUR + 30 * MIN },
-      { league: "Serie A", home: "Inter Milan", away: "AC Milan", offsetMs: 3 * HOUR + 20 * MIN },
-      { league: "Liga", home: "Atlético Madrid", away: "FC Séville", offsetMs: 4 * HOUR + 10 * MIN },
-      { league: "Bundesliga", home: "Leverkusen", away: "RB Leipzig", offsetMs: 5 * HOUR },
-      { league: "Serie A", home: "Juventus", away: "Naples", offsetMs: 6 * HOUR },
+      { league: "Ligue 1", home: "Paris SG", away: "Marseille", offsetMs: -14 * MIN },
+      { league: "Premier League", home: "Arsenal", away: "Chelsea", offsetMs: -6 * MIN },
+      { league: "Ligue 1", home: "Lyon", away: "Monaco", offsetMs: 18 * MIN },
+      { league: "Liga", home: "Real Betis", away: "Villarreal", offsetMs: 42 * MIN },
+      { league: "Premier League", home: "Liverpool", away: "Manchester City", offsetMs: 1 * HOUR + 15 * MIN },
+      { league: "Bundesliga", home: "Bayern Munich", away: "Dortmund", offsetMs: 1 * HOUR + 50 * MIN },
+      { league: "Serie A", home: "Inter Milan", away: "AC Milan", offsetMs: 2 * HOUR + 30 * MIN },
+      { league: "Liga", home: "Atlético Madrid", away: "FC Séville", offsetMs: 3 * HOUR + 10 * MIN },
+      { league: "Bundesliga", home: "Leverkusen", away: "RB Leipzig", offsetMs: 3 * HOUR + 50 * MIN },
+      { league: "Serie A", home: "Juventus", away: "Naples", offsetMs: 4 * HOUR + 30 * MIN },
     ];
 
     const manualSeed = realFixtures.map((f) => {
       const leagueDef = findLeague(f.league);
-      const startsAt = new Date(Math.min(now + f.offsetMs, endOfToday.getTime() - 30 * MIN));
+      const startsAt = new Date(now + f.offsetMs);
       const o = oddsFor(f.home, f.away);
-      const homeLogo = leagueDef ? clubLogo(leagueDef, f.home) : null;
-      const awayLogo = leagueDef ? clubLogo(leagueDef, f.away) : null;
+      const homeLogo = teamLogo(f.home) ?? (leagueDef ? clubLogo(leagueDef, f.home) : null);
+      const awayLogo = teamLogo(f.away) ?? (leagueDef ? clubLogo(leagueDef, f.away) : null);
       return {
         sport: "football",
         league: f.league,
@@ -142,7 +127,6 @@ export async function ensureSeeded() {
     await db.insert(appUser).values({ id: 1 });
   }
 
-  // S'assure que les tables de prédictions existent (sécurité pour le déploiement Vercel)
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS "prediction_questions" (
       "id" serial PRIMARY KEY NOT NULL,
@@ -180,12 +164,10 @@ export async function ensureSeeded() {
     );
   `);
 
-  // Migration idempotente : ajoute la colonne de cash-out si elle manque (bases existantes).
   await db.execute(sql`
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
   `);
 
-  // Table des dépôts (Stripe / PayPal) — sécurise le déploiement Vercel.
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS "deposits" (
       "id" serial PRIMARY KEY NOT NULL,
@@ -200,7 +182,6 @@ export async function ensureSeeded() {
     );
   `);
 
-  // Questions de prédiction (idempotent, insère les nouvelles questions si elles manquent).
   const day = 86_400_000;
   const hour = 3_600_000;
   const now = Date.now();
@@ -310,6 +291,7 @@ export async function ensureSeeded() {
       question: "Apple lancera-t-il un iPhone entièrement pliable cette année ?",
       category: "Actus",
       status: "open" as const,
+      status_check: true,
       seedValue: 204,
       oddsYes: 3.1,
       oddsNo: 1.35,
@@ -353,7 +335,26 @@ export async function ensureSeeded() {
       .where(eq(predictionQuestions.question, q.question));
 
     if (!existing) {
-      const [inserted] = await db.insert(predictionQuestions).values(q).returning();
+      const { question, category, status, seedValue, oddsYes, oddsNo, volume, yesCount, noCount, resolvesAt } = q;
+      const resolution = "resolution" in q ? q.resolution : undefined;
+      const resolvedAt = "resolvedAt" in q ? q.resolvedAt : undefined;
+      const [inserted] = await db
+        .insert(predictionQuestions)
+        .values({
+          question,
+          category,
+          status,
+          seedValue,
+          oddsYes,
+          oddsNo,
+          volume,
+          yesCount,
+          noCount,
+          resolvesAt,
+          ...(resolution ? { resolution } : {}),
+          ...(resolvedAt ? { resolvedAt } : {}),
+        })
+        .returning();
       if (q.status === "resolved" && freshDb) {
         await db.insert(predictionBets).values([
           {
@@ -391,8 +392,6 @@ export async function ensureSeeded() {
     }
   }
 
-  // Avance la séquence de la clé primaire : user 1 a été inséré avec un id explicite,
-  // sinon le prochain `serial` repartirait à 1 (collision à l'inscription).
   await db.execute(sql`
     SELECT setval(
       pg_get_serial_sequence('app_user', 'id'),
@@ -400,7 +399,6 @@ export async function ensureSeeded() {
     )
   `);
 
-  // Compte démo (idempotent) : crédentiels par défaut si jamais définis.
   if (user && !user.email) {
     await db
       .update(appUser)
@@ -408,7 +406,6 @@ export async function ensureSeeded() {
       .where(eq(appUser.id, user.id));
   }
 
-  // Compte administrateur (email dédié) — créé ou promu à chaque démarrage.
   const adminEmail = (process.env.ADMIN_EMAIL ?? "admin@pulse.app").trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD ?? "admin1234";
   const [adminUser] = await db

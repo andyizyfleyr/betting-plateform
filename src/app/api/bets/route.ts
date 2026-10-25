@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
 /** Anti-triche : limites de mise (€) et intervalle minimal entre deux paris. */
 const MIN_STAKE = 0.5;
 const BET_COOLDOWN_MS = 700;
-/** Délai de validation des paris en direct (recotation serveur + état du marché). */
-const LIVE_VALIDATION_MS = 2500;
+/** Délai de validation des paris en direct (recotation serveur + vérification anti-but). */
+const LIVE_VALIDATION_MS = 1200;
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
@@ -64,15 +64,22 @@ export async function GET(req: NextRequest) {
       clv: clvOf(bet.odds, bet.closingOdds),
       cashOutAmount: bet.cashOutAmount ?? null,
       cashOut:
-        livePending && bet.market === "result"
+        livePending && match && !match.suspended
           ? computeCashOut({
               stake: bet.stake,
               odds: bet.odds,
               sport: bet.sport,
-              minute: match?.minute ?? null,
+              minute: match.minute ?? null,
+              market: bet.market,
               selection: bet.selection,
-              homeScore: match?.homeScore ?? null,
-              awayScore: match?.awayScore ?? null,
+              homeTeam: match.homeTeam,
+              awayTeam: match.awayTeam,
+              homeScore: match.homeScore ?? null,
+              awayScore: match.awayScore ?? null,
+              redHome: match.redHome ?? 0,
+              redAway: match.redAway ?? 0,
+              homeForm: match.homeForm ?? 1,
+              awayForm: match.awayForm ?? 1,
             })
           : null,
       placedAt: bet.placedAt,
@@ -221,34 +228,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ce match est terminé" }, { status: 400 });
   }
 
-  // Capture initial state for race condition detection
+  // Capture de l'état sportif initial pour détecter un événement réel pendant la validation
   const initialHomeScore = match.homeScore ?? 0;
   const initialAwayScore = match.awayScore ?? 0;
-  const initialMinute = match.minute;
-  const initialSuspended = match.suspended;
+  const initialRedHome = match.redHome ?? 0;
+  const initialRedAway = match.redAway ?? 0;
 
-  // Délai de validation des paris en direct : on recote AU MOMENT de la validation
-  // (marché suspendu, score/minutes à jour) — la cote envoyée par le client n'est
-  // jamais utilisée, c'est le serveur qui fixe le prix.
+  // Validation des paris en direct : recotation serveur et rejet uniquement si un
+  // événement réel (but, carton rouge, suspension ou fin de match) survient pendant l'attente.
   let pricedMatch = match;
   if (match.status === "live") {
+    if (match.suspended) {
+      return NextResponse.json(
+        { error: "Marché temporairement suspendu suite à une action de jeu" },
+        { status: 400 }
+      );
+    }
     await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
     const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
     if (!freshMatch || freshMatch.status === "finished" || freshMatch.suspended) {
       return NextResponse.json(
-        { error: "Pari rejeté : marché suspendu ou événement en cours lors de la validation" },
+        { error: "Pari rejeté : marché suspendu ou match terminé pendant la validation" },
         { status: 400 }
       );
     }
-    // Race condition check: if score changed during wait, reject
     if (
       (freshMatch.homeScore ?? 0) !== initialHomeScore ||
       (freshMatch.awayScore ?? 0) !== initialAwayScore ||
-      freshMatch.minute !== initialMinute ||
-      freshMatch.suspended !== initialSuspended
+      (freshMatch.redHome ?? 0) !== initialRedHome ||
+      (freshMatch.redAway ?? 0) !== initialRedAway
     ) {
       return NextResponse.json(
-        { error: "Événement survenu pendant la validation — réessayez" },
+        { error: "Action décisive survenue pendant la validation — cote mise à jour, réessayez" },
         { status: 409 }
       );
     }

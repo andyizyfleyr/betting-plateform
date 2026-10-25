@@ -1,14 +1,13 @@
-import { expectedGoals, liveOddsFor, liveResultProbs, liveScoreModel, poissonPmf } from "@/db/fixtures";
+import {
+  binaryOutcomeOdds,
+  liveResultProbs,
+  liveScoreModel,
+  partitionOutcomeOdds,
+  type LiveScoreModel,
+} from "@/db/fixtures";
 import { adjustOddsForExposure, marginOverround, netExposure, type BetLike } from "./risk";
 
-/**
- * Catalogue des marchés de pari (terminologie façon 1xbet).
- * Les lignes d'un même marché sont regroupées : « Total de buts (plus/moins) »
- * contient les lignes 1,5 / 2,5 / 3,5 / 4,5 dans le même accordéon.
- * Chaque marché est entièrement résolu à partir du score final (modèle Poisson
- * des matchs virtuels), ce qui permet des cotes cohérentes et un règlement
- * déterministe.
- */
+export type MarketCategory = "main" | "goals" | "teams" | "scores";
 
 export interface MarketOutcome {
   key: string;
@@ -26,6 +25,7 @@ export interface MarketGroup {
   key: string;
   label: string;
   short: string;
+  category?: MarketCategory;
   outcomes: MarketOutcome[];
   rows?: MarketRow[];
 }
@@ -47,38 +47,38 @@ interface MarketDef {
   key: string;
   label: string;
   short: string;
+  category: MarketCategory;
+  /** true si les issues du marché entier forment une partition exclusive (somme des probs = 1). */
+  partition: boolean;
   outcomes: (home: string, away: string) => OutcomeSpec[];
   rows?: (home: string, away: string) => MarketRowSpec[];
-  probs: (lamH: number, lamA: number) => number[];
   win: (outcome: string, home: number, away: number) => boolean;
 }
 
-const MAX_GOALS = 12;
-const MARGIN = 1.06;
-const ODDS_MIN = 1.01;
-const ODDS_MAX = 1000;
+const SCORE_EXACT_LISTED = new Set([
+  "1_0", "2_0", "2_1",
+  "0_0", "1_1", "2_2",
+  "0_1", "0_2", "1_2",
+  "3_0", "3_1", "0_3", "1_3",
+]);
 
-const SCORE_EXACT_LISTED = new Set(["1_0", "2_0", "2_1", "0_0", "1_1", "2_2", "0_1", "0_2", "1_2"]);
+const MARKET_MAX_ODDS: Record<string, number> = {
+  result: 120,
+  double_chance: 25,
+  total_exact: 90,
+  score_exact: 150,
+};
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
+/** Marge effective d'un marché = marge de base (avant-match ou live) × ratio de liquidité du marché. */
+function effectiveMargin(market: string, baseMargin = 1.045): number {
+  return Math.round(baseMargin * (marginOverround(market) / marginOverround("result")) * 10000) / 10000;
 }
 
-function oddsFromProb(p: number, margin = MARGIN, cap = ODDS_MAX) {
-  return round2(clamp(1 / (clamp(p, 0.0005, 1) * margin), ODDS_MIN, cap));
-}
-
-/** Marge effective d'un marché : la marge live (dynamique) × la table de marge par marché. */
-function effectiveMargin(market: string, liveMargin = MARGIN): number {
-  // La table est exprimée en multiplicateur relatif au marché « result » (le plus liquide).
-  return round2(liveMargin * (marginOverround(market) / marginOverround("result")));
-}
-
-/** Applique la correction d'exposition après marges : cote finale du marché. */
+/** Applique la correction d'exposition du bookmaker après cotation probabiliste. */
 function exposureAdjustedOdds(
   market: string,
   outcome: string,
@@ -89,47 +89,11 @@ function exposureAdjustedOdds(
   return adjustOddsForExposure(modelOdds, netExposure(bets, market, outcome));
 }
 
-/** Distribution de Poisson tronquée + somme cumulée (pour les probabilités). */
-function dist(lambda: number): { p: number[]; tail: number[] } {
-  const p: number[] = [];
-  let acc = 0;
-  for (let k = 0; k <= MAX_GOALS; k++) {
-    p.push(poissonPmf(k, lambda));
-    acc += p[k];
-  }
-  const tail: number[] = [1];
-  for (let k = 0; k <= MAX_GOALS; k++) {
-    acc -= p[k];
-    tail.push(acc);
-  }
-  return { p, tail };
-}
-
-/** Matrice jointe P(domicile = i, extérieur = j). */
-function joint(lamH: number, lamA: number): number[][] {
-  const { p: ph } = dist(lamH);
-  const { p: pa } = dist(lamA);
-  const grid: number[][] = [];
-  for (let i = 0; i <= MAX_GOALS; i++) {
-    grid[i] = [];
-    for (let j = 0; j <= MAX_GOALS; j++) grid[i][j] = ph[i] * pa[j];
-  }
-  return grid;
-}
-
-function sumOver(predicate: (i: number, j: number) => boolean, grid: number[][]) {
-  let s = 0;
-  for (let i = 0; i <= MAX_GOALS; i++)
-    for (let j = 0; j <= MAX_GOALS; j++) if (predicate(i, j)) s += grid[i][j];
-  return s;
-}
-
 const w = {
   result: (o: string, h: number, a: number) =>
     o === "home" ? h > a : o === "away" ? a > h : h === a,
   doubleChance: (o: string, h: number, a: number) =>
     o === "1X" ? h >= a : o === "X2" ? h <= a : h !== a,
-  /** Total de buts — clé type `ou_2_5_over`. */
   totalOU: (o: string, h: number, a: number) => {
     const m = /^ou_(\d+)_(\d+)_(over|under)$/.exec(o);
     if (!m) return false;
@@ -148,7 +112,6 @@ const w = {
     const won = side === "home" ? h > a && a === 0 : a > h && h === 0;
     return won === (o === "oui");
   },
-  /** Buts d'une équipe — clé type `h_1_5_over` (h = domicile, a = extérieur). */
   teamTotal: (side: "h" | "a") => (o: string, h: number, a: number) => {
     const m = /^(h|a)_(\d+)_(\d+)_(over|under)$/.exec(o);
     if (!m || m[1] !== side) return false;
@@ -174,42 +137,34 @@ const MARKETS: MarketDef[] = [
     key: "result",
     label: "Résultat du match",
     short: "1/N/2",
+    category: "main",
+    partition: true,
     outcomes: (h, a) => [
-      { key: "home", label: `Victoire du domicile (${h})`, short: "1" },
-      { key: "draw", label: "Match nul", short: "X" },
-      { key: "away", label: `Victoire de l'extérieur (${a})`, short: "2" },
+      { key: "home", label: `Victoire ${h}`, short: "1" },
+      { key: "draw", label: "Match nul", short: "N" },
+      { key: "away", label: `Victoire ${a}`, short: "2" },
     ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const home = sumOver((i, j) => i > j, g);
-      const draw = sumOver((i, j) => i === j, g);
-      const away = Math.max(0.0005, 1 - home - draw);
-      return [home, draw, away];
-    },
     win: w.result,
   },
   {
     key: "double_chance",
     label: "Double chance",
     short: "1X/12/X2",
-    outcomes: () => [
-      { key: "1X", label: "Domicile ou nul (1X)", short: "1X" },
-      { key: "12", label: "Domicile ou extérieur (12)", short: "12" },
-      { key: "X2", label: "Nul ou extérieur (X2)", short: "X2" },
+    category: "main",
+    partition: false,
+    outcomes: (h, a) => [
+      { key: "1X", label: `${h} ou Nul`, short: "1X" },
+      { key: "12", label: `${h} ou ${a}`, short: "12" },
+      { key: "X2", label: `Nul ou ${a}`, short: "X2" },
     ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const home = sumOver((i, j) => i > j, g);
-      const draw = sumOver((i, j) => i === j, g);
-      const away = Math.max(0.0005, 1 - home - draw);
-      return [home + draw, home + away, draw + away];
-    },
     win: w.doubleChance,
   },
   {
     key: "total_ou",
-    label: "Total de buts (plus/moins)",
+    label: "Total de buts (Plus / Moins)",
     short: "Plus/Moins",
+    category: "main",
+    partition: false, // Coté ligne par ligne (chaque ligne 1,5 / 2,5 / 3,5 / 4,5 est une partition binaire)
     outcomes: () => [
       { key: "ou_1_5_over", label: "Plus de 1,5 buts", short: "Plus" },
       { key: "ou_1_5_under", label: "Moins de 1,5 buts", short: "Moins" },
@@ -226,215 +181,169 @@ const MARKETS: MarketDef[] = [
       { label: "3,5", keys: ["ou_3_5_over", "ou_3_5_under"] },
       { label: "4,5", keys: ["ou_4_5_over", "ou_4_5_under"] },
     ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const over = (line: number) => sumOver((i, j) => i + j > line, g);
-      return [over(1.5), 1 - over(1.5), over(2.5), 1 - over(2.5), over(3.5), 1 - over(3.5), over(4.5), 1 - over(4.5)];
-    },
     win: w.totalOU,
-  },
-  {
-    key: "odd_even",
-    label: "Total de buts (pair/impair)",
-    short: "Pair/Impair",
-    outcomes: () => [
-      { key: "pair", label: "Total de buts pair", short: "Pair" },
-      { key: "impair", label: "Total de buts impair", short: "Impair" },
-    ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const pair = sumOver((i, j) => (i + j) % 2 === 0, g);
-      return [pair, 1 - pair];
-    },
-    win: w.oddEven,
-  },
-  {
-    key: "total_exact",
-    label: "Total de buts exact",
-    short: "Total exact",
-    outcomes: () => [
-      { key: "0", label: "0 but", short: "0" },
-      { key: "1", label: "1 but", short: "1" },
-      { key: "2", label: "2 buts", short: "2" },
-      { key: "3", label: "3 buts", short: "3" },
-      { key: "4", label: "4 buts", short: "4" },
-      { key: "5+", label: "5 buts ou plus", short: "5+" },
-    ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const p = [];
-      let acc = 0;
-      for (let t = 0; t <= 4; t++) {
-        const pt = sumOver((i, j) => i + j === t, g);
-        p.push(pt);
-        acc += pt;
-      }
-      p.push(Math.max(0.0005, 1 - acc));
-      return p;
-    },
-    win: w.totalExact,
   },
   {
     key: "btts",
     label: "Les deux équipes marquent",
     short: "BTTS",
+    category: "main",
+    partition: true,
     outcomes: () => [
-      { key: "oui", label: "Oui — les deux équipes marquent", short: "Oui" },
-      { key: "non", label: "Non — les deux équipes ne marquent pas", short: "Non" },
+      { key: "oui", label: "Les deux équipes marquent : Oui", short: "Oui" },
+      { key: "non", label: "Les deux équipes marquent : Non", short: "Non" },
     ],
-    probs: (lamH, lamA) => {
-      const { tail: th } = dist(lamH);
-      const { tail: ta } = dist(lamA);
-      const oui = th[1] * ta[1];
-      return [oui, 1 - oui];
-    },
     win: w.btts,
   },
   {
-    key: "score_exact",
-    label: "Score exact",
-    short: "Score exact",
-    outcomes: () => [
-      { key: "1_0", label: "Score exact 1-0", short: "1-0" },
-      { key: "2_0", label: "Score exact 2-0", short: "2-0" },
-      { key: "2_1", label: "Score exact 2-1", short: "2-1" },
-      { key: "0_0", label: "Score exact 0-0", short: "0-0" },
-      { key: "1_1", label: "Score exact 1-1", short: "1-1" },
-      { key: "2_2", label: "Score exact 2-2", short: "2-2" },
-      { key: "0_1", label: "Score exact 0-1", short: "0-1" },
-      { key: "0_2", label: "Score exact 0-2", short: "0-2" },
-      { key: "1_2", label: "Score exact 1-2", short: "1-2" },
-      { key: "other", label: "Autre score", short: "Autre" },
-    ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const keys = ["1_0", "2_0", "2_1", "0_0", "1_1", "2_2", "0_1", "0_2", "1_2"];
-      const listed = keys.map((k) => {
-        const [i, j] = k.split("_").map(Number);
-        return g[i][j];
-      });
-      const sumListed = listed.reduce((s, x) => s + x, 0);
-      return [...listed, Math.max(0.0005, 1 - sumListed)];
-    },
-    win: w.scoreExact,
-  },
-  {
     key: "result_total",
-    label: "Résultat + total (2,5)",
-    short: "Résultat + 2,5",
-    outcomes: () => [
-      { key: "home_over", label: "Domicile et plus de 2,5 buts", short: "1 & +2,5" },
-      { key: "draw_over", label: "Nul et plus de 2,5 buts", short: "X & +2,5" },
-      { key: "away_over", label: "Extérieur et plus de 2,5 buts", short: "2 & +2,5" },
+    label: "Résultat & Total (2,5 buts)",
+    short: "1N2 + 2,5",
+    category: "main",
+    partition: true,
+    outcomes: (h, a) => [
+      { key: "home_over", label: `${h} & +2,5 buts`, short: "1 & +2,5" },
+      { key: "draw_over", label: "Nul & +2,5 buts", short: "N & +2,5" },
+      { key: "away_over", label: `${a} & +2,5 buts`, short: "2 & +2,5" },
       { key: "under", label: "Moins de 2,5 buts", short: "Moins 2,5" },
     ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const home = sumOver((i, j) => i > j && i + j >= 3, g);
-      const draw = sumOver((i, j) => i === j && i + j >= 3, g);
-      const away = sumOver((i, j) => j > i && i + j >= 3, g);
-      const under = Math.max(0.0005, 1 - home - draw - away);
-      return [home, draw, away, under];
-    },
     win: w.resultOver25,
   },
   {
     key: "home_total",
-    label: "Buts du domicile (plus/moins)",
-    short: "Buts domicile",
-    outcomes: () => [
-      { key: "h_0_5_over", label: "Le domicile marque plus de 0,5 but", short: "Plus" },
-      { key: "h_0_5_under", label: "Le domicile marque moins de 0,5 but", short: "Moins" },
-      { key: "h_1_5_over", label: "Le domicile marque plus de 1,5 buts", short: "Plus" },
-      { key: "h_1_5_under", label: "Le domicile marque moins de 1,5 buts", short: "Moins" },
+    label: "Buts équipe domicile",
+    short: "Buts dom.",
+    category: "teams",
+    partition: false,
+    outcomes: (h) => [
+      { key: "h_0_5_over", label: `${h} : Plus de 0,5 but`, short: "Plus" },
+      { key: "h_0_5_under", label: `${h} : Moins de 0,5 but`, short: "Moins" },
+      { key: "h_1_5_over", label: `${h} : Plus de 1,5 buts`, short: "Plus" },
+      { key: "h_1_5_under", label: `${h} : Moins de 1,5 buts`, short: "Moins" },
     ],
     rows: () => [
       { label: "0,5", keys: ["h_0_5_over", "h_0_5_under"] },
       { label: "1,5", keys: ["h_1_5_over", "h_1_5_under"] },
     ],
-    probs: (lamH) => {
-      const { p, tail } = dist(lamH);
-      return [tail[1], p[0], tail[2], 1 - tail[2]];
-    },
     win: w.teamTotal("h"),
   },
   {
     key: "away_total",
-    label: "Buts de l'extérieur (plus/moins)",
-    short: "Buts extérieur",
-    outcomes: () => [
-      { key: "a_0_5_over", label: "L'extérieur marque plus de 0,5 but", short: "Plus" },
-      { key: "a_0_5_under", label: "L'extérieur marque moins de 0,5 but", short: "Moins" },
-      { key: "a_1_5_over", label: "L'extérieur marque plus de 1,5 buts", short: "Plus" },
-      { key: "a_1_5_under", label: "L'extérieur marque moins de 1,5 buts", short: "Moins" },
+    label: "Buts équipe extérieur",
+    short: "Buts ext.",
+    category: "teams",
+    partition: false,
+    outcomes: (_, a) => [
+      { key: "a_0_5_over", label: `${a} : Plus de 0,5 but`, short: "Plus" },
+      { key: "a_0_5_under", label: `${a} : Moins de 0,5 but`, short: "Moins" },
+      { key: "a_1_5_over", label: `${a} : Plus de 1,5 buts`, short: "Plus" },
+      { key: "a_1_5_under", label: `${a} : Moins de 1,5 buts`, short: "Moins" },
     ],
     rows: () => [
       { label: "0,5", keys: ["a_0_5_over", "a_0_5_under"] },
       { label: "1,5", keys: ["a_1_5_over", "a_1_5_under"] },
     ],
-    probs: (lamA) => {
-      const { p, tail } = dist(lamA);
-      return [tail[1], p[0], tail[2], 1 - tail[2]];
-    },
     win: w.teamTotal("a"),
   },
   {
-    key: "home_to_nil",
-    label: "Victoire à zéro (domicile)",
-    short: "Win to nil D",
+    key: "total_exact",
+    label: "Nombre exact de buts",
+    short: "Total exact",
+    category: "goals",
+    partition: true,
     outcomes: () => [
-      { key: "oui", label: "Le domicile gagne sans encaisser", short: "Oui" },
-      { key: "non", label: "Le domicile ne gagne pas sans encaisser", short: "Non" },
+      { key: "0", label: "0 but dans le match", short: "0" },
+      { key: "1", label: "1 but dans le match", short: "1" },
+      { key: "2", label: "2 buts dans le match", short: "2" },
+      { key: "3", label: "3 buts dans le match", short: "3" },
+      { key: "4", label: "4 buts dans le match", short: "4" },
+      { key: "5+", label: "5 buts ou plus", short: "5+" },
     ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const oui = sumOver((i, j) => i > j && j === 0, g);
-      return [oui, 1 - oui];
-    },
+    win: w.totalExact,
+  },
+  {
+    key: "odd_even",
+    label: "Total de buts Pair / Impair",
+    short: "Pair/Impair",
+    category: "goals",
+    partition: true,
+    outcomes: () => [
+      { key: "pair", label: "Total de buts pair", short: "Pair" },
+      { key: "impair", label: "Total de buts impair", short: "Impair" },
+    ],
+    win: w.oddEven,
+  },
+  {
+    key: "home_to_nil",
+    label: "Domicile gagne sans encaisser",
+    short: "Dom. à zéro",
+    category: "teams",
+    partition: true,
+    outcomes: (h) => [
+      { key: "oui", label: `${h} gagne sans encaisser : Oui`, short: "Oui" },
+      { key: "non", label: `${h} gagne sans encaisser : Non`, short: "Non" },
+    ],
     win: w.toNil("home"),
   },
   {
     key: "away_to_nil",
-    label: "Victoire à zéro (extérieur)",
-    short: "Win to nil E",
-    outcomes: () => [
-      { key: "oui", label: "L'extérieur gagne sans encaisser", short: "Oui" },
-      { key: "non", label: "L'extérieur ne gagne pas sans encaisser", short: "Non" },
+    label: "Extérieur gagne sans encaisser",
+    short: "Ext. à zéro",
+    category: "teams",
+    partition: true,
+    outcomes: (_, a) => [
+      { key: "oui", label: `${a} gagne sans encaisser : Oui`, short: "Oui" },
+      { key: "non", label: `${a} gagne sans encaisser : Non`, short: "Non" },
     ],
-    probs: (lamH, lamA) => {
-      const g = joint(lamH, lamA);
-      const oui = sumOver((i, j) => j > i && i === 0, g);
-      return [oui, 1 - oui];
-    },
     win: w.toNil("away"),
   },
   {
     key: "home_clean_sheet",
     label: "Cage inviolée (domicile)",
     short: "Clean sheet D",
-    outcomes: () => [
-      { key: "oui", label: "Le domicile ne concède aucun but", short: "Oui" },
-      { key: "non", label: "Le domicile concède au moins un but", short: "Non" },
+    category: "teams",
+    partition: true,
+    outcomes: (h) => [
+      { key: "oui", label: `Cage inviolée ${h} : Oui`, short: "Oui" },
+      { key: "non", label: `Cage inviolée ${h} : Non`, short: "Non" },
     ],
-    probs: (lamH, lamA) => {
-      const { p } = dist(lamA);
-      return [p[0], 1 - p[0]];
-    },
     win: w.cleanSheet("home"),
   },
   {
     key: "away_clean_sheet",
     label: "Cage inviolée (extérieur)",
     short: "Clean sheet E",
-    outcomes: () => [
-      { key: "oui", label: "L'extérieur ne concède aucun but", short: "Oui" },
-      { key: "non", label: "L'extérieur concède au moins un but", short: "Non" },
+    category: "teams",
+    partition: true,
+    outcomes: (_, a) => [
+      { key: "oui", label: `Cage inviolée ${a} : Oui`, short: "Oui" },
+      { key: "non", label: `Cage inviolée ${a} : Non`, short: "Non" },
     ],
-    probs: (lamH, lamA) => {
-      const { p } = dist(lamH);
-      return [p[0], 1 - p[0]];
-    },
     win: w.cleanSheet("away"),
+  },
+  {
+    key: "score_exact",
+    label: "Score exact",
+    short: "Score exact",
+    category: "scores",
+    partition: true,
+    outcomes: () => [
+      { key: "1_0", label: "Score exact 1-0", short: "1-0" },
+      { key: "0_0", label: "Score exact 0-0", short: "0-0" },
+      { key: "0_1", label: "Score exact 0-1", short: "0-1" },
+      { key: "2_0", label: "Score exact 2-0", short: "2-0" },
+      { key: "1_1", label: "Score exact 1-1", short: "1-1" },
+      { key: "0_2", label: "Score exact 0-2", short: "0-2" },
+      { key: "2_1", label: "Score exact 2-1", short: "2-1" },
+      { key: "2_2", label: "Score exact 2-2", short: "2-2" },
+      { key: "1_2", label: "Score exact 1-2", short: "1-2" },
+      { key: "3_0", label: "Score exact 3-0", short: "3-0" },
+      { key: "3_1", label: "Score exact 3-1", short: "3-1" },
+      { key: "0_3", label: "Score exact 0-3", short: "0-3" },
+      { key: "1_3", label: "Score exact 1-3", short: "1-3" },
+      { key: "other", label: "Autre score", short: "Autre score" },
+    ],
+    win: w.scoreExact,
   },
 ];
 
@@ -444,159 +353,219 @@ export function isKnownMarket(key: string): boolean {
   return MARKET_BY_KEY.has(key);
 }
 
-/** Règlement : une issue est gagnante selon le score final. */
-export function marketWin(market: string, outcome: string, home: number, away: number): boolean {
-  const def = MARKET_BY_KEY.get(market);
-  if (!def) return false;
-  return def.win(outcome, home, away);
-}
-
-/** Construit tous les marchés avec leurs cotes pour une affiche. */
-export function buildMarkets(home: string, away: string, bets?: BetLike[]): MarketGroup[] {
-  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  return MARKETS.map((m) => {
-    const probs = m.probs(lambdaHome, lambdaAway);
-    const outcomes = m.outcomes(home, away).map((o, i) => ({
-      ...o,
-      odds: exposureAdjustedOdds(m.key, o.key, oddsFromProb(probs[i] ?? 0, effectiveMargin(m.key)), bets),
-    }));
-    const rows = m.rows
-      ? m.rows(home, away).map((r) => ({
-          label: r.label,
-          outcomes: r.keys
-            .map((k) => outcomes.find((o) => o.key === k))
-            .filter((o): o is MarketOutcome => Boolean(o)),
-        }))
-      : undefined;
-    return { key: m.key, label: m.label, short: m.short, outcomes, rows };
-  });
-}
-
-/** Cote d'une issue précise (pour la validation serveur d'un pari). */
-export function marketOddsFor(
-  market: string,
-  outcome: string,
-  home: string,
-  away: string,
-  bets?: BetLike[]
-) {
-  const def = MARKET_BY_KEY.get(market);
-  if (!def) return null;
-  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const probs = def.probs(lambdaHome, lambdaAway);
-  const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
-  if (idx < 0) return null;
-  return exposureAdjustedOdds(market, outcome, oddsFromProb(probs[idx] ?? 0, effectiveMargin(market)), bets);
-}
-
-/** Libellé d'une issue précise. */
-export function marketLabelFor(market: string, outcome: string, home: string, away: string) {
-  const def = MARKET_BY_KEY.get(market);
-  if (!def) return null;
-  return def.outcomes(home, away).find((o) => o.key === outcome)?.label ?? null;
-}
-
-/** Somme de la grille des scores finaux sur un prédicat (grille indexée par score final). */
-function sumOverLive(predicate: (i: number, j: number) => boolean, grid: number[][]) {
-  let s = 0;
-  for (let i = 0; i < grid.length; i++) {
-    for (let j = 0; j < grid[i].length; j++) {
-      const v = grid[i][j];
-      if (v > 0 && predicate(i, j)) s += v;
+/** Somme exacte de la probabilité sur la grille finale [finalHome][finalAway]. */
+function rawProbOnModel(m: MarketDef, outcomeKey: string, model: LiveScoreModel): number {
+  let prob = 0;
+  for (let h = 0; h < model.grid.length; h++) {
+    const row = model.grid[h];
+    for (let a = 0; a < row.length; a++) {
+      const cell = row[a];
+      if (cell > 0 && m.win(outcomeKey, h, a)) {
+        prob += cell;
+      }
     }
   }
-  return s;
+  return prob;
 }
 
-/** Vrai si une issue est déjà décidée par le score en cours (gagnée OU impossible). */
+/** Extrait la minute numérique depuis un libellé (« 37' » → 37, « MT » → 45, « 90+2' » → 90). */
+export function minuteNumber(minute: string | null | undefined): number {
+  if (!minute) return 0;
+  const trimmed = minute.trim().toUpperCase();
+  if (trimmed === "MT" || trimmed === "HT" || trimmed.includes("MI-TEMPS")) return 45;
+  const plus = /^(\d+)\s*\+\s*\d+/.exec(trimmed);
+  if (plus) return Math.max(0, Math.min(90, parseInt(plus[1], 10)));
+  const m = /^\d+/.exec(trimmed);
+  const n = m ? parseInt(m[0], 10) : 0;
+  return Math.max(0, Math.min(90, n));
+}
+
+function maxReachableAdditionalGoals(minute: number): number {
+  if (minute >= 90) return 0;
+  const remaining = Math.max(1, 90 - minute);
+  return Math.min(12, Math.max(2, Math.ceil(remaining / 5) + 1));
+}
+
+/**
+ * Retourne `true` si l'issue est déjà mathématiquement décidée (acquise ou devenue impossible)
+ * au vu du score actuel et du temps restant.
+ */
 export function marketOutcomeSettled(
   market: string,
   outcome: string,
   homeScore: number,
   awayScore: number,
-  minute: number = 90
+  minute: string | number | null | undefined
 ): boolean {
-  const total = homeScore + awayScore;
-  const diff = homeScore - awayScore;
-  const remaining = Math.max(0, 90 - minute);
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return false;
+  if (!def.outcomes("Domicile", "Extérieur").some((o) => o.key === outcome)) return false;
 
-  // Si match fini (minute >= 90), tout est décidé
-  if (minute >= 90) {
-    switch (market) {
-      case "result":
-        return (outcome === "home" && diff <= 0) || (outcome === "draw" && diff !== 0) || (outcome === "away" && diff >= 0);
-      case "double_chance":
-        return (outcome === "1X" && diff < 0) || (outcome === "12" && diff === 0) || (outcome === "X2" && diff > 0);
-      case "odd_even":
-        return false; // pair/impair jamais décidé avant la fin
+  const min = typeof minute === "number" ? minute : minuteNumber(minute);
+  if (min >= 90) return true;
+
+  const maxAdd = maxReachableAdditionalGoals(min);
+  let sawTrue = false;
+  let sawFalse = false;
+
+  for (let addH = 0; addH <= maxAdd; addH++) {
+    for (let addA = 0; addH + addA <= maxAdd; addA++) {
+      if (def.win(outcome, homeScore + addH, awayScore + addA)) sawTrue = true;
+      else sawFalse = true;
+      if (sawTrue && sawFalse) return false;
     }
   }
-
-  // En live : marché décidé si l'issue est mathématiquement impossible
-  // Ex: 1X impossible si away mène de > remaining goals
-  switch (market) {
-    case "result":
-      if (outcome === "home" && diff < -remaining) return true; // home ne peut plus rattraper
-      if (outcome === "away" && diff > remaining) return true; // away ne peut plus rattraper
-      if (outcome === "draw" && Math.abs(diff) > remaining) return true; // plus possible d'égaliser
-      return false;
-    case "double_chance":
-      if (outcome === "1X" && diff < -remaining) return true; // home ne peut plus gagner ni faire nul
-      if (outcome === "X2" && diff > remaining) return true; // away ne peut plus gagner ni faire nul
-      if (outcome === "12" && diff === 0 && remaining === 0) return true; // 12 impossible si match nul à la fin
-      return false;
-    case "odd_even":
-      return false;
-    case "total_ou": {
-      const m = /^ou_(\d+)_(\d+)_(over|under)$/.exec(outcome);
-      if (!m) return false;
-      const line = Number(`${m[1]}.${m[2]}`);
-      return total > line;
-    }
-    case "total_exact": {
-      if (outcome === "5+") return total >= 5;
-      return total > Number(outcome);
-    }
-    case "btts":
-      return homeScore > 0 && awayScore > 0;
-    case "score_exact": {
-      if (outcome === "other") return false;
-      const [i, j] = outcome.split("_").map(Number);
-      return i < homeScore || j < awayScore;
-    }
-    case "result_total":
-      return outcome === "under" && total >= 3;
-    case "home_total":
-      return teamTotalSettled(outcome, homeScore, "h");
-    case "away_total":
-      return teamTotalSettled(outcome, awayScore, "a");
-    case "home_to_nil":
-    case "home_clean_sheet":
-      return awayScore >= 1;
-    case "away_to_nil":
-    case "away_clean_sheet":
-      return homeScore >= 1;
-    default:
-      return false;
-  }
-}
-
-function teamTotalSettled(outcome: string, goals: number, side: "h" | "a"): boolean {
-  const m = /^(h|a)_(\d+)_(\d+)_(over|under)$/.exec(outcome);
-  if (!m || m[1] !== side) return false;
-  const line = Number(`${m[2]}.${m[3]}`);
-  return goals > line;
+  return true;
 }
 
 /**
- * Construit les marchés d'un match en direct avec les cotes live :
- * - les issues déjà décidées (gagnées ou devenues impossibles) sont retirées —
- *   seules les options encore ouvertes restent affichées ;
- * - chaque marché est coté sur la même grille de scores finaux (modèle live),
- *   avec la marge bookmaker dynamique ;
- * - le marché Résultat reprend exactement les cotes 1/N/2 du moteur (cohérence
- *   cartes / feuille de marchés).
+ * Construit un marché complet (avant-match ou live) à partir du modèle joint unifié.
  */
+function buildMarketGroup(
+  m: MarketDef,
+  home: string,
+  away: string,
+  model: LiveScoreModel,
+  homeScore: number,
+  awayScore: number,
+  minute: number,
+  isLive: boolean,
+  bets?: BetLike[]
+): MarketGroup | null {
+  const overround = effectiveMargin(m.key, model.margin);
+  const maxOdds = MARKET_MAX_ODDS[m.key] ?? 65;
+  const specs = m.outcomes(home, away);
+
+  // Cas 1 : marché structuré en lignes Plus/Moins (total_ou, home_total, away_total)
+  if (m.rows) {
+    const rowSpecs = m.rows(home, away);
+    const builtRows: MarketRow[] = [];
+    const builtOutcomes: MarketOutcome[] = [];
+
+    for (const rSpec of rowSpecs) {
+      const rowEntries = rSpec.keys
+        .map((k) => specs.find((s) => s.key === k))
+        .filter((s): s is OutcomeSpec => Boolean(s))
+        .map((s) => {
+          const prob = rawProbOnModel(m, s.key, model);
+          const settled = isLive
+            ? marketOutcomeSettled(m.key, s.key, homeScore, awayScore, minute) ||
+              prob < 0.0015 ||
+              prob > 0.994
+            : false;
+          return { spec: s, prob, settled };
+        });
+
+      // Si une issue d'une ligne Plus/Moins est décidée, toute la ligne est retirée
+      if (rowEntries.length < 2 || rowEntries.some((e) => e.settled)) continue;
+
+      const oddsPair = partitionOutcomeOdds(
+        rowEntries.map((e) => e.prob),
+        overround,
+        maxOdds
+      );
+      const rowOutcomes: MarketOutcome[] = rowEntries.map((e, idx) => ({
+        key: e.spec.key,
+        label: e.spec.label,
+        short: e.spec.short,
+        odds: exposureAdjustedOdds(m.key, e.spec.key, oddsPair[idx], bets),
+      }));
+
+      builtRows.push({ label: rSpec.label, outcomes: rowOutcomes });
+      builtOutcomes.push(...rowOutcomes);
+    }
+
+    if (builtRows.length === 0) return null;
+    return {
+      key: m.key,
+      label: m.label,
+      short: m.short,
+      category: m.category,
+      outcomes: builtOutcomes,
+      rows: builtRows,
+    };
+  }
+
+  // Cas 2 : marché standard sans sous-lignes
+  const entries = specs.map((s) => {
+    const prob = rawProbOnModel(m, s.key, model);
+    const settled = isLive
+      ? marketOutcomeSettled(m.key, s.key, homeScore, awayScore, minute) ||
+        prob < 0.0012 ||
+        prob > 0.994
+      : false;
+    return { spec: s, prob, settled };
+  });
+
+  // Sur les marchés binaires Oui/Non ou Pair/Impair, on retire la paire complète si un côté est décidé
+  if (m.partition && specs.length === 2 && entries.some((e) => e.settled)) {
+    return null;
+  }
+
+  const open = entries.filter((e) => !e.settled);
+  if (open.length === 0) return null;
+
+  let outcomes: MarketOutcome[];
+  if (m.partition && open.length >= 2) {
+    const sumOpen = open.reduce((acc, e) => acc + e.prob, 0);
+    if (sumOpen > 0.96) {
+      const oddsList = partitionOutcomeOdds(
+        open.map((e) => e.prob / sumOpen),
+        overround,
+        maxOdds
+      );
+      outcomes = open.map((e, idx) => ({
+        key: e.spec.key,
+        label: e.spec.label,
+        short: e.spec.short,
+        odds: exposureAdjustedOdds(m.key, e.spec.key, oddsList[idx], bets),
+      }));
+    } else {
+      outcomes = open.map((e) => ({
+        key: e.spec.key,
+        label: e.spec.label,
+        short: e.spec.short,
+        odds: exposureAdjustedOdds(
+          m.key,
+          e.spec.key,
+          binaryOutcomeOdds(e.prob, overround, maxOdds),
+          bets
+        ),
+      }));
+    }
+  } else {
+    outcomes = open.map((e) => ({
+      key: e.spec.key,
+      label: e.spec.label,
+      short: e.spec.short,
+      odds: exposureAdjustedOdds(
+        m.key,
+        e.spec.key,
+        binaryOutcomeOdds(e.prob, overround, maxOdds),
+        bets
+      ),
+    }));
+  }
+
+  return {
+    key: m.key,
+    label: m.label,
+    short: m.short,
+    category: m.category,
+    outcomes,
+  };
+}
+
+export function buildMarkets(home: string, away: string, bets?: BetLike[]): MarketGroup[] {
+  const model = liveScoreModel(home, away, 0, 0, 0);
+  const out: MarketGroup[] = [];
+  for (const m of MARKETS) {
+    const grp = buildMarketGroup(m, home, away, model, 0, 0, 0, false, bets);
+    if (grp) out.push(grp);
+  }
+  return out;
+}
+
 export function buildLiveMarkets(
   home: string,
   away: string,
@@ -606,52 +575,29 @@ export function buildLiveMarkets(
   opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number },
   bets?: BetLike[]
 ): MarketGroup[] {
-  const live = liveOddsFor(home, away, homeScore, awayScore, minute, opts);
-  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
-
-  return MARKETS.map((m): MarketGroup | null => {
-    const open = m
-      .outcomes(home, away)
-      .filter((o) => !marketOutcomeSettled(m.key, o.key, homeScore, awayScore, minute));
-    if (open.length === 0) return null;
-
-    const priced: MarketOutcome[] = open.map((o) => {
-      let odds: number;
-      if (m.key === "result") {
-        const base =
-          o.key === "home" ? live.oddsHome : o.key === "draw" ? live.oddsDraw : live.oddsAway;
-        odds = exposureAdjustedOdds(m.key, o.key, base, bets);
-      } else {
-        const p = sumOverLive((i, j) => m.win(o.key, i, j), grid);
-        odds = exposureAdjustedOdds(
-          m.key,
-          o.key,
-          oddsFromProb(p, effectiveMargin(m.key, margin)),
-          bets
-        );
-      }
-      return { ...o, odds };
-    });
-
-    const rows = m.rows
-      ? m
-          .rows(home, away)
-          .map((r) => ({
-            label: r.label,
-            outcomes: priced.filter((o) => r.keys.includes(o.key)),
-          }))
-          .filter((r) => r.outcomes.length > 0)
-      : undefined;
-
-    return { key: m.key, label: m.label, short: m.short, outcomes: priced, rows };
-  }).filter((g): g is MarketGroup => g !== null);
+  const model = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
+  const out: MarketGroup[] = [];
+  for (const m of MARKETS) {
+    const grp = buildMarketGroup(m, home, away, model, homeScore, awayScore, minute, true, bets);
+    if (grp) out.push(grp);
+  }
+  return out;
 }
 
-/**
- * Cote serveur d'une issue en direct (validation anti-triche) : null si le marché
- * est inconnu, l'issue introuvable ou déjà décidée. Le serveur recote TOUJOURS le
- * pari au moment de la validation — jamais la cote envoyée par le client.
- */
+export function marketOddsFor(
+  market: string,
+  outcome: string,
+  home: string,
+  away: string,
+  bets?: BetLike[]
+): number | null {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return null;
+  const model = liveScoreModel(home, away, 0, 0, 0);
+  const grp = buildMarketGroup(def, home, away, model, 0, 0, 0, false, bets);
+  return grp?.outcomes.find((o) => o.key === outcome)?.odds ?? null;
+}
+
 export function liveMarketOddsFor(
   market: string,
   outcome: string,
@@ -665,28 +611,34 @@ export function liveMarketOddsFor(
 ): number | null {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
-  if (marketOutcomeSettled(market, outcome, homeScore, awayScore, minute)) return null;
-  const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
-  if (idx < 0) return null;
-
-  if (market === "result") {
-    const live = liveOddsFor(home, away, homeScore, awayScore, minute, opts);
-    const base =
-      outcome === "home" ? live.oddsHome : outcome === "draw" ? live.oddsDraw : live.oddsAway;
-    return exposureAdjustedOdds(market, outcome, base, bets);
-  }
-
-  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
-  const p = sumOverLive((i, j) => def.win(outcome, i, j), grid);
-  return exposureAdjustedOdds(market, outcome, oddsFromProb(p, effectiveMargin(market, margin)), bets);
+  const model = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
+  const grp = buildMarketGroup(def, home, away, model, homeScore, awayScore, minute, true, bets);
+  return grp?.outcomes.find((o) => o.key === outcome)?.odds ?? null;
 }
 
-/**
- * Cote de clôture d'une issue au moment où le marché se ferme (CLV tracking).
- * Contrairement à liveMarketOddsFor, elle ignore l'état « décidé » : au score
- * final le marché est fermé, mais on a besoin du dernier prix pour mesurer la
- * valeur (closing line value) de chaque pari pris pendant le match.
- */
+export function marketLabelFor(
+  market: string,
+  outcome: string,
+  home: string,
+  away: string
+): string | null {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return null;
+  const spec = def.outcomes(home, away).find((o) => o.key === outcome);
+  return spec ? spec.label : null;
+}
+
+export function marketWin(
+  market: string,
+  outcome: string,
+  homeScore: number,
+  awayScore: number
+): boolean {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return false;
+  return def.win(outcome, homeScore, awayScore);
+}
+
 export function closingOddsFor(
   market: string,
   outcome: string,
@@ -698,26 +650,15 @@ export function closingOddsFor(
 ): number | null {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
-  const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
-  if (idx < 0) return null;
+  if (!def.outcomes(home, away).some((o) => o.key === outcome)) return null;
 
-  if (market === "result") {
-    // Cote de clôture juste : probabilité Skellam décalée du score final + marge.
-    const p = liveResultProbs(home, away, homeScore, awayScore, 90, opts);
-    const prob = outcome === "home" ? p.home : outcome === "draw" ? p.draw : p.away;
-    return oddsFromProb(prob, effectiveMargin(market));
-  }
-
-  const { grid, margin } = liveScoreModel(home, away, homeScore, awayScore, 90, opts);
-  const p = sumOverLive((i, j) => def.win(outcome, i, j), grid);
-  return oddsFromProb(p, effectiveMargin(market, margin));
+  const model = liveScoreModel(home, away, 0, 0, 0, opts);
+  const overround = effectiveMargin(market, model.margin);
+  const prob = rawProbOnModel(def, outcome, model);
+  if (prob <= 0) return null;
+  return binaryOutcomeOdds(prob, overround, 250);
 }
 
-/**
- * Probabilité (0-1) que l'issue se réalise selon le modèle live, au score/minute
- * courant. Sert à détecter les paris placés sur une issue « quasi jouée »
- * (probabilité très proche de 1) juste avant un markGoal manuel.
- */
 export function liveOutcomeProbability(
   market: string,
   outcome: string,
@@ -730,28 +671,17 @@ export function liveOutcomeProbability(
 ): number | null {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
-  const idx = def.outcomes(home, away).findIndex((o) => o.key === outcome);
-  if (idx < 0) return null;
+  if (!def.outcomes(home, away).some((o) => o.key === outcome)) return null;
 
   if (market === "result") {
-    // Skellam sur les buts RESTANTS, décalé du score courant (liveResultProbs).
     const p = liveResultProbs(home, away, homeScore, awayScore, minute, opts);
     return outcome === "home" ? p.home : outcome === "draw" ? p.draw : p.away;
   }
 
-  const { grid } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
-  return sumOverLive((i, j) => def.win(outcome, i, j), grid);
+  const model = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
+  return rawProbOnModel(def, outcome, model);
 }
 
-/** Minute numérique depuis le libellé du moteur (« 37' » → 37, null → 0). */
-export function minuteNumber(minute: string | null): number {
-  if (!minute) return 0;
-  const m = /^\d+/.exec(minute);
-  const n = m ? parseInt(m[0], 10) : 0;
-  return Math.max(0, Math.min(90, n));
-}
-
-/** Un marché perso saisi par l'admin (source "manual"). */
 export interface CustomMarketGroup {
   key: string;
   label: string;
@@ -760,7 +690,6 @@ export interface CustomMarketGroup {
   rows?: MarketRow[];
 }
 
-/** Cote d'une issue dans un catchier de marchés personnalisés (null si absent). */
 export function customMarketOdds(
   markets: CustomMarketGroup[] | null | undefined,
   market: string,
@@ -779,7 +708,6 @@ export function customMarketOdds(
   return g.outcomes.find((o) => o.key === outcome)?.odds ?? null;
 }
 
-/** Libellé d'une issue dans un catalogue de marchés personnalisés (null si absent). */
 export function customMarketLabel(
   markets: CustomMarketGroup[] | null | undefined,
   market: string,
@@ -798,7 +726,6 @@ export function customMarketLabel(
   return g.outcomes.find((o) => o.key === outcome)?.label ?? null;
 }
 
-/** Catalogue des marchés éditables dans l'admin (issues sans cotes). */
 export function marketCatalog(): Array<{ key: string; label: string; short: string; outcomes: MarketOutcome[] }> {
   return MARKETS.map((m) => {
     const spec = m.outcomes("Domicile", "Extérieur");

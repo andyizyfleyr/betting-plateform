@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ArrowRight, Check, Loader2, Plus, Ticket, X } from "lucide-react";
+import { ArrowRight, Check, Loader2, Lock, Plus, Ticket, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp, type BetTarget } from "./providers";
 import { TeamAvatar } from "./team-avatar";
@@ -11,7 +11,7 @@ import { AnimatedNumber } from "./animated-number";
 import { cn, eur, formatOdds } from "@/lib/format";
 
 const QUICK_STAKES = [5, 10, 25, 50];
-const POLL_INTERVAL = 5_000;
+const POLL_INTERVAL = 4_000;
 
 export function BetModal() {
   const { target, closeBet, marketMatch } = useApp();
@@ -59,9 +59,15 @@ function BetModalSheet({
     stake: number;
     odds: number;
   } | null>(null);
-  const [live, setLive] = useState<{ matchId: number; odds: number; minute: string | null } | null>(
-    null
-  );
+  const [live, setLive] = useState<{
+    matchId: number;
+    odds: number | null;
+    minute: string | null;
+    homeScore: number | null;
+    awayScore: number | null;
+    suspended: boolean;
+    finished: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (target.match.status !== "live") return;
@@ -73,22 +79,38 @@ function BetModalSheet({
         if (!active) return;
         const fresh = r.matches.find((m) => m.id === target.match.id);
         if (!fresh) return;
-        if (target.market === "result") {
-          const map = { home: fresh.oddsHome, draw: fresh.oddsDraw, away: fresh.oddsAway } as const;
-          const od = map[target.selection as keyof typeof map];
-          if (od != null) setLive({ matchId: target.match.id, odds: od, minute: fresh.minute });
-        } else {
-          const grp = (fresh.markets ?? []).find((g) => g.key === target.market);
-          const outcome = grp?.outcomes.find((o) => o.key === target.selection);
-          if (outcome?.odds)
-            setLive({ matchId: target.match.id, odds: outcome.odds, minute: fresh.minute });
+
+        if (fresh.status === "finished") {
+          setLive({
+            matchId: target.match.id,
+            odds: null,
+            minute: null,
+            homeScore: fresh.homeScore,
+            awayScore: fresh.awayScore,
+            suspended: true,
+            finished: true,
+          });
+          return;
         }
+
+        const grp = (fresh.markets ?? []).find((g) => g.key === target.market);
+        const outcome = grp?.outcomes.find((o) => o.key === target.selection);
+
+        setLive({
+          matchId: target.match.id,
+          odds: outcome ? outcome.odds : null,
+          minute: fresh.minute,
+          homeScore: fresh.homeScore,
+          awayScore: fresh.awayScore,
+          suspended: fresh.suspended,
+          finished: false,
+        });
       } catch {
         /* silencieux */
       }
     };
-    poll();
-    const id = setInterval(poll, POLL_INTERVAL);
+    void poll();
+    const id = setInterval(() => void poll(), POLL_INTERVAL);
     return () => {
       active = false;
       clearInterval(id);
@@ -99,9 +121,15 @@ function BetModalSheet({
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
   const overBalance = stake > balance;
   const belowMin = stake > 0 && stake < 0.5;
-  const liveActive = live && live.matchId === target.match.id;
-  const displayOdds = liveActive ? live.odds : target.odds;
-  const liveMinute = liveActive ? live.minute : null;
+  const liveActive = live && live.matchId === target.match.id ? live : null;
+
+  const marketClosed = Boolean(liveActive && (liveActive.finished || liveActive.odds == null));
+  const marketSuspended = Boolean(liveActive ? liveActive.suspended : target.match.suspended);
+  const displayOdds = liveActive?.odds ?? target.odds;
+  const liveMinute = liveActive ? liveActive.minute : target.match.minute;
+  const liveHomeScore = liveActive ? liveActive.homeScore : target.match.homeScore;
+  const liveAwayScore = liveActive ? liveActive.awayScore : target.match.awayScore;
+
   const payout = stake * displayOdds;
   const profit = payout - stake;
 
@@ -114,8 +142,15 @@ function BetModalSheet({
     setError(null);
   };
 
+  const canSubmit =
+    phase === "input" &&
+    stake >= 0.5 &&
+    !overBalance &&
+    !marketSuspended &&
+    !marketClosed;
+
   const confirm = async () => {
-    if (phase !== "input" || stake < 0.5 || overBalance) return;
+    if (!canSubmit) return;
     setPhase("loading");
     setError(null);
     try {
@@ -155,7 +190,7 @@ function BetModalSheet({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={phase === "success" ? undefined : onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
       />
 
       <motion.div
@@ -204,7 +239,7 @@ function BetModalSheet({
               </button>
             </div>
 
-            {/* Résumé sélection */}
+            {/* Résumé de la sélection */}
             <div className="mt-3 flex items-center gap-3 rounded-2xl border border-edge bg-elev/60 p-3">
               <div className="flex shrink-0 -space-x-2">
                 <TeamAvatar
@@ -221,28 +256,45 @@ function BetModalSheet({
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-[13px] font-semibold text-ink">
-                  {target.match.homeTeam} – {target.match.awayTeam}
-                </p>
-                <p className="mt-0.5 truncate text-[11.5px] text-mist">
-                  {target.match.status === "live" && (
-                    <span className="mr-1.5 inline-flex items-center gap-1 font-bold text-betclic-red">
-                      <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                      {liveMinute ?? target.match.minute ?? "LIVE"}
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate font-display text-[13px] font-semibold text-ink">
+                    {target.match.homeTeam} – {target.match.awayTeam}
+                  </p>
+                  {target.match.status === "live" && liveHomeScore != null && (
+                    <span className="shrink-0 rounded-md bg-betclic-red/12 px-1.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red">
+                      {liveHomeScore}–{liveAwayScore ?? 0} · {liveMinute ?? "LIVE"}
                     </span>
                   )}
+                </div>
+                <p className="mt-0.5 truncate text-[11.5px] text-mist">
                   <span className="font-semibold text-ink">{target.label}</span>
                   {target.market !== "result" && (
                     <span className="text-dim"> · {target.marketLabel}</span>
                   )}
                 </p>
               </div>
-              <span className="shrink-0 rounded-xl bg-betclic-red px-2.5 py-1.5 font-display text-[15px] font-bold tabular-nums text-white">
-                {formatOdds(displayOdds, oddsFormat)}
+              <span
+                className={cn(
+                  "shrink-0 rounded-xl px-2.5 py-1.5 font-display text-[15px] font-bold tabular-nums text-white",
+                  marketSuspended || marketClosed ? "bg-dim" : "bg-betclic-red"
+                )}
+              >
+                {marketClosed ? "Fermé" : formatOdds(displayOdds, oddsFormat)}
               </span>
             </div>
 
-            {/* Champ de mise direct */}
+            {(marketSuspended || marketClosed) && (
+              <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11.5px] font-semibold text-amber-800">
+                <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+                <span>
+                  {marketClosed
+                    ? "Cette sélection est désormais décidée ou clôturée."
+                    : "Marché momentanément suspendu (action de jeu en cours)…"}
+                </span>
+              </div>
+            )}
+
+            {/* Champ de mise */}
             <div className="mt-3.5">
               <div className="flex items-center justify-between text-[11.5px]">
                 <label htmlFor="sport-stake-input" className="font-semibold text-mist">
@@ -366,11 +418,11 @@ function BetModalSheet({
             {/* Validation */}
             <button
               type="button"
-              disabled={stake < 0.5 || overBalance || phase === "loading"}
+              disabled={!canSubmit}
               onClick={confirm}
               className={cn(
                 "mt-3.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
-                stake >= 0.5 && !overBalance
+                canSubmit
                   ? "bg-betclic-red text-white shadow-sm"
                   : "bg-elev text-dim"
               )}
@@ -380,6 +432,10 @@ function BetModalSheet({
                   <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
                   Validation en cours…
                 </>
+              ) : marketClosed ? (
+                "Sélection clôturée"
+              ) : marketSuspended ? (
+                "Marché suspendu…"
               ) : (
                 <>
                   Placer {stake > 0 ? eur(stake) : "le pari"}
