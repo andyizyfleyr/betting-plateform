@@ -95,6 +95,7 @@ export async function GET(req: NextRequest) {
             })
           : null,
       placedAt: bet.placedAt,
+      settledAt: bet.settledAt ?? null,
       matchStatus: match?.status ?? null,
       matchHomeScore: match?.homeScore ?? null,
       matchAwayScore: match?.awayScore ?? null,
@@ -149,6 +150,7 @@ export async function GET(req: NextRequest) {
       cashOutAmount: pb.cashOutAmount ?? null,
       cashOut: cashOutVal,
       placedAt: pb.placedAt,
+      settledAt: pb.settledAt ?? null,
       matchStatus: null,
       matchHomeScore: null,
       matchAwayScore: null,
@@ -223,6 +225,7 @@ export async function GET(req: NextRequest) {
       cashOutAmount: cb.cashOutAmount ?? null,
       cashOut: cb.status === "pending" ? computeComboCashOut(cb, comboMatchMap, comboQuestionMap) : null,
       placedAt: cb.placedAt,
+      settledAt: cb.settledAt ?? null,
       matchStatus: liveMatch ? ("live" as const) : null,
       matchHomeScore: null,
       matchAwayScore: null,

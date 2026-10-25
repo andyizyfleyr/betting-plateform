@@ -80,7 +80,11 @@ export function BetTicket({
             </span>
           )}
           <span className="text-dim">·</span>
-          <span className="shrink-0 text-[11px] text-dim">{formatPlacedAt(bet.placedAt)}</span>
+          <span className="shrink-0 text-[11px] text-dim">
+            {formatPlacedAt(
+              bet.status !== "pending" ? (bet.settledAt ?? bet.placedAt) : bet.placedAt
+            )}
+          </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
