@@ -37,3 +37,6 @@ next-env.d.ts
 
 # drizzle-kit generated folder (schema managed via scripts/migrate-*.ts)
 /drizzle/
+
+# unselected AI image candidates
+/Unselected files/
