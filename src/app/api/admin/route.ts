@@ -88,19 +88,19 @@ export async function GET(req: NextRequest) {
     db
       .select({
         stake: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
-        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${bets.status} = 'won' THEN ${bets.potentialWin} WHEN ${bets.status} = 'cashed' THEN COALESCE(${bets.cashOutAmount}, 0) ELSE 0 END), 0)::float8`,
+        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${bets.status} = 'won' THEN ${bets.potentialWin} WHEN ${bets.status} = 'cashed' THEN COALESCE(${bets.cashOutAmount}, 0) WHEN ${bets.status} = 'void' THEN ${bets.stake} ELSE 0 END), 0)::float8`,
       })
       .from(bets),
     db
       .select({
         stake: sql<number>`COALESCE(SUM(${predictionBets.stake}), 0)::float8`,
-        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${predictionBets.status} = 'won' THEN ${predictionBets.potentialWin} WHEN ${predictionBets.status} = 'cashed' THEN COALESCE(${predictionBets.cashOutAmount}, 0) ELSE 0 END), 0)::float8`,
+        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${predictionBets.status} = 'won' THEN ${predictionBets.potentialWin} WHEN ${predictionBets.status} = 'cashed' THEN COALESCE(${predictionBets.cashOutAmount}, 0) WHEN ${predictionBets.status} = 'void' THEN ${predictionBets.stake} ELSE 0 END), 0)::float8`,
       })
       .from(predictionBets),
     db
       .select({
         stake: sql<number>`COALESCE(SUM(${comboBets.stake}), 0)::float8`,
-        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${comboBets.status} = 'won' THEN ${comboBets.potentialWin} WHEN ${comboBets.status} = 'cashed' THEN COALESCE(${comboBets.cashOutAmount}, 0) ELSE 0 END), 0)::float8`,
+        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${comboBets.status} = 'won' THEN ${comboBets.potentialWin} WHEN ${comboBets.status} = 'cashed' THEN COALESCE(${comboBets.cashOutAmount}, 0) WHEN ${comboBets.status} = 'void' THEN ${comboBets.stake} ELSE 0 END), 0)::float8`,
       })
       .from(comboBets),
     db.select({ n: count() }).from(matches).where(eq(matches.status, "live")),
@@ -650,19 +650,26 @@ export async function POST(req: NextRequest) {
         const settled = await tx
           .select()
           .from(bets)
-          .where(and(eq(bets.matchId, matchId), inArray(bets.status, ["won", "lost"])));
+          .where(and(eq(bets.matchId, matchId), inArray(bets.status, ["won", "lost", "void"])));
 
         for (const b of settled) {
-          if (b.status === "won") {
-            const clawback = round2(
-              b.stake * b.odds * (b.payoutMultiplier ?? 1) + (b.stakeReturned ?? 0)
-            );
+          if (b.status === "won" || b.status === "void") {
+            const clawback =
+              b.status === "void"
+                ? round2(b.stake)
+                : round2(b.stake * b.odds * (b.payoutMultiplier ?? 1) + (b.stakeReturned ?? 0));
             await tx
               .update(appUser)
               .set({ balance: sql`GREATEST(0, ${appUser.balance} - ${clawback})` })
               .where(eq(appUser.id, b.userId));
           }
-          await tx.update(bets).set({ status: "pending" }).where(eq(bets.id, b.id));
+          await tx
+            .update(bets)
+            .set({
+              status: "pending",
+              potentialWin: round2(b.stake * b.odds),
+            })
+            .where(eq(bets.id, b.id));
         }
 
         const [u] = await tx

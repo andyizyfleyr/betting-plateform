@@ -12,7 +12,7 @@ import { useApp } from "@/components/providers";
 import { eur } from "@/lib/format";
 
 type Tab = "ongoing" | "finished";
-type OutcomeFilter = "all" | "won" | "lost" | "cashed";
+type OutcomeFilter = "all" | "won" | "lost" | "cashed" | "void";
 
 const POLL_INTERVAL = 5_000;
 const MAX_RETRIES = 3;
@@ -181,6 +181,7 @@ export default function ParisPage() {
       won: finishedForOutcomeCounts.filter((b) => b.status === "won").length,
       lost: finishedForOutcomeCounts.filter((b) => b.status === "lost").length,
       cashed: finishedForOutcomeCounts.filter((b) => b.status === "cashed").length,
+      void: finishedForOutcomeCounts.filter((b) => b.status === "void").length,
     }),
     [byKind.length, finishedForOutcomeCounts]
   );
@@ -360,6 +361,11 @@ export default function ParisPage() {
                 value: "cashed",
                 label: "Cash-out",
                 count: bets !== null ? outcomeCounts.cashed : undefined,
+              },
+              {
+                value: "void",
+                label: "Remboursés",
+                count: bets !== null ? outcomeCounts.void : undefined,
               },
             ],
           },

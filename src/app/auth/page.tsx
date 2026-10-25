@@ -33,19 +33,30 @@ function AuthInner() {
 
   useEffect(() => {
     if (user) {
-      router.replace("/predictions");
+      router.replace(user.role === "admin" ? "/admin" : "/predictions");
     }
   }, [user, router]);
 
   const finishLogin = useCallback(
     (loggedUser: Parameters<typeof applyUser>[0], created: boolean) => {
       applyUser(loggedUser);
+      const isAdminUser = loggedUser?.role === "admin";
       toast({
         kind: "success",
-        title: created ? "Compte créé" : "Connexion réussie",
+        title: isAdminUser
+          ? "Connexion administrateur"
+          : created
+            ? "Compte créé"
+            : "Connexion réussie",
       });
+      if (isAdminUser) {
+        router.replace("/admin");
+        return;
+      }
       const from = params.get("from");
-      router.push(from && from.startsWith("/") ? from : "/predictions");
+      const safeDest =
+        from && from.startsWith("/") && !from.startsWith("/admin") ? from : "/predictions";
+      router.push(safeDest);
     },
     [applyUser, params, router, toast]
   );

@@ -740,18 +740,30 @@ export interface MlSmartComboSuggestion {
 
 const RECOMMENDABLE_MARKETS = new Set([
   "result",
+  "dnb",
   "double_chance",
+  "handicap_euro",
   "total_ou",
   "btts",
   "result_total",
+  "result_btts",
+  "goal_range",
+  "ht_result",
+  "first_team_to_score",
 ]);
 
 const MARKET_SHORT_REASON: Record<string, string> = {
   result: "1N2",
+  dnb: "Remboursé si nul",
   double_chance: "Double chance",
+  handicap_euro: "Handicap 1N2",
   total_ou: "Plus/Moins buts",
   btts: "Les 2 marquent",
   result_total: "Résultat & Buts",
+  result_btts: "1N2 & BTTS",
+  goal_range: "Multi-buts",
+  ht_result: "Mi-temps 1N2",
+  first_team_to_score: "1er but",
 };
 
 export async function getPersonalizedRecommendations(uid: number | null): Promise<{

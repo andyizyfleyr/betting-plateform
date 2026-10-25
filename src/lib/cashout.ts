@@ -50,6 +50,8 @@ export function computeCashOut(params: {
   redAway?: number | null;
   homeForm?: number | null;
   awayForm?: number | null;
+  events?: Array<{ type: string; team: string; minute: number; player?: string }> | null;
+  matchId?: number | null;
 }): number | null {
   const { stake, odds, selection } = params;
   const market = params.market ?? "result";
@@ -75,6 +77,8 @@ export function computeCashOut(params: {
         awayForm: params.awayForm ?? 1,
         redHome: params.redHome ?? 0,
         redAway: params.redAway ?? 0,
+        events: params.events ?? null,
+        matchId: params.matchId ?? 0,
       }
     );
     if (liveProb == null || liveProb < 0.02) return null;

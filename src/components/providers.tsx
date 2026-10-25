@@ -158,7 +158,9 @@ export function Providers({ children }: { children: ReactNode }) {
     };
   }, [isAuthRoute, user]);
 
-  const loggedIn = user !== null && !isAuthRoute;
+  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+  const isAdminMode = isAdminRoute || user?.role === "admin";
+  const loggedIn = user !== null && !isAuthRoute && !isAdminMode;
 
   // Polling global unifié : solde, compteur « En cours » et alertes temps réel sur toutes les pages
   useEffect(() => {
@@ -192,6 +194,13 @@ export function Providers({ children }: { children: ReactNode }) {
                   kind: "success",
                   title: "Pari gagné !",
                   description: `+${eur(b.potentialWin)} crédités sur votre solde`,
+                });
+              } else if (b.status === "void") {
+                triggerHaptic(currentPrefs?.haptics, 18);
+                toast({
+                  kind: "info",
+                  title: "Mise remboursée",
+                  description: `+${eur(b.stake)} recrédités sur votre solde`,
                 });
               } else if (b.status === "lost") {
                 triggerHaptic(currentPrefs?.haptics, 18);
@@ -339,11 +348,15 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={value}>
       {children}
-      <ComboFloatingBar />
-      <ComboSheet />
-      <MarketSheet />
-      <BetModal />
-      <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
+      {!isAdminMode && (
+        <>
+          <ComboFloatingBar />
+          <ComboSheet />
+          <MarketSheet />
+          <BetModal />
+          <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
+        </>
+      )}
       <Toasts toasts={toasts} />
     </AppContext.Provider>
   );

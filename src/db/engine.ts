@@ -18,7 +18,7 @@ import {
   computeUserPatternRiskWeights,
   getGlobalHouseHealth,
 } from "@/lib/house-brain";
-import { isKnownMarket, marketWin, minuteNumber } from "@/lib/markets";
+import { isKnownMarket, marketSettle, minuteNumber } from "@/lib/markets";
 import { ensureMlLoaded, recordMatchFinishedMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
 import { teamLogo } from "@/lib/team-logos";
@@ -329,7 +329,8 @@ export function computeDynamicStepTilts(
   away: number,
   minute: number,
   baseLambdaH: number,
-  baseLambdaA: number
+  baseLambdaA: number,
+  eventsSoFar?: Array<{ type: string; team: string; minute: number }>
 ): { hTilt: number; aTilt: number } {
   const { tickets, houseTightness } = pressure;
   if (tickets.length === 0) {
@@ -339,6 +340,14 @@ export function computeDynamicStepTilts(
   const remShare = Math.max(0.02, 1 - goalTimeCDF(minute));
   const remH = Math.max(0.02, baseLambdaH * remShare);
   const remA = Math.max(0.02, baseLambdaA * remShare);
+  const htRemFrac =
+    minute <= 45 ? Math.max(0, Math.min(1, (goalTimeCDF(45) - goalTimeCDF(minute)) / remShare)) : 0;
+
+  const priorGoals = (eventsSoFar ?? []).filter(
+    (e) => e.type === "goal" && (e.team === "home" || e.team === "away")
+  );
+  const priorHtH = priorGoals.filter((g) => g.team === "home" && g.minute <= 45).length;
+  const priorHtA = priorGoals.filter((g) => g.team === "away" && g.minute <= 45).length;
 
   const MAX_ADD = 4;
   const pH: number[] = [];
@@ -358,35 +367,76 @@ export function computeDynamicStepTilts(
     pA[k] /= sumPA || 1;
   }
 
-  // Table des paiements pondérés pour les scores finaux atteignables [home..home+5][away..away+5]
-  const span = MAX_ADD + 2;
-  const payGrid: number[][] = Array.from({ length: span }, () => new Array<number>(span).fill(0));
-  for (let dh = 0; dh < span; dh++) {
-    for (let da = 0; da < span; da++) {
-      const fh = home + dh;
-      const fa = away + da;
-      let payout = 0;
-      for (const t of tickets) {
-        let won = false;
-        if (isKnownMarket(t.market)) {
-          won = marketWin(t.market, t.selection, fh, fa);
-        } else if (t.market === "result") {
-          won = t.selection === "home" ? fh > fa : t.selection === "away" ? fa > fh : fh === fa;
+  const evalScenarioPayout = (offH: number, offA: number, dh: number, da: number): number => {
+    const fh = home + offH + dh;
+    const fa = away + offA + da;
+    const estHtH =
+      minute <= 45 ? home + offH + Math.round(dh * htRemFrac) : Math.min(fh, priorHtH);
+    const estHtA =
+      minute <= 45 ? away + offA + Math.round(da * htRemFrac) : Math.min(fa, priorHtA);
+
+    const synthEvents: Array<{ type: string; team: string; minute: number }> = [];
+    if (fh + fa > 0) {
+      let firstTeam: "home" | "away" = "home";
+      if (priorGoals.length > 0) {
+        firstTeam = priorGoals[0].team === "home" ? "home" : "away";
+      } else if (offH > 0) {
+        firstTeam = "home";
+      } else if (offA > 0) {
+        firstTeam = "away";
+      } else {
+        firstTeam = dh >= da && dh > 0 ? "home" : da > 0 ? "away" : "home";
+      }
+      let rem1H = estHtH;
+      let rem1A = estHtA;
+      let rem2H = fh - estHtH;
+      let rem2A = fa - estHtA;
+      if (firstTeam === "home") {
+        if (rem1H > 0) {
+          synthEvents.push({ type: "goal", team: "home", minute: 10 });
+          rem1H--;
+        } else if (rem2H > 0) {
+          synthEvents.push({ type: "goal", team: "home", minute: 50 });
+          rem2H--;
         }
-        if (won) {
-          payout += t.stake * t.odds * t.riskWeight;
+      } else {
+        if (rem1A > 0) {
+          synthEvents.push({ type: "goal", team: "away", minute: 10 });
+          rem1A--;
+        } else if (rem2A > 0) {
+          synthEvents.push({ type: "goal", team: "away", minute: 50 });
+          rem2A--;
         }
       }
-      payGrid[dh][da] = payout;
+      for (let i = 0; i < rem1H; i++) synthEvents.push({ type: "goal", team: "home", minute: 25 });
+      for (let i = 0; i < rem1A; i++) synthEvents.push({ type: "goal", team: "away", minute: 28 });
+      for (let i = 0; i < rem2H; i++) synthEvents.push({ type: "goal", team: "home", minute: 70 });
+      for (let i = 0; i < rem2A; i++) synthEvents.push({ type: "goal", team: "away", minute: 72 });
     }
-  }
+
+    let payout = 0;
+    for (const t of tickets) {
+      if (isKnownMarket(t.market)) {
+        const res = marketSettle(t.market, t.selection, fh, fa, synthEvents, 0);
+        if (res.voided) {
+          payout += t.stake * t.riskWeight;
+        } else if (res.won) {
+          payout += t.stake * t.odds * t.riskWeight;
+        }
+      } else if (t.market === "result") {
+        const won = t.selection === "home" ? fh > fa : t.selection === "away" ? fa > fh : fh === fa;
+        if (won) payout += t.stake * t.odds * t.riskWeight;
+      }
+    }
+    return payout;
+  };
 
   const expectedValueAtOffset = (offH: number, offA: number): number => {
     let ev = 0;
     for (let dh = 0; dh <= MAX_ADD; dh++) {
       const wh = pH[dh];
       for (let da = 0; da <= MAX_ADD; da++) {
-        ev += wh * pA[da] * payGrid[offH + dh][offA + da];
+        ev += wh * pA[da] * evalScenarioPayout(offH, offA, dh, da);
       }
     }
     return ev;
@@ -1437,7 +1487,15 @@ function simulateMatchRange(
       tacA = 0.94;
     }
 
-    const shield = computeDynamicStepTilts(pressure, home, away, min, baseEffH, baseEffA);
+    const shield = computeDynamicStepTilts(
+      pressure,
+      home,
+      away,
+      min,
+      baseEffH,
+      baseEffA,
+      events
+    );
 
     const rateH =
       baseEffH *

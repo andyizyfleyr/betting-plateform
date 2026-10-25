@@ -19,23 +19,33 @@ export const EXPOSURE_TRIGGER = 0.12;
 
 /** Marge par type de marché (%, ex. 0.064 = 6,4%). */
 export const MARKET_MARGIN: Record<string, number> = {
-  // Marché principal 1N2 & Double chance.
+  // Marché principal 1N2, DNB & Double chance.
   result: 0.072,
+  dnb: 0.072,
   double_chance: 0.074,
-  // Liquidité moyenne.
+  handicap_euro: 0.084,
+  // Liquidité moyenne & mi-temps.
   btts: 0.078,
   odd_even: 0.078,
   total_ou: 0.078,
+  ht_total_ou: 0.08,
+  ht_result: 0.082,
   home_total: 0.082,
   away_total: 0.082,
+  first_team_to_score: 0.085,
+  highest_scoring_half: 0.086,
+  goal_range: 0.088,
   result_total: 0.092,
-  // Marchés à forte variance / score exact → marge haute.
-  total_exact: 0.14,
-  score_exact: 0.19,
+  result_btts: 0.098,
+  // Marchés à forte variance / écart / MT-FM / score exact → marge haute.
+  winning_margin: 0.125,
   home_to_nil: 0.13,
   away_to_nil: 0.13,
   home_clean_sheet: 0.13,
   away_clean_sheet: 0.13,
+  total_exact: 0.14,
+  ht_ft: 0.145,
+  score_exact: 0.19,
 };
 /** Marge par défaut quand le marché n'est pas dans la table. */
 const DEFAULT_MARGIN = 0.075;

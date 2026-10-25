@@ -92,6 +92,8 @@ export async function GET(req: NextRequest) {
               redAway: match.redAway ?? 0,
               homeForm: match.homeForm ?? 1,
               awayForm: match.awayForm ?? 1,
+              events: match.events ?? null,
+              matchId: match.id,
             })
           : null,
       placedAt: bet.placedAt,
@@ -423,11 +425,22 @@ export async function POST(req: NextRequest) {
 
   const homeScore = pricedMatch.homeScore ?? 0;
   const awayScore = pricedMatch.awayScore ?? 0;
+  const modelOpts = {
+    homeForm: pricedMatch.homeForm ?? 1,
+    awayForm: pricedMatch.awayForm ?? 1,
+    redHome: pricedMatch.redHome ?? 0,
+    redAway: pricedMatch.redAway ?? 0,
+    events: pricedMatch.events ?? [],
+    matchId: pricedMatch.id,
+  };
 
   // Anti-triche : interdiction de parier sur une issue déjà décidée (gagnée ou
   // devenue impossible) — ex. « Plus de 2,5 » avec 3 buts inscrits, « 0-0 » à 1-0, etc.
   const minute = minuteNumber(pricedMatch.minute);
-  if (pricedMatch.status === "live" && marketOutcomeSettled(market, selection, homeScore, awayScore, minute)) {
+  if (
+    pricedMatch.status === "live" &&
+    marketOutcomeSettled(market, selection, homeScore, awayScore, minute, modelOpts)
+  ) {
     return NextResponse.json({ error: "Ce marché est déjà décidé" }, { status: 400 });
   }
 
@@ -451,20 +464,10 @@ export async function POST(req: NextRequest) {
             pricedMatch.awayTeam,
             homeScore,
             awayScore,
-            minuteNumber(pricedMatch.minute),
-            {
-              homeForm: pricedMatch.homeForm ?? 1,
-              awayForm: pricedMatch.awayForm ?? 1,
-              redHome: pricedMatch.redHome ?? 0,
-              redAway: pricedMatch.redAway ?? 0,
-            }
+            minute,
+            modelOpts
           )
-        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam, {
-            homeForm: pricedMatch.homeForm ?? 1,
-            awayForm: pricedMatch.awayForm ?? 1,
-            redHome: pricedMatch.redHome ?? 0,
-            redAway: pricedMatch.redAway ?? 0,
-          });
+        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam, modelOpts);
     selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
     if (odds == null || selectionLabel == null) {
       return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
@@ -484,13 +487,8 @@ export async function POST(req: NextRequest) {
           pricedMatch.awayTeam,
           homeScore,
           awayScore,
-          minuteNumber(pricedMatch.minute),
-          {
-            homeForm: pricedMatch.homeForm ?? 1,
-            awayForm: pricedMatch.awayForm ?? 1,
-            redHome: pricedMatch.redHome ?? 0,
-            redAway: pricedMatch.redAway ?? 0,
-          }
+          minute,
+          modelOpts
         )
       : null;
   // Bloque en direct les issues quasi certaines (scalping à 1,01–1,03 en fin de match)

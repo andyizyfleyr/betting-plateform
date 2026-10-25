@@ -198,6 +198,16 @@ export async function GET(req: NextRequest) {
         status: "cashed",
         createdAt: settledIso,
       });
+    } else if (b.status === "void") {
+      entries.push({
+        id: `sb-void-${b.id}`,
+        type: "cashout",
+        title: `Remboursement · ${b.homeTeam} – ${b.awayTeam}`,
+        subtitle: b.selectionLabel,
+        amount: round2(b.stake),
+        status: "void",
+        createdAt: settledIso,
+      });
     }
   }
 
@@ -267,6 +277,16 @@ export async function GET(req: NextRequest) {
         subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
         amount: round2(c.cashOutAmount),
         status: "cashed",
+        createdAt: settledIso,
+      });
+    } else if (c.status === "void") {
+      entries.push({
+        id: `cb-void-${c.id}`,
+        type: "cashout",
+        title: `Remboursement Combiné (${legCount} sél.)`,
+        subtitle: `Mise restituée`,
+        amount: round2(c.stake),
+        status: "void",
         createdAt: settledIso,
       });
     }

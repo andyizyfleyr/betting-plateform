@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { computeComboQuote } from "@/lib/combo-math";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
-import { isKnownMarket, liveOutcomeProbability, marketWin, minuteNumber } from "@/lib/markets";
+import { isKnownMarket, liveOutcomeProbability, marketSettle, minuteNumber } from "@/lib/markets";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -90,9 +90,16 @@ export async function settlePendingCombos(): Promise<void> {
           legsChanged = true;
           return { ...leg, status: "void" };
         }
-        const won = marketWin(leg.market, leg.selection, home, away);
+        const { won, voided } = marketSettle(
+          leg.market,
+          leg.selection,
+          home,
+          away,
+          m.events ?? null,
+          m.id
+        );
         legsChanged = true;
-        return { ...leg, status: won ? "won" : "lost" };
+        return { ...leg, status: voided ? "void" : won ? "won" : "lost" };
       }
 
       // Sélection de prédiction
@@ -151,10 +158,8 @@ export async function settlePendingCombos(): Promise<void> {
       const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawWonMs)));
 
       const wonOdds = nextLegs.filter((l) => l.status === "won").map((l) => l.odds);
-      const quote =
-        wonOdds.length === 0
-          ? null
-          : computeComboQuote(wonOdds, cb.stake);
+      const allVoid = wonOdds.length === 0;
+      const quote = allVoid ? null : computeComboQuote(wonOdds, cb.stake);
       const payout =
         quote == null
           ? round2(cb.stake) // toutes les sélections annulées → remboursement mise
@@ -165,7 +170,7 @@ export async function settlePendingCombos(): Promise<void> {
           .update(comboBets)
           .set({
             legs: nextLegs,
-            status: "won",
+            status: allVoid ? "void" : "won",
             potentialWin: payout,
             settledAt,
           })
@@ -218,7 +223,12 @@ export function computeComboCashOut(
 
   for (const leg of legs) {
     if (leg.status === "lost") return null;
-    if (leg.status === "won" || leg.status === "void") {
+    if (leg.status === "won") {
+      wonCount += 1;
+      continue;
+    }
+    if (leg.status === "void") {
+      jointProb *= 1 / Math.max(1.01, leg.odds);
       wonCount += 1;
       continue;
     }
@@ -246,6 +256,8 @@ export function computeComboCashOut(
                 awayForm: m.awayForm ?? 1,
                 redHome: m.redHome ?? 0,
                 redAway: m.redAway ?? 0,
+                events: m.events ?? null,
+                matchId: m.id,
               }
             )
           : null;

@@ -40,20 +40,22 @@ export async function proxy(req: NextRequest) {
   // ---- Pages ----
   const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");
   if (isAdminPage) {
-    if (!authed || !isAdmin) {
+    if (!authed) {
       const url = new URL("/auth", req.url);
       url.searchParams.set("from", pathname);
       return NextResponse.redirect(url);
     }
-    // Les pages admin utilisent la même coquille d'application que le reste.
+    if (!isAdmin) {
+      return NextResponse.redirect(new URL("/predictions", req.url));
+    }
     return NextResponse.next();
   }
 
-  // ---- Pages ----
+  // ---- Authentification ----
   const isAuthPage = pathname === "/auth" || pathname.startsWith("/auth/");
   if (isAuthPage) {
     if (authed) {
-      return NextResponse.redirect(new URL("/predictions", req.url));
+      return NextResponse.redirect(new URL(isAdmin ? "/admin" : "/predictions", req.url));
     }
     return NextResponse.next();
   }
@@ -62,6 +64,11 @@ export async function proxy(req: NextRequest) {
     const url = new URL("/auth", req.url);
     url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
+  }
+
+  // L'administrateur n'accède jamais à l'espace utilisateurs : il reste exclusivement sur son dashboard.
+  if (isAdmin) {
+    return NextResponse.redirect(new URL("/admin", req.url));
   }
 
   return NextResponse.next();
