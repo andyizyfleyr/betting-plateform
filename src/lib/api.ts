@@ -98,6 +98,7 @@ export interface ClientBet {
   cashOutAmount: number | null;
   cashOut: number | null;
   placedAt: string;
+  settledAt?: string | null;
   // État actuel du match lié (score live / final)
   matchStatus: MatchStatus | null;
   matchHomeScore: number | null;

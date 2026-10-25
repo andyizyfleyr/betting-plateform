@@ -32,9 +32,13 @@ function dayLabel(iso: string) {
   }).format(d);
 }
 
+function settledOrPlacedIso(b: ClientBet): string {
+  return b.status !== "pending" && b.settledAt ? b.settledAt : b.placedAt;
+}
+
 export default function ParisPage() {
   const { betsVersion, user, openRecharge } = useApp();
-  const [tab, setTab] = useState<Tab>("ongoing");
+  const [tabChoice, setTabChoice] = useState<Tab | null>(null);
   const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction" | "combo">("all");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
   const [query, setQuery] = useState("");
@@ -78,6 +82,19 @@ export default function ParisPage() {
 
   const allBets = useMemo(() => bets ?? [], [bets]);
 
+  // Si aucun pari n'est en cours mais qu'il existe des paris terminés,
+  // on bascule automatiquement sur « Terminés » par défaut.
+  const hasAnyOngoing = useMemo(
+    () => allBets.some((b) => b.status === "pending"),
+    [allBets]
+  );
+  const hasAnyFinished = useMemo(
+    () => allBets.some((b) => b.status !== "pending"),
+    [allBets]
+  );
+  const smartDefaultTab: Tab = !hasAnyOngoing && hasAnyFinished ? "finished" : "ongoing";
+  const tab: Tab = tabChoice ?? smartDefaultTab;
+
   const staked = useMemo(
     () => allBets.filter((b) => b.status === "pending").reduce((s, b) => s + b.stake, 0),
     [allBets]
@@ -114,11 +131,26 @@ export default function ParisPage() {
   }, [allBets, query]);
 
   const ongoingAll = useMemo(
-    () => searchedBets.filter((b) => b.status === "pending"),
+    () =>
+      searchedBets
+        .filter((b) => b.status === "pending")
+        .sort(
+          (a, b) =>
+            new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() || b.id - a.id
+        ),
     [searchedBets]
   );
   const finishedAll = useMemo(
-    () => searchedBets.filter((b) => b.status !== "pending"),
+    () =>
+      searchedBets
+        .filter((b) => b.status !== "pending")
+        .sort(
+          (a, b) =>
+            new Date(settledOrPlacedIso(b)).getTime() -
+              new Date(settledOrPlacedIso(a)).getTime() ||
+            new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() ||
+            b.id - a.id
+        ),
     [searchedBets]
   );
 
@@ -161,7 +193,7 @@ export default function ParisPage() {
   const finishedGroups = useMemo(() => {
     const map = new Map<string, ClientBet[]>();
     for (const b of visibleBets) {
-      const key = dayLabel(b.placedAt);
+      const key = dayLabel(settledOrPlacedIso(b));
       map.set(key, [...(map.get(key) ?? []), b]);
     }
     return [...map.entries()];
@@ -250,9 +282,9 @@ export default function ParisPage() {
             id: "status",
             placeholder: "Statut",
             value: tab,
-            defaultValue: "ongoing",
+            defaultValue: smartDefaultTab,
             onChange: (next) => {
-              setTab(next);
+              setTabChoice(next === smartDefaultTab ? null : next);
               if (next === "ongoing") setOutcomeFilter("all");
             },
             options: [
@@ -305,7 +337,7 @@ export default function ParisPage() {
             onChange: (next) => {
               setOutcomeFilter(next);
               if (next !== "all" && tab === "ongoing") {
-                setTab("finished");
+                setTabChoice("finished");
               }
             },
             options: [
@@ -333,13 +365,15 @@ export default function ParisPage() {
           },
         ]}
         onReset={() => {
-          setTab("ongoing");
+          setTabChoice(null);
           setKindFilter("all");
           setOutcomeFilter("all");
         }}
         resultCountText={
           bets !== null
-            ? `${visibleBets.length} pari${visibleBets.length > 1 ? "s" : ""}`
+            ? tab === "ongoing"
+              ? `${visibleBets.length} pari${visibleBets.length > 1 ? "s" : ""} en cours`
+              : `${visibleBets.length} pari${visibleBets.length > 1 ? "s" : ""} terminé${visibleBets.length > 1 ? "s" : ""}`
             : null
         }
       />
