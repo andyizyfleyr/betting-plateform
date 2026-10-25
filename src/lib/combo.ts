@@ -20,8 +20,15 @@ import {
   minuteNumber,
   realMatchLiveProbability,
   realMatchSettle,
+  tryEarlyLiveSettle,
 } from "@/lib/markets";
-import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
+import {
+  getRealMatchSettlementMode,
+  isRealMatchFeedStale,
+  type RealMatchSettlementMode,
+} from "@/lib/real-sports-feed";
+
+const REAL_COMBO_GOAL_CONFIRM_MS = 90_000;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -34,7 +41,8 @@ function round2(n: number): number {
 export function resolveComboLegStatus(
   leg: ComboLeg,
   matchMap: Map<number, MatchRow>,
-  questionMap: Map<number, PredictionQuestionRow>
+  questionMap: Map<number, PredictionQuestionRow>,
+  opts?: { realSettlementMode?: RealMatchSettlementMode; nowMs?: number }
 ): "pending" | "won" | "lost" | "void" {
   if (leg.status !== "pending") return leg.status;
 
@@ -42,6 +50,40 @@ export function resolveComboLegStatus(
     const m = leg.matchId ? matchMap.get(leg.matchId) : undefined;
     if (!m) return "void";
     if (m.feedStatusNote === "VOIDED") return "void";
+
+    if (m.status === "live") {
+      if (m.feedStatusNote?.startsWith("POSTPONED")) return "pending";
+      const isManual = m.source === "manual";
+      const realMode = opts?.realSettlementMode ?? "auto";
+      if (isManual && realMode !== "auto") return "pending";
+
+      const early = tryEarlyLiveSettle(leg.market, leg.selection, {
+        source: isManual ? "manual" : "virtual",
+        status: m.status,
+        minute: m.minute,
+        homeScore: m.homeScore ?? 0,
+        awayScore: m.awayScore ?? 0,
+        htHomeScore: m.htHomeScore ?? m.realStats?.htHomeScore ?? null,
+        htAwayScore: m.htAwayScore ?? m.realStats?.htAwayScore ?? null,
+        events: m.events ?? null,
+        matchId: m.id,
+      });
+      if (!early) return "pending";
+
+      const nowMs = opts?.nowMs ?? Date.now();
+      const isSecondHalfInPlay = minuteNumber(m.minute) >= 46;
+      const isPureFirstHalfMarket =
+        leg.market === "ht_result" || leg.market === "ht_total_ou" || leg.market === "ht_ft";
+
+      if (isManual && early.dependsOnGoals && !(isSecondHalfInPlay && isPureFirstHalfMarket)) {
+        if (m.suspended) return "pending";
+        if (m.lastGoalAt && nowMs - m.lastGoalAt.getTime() < REAL_COMBO_GOAL_CONFIRM_MS) {
+          return "pending";
+        }
+      }
+      return early.voided ? "void" : early.won ? "won" : "lost";
+    }
+
     if (m.status !== "finished") return "pending";
 
     const home = m.homeScore ?? 0;
@@ -136,13 +178,19 @@ export async function settlePendingCombos(): Promise<void> {
 
   const matchMap = new Map(matchRows.map((m) => [m.id, m]));
   const questionMap = new Map(questionRows.map((q) => [q.id, q]));
+  const hasLiveManual = matchRows.some((m) => m.status === "live" && m.source === "manual");
+  const realSettlementMode: RealMatchSettlementMode = hasLiveManual
+    ? await getRealMatchSettlementMode()
+    : "auto";
+  const evalNowMs = Date.now();
+  const legOpts = { realSettlementMode, nowMs: evalNowMs };
 
   // 1. Met à jour les sélections désormais terminées sur les combinés déjà réglés (ex. perdus tôt)
   for (const cb of settledWithPendingLegs) {
     let changed = false;
     const updatedLegs: ComboLeg[] = (cb.legs ?? []).map((leg) => {
       if (leg.status !== "pending") return leg;
-      const nextStatus = resolveComboLegStatus(leg, matchMap, questionMap);
+      const nextStatus = resolveComboLegStatus(leg, matchMap, questionMap, legOpts);
       if (nextStatus !== leg.status) {
         changed = true;
         return { ...leg, status: nextStatus };
@@ -165,7 +213,7 @@ export async function settlePendingCombos(): Promise<void> {
     let legsChanged = false;
     const nextLegs: ComboLeg[] = (cb.legs ?? []).map((leg) => {
       if (leg.status !== "pending") return leg;
-      const nextStatus = resolveComboLegStatus(leg, matchMap, questionMap);
+      const nextStatus = resolveComboLegStatus(leg, matchMap, questionMap, legOpts);
       if (nextStatus !== leg.status) {
         legsChanged = true;
         return { ...leg, status: nextStatus };
@@ -306,6 +354,21 @@ export function computeComboCashOut(
         }
         const min = minuteNumber(m.minute);
         if (min >= 88) return null;
+        if (
+          tryEarlyLiveSettle(leg.market, leg.selection, {
+            source: m.source === "manual" ? "manual" : "virtual",
+            status: m.status,
+            minute: m.minute,
+            homeScore: m.homeScore ?? 0,
+            awayScore: m.awayScore ?? 0,
+            htHomeScore: m.htHomeScore ?? m.realStats?.htHomeScore ?? null,
+            htAwayScore: m.htAwayScore ?? m.realStats?.htAwayScore ?? null,
+            events: m.events ?? null,
+            matchId: m.id,
+          }) != null
+        ) {
+          return null; // sélection déjà tranchée — règlement imminent
+        }
         hasLiveProgress = true;
         const pLive =
           m.source === "manual"

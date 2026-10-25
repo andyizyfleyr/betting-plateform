@@ -173,6 +173,10 @@ export async function POST(req: NextRequest) {
           awayTeam: effectiveMatch.awayTeam,
           homeScore: effectiveMatch.homeScore,
           awayScore: effectiveMatch.awayScore,
+          htHomeScore:
+            effectiveMatch.htHomeScore ?? effectiveMatch.realStats?.htHomeScore ?? null,
+          htAwayScore:
+            effectiveMatch.htAwayScore ?? effectiveMatch.realStats?.htAwayScore ?? null,
           redHome: effectiveMatch.redHome,
           redAway: effectiveMatch.redAway,
           homeForm: effectiveMatch.homeForm,
@@ -180,6 +184,8 @@ export async function POST(req: NextRequest) {
           events: effectiveMatch.events ?? null,
           matchId: effectiveMatch.id,
           source: effectiveMatch.source ?? "virtual",
+          externalId: effectiveMatch.externalId ?? null,
+          autoSync: effectiveMatch.autoSync ?? true,
           oddsHome: effectiveMatch.oddsHome,
           oddsDraw: effectiveMatch.oddsDraw,
           oddsAway: effectiveMatch.oddsAway,

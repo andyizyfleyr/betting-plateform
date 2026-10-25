@@ -1,9 +1,11 @@
 import { livePricingMinute } from "@/db/fixtures";
 import {
+  isFirstHalfCompleted,
   isKnownMarket,
   liveOutcomeProbability,
   minuteNumber,
   realMatchLiveProbability,
+  tryEarlyLiveSettle,
   type CustomMarketGroup,
 } from "@/lib/markets";
 
@@ -52,6 +54,8 @@ export function computeCashOut(params: {
   awayTeam?: string;
   homeScore: number | null;
   awayScore: number | null;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
   redHome?: number | null;
   redAway?: number | null;
   homeForm?: number | null;
@@ -59,6 +63,8 @@ export function computeCashOut(params: {
   events?: Array<{ type: string; team: string; minute: number; player?: string }> | null;
   matchId?: number | null;
   source?: string | null;
+  externalId?: string | null;
+  autoSync?: boolean | null;
   oddsHome?: number | null;
   oddsDraw?: number | null;
   oddsAway?: number | null;
@@ -69,11 +75,42 @@ export function computeCashOut(params: {
   const potential = stake * odds;
   const min = minuteNumber(params.minute);
   if (min >= 88) return null;
+  if (
+    (market === "ht_result" || market === "ht_total_ou") &&
+    isFirstHalfCompleted(params.minute, "live")
+  ) {
+    return null;
+  }
 
   const h = params.homeScore ?? 0;
   const a = params.awayScore ?? 0;
-  const impliedEntry = clamp(0.95 / Math.max(1.02, odds), 0.02, 0.94);
   const isManual = params.source === "manual";
+  const typedEvents =
+    (params.events as Array<{
+      type: "goal" | "red";
+      team: "home" | "away";
+      minute: number;
+      player?: string;
+    }> | null) ?? null;
+
+  // Dès qu'une issue est déjà tranchée mathématiquement, le pari part au règlement (plus de cash-out)
+  if (
+    tryEarlyLiveSettle(market, selection, {
+      source: isManual ? "manual" : "virtual",
+      status: "live",
+      minute: params.minute,
+      homeScore: h,
+      awayScore: a,
+      htHomeScore: params.htHomeScore ?? null,
+      htAwayScore: params.htAwayScore ?? null,
+      events: typedEvents,
+      matchId: params.matchId ?? 0,
+    }) != null
+  ) {
+    return null;
+  }
+
+  const impliedEntry = clamp(0.95 / Math.max(1.02, odds), 0.02, 0.94);
 
   if (
     params.homeTeam &&
@@ -92,18 +129,16 @@ export function computeCashOut(params: {
             startsAt: new Date(0),
             homeScore: h,
             awayScore: a,
+            htHomeScore: params.htHomeScore ?? null,
+            htAwayScore: params.htAwayScore ?? null,
             oddsHome: params.oddsHome ?? 2.2,
             oddsDraw: params.oddsDraw ?? null,
             oddsAway: params.oddsAway ?? 3.0,
             redHome: params.redHome ?? 0,
             redAway: params.redAway ?? 0,
-            events:
-              (params.events as Array<{
-                type: "goal" | "red";
-                team: "home" | "away";
-                minute: number;
-                player?: string;
-              }> | null) ?? null,
+            externalId: params.externalId ?? null,
+            autoSync: params.autoSync ?? true,
+            events: typedEvents,
             markets: params.markets ?? null,
           },
           market,
