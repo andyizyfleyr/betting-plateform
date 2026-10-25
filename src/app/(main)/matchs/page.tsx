@@ -367,9 +367,9 @@ export default function MatchsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
-      {/* En-tête compact */}
-      <div className="flex items-center justify-between gap-2">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-6 pt-2.5 lg:px-0 lg:py-0">
+      {/* En-tête desktop uniquement (masqué sur mobile) */}
+      <div className="hidden items-center justify-between gap-2 lg:flex">
         <div>
           <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
             {isRealUniverse && effectiveLeague !== "all" ? effectiveLeague : "Matchs"}
@@ -409,9 +409,9 @@ export default function MatchsPage() {
         </div>
       </div>
 
-      {/* Sélecteur strict d'univers + Barre de recherche côte à côte sur grand écran */}
-      <div className="mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+      {/* Sélecteur d'univers (desktop uniquement) + Barre de recherche */}
+      <div className="lg:mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
+        <div className="hidden grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1 lg:grid">
           <button
             type="button"
             onClick={() => switchUniverse("real")}
@@ -478,7 +478,7 @@ export default function MatchsPage() {
         </div>
 
         {/* Barre de recherche */}
-        <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 xl:mt-0 xl:h-12 xl:rounded-2xl xl:px-3.5">
+        <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:mt-2.5 xl:mt-0 xl:h-12 xl:rounded-2xl xl:px-3.5">
           <Search className="h-4 w-4 shrink-0 text-dim" />
           <input
             type="text"
@@ -504,10 +504,10 @@ export default function MatchsPage() {
         </div>
       </div>
 
-      {/* Bandeau explicatif du mode actif */}
+      {/* Bandeau explicatif du mode actif (desktop uniquement) */}
       <div
         className={cn(
-          "mt-2 flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-[11px] font-medium",
+          "mt-2 hidden items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-[11px] font-medium lg:flex",
           isRealUniverse
             ? "bg-emerald-600/8 text-emerald-800"
             : "bg-elev/80 text-mist"
@@ -615,13 +615,13 @@ export default function MatchsPage() {
         isRealUniverse ? (
           <>
             {/* Squelette mobile sur 2 lignes carrousel (Populaire EN DIRECT + Populaire en avant-match) */}
-            <div className="flex flex-col gap-5 lg:hidden">
+            <div className="flex flex-col gap-3.5 lg:hidden">
               {[0, 1].map((rowIdx) => (
-                <div key={rowIdx} className="space-y-2">
+                <div key={rowIdx} className="space-y-1.5">
                   <div className="shimmer h-4 w-44 rounded-md" />
-                  <div className="-mx-4 flex gap-3 overflow-hidden px-4">
-                    <div className="shimmer h-[168px] w-[85vw] max-w-[332px] shrink-0 rounded-2xl" />
-                    <div className="shimmer h-[168px] w-[85vw] max-w-[332px] shrink-0 rounded-2xl" />
+                  <div className="-mx-4 flex gap-2.5 overflow-hidden px-4">
+                    <div className="shimmer h-[136px] w-[84vw] max-w-[320px] shrink-0 rounded-2xl" />
+                    <div className="shimmer h-[136px] w-[84vw] max-w-[320px] shrink-0 rounded-2xl" />
                   </div>
                 </div>
               ))}
@@ -670,7 +670,7 @@ export default function MatchsPage() {
               <button
                 type="button"
                 onClick={() => switchUniverse("virtual")}
-                className="h-9 rounded-full bg-betclic-red px-3.5 font-display text-[12px] font-bold text-white active:scale-95"
+                className="hidden h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[12px] font-bold text-white active:scale-95 lg:inline-flex"
               >
                 Ouvrir les matchs virtuels ({virtualActiveTotal})
               </button>
@@ -680,7 +680,7 @@ export default function MatchsPage() {
       ) : isRealUniverse ? (
         <>
           {/* MOBILE (< lg) : Classement 1xBet sur 2 lignes carrousel défilables gauche-droite */}
-          <div className="flex flex-col gap-5 lg:hidden">
+          <div className="flex flex-col gap-3.5 lg:hidden">
             {(filter === "all" || filter === "live") && (
               <RealMatchCarouselRow
                 label="Populaire EN DIRECT"
@@ -943,7 +943,7 @@ function RealMatchCarouselRow({
         <div
           ref={scrollerRef}
           onScroll={syncScrollEdges}
-          className="-mx-4 mt-2 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-3 overflow-x-auto px-4 pb-1 scroll-smooth no-scrollbar"
+          className="-mx-4 mt-1.5 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-2.5 overflow-x-auto px-4 pb-1 scroll-smooth no-scrollbar"
         >
           {items.map((m) => (
             <div
@@ -952,7 +952,7 @@ function RealMatchCarouselRow({
                 "shrink-0 snap-start",
                 items.length === 1
                   ? "w-full"
-                  : "w-[85vw] max-w-[332px] sm:w-[328px]"
+                  : "w-[84vw] max-w-[320px] sm:w-[312px]"
               )}
             >
               <MatchCard match={m} className="h-full" />

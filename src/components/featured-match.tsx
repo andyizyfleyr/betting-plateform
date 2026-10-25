@@ -147,7 +147,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
           </div>
 
           {isLive && hasGoals && (
-            <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10.5px] text-mist">
+            <div className="mb-3 hidden grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10.5px] text-mist lg:grid">
               <div className="min-w-0">
                 {homeGoals.map((g, i) => (
                   <p key={i} className="truncate font-medium text-ink">

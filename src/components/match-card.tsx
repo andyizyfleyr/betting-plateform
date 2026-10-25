@@ -78,12 +78,6 @@ export function MatchCard({
   const isReal = match.source === "manual";
   const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const marketCount = match.markets?.length ?? 0;
-  const { homeGoals, awayGoals } = formatGoalSummary(
-    match.events,
-    match.homeScore,
-    match.awayScore
-  );
-  const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
   return (
     <article
@@ -95,7 +89,7 @@ export function MatchCard({
         }
       }}
       className={cn(
-        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45",
+        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl px-3 py-2.5 transition-colors active:bg-elev/45 lg:p-3",
         className
       )}
     >
@@ -113,12 +107,12 @@ export function MatchCard({
         />
       )}
 
-      {/* En-tête : type de match + ligue + statut */}
-      <div className="flex items-center justify-between gap-2 text-[11.5px]">
+      {/* En-tête : ligue + statut (compact sur mobile, sans bouton Stats mobile) */}
+      <div className="flex items-center justify-between gap-2 text-[11px]">
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
           <span
             className={cn(
-              "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
+              "hidden shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide lg:inline-block",
               isReal
                 ? "bg-emerald-600/12 text-emerald-700"
                 : "bg-elev text-dim"
@@ -130,7 +124,7 @@ export function MatchCard({
           <span className="truncate font-semibold">{match.league}</span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
           {isLive ? (
             <>
               {isReal ? (
@@ -142,7 +136,7 @@ export function MatchCard({
                       setShowTracker((s) => !s);
                     }}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors",
+                      "hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
                       showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                     )}
                   >
@@ -158,7 +152,7 @@ export function MatchCard({
                     setShowTracker((s) => !s);
                   }}
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors",
+                    "hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
                     showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                   )}
                 >
@@ -169,8 +163,8 @@ export function MatchCard({
               <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
             </>
           ) : isFinished ? (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold text-dim">
-              Terminé · Historique
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-semibold text-dim">
+              Terminé
               <ChevronRight className="h-3 w-3" strokeWidth={2.3} />
             </span>
           ) : isReal && match.kickoffReached ? (
@@ -179,7 +173,7 @@ export function MatchCard({
               Coup d&apos;envoi atteint
             </span>
           ) : isReal ? (
-            <span className="rounded-full bg-elev px-2.5 py-0.5 font-display text-[10.5px] font-semibold text-ink">
+            <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-semibold text-ink">
               {formatKickoff(match.startsAt)}
             </span>
           ) : (
@@ -192,11 +186,18 @@ export function MatchCard({
               <KickoffCountdown startsAt={match.startsAt} />
             </>
           )}
+
+          {!isFinished && marketCount > 1 && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-elev px-1.5 py-0.5 font-display text-[10px] font-bold text-ink lg:hidden">
+              +{marketCount - 1}
+              <ChevronRight className="h-2.5 w-2.5 text-betclic-red" strokeWidth={2.6} />
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Équipes & scores */}
-      <div className="mt-2.5 flex flex-col gap-1.5">
+      {/* Équipes & scores resserrés */}
+      <div className="mt-1.5 flex flex-col gap-1 lg:mt-2 lg:gap-1.5">
         <TeamRow
           name={match.homeTeam}
           logo={match.homeLogo}
@@ -215,46 +216,34 @@ export function MatchCard({
         />
       </div>
 
-      {/* Résumé compact des buteurs lorsqu'il y a eu des buts */}
-      {(isLive || isFinished) && hasGoals && (
-        <div className="mt-2 flex flex-col gap-0.5 rounded-xl bg-elev/65 px-2.5 py-1.5 text-[10.5px] leading-snug text-mist">
-          {homeGoals.length > 0 && (
-            <p className="truncate">
-              <span className="font-semibold text-ink">{match.homeTeam} :</span>{" "}
-              {homeGoals.join(", ")}
-            </p>
-          )}
-          {awayGoals.length > 0 && (
-            <p className="truncate">
-              <span className="font-semibold text-ink">{match.awayTeam} :</span>{" "}
-              {awayGoals.join(", ")}
-            </p>
-          )}
+      {/* Tracker 2D virtuel ou statistiques officielles (desktop uniquement) */}
+      {!isReal && isLive && showTracker && (
+        <div className="hidden lg:block">
+          <LiveMatchTracker match={match} className="mt-2" />
+        </div>
+      )}
+      {isReal && isLive && showTracker && realStatsAvailable && (
+        <div className="hidden lg:block">
+          <RealMatchStatsCard
+            stats={match.realStats}
+            homeTeam={match.homeTeam}
+            awayTeam={match.awayTeam}
+            homeLogo={match.homeLogo}
+            awayLogo={match.awayLogo}
+            htHomeScore={match.htHomeScore}
+            htAwayScore={match.htAwayScore}
+            compact
+            className="mt-2"
+          />
         </div>
       )}
 
-      {/* Tracker 2D virtuel ou statistiques officielles du match réel */}
-      {!isReal && isLive && showTracker && <LiveMatchTracker match={match} className="mt-2.5" />}
-      {isReal && isLive && showTracker && realStatsAvailable && (
-        <RealMatchStatsCard
-          stats={match.realStats}
-          homeTeam={match.homeTeam}
-          awayTeam={match.awayTeam}
-          homeLogo={match.homeLogo}
-          awayLogo={match.awayLogo}
-          htHomeScore={match.htHomeScore}
-          htAwayScore={match.htAwayScore}
-          compact
-          className="mt-2.5"
-        />
-      )}
-
-      {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés */}
+      {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés sur desktop */}
       {!isFinished && (
-        <div className="mt-auto pt-3">
+        <div className="mt-auto pt-2 lg:pt-2.5">
           <ResultOdds match={match} />
           {marketCount > 1 && (
-            <div className="mt-2 flex items-center justify-between gap-2 border-t border-edge/60 pt-2 text-[11px]">
+            <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[11px] lg:flex">
               <span className="truncate text-dim">
                 Total, Double chance, Handicap, Score exact…
               </span>
@@ -287,11 +276,11 @@ function TeamRow({
 }) {
   const isFinished = score != null && !isLive;
   return (
-    <div className="flex items-center gap-2.5">
-      <TeamAvatar name={name} logo={logo} size="xs" />
+    <div className="flex items-center gap-2">
+      <TeamAvatar name={name} logo={logo} size="2xs" />
       <span
         className={cn(
-          "truncate font-display text-[14px] font-semibold",
+          "truncate font-display text-[13px] font-semibold leading-tight lg:text-[13.5px]",
           isFinished && !winner ? "text-mist" : "text-ink"
         )}
       >
@@ -303,7 +292,7 @@ function TeamRow({
           {Array.from({ length: redCards }).map((_, i) => (
             <span
               key={i}
-              className="inline-block h-3 w-2 rounded-[2px] bg-betclic-red shadow-xs"
+              className="inline-block h-2.5 w-1.5 rounded-[2px] bg-betclic-red shadow-xs"
             />
           ))}
         </span>
@@ -312,7 +301,7 @@ function TeamRow({
       {score != null && (
         <span
           className={cn(
-            "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[15px] font-bold tabular-nums",
+            "ml-auto min-w-[20px] rounded-md px-1.5 py-0.5 text-center font-display text-[13.5px] font-bold leading-none tabular-nums lg:text-[14.5px]",
             isLive
               ? "bg-betclic-red/10 text-betclic-red"
               : isFinished && winner
@@ -485,7 +474,7 @@ function OddsCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
+        "flex h-9 items-center justify-between rounded-lg border px-2.5 transition-all active:scale-[0.98] lg:h-10 lg:rounded-xl lg:px-3",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
@@ -499,7 +488,7 @@ function OddsCell({
     >
       <span
         className={cn(
-          "font-display text-[11px] font-bold",
+          "font-display text-[10.5px] font-bold lg:text-[11px]",
           active ? "text-white/85" : "text-dim"
         )}
       >
@@ -511,7 +500,7 @@ function OddsCell({
         <span className="flex items-center gap-0.5">
           <span
             className={cn(
-              "font-display text-[13.5px] font-bold tabular-nums",
+              "font-display text-[13px] font-bold tabular-nums lg:text-[13.5px]",
               active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
             )}
           >
