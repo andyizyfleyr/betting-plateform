@@ -22,11 +22,13 @@ import {
 import { api, type ClientBet, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { useApp } from "@/components/providers";
 import { AnimatedNumber } from "@/components/animated-number";
+import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { Toggle } from "@/components/toggle";
 import { WithdrawModal } from "@/components/withdraw-modal";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 type LedgerFilter = "all" | "deposit" | "withdrawal" | "gains" | "stakes";
+type LedgerFlowFilter = "all" | "credit" | "debit";
 
 export default function ParametresPage() {
   const { user, applyUser, setBalance, toast, openRecharge, betsVersion } = useApp();
@@ -34,6 +36,7 @@ export default function ParametresPage() {
   const [bets, setBets] = useState<ClientBet[] | null>(null);
   const [wallet, setWallet] = useState<ClientWalletData | null>(null);
   const [walletFilter, setWalletFilter] = useState<LedgerFilter>("all");
+  const [walletFlow, setWalletFlow] = useState<LedgerFlowFilter>("all");
   const [showAllLedger, setShowAllLedger] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -141,7 +144,18 @@ export default function ParametresPage() {
     return { total: all.length, wins: won.length, gains, rate };
   }, [bets]);
 
-  const filteredLedger = useMemo(() => {
+  const ledgerCounts = useMemo(() => {
+    const entries = wallet?.entries ?? [];
+    return {
+      all: entries.length,
+      gains: entries.filter((e) => e.type === "win" || e.type === "cashout").length,
+      stakes: entries.filter((e) => e.type === "stake").length,
+      deposit: entries.filter((e) => e.type === "deposit" || e.type === "adjustment").length,
+      withdrawal: entries.filter((e) => e.type === "withdrawal").length,
+    };
+  }, [wallet]);
+
+  const byLedgerType = useMemo(() => {
     const entries = wallet?.entries ?? [];
     if (walletFilter === "all") return entries;
     if (walletFilter === "deposit") {
@@ -151,6 +165,18 @@ export default function ParametresPage() {
     if (walletFilter === "stakes") return entries.filter((e) => e.type === "stake");
     return entries.filter((e) => e.type === "win" || e.type === "cashout");
   }, [wallet, walletFilter]);
+
+  const creditCount = useMemo(
+    () => byLedgerType.filter((e) => e.amount > 0).length,
+    [byLedgerType]
+  );
+  const debitCount = byLedgerType.length - creditCount;
+
+  const filteredLedger = useMemo(() => {
+    if (walletFlow === "credit") return byLedgerType.filter((e) => e.amount > 0);
+    if (walletFlow === "debit") return byLedgerType.filter((e) => e.amount <= 0);
+    return byLedgerType;
+  }, [byLedgerType, walletFlow]);
 
   const visibleLedger = showAllLedger ? filteredLedger : filteredLedger.slice(0, 6);
 
@@ -334,46 +360,90 @@ export default function ParametresPage() {
           <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
           Portefeuille & Mouvements
         </h2>
-        {wallet && (
-          <span className="text-[11px] font-semibold text-dim">
-            {wallet.entries.length} opér.
-          </span>
-        )}
       </div>
 
-      <section className="glass-card mt-2 rounded-2xl p-3.5">
-        <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
-          {(
-            [
-              { k: "all", l: "Tous" },
-              { k: "gains", l: "Gains" },
-              { k: "stakes", l: "Mises" },
-              { k: "deposit", l: "Dépôts" },
-              { k: "withdrawal", l: "Retraits" },
-            ] as const
-          ).map(({ k, l }) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setWalletFilter(k)}
-              className={cn(
-                "h-7 shrink-0 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
-                walletFilter === k
-                  ? "border-ink bg-ink font-semibold text-white"
-                  : "border-edge bg-white text-mist"
-              )}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
+      <FilterDropdownRow
+        sticky={false}
+        filters={[
+          {
+            id: "ledger-type",
+            placeholder: "Catégorie",
+            value: walletFilter,
+            defaultValue: "all",
+            onChange: setWalletFilter,
+            options: [
+              {
+                value: "all",
+                label: "Tous",
+                count: wallet ? ledgerCounts.all : undefined,
+              },
+              {
+                value: "gains",
+                label: "Gains",
+                count: wallet ? ledgerCounts.gains : undefined,
+              },
+              {
+                value: "stakes",
+                label: "Mises",
+                count: wallet ? ledgerCounts.stakes : undefined,
+              },
+              {
+                value: "deposit",
+                label: "Dépôts",
+                count: wallet ? ledgerCounts.deposit : undefined,
+              },
+              {
+                value: "withdrawal",
+                label: "Retraits",
+                count: wallet ? ledgerCounts.withdrawal : undefined,
+              },
+            ],
+          },
+          {
+            id: "ledger-flow",
+            placeholder: "Flux",
+            value: walletFlow,
+            defaultValue: "all",
+            onChange: setWalletFlow,
+            options: [
+              {
+                value: "all",
+                label: "Tous flux",
+                count: wallet ? byLedgerType.length : undefined,
+              },
+              {
+                value: "credit",
+                label: "Entrées (+)",
+                pillLabel: "Entrées",
+                count: wallet ? creditCount : undefined,
+              },
+              {
+                value: "debit",
+                label: "Sorties (−)",
+                pillLabel: "Sorties",
+                count: wallet ? debitCount : undefined,
+              },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setWalletFilter("all");
+          setWalletFlow("all");
+        }}
+        resultCountText={
+          wallet
+            ? `${filteredLedger.length} mouvement${filteredLedger.length > 1 ? "s" : ""}`
+            : null
+        }
+      />
 
+      <section className="glass-card rounded-2xl p-3.5">
         {visibleLedger.length === 0 ? (
           <p className="py-6 text-center text-[12px] text-dim">
             Aucun mouvement dans cette catégorie.
           </p>
         ) : (
-          <div className="mt-3 divide-y divide-edge">
+          <div className="divide-y divide-edge">
             {visibleLedger.map((entry) => {
               const positive = entry.amount > 0;
               const isRejectedOrCancelled =
