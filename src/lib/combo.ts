@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, ne, and, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   appUser,
@@ -19,24 +19,81 @@ function round2(n: number): number {
 }
 
 /**
- * Règle automatiquement tous les paris combinés en cours (`status = "pending"`) :
+ * Calcule le statut réel d'une sélection de combiné à partir de l'état actuel
+ * du match ou de la question de prédiction associée.
+ */
+export function resolveComboLegStatus(
+  leg: ComboLeg,
+  matchMap: Map<number, MatchRow>,
+  questionMap: Map<number, PredictionQuestionRow>
+): "pending" | "won" | "lost" | "void" {
+  if (leg.status !== "pending") return leg.status;
+
+  if (leg.kind === "sport") {
+    const m = leg.matchId ? matchMap.get(leg.matchId) : undefined;
+    if (!m) return "void";
+    if (m.status !== "finished") return "pending";
+
+    const home = m.homeScore ?? 0;
+    const away = m.awayScore ?? 0;
+    if (!isKnownMarket(leg.market)) {
+      if (leg.market === "result") {
+        const won =
+          leg.selection === "home"
+            ? home > away
+            : leg.selection === "away"
+              ? away > home
+              : home === away;
+        return won ? "won" : "lost";
+      }
+      return "void";
+    }
+    const { won, voided } = marketSettle(
+      leg.market,
+      leg.selection,
+      home,
+      away,
+      m.events ?? null,
+      m.id
+    );
+    return voided ? "void" : won ? "won" : "lost";
+  }
+
+  const q = leg.questionId ? questionMap.get(leg.questionId) : undefined;
+  if (!q) return "void";
+  if (q.status !== "resolved" || !q.resolution) return "pending";
+  return q.resolution === leg.selection ? "won" : "lost";
+}
+
+/**
+ * Règle automatiquement tous les paris combinés en cours (`status = "pending"`)
+ * ET met également à jour le statut final des sélections restantes sur les combinés
+ * déjà classés (`lost` / `cashed`) dès que leurs matchs se terminent :
  * - Met à jour le statut individuel de chaque sélection (`won` / `lost` / `void`)
  * - Dès qu'une seule sélection est perdante (`lost`), le combiné passe immédiatement en `lost`
  * - Lorsque toutes les sélections sont terminées (`won` ou `void`), recalcule le gain
  *   exact sur les sélections gagnantes (remboursement si 100 % annulé) et crédite le solde.
  */
 export async function settlePendingCombos(): Promise<void> {
-  const pending = await db
-    .select()
-    .from(comboBets)
-    .where(eq(comboBets.status, "pending"));
+  const [pending, settledWithPendingLegs] = await Promise.all([
+    db.select().from(comboBets).where(eq(comboBets.status, "pending")),
+    db
+      .select()
+      .from(comboBets)
+      .where(
+        and(
+          ne(comboBets.status, "pending"),
+          sql`${comboBets.legs}::text LIKE '%"status":"pending"%'`
+        )
+      ),
+  ]);
 
-  if (pending.length === 0) return;
+  if (pending.length === 0 && settledWithPendingLegs.length === 0) return;
 
   const matchIds = new Set<number>();
   const questionIds = new Set<number>();
 
-  for (const cb of pending) {
+  for (const cb of [...pending, ...settledWithPendingLegs]) {
     for (const leg of cb.legs ?? []) {
       if (leg.kind === "sport" && leg.matchId) matchIds.add(leg.matchId);
       if (leg.kind === "prediction" && leg.questionId) questionIds.add(leg.questionId);
@@ -58,60 +115,40 @@ export async function settlePendingCombos(): Promise<void> {
   const matchMap = new Map(matchRows.map((m) => [m.id, m]));
   const questionMap = new Map(questionRows.map((q) => [q.id, q]));
 
+  // 1. Met à jour les sélections désormais terminées sur les combinés déjà réglés (ex. perdus tôt)
+  for (const cb of settledWithPendingLegs) {
+    let changed = false;
+    const updatedLegs: ComboLeg[] = (cb.legs ?? []).map((leg) => {
+      if (leg.status !== "pending") return leg;
+      const nextStatus = resolveComboLegStatus(leg, matchMap, questionMap);
+      if (nextStatus !== leg.status) {
+        changed = true;
+        return { ...leg, status: nextStatus };
+      }
+      return leg;
+    });
+    if (changed) {
+      await db
+        .update(comboBets)
+        .set({ legs: updatedLegs })
+        .where(eq(comboBets.id, cb.id));
+    }
+  }
+
+  if (pending.length === 0) return;
+
   let settledAny = false;
 
   for (const cb of pending) {
     let legsChanged = false;
     const nextLegs: ComboLeg[] = (cb.legs ?? []).map((leg) => {
       if (leg.status !== "pending") return leg;
-
-      if (leg.kind === "sport") {
-        const m = leg.matchId ? matchMap.get(leg.matchId) : undefined;
-        if (!m) {
-          legsChanged = true;
-          return { ...leg, status: "void" };
-        }
-        if (m.status !== "finished") return leg;
-
-        const home = m.homeScore ?? 0;
-        const away = m.awayScore ?? 0;
-        if (!isKnownMarket(leg.market)) {
-          // Marché personnalisé manuel 1/N/2
-          if (leg.market === "result") {
-            const won =
-              leg.selection === "home"
-                ? home > away
-                : leg.selection === "away"
-                  ? away > home
-                  : home === away;
-            legsChanged = true;
-            return { ...leg, status: won ? "won" : "lost" };
-          }
-          legsChanged = true;
-          return { ...leg, status: "void" };
-        }
-        const { won, voided } = marketSettle(
-          leg.market,
-          leg.selection,
-          home,
-          away,
-          m.events ?? null,
-          m.id
-        );
+      const nextStatus = resolveComboLegStatus(leg, matchMap, questionMap);
+      if (nextStatus !== leg.status) {
         legsChanged = true;
-        return { ...leg, status: voided ? "void" : won ? "won" : "lost" };
+        return { ...leg, status: nextStatus };
       }
-
-      // Sélection de prédiction
-      const q = leg.questionId ? questionMap.get(leg.questionId) : undefined;
-      if (!q) {
-        legsChanged = true;
-        return { ...leg, status: "void" };
-      }
-      if (q.status !== "resolved" || !q.resolution) return leg;
-
-      legsChanged = true;
-      return { ...leg, status: q.resolution === leg.selection ? "won" : "lost" };
+      return leg;
     });
 
     const hasLost = nextLegs.some((l) => l.status === "lost");

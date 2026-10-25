@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, HandCoins, Layers, Loader2, Share2, TrendingUp, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronRight, HandCoins, Layers, Loader2, Share2, TrendingUp, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { SportIcon } from "./sport-icon";
@@ -108,44 +109,93 @@ export function BetTicket({
       <div className="mt-2.5">
         {isCombo && bet.legs ? (
           <div className="space-y-1.5">
-            {bet.legs.map((leg, i) => (
-              <div
-                key={`${leg.kind}-${leg.matchId ?? leg.questionId ?? i}`}
-                className="flex items-center justify-between gap-2 rounded-xl bg-elev/80 px-2.5 py-2"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className={cn(
-                      "grid h-4 w-4 shrink-0 place-items-center rounded-full text-[9.5px] font-bold",
-                      leg.status === "won"
-                        ? "bg-win/15 text-win"
+            {bet.legs.map((leg, i) => {
+              const legHref =
+                leg.kind === "sport" && leg.matchId
+                  ? `/resultats?match=${leg.matchId}`
+                  : leg.kind === "prediction"
+                    ? "/predictions"
+                    : null;
+
+              const scoreBadge =
+                leg.kind === "sport" && leg.matchHomeScore != null && leg.matchAwayScore != null
+                  ? leg.matchStatus === "live"
+                    ? `${leg.matchHomeScore}-${leg.matchAwayScore} · ${leg.matchMinute ?? "LIVE"}`
+                    : `${leg.matchHomeScore} - ${leg.matchAwayScore}`
+                  : null;
+
+              const content = (
+                <>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "grid h-4 w-4 shrink-0 place-items-center rounded-full text-[9.5px] font-bold",
+                        leg.status === "won"
+                          ? "bg-win/15 text-win"
+                          : leg.status === "lost"
+                            ? "bg-betclic-red/15 text-betclic-red"
+                            : leg.status === "void"
+                              ? "bg-amber-500/15 text-amber-700"
+                              : "bg-white text-dim"
+                      )}
+                    >
+                      {leg.status === "won"
+                        ? "✓"
                         : leg.status === "lost"
-                          ? "bg-betclic-red/15 text-betclic-red"
+                          ? "✕"
                           : leg.status === "void"
-                            ? "bg-amber-500/15 text-amber-700"
-                            : "bg-white text-dim"
-                    )}
-                  >
-                    {leg.status === "won"
-                      ? "✓"
-                      : leg.status === "lost"
-                        ? "✕"
-                        : leg.status === "void"
-                          ? "↺"
-                          : "•"}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate font-display text-[12.5px] font-semibold text-ink">
-                      {leg.title}
-                    </p>
-                    <p className="truncate text-[11px] text-mist">{leg.selectionLabel}</p>
+                            ? "↺"
+                            : "•"}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate font-display text-[12.5px] font-semibold text-ink">
+                          {leg.title}
+                        </p>
+                        {scoreBadge && (
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[10px] font-bold tabular-nums",
+                              leg.matchStatus === "live"
+                                ? "bg-betclic-red/12 text-betclic-red"
+                                : "bg-white text-ink ring-1 ring-edge"
+                            )}
+                          >
+                            {scoreBadge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="truncate text-[11px] text-mist">{leg.selectionLabel}</p>
+                    </div>
                   </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="font-display text-[12px] font-bold tabular-nums text-betclic-red">
+                      {formatOdds(leg.odds, oddsFormat)}
+                    </span>
+                    {legHref && (
+                      <ChevronRight className="h-3.5 w-3.5 text-dim" strokeWidth={2.2} />
+                    )}
+                  </div>
+                </>
+              );
+
+              return legHref ? (
+                <Link
+                  key={`${leg.kind}-${leg.matchId ?? leg.questionId ?? i}`}
+                  href={legHref}
+                  className="flex items-center justify-between gap-2 rounded-xl bg-elev/80 px-2.5 py-2 transition-colors hover:bg-elev active:bg-edge/60"
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div
+                  key={`${leg.kind}-${leg.matchId ?? leg.questionId ?? i}`}
+                  className="flex items-center justify-between gap-2 rounded-xl bg-elev/80 px-2.5 py-2"
+                >
+                  {content}
                 </div>
-                <span className="shrink-0 font-display text-[12px] font-bold tabular-nums text-betclic-red">
-                  {formatOdds(leg.odds, oddsFormat)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : isPrediction ? (
           <>
@@ -163,28 +213,57 @@ export function BetTicket({
           </>
         ) : (
           <>
-            <div className="flex items-center gap-2.5">
-              <div className="flex shrink-0 -space-x-2">
-                <TeamAvatar name={bet.homeTeam} size="xs" className="ring-2 ring-white" />
-                <TeamAvatar name={bet.awayTeam} size="xs" className="ring-2 ring-white" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-[14px] font-semibold text-ink">
-                  {bet.homeTeam} <span className="text-dim">–</span> {bet.awayTeam}
-                </p>
-                {(bet.matchHomeScore != null || bet.matchStartsAt) && (
-                  <p className="text-[11px] tabular-nums text-dim">
-                    {bet.matchStatus === "live" && bet.matchHomeScore != null
-                      ? `Score live : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
-                      : bet.matchStatus === "finished" && bet.matchHomeScore != null
-                        ? `Score final : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
-                        : bet.matchStartsAt
-                          ? formatKickoff(bet.matchStartsAt)
-                          : null}
+            {bet.matchId ? (
+              <Link
+                href={`/resultats?match=${bet.matchId}`}
+                className="-mx-1.5 flex items-center gap-2.5 rounded-xl px-1.5 py-1 transition-colors hover:bg-elev/70 active:bg-elev"
+              >
+                <div className="flex shrink-0 -space-x-2">
+                  <TeamAvatar name={bet.homeTeam} size="xs" className="ring-2 ring-white" />
+                  <TeamAvatar name={bet.awayTeam} size="xs" className="ring-2 ring-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-display text-[14px] font-semibold text-ink">
+                    {bet.homeTeam} <span className="text-dim">–</span> {bet.awayTeam}
                   </p>
-                )}
+                  {(bet.matchHomeScore != null || bet.matchStartsAt) && (
+                    <p className="text-[11px] tabular-nums text-dim">
+                      {bet.matchStatus === "live" && bet.matchHomeScore != null
+                        ? `Score live : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
+                        : bet.matchStatus === "finished" && bet.matchHomeScore != null
+                          ? `Score final : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
+                          : bet.matchStartsAt
+                            ? formatKickoff(bet.matchStartsAt)
+                            : null}
+                    </p>
+                  )}
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
+              </Link>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <div className="flex shrink-0 -space-x-2">
+                  <TeamAvatar name={bet.homeTeam} size="xs" className="ring-2 ring-white" />
+                  <TeamAvatar name={bet.awayTeam} size="xs" className="ring-2 ring-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-display text-[14px] font-semibold text-ink">
+                    {bet.homeTeam} <span className="text-dim">–</span> {bet.awayTeam}
+                  </p>
+                  {(bet.matchHomeScore != null || bet.matchStartsAt) && (
+                    <p className="text-[11px] tabular-nums text-dim">
+                      {bet.matchStatus === "live" && bet.matchHomeScore != null
+                        ? `Score live : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
+                        : bet.matchStatus === "finished" && bet.matchHomeScore != null
+                          ? `Score final : ${bet.matchHomeScore} - ${bet.matchAwayScore}`
+                          : bet.matchStartsAt
+                            ? formatKickoff(bet.matchStartsAt)
+                            : null}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
               <span className="truncate pr-2 text-[12.5px] font-semibold text-ink">

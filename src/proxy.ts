@@ -28,6 +28,7 @@ export async function proxy(req: NextRequest) {
       pathname === "/api/health" ||
       pathname.startsWith("/api/auth") ||
       pathname === "/api/matches" ||
+      pathname.startsWith("/api/matches/") ||
       // Webhook Stripe : appelé par Stripe SANS cookie d'authentification.
       pathname === "/api/payments/stripe/webhook";
     if (publicApi) return NextResponse.next();

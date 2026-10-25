@@ -18,7 +18,7 @@ import { MAX_COMBO_LEGS } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur } from "@/lib/format";
 import { BetModal } from "./bet-modal";
-import { ComboFloatingBar, ComboSheet, type ComboSelection } from "./combo-slip";
+import { ComboSheet, type ComboSelection } from "./combo-slip";
 import { MarketSheet } from "./market-sheet";
 import { RechargeModal } from "./recharge-modal";
 
@@ -114,7 +114,6 @@ export function Providers({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(raw) as ComboSelection[];
           if (Array.isArray(parsed) && parsed.length > 0) {
             setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
-            setComboQuickMode(true);
           }
         }
       } catch {
@@ -261,7 +260,6 @@ export function Providers({ children }: { children: ReactNode }) {
       }
       const next = [...comboLegs, sel];
       persistCombo(next);
-      if (comboLegs.length === 0) setComboQuickMode(true);
       return "added";
     },
     [comboLegs, persistCombo]
@@ -350,7 +348,6 @@ export function Providers({ children }: { children: ReactNode }) {
       {children}
       {!isAdminMode && (
         <>
-          <ComboFloatingBar />
           <ComboSheet />
           <MarketSheet />
           <BetModal />

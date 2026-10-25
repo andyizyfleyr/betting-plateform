@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, ChevronUp, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
+import { useLongPressOdds } from "@/lib/use-long-press-odds";
+import type { ComboSelection } from "./combo-slip";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
@@ -69,6 +72,7 @@ export function MatchCard({
   index?: number;
   nextUp?: boolean;
 }) {
+  const router = useRouter();
   const { openMarkets } = useApp();
   const [showTracker, setShowTracker] = useState(false);
   const isLive = match.status === "live";
@@ -79,7 +83,13 @@ export function MatchCard({
 
   return (
     <article
-      onClick={() => openMarkets(match)}
+      onClick={() => {
+        if (isFinished) {
+          router.push(`/resultats?match=${match.id}`);
+        } else {
+          openMarkets(match);
+        }
+      }}
       className={cn(
         "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45"
       )}
@@ -118,8 +128,9 @@ export function MatchCard({
               <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
             </>
           ) : isFinished ? (
-            <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold text-dim">
-              Terminé · Stats
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold text-dim">
+              Terminé · Historique
+              <ChevronRight className="h-3 w-3" strokeWidth={2.3} />
             </span>
           ) : (
             <>
@@ -317,6 +328,18 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
         const inCombo = isInCombo(comboUid, "result", c.key);
         const locked = match.suspended || c.closed;
 
+        const comboSel: ComboSelection = {
+          uid: comboUid,
+          kind: "sport",
+          matchId: match.id,
+          title: `${match.homeTeam} – ${match.awayTeam}`,
+          league: match.league,
+          market: "result",
+          selection: c.key,
+          selectionLabel: c.label,
+          odds: c.odds,
+        };
+
         return (
           <OddsCell
             key={c.key}
@@ -326,22 +349,12 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
             suspended={locked}
             selected={isSelected}
             inCombo={inCombo}
-            onPick={(e) => {
-              e.stopPropagation();
+            comboSelection={comboSel}
+            onPick={() => {
               if (comboQuickMode) {
-                const res = toggleComboLeg({
-                  uid: comboUid,
-                  kind: "sport",
-                  matchId: match.id,
-                  title: `${match.homeTeam} – ${match.awayTeam}`,
-                  league: match.league,
-                  market: "result",
-                  selection: c.key,
-                  selectionLabel: c.label,
-                  odds: c.odds,
-                });
+                const res = toggleComboLeg(comboSel);
                 if (res === "full") {
-                  toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
+                  toast({ kind: "error", title: "Betslip complet (8 sélections max)" });
                 }
                 return;
               }
@@ -368,6 +381,7 @@ function OddsCell({
   suspended,
   selected,
   inCombo,
+  comboSelection,
   onPick,
 }: {
   tag: string;
@@ -376,16 +390,23 @@ function OddsCell({
   suspended: boolean;
   selected?: boolean;
   inCombo?: boolean;
-  onPick: (e: React.MouseEvent) => void;
+  comboSelection: ComboSelection;
+  onPick: () => void;
 }) {
   const { oddsFormat } = useApp();
   const flash = useOddsFlash(odds);
   const active = selected || inCombo;
+  const { pressing, handlers, style } = useLongPressOdds({
+    disabled: suspended,
+    comboSelection,
+    onTap: () => onPick(),
+  });
 
   return (
     <button
       type="button"
-      onClick={suspended ? (e) => e.stopPropagation() : onPick}
+      {...handlers}
+      style={style}
       aria-disabled={suspended}
       className={cn(
         "flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
@@ -394,6 +415,7 @@ function OddsCell({
           : inCombo
             ? "border-ink bg-ink text-white shadow-xs ring-2 ring-betclic-red/35"
             : "border-edge bg-elev/75 hover:border-ink/20 active:border-betclic-red/50 active:bg-betclic-red/8",
+        pressing && !suspended && "scale-[0.96] ring-2 ring-betclic-red/50",
         suspended && "cursor-not-allowed opacity-50",
         !active && flash === "up" && "border-win/40 bg-win/8",
         !active && flash === "down" && "border-betclic-red/40 bg-betclic-red/8"
