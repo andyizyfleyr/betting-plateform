@@ -45,7 +45,7 @@ function round4(v: number): number {
   return Math.round(v * 10000) / 10000;
 }
 
-const ML_CACHE_TTL_MS = 25_000;
+const ML_CACHE_TTL_MS = 60_000;
 
 interface InMemoryMlBundle {
   loadedAt: number;
@@ -166,6 +166,44 @@ export async function ensureMlLoaded(forceReload = false): Promise<InMemoryMlBun
   return mlLoadPromise;
 }
 
+interface MlModelUpsertItem {
+  modelKey: string;
+  version: number;
+  samplesCount: number;
+  brierScore: number;
+  logLoss: number;
+  state: Record<string, unknown>;
+}
+
+async function upsertMlModelRowsBatch(items: MlModelUpsertItem[]): Promise<void> {
+  if (items.length === 0) return;
+  const now = new Date();
+  await db
+    .insert(mlModels)
+    .values(
+      items.map((it) => ({
+        modelKey: it.modelKey,
+        version: it.version,
+        samplesCount: it.samplesCount,
+        brierScore: round4(it.brierScore),
+        logLoss: round4(it.logLoss),
+        state: it.state,
+        updatedAt: now,
+      }))
+    )
+    .onConflictDoUpdate({
+      target: mlModels.modelKey,
+      set: {
+        version: sql`excluded.version`,
+        samplesCount: sql`excluded.samples_count`,
+        brierScore: sql`excluded.brier_score`,
+        logLoss: sql`excluded.log_loss`,
+        state: sql`excluded.state`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+    });
+}
+
 async function upsertMlModelRow(
   modelKey: string,
   version: number,
@@ -174,29 +212,9 @@ async function upsertMlModelRow(
   logLoss: number,
   state: Record<string, unknown>
 ): Promise<void> {
-  const now = new Date();
-  await db
-    .insert(mlModels)
-    .values({
-      modelKey,
-      version,
-      samplesCount,
-      brierScore: round4(brierScore),
-      logLoss: round4(logLoss),
-      state,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: mlModels.modelKey,
-      set: {
-        version,
-        samplesCount,
-        brierScore: round4(brierScore),
-        logLoss: round4(logLoss),
-        state,
-        updatedAt: now,
-      },
-    });
+  await upsertMlModelRowsBatch([
+    { modelKey, version, samplesCount, brierScore, logLoss, state },
+  ]);
 }
 
 /**
@@ -246,113 +264,149 @@ export async function recordMatchFinishedMl(match: {
  * APPRENTISSAGE EN LIGNE — Modèles 1 (`sharp_detector`) & 2 (`market_calibrator`) :
  * Appelé automatiquement à chaque règlement de pari dans `settle.ts`.
  */
-export async function recordSettledBetMl(params: {
+export interface SettledBetMlInput {
   userId: number;
   market: string;
   odds: number;
   stake: number;
   won: boolean;
   payout: number;
-}): Promise<void> {
+}
+
+/**
+ * APPRENTISSAGE EN LIGNE PAR LOTS — Modèles 1 (`sharp_detector`) & 2 (`market_calibrator`) :
+ * Traite tous les tickets réglés d'un coup en 1 seule lecture SQL groupée (`WHERE user_id IN (...)`)
+ * et 1 seul upsert multi-lignes `INSERT ... ON CONFLICT DO UPDATE`.
+ */
+export async function recordSettledBetsBatchMl(
+  items: SettledBetMlInput[]
+): Promise<void> {
+  if (items.length === 0) return;
   const bundle = await ensureMlLoaded();
-  const odds = Math.max(1.01, params.odds);
-  const pPred = clamp(0.93 / odds, 0.015, 0.97);
-  const yWin = params.won ? 1 : 0;
-
-  // 1. Mise à jour bayésienne incrémentale du segment de marché (Modèle 2)
-  const segKey = segmentKeyOf(params.market, odds);
-  const prevSeg = bundle.calibrator.segments[segKey] ?? {
-    n: 0,
-    sumPredProb: 0,
-    sumWins: 0,
-    staked: 0,
-    paid: 0,
-    marginMult: 1.0,
-  };
+  const nowDate = new Date();
   const decay = 0.992;
-  const nextSeg = {
-    n: round4(prevSeg.n * decay + 1),
-    sumPredProb: round4(prevSeg.sumPredProb * decay + pPred),
-    sumWins: round4(prevSeg.sumWins * decay + yWin),
-    staked: round2(prevSeg.staked * decay + params.stake),
-    paid: round2(prevSeg.paid * decay + params.payout),
-    marginMult: 1.0,
-  };
-  nextSeg.marginMult = computeSegmentMarginMultiplier(nextSeg);
-  bundle.calibrator.segments[segKey] = nextSeg;
 
-  const brierMkt = (pPred - yWin) * (pPred - yWin);
-  const logLossMkt = -(yWin * Math.log(pPred) + (1 - yWin) * Math.log(1 - pPred));
-  bundle.calibrator.emaBrier = round4(0.95 * bundle.calibrator.emaBrier + 0.05 * brierMkt);
-  bundle.calibrator.emaLogLoss = round4(0.95 * bundle.calibrator.emaLogLoss + 0.05 * logLossMkt);
-  bundle.calibratorMeta.samplesCount += 1;
-  bundle.calibratorMeta.updatedAt = new Date();
+  for (const params of items) {
+    const odds = Math.max(1.01, params.odds);
+    const pPred = clamp(0.93 / odds, 0.015, 0.97);
+    const yWin = params.won ? 1 : 0;
+
+    const segKey = segmentKeyOf(params.market, odds);
+    const prevSeg = bundle.calibrator.segments[segKey] ?? {
+      n: 0,
+      sumPredProb: 0,
+      sumWins: 0,
+      staked: 0,
+      paid: 0,
+      marginMult: 1.0,
+    };
+    const nextSeg = {
+      n: round4(prevSeg.n * decay + 1),
+      sumPredProb: round4(prevSeg.sumPredProb * decay + pPred),
+      sumWins: round4(prevSeg.sumWins * decay + yWin),
+      staked: round2(prevSeg.staked * decay + params.stake),
+      paid: round2(prevSeg.paid * decay + params.payout),
+      marginMult: 1.0,
+    };
+    nextSeg.marginMult = computeSegmentMarginMultiplier(nextSeg);
+    bundle.calibrator.segments[segKey] = nextSeg;
+
+    const brierMkt = (pPred - yWin) * (pPred - yWin);
+    const logLossMkt = -(yWin * Math.log(pPred) + (1 - yWin) * Math.log(1 - pPred));
+    bundle.calibrator.emaBrier = round4(0.95 * bundle.calibrator.emaBrier + 0.05 * brierMkt);
+    bundle.calibrator.emaLogLoss = round4(0.95 * bundle.calibrator.emaLogLoss + 0.05 * logLossMkt);
+    bundle.calibratorMeta.samplesCount += 1;
+    bundle.calibratorMeta.updatedAt = nowDate;
+  }
 
   hydrateMlRuntimeCaches({ calibrator: bundle.calibrator });
 
-  // 2. Descente de gradient en ligne sur le profil du joueur (Modèle 1)
-  const userRows = await db
-    .select({
-      market: bets.market,
-      selection: bets.selection,
-      stake: bets.stake,
-      odds: bets.odds,
-      closingOdds: bets.closingOdds,
-      status: bets.status,
-      potentialWin: bets.potentialWin,
-      cashOutAmount: bets.cashOutAmount,
-      riskFlag: bets.riskFlag,
-      placedAt: bets.placedAt,
-    })
-    .from(bets)
-    .where(eq(bets.userId, params.userId))
-    .orderBy(desc(bets.id))
-    .limit(22);
+  // Lecture groupée unique de l'historique récent pour tous les parieurs distincts du lot
+  const uniqueUserIds = [
+    ...new Set(items.map((it) => it.userId).filter((id) => Number.isFinite(id) && id > 0)),
+  ];
 
-  if (userRows.length >= 4) {
-    const samples: BetSampleForFeatures[] = userRows.map((r) => ({
-      market: r.market,
-      selection: r.selection,
-      stake: r.stake,
-      odds: r.odds,
-      closingOdds: r.closingOdds,
-      status: r.status,
-      potentialWin: r.potentialWin,
-      cashOutAmount: r.cashOutAmount,
-      riskFlag: r.riskFlag,
-      placedAtMs: r.placedAt ? r.placedAt.getTime() : Date.now(),
-    }));
-    const features = extractSharpFeatures(samples.slice(1));
-    const netReturn = params.payout - params.stake;
-    const softTarget = clamp(0.5 + netReturn / Math.max(8, params.stake * 2.2), 0.05, 0.95);
-    bundle.sharp = onlineSgdStepSharp(bundle.sharp, features, softTarget);
-    bundle.sharpMeta.samplesCount += 1;
-    bundle.sharpMeta.updatedAt = new Date();
+  if (uniqueUserIds.length > 0) {
+    const allUserRows = await db
+      .select({
+        userId: bets.userId,
+        market: bets.market,
+        selection: bets.selection,
+        stake: bets.stake,
+        odds: bets.odds,
+        closingOdds: bets.closingOdds,
+        status: bets.status,
+        potentialWin: bets.potentialWin,
+        cashOutAmount: bets.cashOutAmount,
+        riskFlag: bets.riskFlag,
+        placedAt: bets.placedAt,
+      })
+      .from(bets)
+      .where(inArray(bets.userId, uniqueUserIds))
+      .orderBy(desc(bets.id))
+      .limit(Math.min(400, uniqueUserIds.length * 24));
+
+    const rowsByUser = new Map<number, typeof allUserRows>();
+    for (const r of allUserRows) {
+      const arr = rowsByUser.get(r.userId) ?? [];
+      if (arr.length < 22) {
+        arr.push(r);
+        rowsByUser.set(r.userId, arr);
+      }
+    }
+
+    for (const params of items) {
+      const userRows = rowsByUser.get(params.userId) ?? [];
+      if (userRows.length >= 4) {
+        const samples: BetSampleForFeatures[] = userRows.map((r) => ({
+          market: r.market,
+          selection: r.selection,
+          stake: r.stake,
+          odds: r.odds,
+          closingOdds: r.closingOdds,
+          status: r.status,
+          potentialWin: r.potentialWin,
+          cashOutAmount: r.cashOutAmount,
+          riskFlag: r.riskFlag,
+          placedAtMs: r.placedAt ? r.placedAt.getTime() : Date.now(),
+        }));
+        const features = extractSharpFeatures(samples.slice(1));
+        const netReturn = params.payout - params.stake;
+        const softTarget = clamp(0.5 + netReturn / Math.max(8, params.stake * 2.2), 0.05, 0.95);
+        bundle.sharp = onlineSgdStepSharp(bundle.sharp, features, softTarget);
+        bundle.sharpMeta.samplesCount += 1;
+        bundle.sharpMeta.updatedAt = nowDate;
+      }
+    }
   }
 
-  // Persistance régulée (évite d'écrire 15 fois dans la même milliseconde sur un match très parié)
+  // Persistance groupée régulée (1 seule requête multi-lignes au plus toutes les 8 s)
   const now = Date.now();
-  if (now - lastPersistAt > 800) {
+  if (now - lastPersistAt > 8_000) {
     lastPersistAt = now;
-    await Promise.all([
-      upsertMlModelRow(
-        "market_calibrator",
-        bundle.calibratorMeta.version,
-        bundle.calibratorMeta.samplesCount,
-        bundle.calibrator.emaBrier,
-        bundle.calibrator.emaLogLoss,
-        bundle.calibrator as unknown as Record<string, unknown>
-      ),
-      upsertMlModelRow(
-        "sharp_detector",
-        bundle.sharpMeta.version,
-        bundle.sharpMeta.samplesCount,
-        bundle.sharp.emaBrier,
-        bundle.sharp.emaLogLoss,
-        bundle.sharp as unknown as Record<string, unknown>
-      ),
+    await upsertMlModelRowsBatch([
+      {
+        modelKey: "market_calibrator",
+        version: bundle.calibratorMeta.version,
+        samplesCount: bundle.calibratorMeta.samplesCount,
+        brierScore: bundle.calibrator.emaBrier,
+        logLoss: bundle.calibrator.emaLogLoss,
+        state: bundle.calibrator as unknown as Record<string, unknown>,
+      },
+      {
+        modelKey: "sharp_detector",
+        version: bundle.sharpMeta.version,
+        samplesCount: bundle.sharpMeta.samplesCount,
+        brierScore: bundle.sharp.emaBrier,
+        logLoss: bundle.sharp.emaLogLoss,
+        state: bundle.sharp as unknown as Record<string, unknown>,
+      },
     ]);
   }
+}
+
+export async function recordSettledBetMl(params: SettledBetMlInput): Promise<void> {
+  await recordSettledBetsBatchMl([params]);
 }
 
 /**
@@ -571,39 +625,39 @@ export async function retrainAllMlModels(): Promise<InMemoryMlBundle> {
   const glickoVer = nextVer("glicko_clubs");
   const recVer = nextVer("recommender_meta");
 
-  await Promise.all([
-    upsertMlModelRow(
-      "sharp_detector",
-      sharpVer,
-      trainingPairs.length,
-      sharpState.emaBrier,
-      sharpState.emaLogLoss,
-      sharpState as unknown as Record<string, unknown>
-    ),
-    upsertMlModelRow(
-      "market_calibrator",
-      calVer,
-      cCount,
-      calState.emaBrier,
-      calState.emaLogLoss,
-      calState as unknown as Record<string, unknown>
-    ),
-    upsertMlModelRow(
-      "glicko_clubs",
-      glickoVer,
-      gCount,
-      glickoState.emaBrier,
-      glickoState.emaLogLoss,
-      glickoState as unknown as Record<string, unknown>
-    ),
-    upsertMlModelRow(
-      "recommender_meta",
-      recVer,
-      recState.totalAnalysedBets,
-      0.185,
-      0.54,
-      recState as unknown as Record<string, unknown>
-    ),
+  await upsertMlModelRowsBatch([
+    {
+      modelKey: "sharp_detector",
+      version: sharpVer,
+      samplesCount: trainingPairs.length,
+      brierScore: sharpState.emaBrier,
+      logLoss: sharpState.emaLogLoss,
+      state: sharpState as unknown as Record<string, unknown>,
+    },
+    {
+      modelKey: "market_calibrator",
+      version: calVer,
+      samplesCount: cCount,
+      brierScore: calState.emaBrier,
+      logLoss: calState.emaLogLoss,
+      state: calState as unknown as Record<string, unknown>,
+    },
+    {
+      modelKey: "glicko_clubs",
+      version: glickoVer,
+      samplesCount: gCount,
+      brierScore: glickoState.emaBrier,
+      logLoss: glickoState.emaLogLoss,
+      state: glickoState as unknown as Record<string, unknown>,
+    },
+    {
+      modelKey: "recommender_meta",
+      version: recVer,
+      samplesCount: recState.totalAnalysedBets,
+      brierScore: 0.185,
+      logLoss: 0.54,
+      state: recState as unknown as Record<string, unknown>,
+    },
   ]);
 
   const nowDate = new Date();

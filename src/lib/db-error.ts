@@ -106,14 +106,14 @@ export function classifyServerError(err: unknown): ClassifiedServerError {
   }
 
   if (
-    /compute time quota|quota.*exceeded|exceeded.*(quota|limit|compute|transfer|size|storage)|project size limit|data transfer/i.test(
+    /\[53000\]|\b53000\b|compute time quota|network transfer|quota.*exceeded|exceeded.*(quota|limit|compute|transfer|size|storage)|project size limit|data transfer/i.test(
       lower
     )
   ) {
     return {
       code: "DB_QUOTA_EXCEEDED",
       message:
-        "Le quota gratuit mensuel de votre base PostgreSQL (Neon) est atteint. Créez ou rattachez une nouvelle base dans Vercel → be-plateform → Storage puis redéployez.",
+        "Le quota mensuel de votre base PostgreSQL (Neon — ex. 5 Go Network Transfer du plan Free) est atteint. Passez le projet Neon en plan supérieur pour conserver vos données ou rattachez un nouveau projet Neon dans Vercel → Storage.",
       detail: rootReason,
       status: 503,
     };

@@ -11,7 +11,11 @@ import {
   realMatchSettle,
   tryEarlyLiveSettle,
 } from "@/lib/markets";
-import { recordSettledBetMl } from "@/lib/ml-engine";
+import {
+  recordSettledBetsBatchMl,
+  type SettledBetMlInput,
+} from "@/lib/ml-engine";
+import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import {
   getRealMatchSettlementMode,
@@ -147,6 +151,27 @@ async function settleRows(
     overrideDecision?: { won: boolean; voided: boolean };
   }>
 ) {
+  if (rows.length === 0) return;
+
+  interface PlannedSettlement {
+    betId: number;
+    userId: number;
+    market: string;
+    odds: number;
+    stake: number;
+    won: boolean;
+    voided: boolean;
+    status: "won" | "lost" | "void";
+    potentialWin: number;
+    payout: number;
+    settledAtIso: string;
+    closingOdds: number | null;
+    isVirtual: boolean;
+  }
+
+  const nowMs = Date.now();
+  const planned = new Map<number, PlannedSettlement>();
+
   for (const { bet, match, overrideDecision } of rows) {
     if (!match) continue;
     const { won, voided } = overrideDecision ?? resolveBet(bet, match);
@@ -154,52 +179,102 @@ async function settleRows(
     const payoutMultiplier = bet.payoutMultiplier ?? 1;
     const stakeReturned = bet.stakeReturned ?? 0;
     const payout = voided
-      ? Math.round(bet.stake * 100) / 100 // remboursement intégral de la mise (ex. DNB nul)
+      ? Math.round(bet.stake * 100) / 100
       : won
         ? Math.round((bet.stake * bet.odds * payoutMultiplier + stakeReturned) * 100) / 100
         : 0;
 
-    // CLV : capture de la cote de clôture au moment du règlement.
     const closingOdds = closingOddsForBet(bet, match);
-    const nowMs = Date.now();
     const rawFinishedMs = match.finishedAt ? match.finishedAt.getTime() : nowMs;
     const minSettledMs = bet.placedAt ? bet.placedAt.getTime() + 1_000 : 0;
     const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawFinishedMs)));
 
-    const [updated] = await db
-      .update(bets)
-      .set({
-        status: voided ? "void" : won ? "won" : "lost",
-        ...(voided ? { potentialWin: payout } : {}),
-        settledAt,
-        ...(closingOdds != null ? { closingOdds } : {}),
-      })
-      .where(and(eq(bets.id, bet.id), eq(bets.status, "pending")))
-      .returning({ id: bets.id });
+    planned.set(bet.id, {
+      betId: bet.id,
+      userId: bet.userId,
+      market: bet.market,
+      odds: bet.odds,
+      stake: bet.stake,
+      won,
+      voided,
+      status: voided ? "void" : won ? "won" : "lost",
+      potentialWin: voided ? payout : bet.potentialWin,
+      payout,
+      settledAtIso: settledAt.toISOString(),
+      closingOdds,
+      isVirtual: match.source === "virtual",
+    });
+  }
 
-    if (!updated) continue;
+  const batch = [...planned.values()];
+  if (batch.length === 0) return;
 
-    if (payout > 0) {
-      await db
-        .update(appUser)
-        .set({ balance: sql`${appUser.balance} + ${payout}` })
-        .where(eq(appUser.id, bet.userId));
+  // Règlement atomique en UNE SEULE requête SQL CTE :
+  // - met à jour tous les paris `pending` en un seul `UPDATE ... FROM (VALUES ...)`
+  // - agrège par `user_id` et crédite tous les soldes gagnants/remboursés d'un seul coup
+  const valuesTuples = sql.join(
+    batch.map(
+      (p) =>
+        sql`(${p.betId}::int, ${p.status}::text, ${p.potentialWin}::float8, ${p.payout}::float8, ${p.settledAtIso}::timestamptz::timestamp, ${p.closingOdds}::float8)`
+    ),
+    sql`, `
+  );
+
+  const res = await db.execute(sql`
+    WITH updated AS (
+      UPDATE "bets" AS b
+      SET
+        "status" = v.status,
+        "potential_win" = v.potential_win,
+        "settled_at" = v.settled_at,
+        "closing_odds" = COALESCE(v.closing_odds, b."closing_odds")
+      FROM (VALUES ${valuesTuples}) AS v(id, status, potential_win, payout, settled_at, closing_odds)
+      WHERE b."id" = v.id
+        AND b."status" = 'pending'
+      RETURNING b."id", b."user_id", v.payout
+    ),
+    credited AS (
+      UPDATE "app_user" AS u
+      SET "balance" = u."balance" + agg.total_payout
+      FROM (
+        SELECT "user_id", SUM(payout)::float8 AS total_payout
+        FROM updated
+        WHERE payout > 0
+        GROUP BY "user_id"
+      ) AS agg
+      WHERE u."id" = agg."user_id"
+      RETURNING u."id"
+    )
+    SELECT "id" FROM updated
+  `);
+
+  const updatedIds = new Set<number>(
+    (res.rows ?? []).map((r) => Number((r as { id: number | string }).id))
+  );
+  if (updatedIds.size === 0) return;
+
+  invalidateHouseHealthCache();
+
+  // Apprentissage en ligne ML par lot unique (réservé aux matchs virtuels)
+  const mlItems: SettledBetMlInput[] = [];
+  for (const p of batch) {
+    if (updatedIds.has(p.betId) && !p.voided && p.isVirtual) {
+      mlItems.push({
+        userId: p.userId,
+        market: p.market,
+        odds: p.odds,
+        stake: p.stake,
+        won: p.won,
+        payout: p.payout,
+      });
     }
+  }
 
-    // Apprentissage en ligne ML réservé aux matchs virtuels pour ne jamais biaiser le calibrateur virtuel
-    if (!voided && match.source === "virtual") {
-      try {
-        await recordSettledBetMl({
-          userId: bet.userId,
-          market: bet.market,
-          odds: bet.odds,
-          stake: bet.stake,
-          won,
-          payout,
-        });
-      } catch (mlErr) {
-        console.error("[ml online bet update]", mlErr);
-      }
+  if (mlItems.length > 0) {
+    try {
+      await recordSettledBetsBatchMl(mlItems);
+    } catch (mlErr) {
+      console.error("[ml online bet batch update]", mlErr);
     }
   }
 }
@@ -275,33 +350,30 @@ export async function settleMatchBets(
   }
 }
 
-/** Rembourse intégralement (void) tous les paris simples et sélections combinées d'un match annulé/reporté. */
+/** Rembourse intégralement (void) tous les paris simples et sélections combinées d'un match annulé/reporté en 1 seule requête SQL CTE. */
 export async function voidMatchBets(matchId: number) {
-  const pendingRows = await db
-    .select()
-    .from(bets)
-    .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
+  await db.execute(sql`
+    WITH voided AS (
+      UPDATE "bets"
+      SET
+        "status" = 'void',
+        "potential_win" = ROUND(("stake" * 100)::numeric)::float8 / 100.0,
+        "settled_at" = now()
+      WHERE "match_id" = ${matchId}
+        AND "status" = 'pending'
+      RETURNING "user_id", "potential_win"
+    )
+    UPDATE "app_user" AS u
+    SET "balance" = u."balance" + agg.refund
+    FROM (
+      SELECT "user_id", SUM("potential_win")::float8 AS refund
+      FROM voided
+      WHERE "potential_win" > 0
+      GROUP BY "user_id"
+    ) AS agg
+    WHERE u."id" = agg."user_id"
+  `);
 
-  const now = new Date();
-  for (const bet of pendingRows) {
-    const refund = Math.round(bet.stake * 100) / 100;
-    const [updated] = await db
-      .update(bets)
-      .set({
-        status: "void",
-        potentialWin: refund,
-        settledAt: now,
-      })
-      .where(and(eq(bets.id, bet.id), eq(bets.status, "pending")))
-      .returning({ id: bets.id });
-
-    if (updated && refund > 0) {
-      await db
-        .update(appUser)
-        .set({ balance: sql`${appUser.balance} + ${refund}` })
-        .where(eq(appUser.id, bet.userId));
-    }
-  }
-
+  invalidateHouseHealthCache();
   await settlePendingCombos();
 }

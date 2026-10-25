@@ -118,108 +118,122 @@ export async function settleQuestion(
   const nowMs = Date.now();
   const resolvedAt =
     effectiveAt && effectiveAt.getTime() <= nowMs ? effectiveAt : new Date(nowMs);
+  const resolvedIso = resolvedAt.toISOString();
+  const nowIso = new Date(nowMs).toISOString();
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(predictionQuestions)
-      .set({ status: "resolved", resolution, resolvedAt })
-      .where(eq(predictionQuestions.id, questionId));
-
-    const pending = await tx
-      .select()
-      .from(predictionBets)
-      .where(
-        and(
-          eq(predictionBets.questionId, questionId),
-          eq(predictionBets.status, "pending")
+  // Règlement atomique en UNE SEULE requête SQL CTE :
+  // clôture la question, règle tous les tickets `pending` et crédite tous les gagnants groupés par `user_id`.
+  await db.execute(sql`
+    WITH q_upd AS (
+      UPDATE "prediction_questions"
+      SET
+        "status" = 'resolved',
+        "resolution" = ${resolution},
+        "resolved_at" = ${resolvedIso}::timestamptz::timestamp
+      WHERE "id" = ${questionId}
+      RETURNING "id"
+    ),
+    settled AS (
+      UPDATE "prediction_bets" AS pb
+      SET
+        "status" = CASE WHEN pb."selection" = ${resolution} THEN 'won' ELSE 'lost' END,
+        "potential_win" = CASE
+          WHEN pb."selection" = ${resolution}
+            THEN ROUND((pb."stake" * pb."odds" * 100)::numeric)::float8 / 100.0
+          ELSE pb."potential_win"
+        END,
+        "settled_at" = LEAST(
+          ${nowIso}::timestamptz::timestamp,
+          GREATEST(
+            COALESCE(pb."placed_at" + interval '1 second', ${resolvedIso}::timestamptz::timestamp),
+            ${resolvedIso}::timestamptz::timestamp
+          )
         )
-      );
+      WHERE pb."question_id" = ${questionId}
+        AND pb."status" = 'pending'
+      RETURNING
+        pb."user_id",
+        CASE
+          WHEN pb."selection" = ${resolution}
+            THEN ROUND((pb."stake" * pb."odds" * 100)::numeric)::float8 / 100.0
+          ELSE 0::float8
+        END AS payout
+    )
+    UPDATE "app_user" AS u
+    SET "balance" = u."balance" + agg.total_payout
+    FROM (
+      SELECT "user_id", SUM(payout)::float8 AS total_payout
+      FROM settled
+      WHERE payout > 0
+      GROUP BY "user_id"
+    ) AS agg
+    WHERE u."id" = agg."user_id"
+  `);
 
-    for (const b of pending) {
-      const minSettledMs = b.placedAt ? b.placedAt.getTime() + 1_000 : 0;
-      const settledAt = new Date(
-        Math.min(nowMs, Math.max(minSettledMs, resolvedAt.getTime()))
-      );
-      const won = b.selection === resolution;
-      if (won) {
-        const payout = round2(b.stake * b.odds);
-        await tx
-          .update(predictionBets)
-          .set({ status: "won", potentialWin: payout, settledAt })
-          .where(eq(predictionBets.id, b.id));
-        await tx
-          .update(appUser)
-          .set({ balance: sql`${appUser.balance} + ${payout}` })
-          .where(eq(appUser.id, b.userId));
-      } else {
-        await tx
-          .update(predictionBets)
-          .set({ status: "lost", settledAt })
-          .where(eq(predictionBets.id, b.id));
-      }
-    }
-  });
   await settlePendingCombos();
   invalidateHouseHealthCache();
 }
 
 /**
- * Réouverture propre d'une question par l'administrateur :
- * - Annule les gains déjà versés sur les tickets « won »
+ * Réouverture propre d'une question par l'administrateur en 1 seule transaction SQL groupée :
+ * - Annule les gains déjà versés sur les tickets « won » (agrégés par joueur)
  * - Remet les tickets « won » et « lost » en « pending »
  * - Repousse l'échéance si elle était déjà dépassée pour éviter une re-clôture immédiate.
  */
 export async function reopenSettledQuestion(questionId: number): Promise<boolean> {
-  let found = false;
-  await db.transaction(async (tx) => {
-    const [q] = await tx
-      .select()
-      .from(predictionQuestions)
-      .where(eq(predictionQuestions.id, questionId));
-    if (!q) return;
-    found = true;
+  const res = await db.execute(sql`
+    WITH target_q AS (
+      SELECT
+        "id",
+        CASE
+          WHEN "resolves_at" <= now() + interval '1 minute'
+            THEN now() + interval '24 hours'
+          ELSE "resolves_at"
+        END AS next_resolves_at
+      FROM "prediction_questions"
+      WHERE "id" = ${questionId}
+    ),
+    reopened_bets AS (
+      UPDATE "prediction_bets" AS pb
+      SET
+        "status" = 'pending',
+        "potential_win" = ROUND((pb."stake" * pb."odds" * 100)::numeric)::float8 / 100.0,
+        "settled_at" = NULL
+      FROM target_q
+      WHERE pb."question_id" = target_q."id"
+        AND pb."status" IN ('won', 'lost')
+      RETURNING
+        pb."user_id",
+        CASE WHEN pb."status" = 'won' THEN ROUND((pb."potential_win" * 100)::numeric)::float8 / 100.0 ELSE 0::float8 END AS clawback
+    ),
+    clawed AS (
+      UPDATE "app_user" AS u
+      SET "balance" = GREATEST(0, u."balance" - agg.total_clawback)
+      FROM (
+        SELECT "user_id", SUM(clawback)::float8 AS total_clawback
+        FROM reopened_bets
+        WHERE clawback > 0
+        GROUP BY "user_id"
+      ) AS agg
+      WHERE u."id" = agg."user_id"
+      RETURNING u."id"
+    ),
+    q_reopened AS (
+      UPDATE "prediction_questions" AS pq
+      SET
+        "status" = 'open',
+        "resolution" = NULL,
+        "resolved_at" = NULL,
+        "resolves_at" = target_q.next_resolves_at
+      FROM target_q
+      WHERE pq."id" = target_q."id"
+      RETURNING pq."id"
+    )
+    SELECT "id" FROM q_reopened
+  `);
 
-    const settledBets = await tx
-      .select()
-      .from(predictionBets)
-      .where(
-        and(
-          eq(predictionBets.questionId, questionId),
-          inArray(predictionBets.status, ["won", "lost"])
-        )
-      );
-
-    for (const b of settledBets) {
-      if (b.status === "won") {
-        const clawback = round2(b.potentialWin);
-        await tx
-          .update(appUser)
-          .set({ balance: sql`GREATEST(0, ${appUser.balance} - ${clawback})` })
-          .where(eq(appUser.id, b.userId));
-      }
-      await tx
-        .update(predictionBets)
-        .set({ status: "pending", potentialWin: round2(b.stake * b.odds) })
-        .where(eq(predictionBets.id, b.id));
-    }
-
-    const nextResolvesAt =
-      q.resolvesAt.getTime() <= Date.now() + 60_000
-        ? new Date(Date.now() + 24 * 3_600_000)
-        : q.resolvesAt;
-
-    await tx
-      .update(predictionQuestions)
-      .set({
-        status: "open",
-        resolution: null,
-        resolvedAt: null,
-        resolvesAt: nextResolvesAt,
-      })
-      .where(eq(predictionQuestions.id, questionId));
-  });
   invalidateHouseHealthCache();
-  return found;
+  return (res.rows?.length ?? 0) > 0;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, sql, type SQL } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -9,6 +9,7 @@ import {
   round2,
 } from "@/lib/predictions";
 import { formatServerErrorResponse } from "@/lib/db-error";
+import { jsonWithEtag } from "@/lib/response-cache";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 
@@ -44,13 +45,12 @@ export async function GET(req: NextRequest) {
   }
   const where = filters.length > 0 ? and(...filters) : undefined;
 
-  const [{ total }] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(predictionQuestions)
-    .where(where);
-
-  const rows = await db
-    .select()
+  // 1 seule requête SQL avec `COUNT(*) OVER()::int` (fusionne le count total + la page courante)
+  const rowsWithTotal = await db
+    .select({
+      ...getTableColumns(predictionQuestions),
+      totalCount: sql<number>`COUNT(*) OVER()::int`,
+    })
     .from(predictionQuestions)
     .where(where)
     .orderBy(
@@ -61,20 +61,38 @@ export async function GET(req: NextRequest) {
     .limit(limit)
     .offset((page - 1) * limit);
 
-  // Paris de l'utilisateur connecté, par question (pour le badge « Votre mise »).
-  const myBets = await db
-    .select({
-      questionId: predictionBets.questionId,
-      selection: predictionBets.selection,
-      selectionLabel: predictionBets.selectionLabel,
-      status: predictionBets.status,
-      stake: predictionBets.stake,
-      potentialWin: predictionBets.potentialWin,
-      odds: predictionBets.odds,
-      cashOutAmount: predictionBets.cashOutAmount,
-    })
-    .from(predictionBets)
-    .where(eq(predictionBets.userId, uid));
+  let total = rowsWithTotal[0]?.totalCount ?? 0;
+  if (rowsWithTotal.length === 0 && page > 1) {
+    const [cnt] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(predictionQuestions)
+      .where(where);
+    total = cnt?.total ?? 0;
+  }
+
+  // Ne charge les paris de l'utilisateur QUE pour les questions affichées sur la page courante
+  const pageIds = rowsWithTotal.map((r) => r.id);
+  const myBets =
+    pageIds.length > 0
+      ? await db
+          .select({
+            questionId: predictionBets.questionId,
+            selection: predictionBets.selection,
+            selectionLabel: predictionBets.selectionLabel,
+            status: predictionBets.status,
+            stake: predictionBets.stake,
+            potentialWin: predictionBets.potentialWin,
+            odds: predictionBets.odds,
+            cashOutAmount: predictionBets.cashOutAmount,
+          })
+          .from(predictionBets)
+          .where(
+            and(
+              eq(predictionBets.userId, uid),
+              inArray(predictionBets.questionId, pageIds)
+            )
+          )
+      : [];
 
   const myBetsByQuestion = new Map<number, (typeof myBets)[number][]>();
   for (const b of myBets) {
@@ -86,7 +104,7 @@ export async function GET(req: NextRequest) {
   // Cotes fixes bookmaker : ne dépendent pas d'un pool mutuel entre joueurs.
   // Filet de sécurité anti-doublon d'affichage (au cas où deux intitulés proches existeraient).
   const seenTitles = new Set<string>();
-  const dedupedRows = rows.filter((q) => {
+  const dedupedRows = rowsWithTotal.filter((q) => {
     const k = q.question.trim().toLowerCase();
     if (seenTitles.has(k)) return false;
     seenTitles.add(k);
@@ -113,7 +131,7 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json({
+  return jsonWithEtag(req, {
     questions,
     total,
     page,

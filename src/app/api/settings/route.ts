@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
+import { invalidateLiveSimCache } from "@/db/engine";
 import { appUser } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
 import { formatServerErrorResponse } from "@/lib/db-error";
@@ -59,6 +60,10 @@ export async function PATCH(req: NextRequest) {
       .set(patch)
       .where(eq(appUser.id, auth))
       .returning();
+
+    if (patch.liveSim !== undefined) {
+      invalidateLiveSimCache();
+    }
 
     return NextResponse.json({ user: publicUser(user) });
   } catch (err) {

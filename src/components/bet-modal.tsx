@@ -54,6 +54,7 @@ function BetModalSheet({
     openRecharge,
     comboLegs,
     toggleComboLeg,
+    feedMatches,
     user,
   } = useApp();
   const dragControls = useDragControls();
@@ -80,8 +81,11 @@ function BetModalSheet({
     finished: boolean;
   } | null>(null);
 
+  const sharedFreshMatch =
+    feedMatches?.find((m) => m.id === target.match.id) ?? null;
+
   useEffect(() => {
-    if (target.match.status !== "live") return;
+    if (target.match.status !== "live" || sharedFreshMatch) return;
     let active = true;
     const poll = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -126,13 +130,42 @@ function BetModalSheet({
       active = false;
       clearInterval(id);
     };
-  }, [target]);
+  }, [target, sharedFreshMatch]);
 
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
   const overBalance = stake > balance;
   const belowMin = stake > 0 && stake < 0.5;
-  const liveActive = live && live.matchId === target.match.id ? live : null;
+
+  const derivedFromFeed = sharedFreshMatch
+    ? (() => {
+        if (sharedFreshMatch.status === "finished") {
+          return {
+            matchId: target.match.id,
+            odds: null as number | null,
+            minute: null as string | null,
+            homeScore: sharedFreshMatch.homeScore,
+            awayScore: sharedFreshMatch.awayScore,
+            suspended: true,
+            finished: true,
+          };
+        }
+        const grp = (sharedFreshMatch.markets ?? []).find((g) => g.key === target.market);
+        const outcome = grp?.outcomes.find((o) => o.key === target.selection);
+        return {
+          matchId: target.match.id,
+          odds: outcome ? outcome.odds : null,
+          minute: sharedFreshMatch.minute,
+          homeScore: sharedFreshMatch.homeScore,
+          awayScore: sharedFreshMatch.awayScore,
+          suspended: sharedFreshMatch.suspended,
+          finished: false,
+        };
+      })()
+    : null;
+
+  const liveActive =
+    derivedFromFeed ?? (live && live.matchId === target.match.id ? live : null);
 
   const marketClosed = Boolean(liveActive && (liveActive.finished || liveActive.odds == null));
   const marketSuspended = Boolean(liveActive ? liveActive.suspended : target.match.suspended);
