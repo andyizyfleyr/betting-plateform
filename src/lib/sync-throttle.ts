@@ -3,6 +3,7 @@ import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
 import { settlePendingCombos } from "@/lib/combo";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
 import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
+import { syncRealMatchesThrottled } from "@/lib/real-sports-feed";
 import { settleFinishedBets } from "@/lib/settle";
 
 /**
@@ -33,7 +34,7 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
 
   inFlightFullSync = (async () => {
     try {
-      await runLiveEngine();
+      await Promise.all([runLiveEngine(), syncRealMatchesThrottled(force)]);
       await Promise.all([settleFinishedBets(), settleResolvedQuestions()]);
       await settlePendingCombos();
 

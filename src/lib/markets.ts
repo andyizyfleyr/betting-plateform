@@ -6,7 +6,9 @@ import {
   liveResultProbs,
   liveScoreModel,
   partitionOutcomeOdds,
+  realMatchHalfSplitModel,
   realMatchScoreModel,
+  synthesizeEventsFromHtScore,
   type LiveHalfSplitModel,
   type LiveScoreModel,
   type MatchTimelineEvent,
@@ -1274,14 +1276,32 @@ export interface RealMatchInput {
   minute?: string | null;
   homeScore?: number | null;
   awayScore?: number | null;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
   redHome?: number | null;
   redAway?: number | null;
   oddsHome: number;
   oddsDraw: number | null;
   oddsAway: number;
   suspended?: boolean | null;
+  lastGoalAt?: Date | string | null;
+  externalId?: string | null;
+  autoSync?: boolean | null;
   events?: MatchTimelineEvent[] | null;
   markets?: CustomMarketGroup[] | null;
+}
+
+/** Fenêtre de suspension automatique des cotes live après un but / carton rouge sur match réel (18 s). */
+export const REAL_POST_INCIDENT_SUSPEND_MS = 18_000;
+
+export function isRealMatchPostIncidentSuspended(
+  m: Pick<RealMatchInput, "status" | "lastGoalAt">,
+  now = Date.now()
+): boolean {
+  if (m.status !== "live" || !m.lastGoalAt) return false;
+  const ts =
+    typeof m.lastGoalAt === "string" ? new Date(m.lastGoalAt).getTime() : m.lastGoalAt.getTime();
+  return Number.isFinite(ts) && now - ts >= 0 && now - ts < REAL_POST_INCIDENT_SUSPEND_MS;
 }
 
 /**
@@ -1394,16 +1414,40 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
     });
   }
 
+  const hasFeedTimeline = Boolean(m.externalId && (m.autoSync ?? true));
+  const splitModel = hasFeedTimeline
+    ? realMatchHalfSplitModel({
+        oddsHome: m.oddsHome,
+        oddsDraw: m.oddsDraw,
+        oddsAway: m.oddsAway,
+        homeScore,
+        awayScore,
+        minute,
+        isLive,
+        redHome: m.redHome ?? 0,
+        redAway: m.redAway ?? 0,
+        htHomeScore: m.htHomeScore ?? null,
+        htAwayScore: m.htAwayScore ?? null,
+        events: m.events ?? null,
+        ftModel: model,
+      })
+    : NEUTRAL_SPLIT_MODEL;
+
   for (const def of MARKETS) {
-    if (def.key === "result" || HT_DEPENDENT_MARKETS.has(def.key)) continue;
-    // Sur un match réel piloté par l'admin, on ne ferme pas arbitrairement à 75'
-    const safeDef: MarketDef = { ...def, liveCloseMinute: undefined };
+    if (def.key === "result") continue;
+    if (!hasFeedTimeline && HT_DEPENDENT_MARKETS.has(def.key)) continue;
+    // Sur un match réel : on conserve la fermeture 1ère MT à 41', mais pas la coupure virtuelle à 75'
+    const safeDef: MarketDef = {
+      ...def,
+      liveCloseMinute:
+        def.liveCloseMinute && def.liveCloseMinute <= 45 ? def.liveCloseMinute : undefined,
+    };
     const grp = buildMarketGroup(
       safeDef,
       m.homeTeam,
       m.awayTeam,
       model,
-      NEUTRAL_SPLIT_MODEL,
+      splitModel,
       homeScore,
       awayScore,
       minute,
@@ -1490,20 +1534,40 @@ export function realMatchLiveProbability(
     redAway: m.redAway ?? 0,
   });
 
+  const hasFeedTimeline = Boolean(m.externalId && (m.autoSync ?? true));
   const def = MARKET_BY_KEY.get(market);
-  if (def && !HT_DEPENDENT_MARKETS.has(market)) {
+  if (def && (hasFeedTimeline || !HT_DEPENDENT_MARKETS.has(market))) {
     if (!def.outcomes(m.homeTeam, m.awayTeam).some((o) => o.key === outcome)) {
       return null;
     }
+    const splitModel =
+      hasFeedTimeline && HT_DEPENDENT_MARKETS.has(market)
+        ? realMatchHalfSplitModel({
+            oddsHome: m.oddsHome,
+            oddsDraw: m.oddsDraw,
+            oddsAway: m.oddsAway,
+            homeScore,
+            awayScore,
+            minute,
+            isLive,
+            redHome: m.redHome ?? 0,
+            redAway: m.redAway ?? 0,
+            htHomeScore: m.htHomeScore ?? null,
+            htAwayScore: m.htAwayScore ?? null,
+            events: m.events ?? null,
+            ftModel: model,
+          })
+        : NEUTRAL_SPLIT_MODEL;
+
     if (market === "dnb") {
       const resDef = MARKET_BY_KEY.get("result")!;
-      const pHome = rawProbOnModel(resDef, "home", model, NEUTRAL_SPLIT_MODEL);
-      const pDraw = rawProbOnModel(resDef, "draw", model, NEUTRAL_SPLIT_MODEL);
-      const pAway = rawProbOnModel(resDef, "away", model, NEUTRAL_SPLIT_MODEL);
+      const pHome = rawProbOnModel(resDef, "home", model, splitModel);
+      const pDraw = rawProbOnModel(resDef, "draw", model, splitModel);
+      const pAway = rawProbOnModel(resDef, "away", model, splitModel);
       const pWin = outcome === "home" ? pHome : pAway;
       return Math.min(0.98, pWin + pDraw * 0.48);
     }
-    return rawProbOnModel(def, outcome, model, NEUTRAL_SPLIT_MODEL);
+    return rawProbOnModel(def, outcome, model, splitModel);
   }
 
   const cOdds = customMarketOdds(m.markets ?? null, market, outcome);
@@ -1516,8 +1580,9 @@ export function realMatchLiveProbability(
 /**
  * Règlement strict d'un match réel (`source === "manual"`) :
  * - les 19 marchés temps réglementaire dépendent uniquement du score final officiel `(homeScore, awayScore)` ;
- * - si un marché mi-temps a été joué mais que la mi-temps réelle n'a pas été renseignée,
- *   le pari est remboursé (`voided: true`) au lieu d'utiliser un tirage pseudo-aléatoire.
+ * - les marchés mi-temps / 1er but sont réglés de façon 100 % déterministe dès que le flux officiel
+ *   (ou l'admin) fournit le score mi-temps (`htHomeScore`/`htAwayScore`) ou la chronologie complète ;
+ * - si la mi-temps réelle n'est pas connue, le pari mi-temps est remboursé (`voided: true`) sans tirage aléatoire.
  */
 export function realMatchSettle(
   market: string,
@@ -1525,16 +1590,47 @@ export function realMatchSettle(
   homeScore: number,
   awayScore: number,
   events?: MatchTimelineEvent[] | null,
-  matchId = 0
+  matchId = 0,
+  htHomeScore?: number | null,
+  htAwayScore?: number | null
 ): { won: boolean; voided: boolean } {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return { won: false, voided: true };
 
-  if (
-    HT_DEPENDENT_MARKETS.has(market) &&
-    !hasVerifiedGoalTimeline(homeScore, awayScore, events)
-  ) {
-    return { won: false, voided: true };
+  if (HT_DEPENDENT_MARKETS.has(market)) {
+    const exactEvents = hasVerifiedGoalTimeline(homeScore, awayScore, events);
+    const hasHtPair =
+      htHomeScore != null &&
+      htAwayScore != null &&
+      Number.isFinite(htHomeScore) &&
+      Number.isFinite(htAwayScore) &&
+      htHomeScore >= 0 &&
+      htAwayScore >= 0 &&
+      htHomeScore <= homeScore &&
+      htAwayScore <= awayScore;
+
+    if (market === "first_team_to_score") {
+      const unambiguousFirst =
+        (homeScore === 0 && awayScore === 0) ||
+        (homeScore > 0 && awayScore === 0) ||
+        (awayScore > 0 && homeScore === 0) ||
+        exactEvents ||
+        (hasHtPair &&
+          ((htHomeScore! > 0 && htAwayScore! === 0) ||
+            (htAwayScore! > 0 && htHomeScore! === 0)));
+      if (!unambiguousFirst) {
+        return { won: false, voided: true };
+      }
+    } else if (!exactEvents && !hasHtPair) {
+      return { won: false, voided: true };
+    }
+
+    const effectiveEvents =
+      exactEvents || !hasHtPair
+        ? events
+        : synthesizeEventsFromHtScore(homeScore, awayScore, htHomeScore!, htAwayScore!);
+
+    return marketSettle(market, outcome, homeScore, awayScore, effectiveEvents, matchId);
   }
 
   return marketSettle(market, outcome, homeScore, awayScore, events, matchId);

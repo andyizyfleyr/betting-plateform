@@ -54,6 +54,28 @@ export interface ClientMatchEvent {
   player?: string;
 }
 
+export interface ClientRealMatchStats {
+  possessionHome: number | null;
+  possessionAway: number | null;
+  shotsTotalHome: number | null;
+  shotsTotalAway: number | null;
+  shotsOnTargetHome: number | null;
+  shotsOnTargetAway: number | null;
+  cornersHome: number | null;
+  cornersAway: number | null;
+  foulsHome: number | null;
+  foulsAway: number | null;
+  offsidesHome: number | null;
+  offsidesAway: number | null;
+  savesHome: number | null;
+  savesAway: number | null;
+  yellowCardsHome: number | null;
+  yellowCardsAway: number | null;
+  htHomeScore: number | null;
+  htAwayScore: number | null;
+  updatedAt: string;
+}
+
 export interface ClientMatch {
   id: number;
   sport: string;
@@ -65,6 +87,8 @@ export interface ClientMatch {
   awayLogo?: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
   status: MatchStatus;
   minute: string | null;
   startsAt: string;
@@ -74,10 +98,13 @@ export interface ClientMatch {
   oddsAway: number;
   suspended: boolean;
   kickoffReached?: boolean;
+  externalId?: string | null;
+  autoSync?: boolean;
   redHome?: number;
   redAway?: number;
   events?: ClientMatchEvent[];
   telemetry?: LiveMatchTelemetry;
+  realStats?: ClientRealMatchStats | null;
   markets: MarketGroup[];
 }
 
@@ -255,6 +282,7 @@ export interface ClientMatchHistoryItem {
   redAway: number;
   events: ClientMatchEvent[];
   telemetry?: LiveMatchTelemetry;
+  realStats?: ClientRealMatchStats | null;
   winnerCode: "V1" | "X" | "V2" | null;
   htWinnerCode: "V1" | "X" | "V2" | null;
   totalGoals: number | null;

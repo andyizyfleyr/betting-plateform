@@ -29,7 +29,9 @@ import {
 } from "@/lib/markets";
 import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
+import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import { requireUserId } from "@/lib/session";
+import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (typeof auth !== "number") return auth;
   const uid = auth;
   await ensureMlLoaded();
-  await runLiveEngine();
+  await syncLiveMatchesThrottled();
 
   let body: { legs?: IncomingLeg[]; stake?: number };
   try {
@@ -201,14 +203,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Si au moins un match du combiné est en direct, on effectue le contrôle anti-but (300 ms)
+  // Si au moins un match du combiné est en direct, on effectue le contrôle anti-but
   const liveInitial = new Map<
     number,
     { homeScore: number; awayScore: number; redHome: number; redAway: number }
   >();
+  const liveRealRows = matchRows.filter(
+    (m) => m.status === "live" && m.source === "manual"
+  );
   for (const m of matchRows) {
     if (m.status === "live") {
-      if (m.suspended || (m.source === "virtual" && minuteNumber(m.minute) >= 85)) {
+      if (
+        m.suspended ||
+        (m.source === "virtual" && minuteNumber(m.minute) >= 85) ||
+        (m.source === "manual" && minuteNumber(m.minute) >= 88)
+      ) {
         return NextResponse.json(
           { error: `Marché verrouillé sur ${m.homeTeam} – ${m.awayTeam}` },
           { status: 400 }
@@ -224,39 +233,52 @@ export async function POST(req: NextRequest) {
   }
 
   if (liveInitial.size > 0) {
-    await new Promise((r) => setTimeout(r, LIVE_VALIDATION_MS));
-    if (hasVirtualMatch) {
-      await runLiveEngine();
-    }
-    const freshMatches = await db
-      .select()
-      .from(matches)
-      .where(inArray(matches.id, [...seenMatches]));
-    matchMap = new Map(freshMatches.map((m) => [m.id, m]));
-
-    for (const [mid, init] of liveInitial.entries()) {
-      const fm = matchMap.get(mid);
-      if (
-        !fm ||
-        fm.status === "finished" ||
-        fm.suspended ||
-        (fm.source === "virtual" && minuteNumber(fm.minute) >= 85)
-      ) {
+    if (liveRealRows.length > 0) {
+      const realGuard = await verifyLiveRealMatchesBeforeBet(liveRealRows);
+      if (!realGuard.ok) {
         return NextResponse.json(
-          { error: "Un match en direct a été suspendu ou terminé pendant la validation" },
-          { status: 400 }
-        );
-      }
-      if (
-        (fm.homeScore ?? 0) !== init.homeScore ||
-        (fm.awayScore ?? 0) !== init.awayScore ||
-        (fm.redHome ?? 0) !== init.redHome ||
-        (fm.redAway ?? 0) !== init.redAway
-      ) {
-        return NextResponse.json(
-          { error: "Action décisive en direct — cotes mises à jour, réessayez" },
+          { error: realGuard.error },
           { status: 409 }
         );
+      }
+      for (const [mid, freshRow] of realGuard.refreshedMap.entries()) {
+        matchMap.set(mid, freshRow);
+      }
+    } else {
+      await new Promise((r) => setTimeout(r, LIVE_VALIDATION_MS));
+      if (hasVirtualMatch) {
+        await runLiveEngine();
+      }
+      const freshMatches = await db
+        .select()
+        .from(matches)
+        .where(inArray(matches.id, [...seenMatches]));
+      matchMap = new Map(freshMatches.map((m) => [m.id, m]));
+
+      for (const [mid, init] of liveInitial.entries()) {
+        const fm = matchMap.get(mid);
+        if (
+          !fm ||
+          fm.status === "finished" ||
+          fm.suspended ||
+          (fm.source === "virtual" && minuteNumber(fm.minute) >= 85)
+        ) {
+          return NextResponse.json(
+            { error: "Un match en direct a été suspendu ou terminé pendant la validation" },
+            { status: 400 }
+          );
+        }
+        if (
+          (fm.homeScore ?? 0) !== init.homeScore ||
+          (fm.awayScore ?? 0) !== init.awayScore ||
+          (fm.redHome ?? 0) !== init.redHome ||
+          (fm.redAway ?? 0) !== init.redAway
+        ) {
+          return NextResponse.json(
+            { error: "Action décisive en direct — cotes mises à jour, réessayez" },
+            { status: 409 }
+          );
+        }
       }
     }
   }
@@ -324,7 +346,7 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      if (m.status === "live" && m.source === "virtual" && odds <= 1.04) {
+      if (m.status === "live" && odds <= 1.04) {
         return NextResponse.json(
           { error: `Cote verrouillée sur ${m.homeTeam} – ${m.awayTeam}` },
           { status: 400 }
