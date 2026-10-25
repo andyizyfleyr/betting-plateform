@@ -5,12 +5,11 @@ import { Trophy } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
-import { SportIcon } from "@/components/sport-icon";
 import { cn, todayLabel } from "@/lib/format";
 
 type Filter = "all" | "live" | "upcoming" | "finished";
 
-const POLL_INTERVAL = 2_000;
+const POLL_INTERVAL = 3_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 
@@ -98,22 +97,23 @@ export default function MatchsPage() {
   }, [baseForTab, effectiveLeague]);
 
   const showFeatured =
-    filter === "all" && effectiveLeague === "all" && visible.length > 1;
+    (filter === "all" && effectiveLeague === "all" && visible.length >= 1) ||
+    (filter === "live" && visible.length >= 1);
+
   const featured = showFeatured
     ? (visible.find((m) => m.status === "live") ?? visible[0] ?? null)
     : null;
 
   const liveRest = visible.filter((m) => m.status === "live" && m.id !== featured?.id);
 
-  const upcomingByLeague = useMemo(() => {
-    const map = new Map<string, ClientMatch[]>();
-    for (const m of visible) {
-      if (m.status !== "upcoming") continue;
-      if (featured && m.id === featured.id) continue;
-      map.set(m.league, [...(map.get(m.league) ?? []), m]);
-    }
-    return [...map.entries()];
-  }, [visible, featured]);
+  // File d'attente chronologique stricte (« à tour de rôle »)
+  const upcomingOrdered = useMemo(
+    () =>
+      visible
+        .filter((m) => m.status === "upcoming" && m.id !== featured?.id)
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
+    [visible, featured]
+  );
 
   const finishedList = useMemo(
     () => visible.filter((m) => m.status === "finished"),
@@ -138,7 +138,7 @@ export default function MatchsPage() {
             className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[11.5px] font-bold text-betclic-red active:scale-95"
           >
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-            {liveCount} en direct
+            {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
           </button>
         )}
       </div>
@@ -231,7 +231,7 @@ export default function MatchsPage() {
                 onClick={() => setLeagueFilter(lg)}
                 className={cn(
                   "h-7 shrink-0 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
-                effectiveLeague === lg
+                  effectiveLeague === lg
                     ? "border-betclic-red bg-betclic-red font-semibold text-white"
                     : "border-edge bg-white text-mist"
                 )}
@@ -277,26 +277,18 @@ export default function MatchsPage() {
             </section>
           )}
 
-          {upcomingByLeague.length > 0 && (
-            <section className="flex flex-col gap-4">
-              {upcomingByLeague.map(([league, group]) => (
-                <div key={league}>
-                  <div className="mb-2 flex items-center justify-between px-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <SportIcon sport={group[0].sport} className="h-3.5 w-3.5 text-dim" />
-                      <h2 className="font-display text-[12.5px] font-bold text-ink">{league}</h2>
-                    </div>
-                    <span className="text-[11px] font-medium text-dim">
-                      {group.length} {group.length > 1 ? "matchs" : "match"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-2.5">
-                    {group.map((m) => (
-                      <MatchCard key={m.id} match={m} />
-                    ))}
-                  </div>
-                </div>
-              ))}
+          {upcomingOrdered.length > 0 && (
+            <section>
+              <SectionHeader label="À venir · À tour de rôle" count={upcomingOrdered.length} />
+              <div className="mt-2 flex flex-col gap-2.5">
+                {upcomingOrdered.map((m, idx) => (
+                  <MatchCard
+                    key={m.id}
+                    match={m}
+                    nextUp={idx === 0 && effectiveLeague === "all"}
+                  />
+                ))}
+              </div>
             </section>
           )}
 
