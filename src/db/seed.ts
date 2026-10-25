@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, ensureHealthyDbConnection } from "@/db";
 import {
   adminSettings,
   appUser,
@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v5";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v6";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -47,7 +47,11 @@ export async function ensureSeeded(): Promise<void> {
 }
 
 async function runSeedInternal(): Promise<void> {
-  // Fast-path serverless : si la migration `v5` a déjà abouti et qu'au moins un compte
+  // Vérifie la connectivité PostgreSQL et bascule automatiquement sur une variable de secours
+  // (`POSTGRES_URL`, `STORAGE_DATABASE_URL`, etc.) si `DATABASE_URL` pointe vers une base supprimée.
+  await ensureHealthyDbConnection();
+
+  // Fast-path serverless : si la migration `v6` a déjà abouti et qu'au moins un compte
   // existe (dont l'admin), inutile de rejouer les 20+ DDL `ALTER TABLE` à chaque cold start.
   try {
     const [marker] = await db
@@ -71,6 +75,135 @@ async function runSeedInternal(): Promise<void> {
   } catch {
     // Table `admin_settings` ou colonne absente sur une base neuve : exécute la migration complète.
   }
+
+  // Création idempotente de toutes les tables de base (permet de brancher une base PostgreSQL
+  // 100 % vierge sur Vercel Storage sans avoir besoin de lancer `drizzle-kit push`).
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "app_user" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "name" text DEFAULT 'Alex Martin' NOT NULL,
+      "balance" double precision DEFAULT 250 NOT NULL,
+      "notifications" boolean DEFAULT true NOT NULL,
+      "sound" boolean DEFAULT false NOT NULL,
+      "haptics" boolean DEFAULT true NOT NULL,
+      "odds_format" text DEFAULT 'decimal' NOT NULL,
+      "language" text DEFAULT 'fr' NOT NULL,
+      "live_sim" boolean DEFAULT true NOT NULL,
+      "role" text DEFAULT 'user' NOT NULL,
+      "bonus_locked" double precision DEFAULT 0 NOT NULL,
+      "token_version" integer DEFAULT 0 NOT NULL,
+      "email" text UNIQUE,
+      "password_hash" text,
+      "created_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "matches" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "sport" text NOT NULL,
+      "league" text NOT NULL,
+      "home_team" text NOT NULL,
+      "away_team" text NOT NULL,
+      "home_score" integer,
+      "away_score" integer,
+      "status" text DEFAULT 'upcoming' NOT NULL,
+      "minute" text,
+      "starts_at" timestamp NOT NULL,
+      "odds_home" double precision NOT NULL,
+      "odds_draw" double precision,
+      "odds_away" double precision NOT NULL,
+      "suspended" boolean DEFAULT false NOT NULL,
+      "last_goal_at" timestamp,
+      "finished_at" timestamp,
+      "red_home" integer DEFAULT 0 NOT NULL,
+      "red_away" integer DEFAULT 0 NOT NULL,
+      "events" jsonb DEFAULT '[]'::jsonb,
+      "tick_history" jsonb DEFAULT '[]'::jsonb,
+      "regime" text DEFAULT 'balanced' NOT NULL,
+      "home_form" double precision DEFAULT 1 NOT NULL,
+      "away_form" double precision DEFAULT 1 NOT NULL,
+      "asian_handicap_line" double precision,
+      "home_logo" text,
+      "away_logo" text,
+      "markets" jsonb,
+      "source" text DEFAULT 'virtual' NOT NULL,
+      "scenario_locked" boolean DEFAULT false NOT NULL,
+      "scenario_nonce" integer DEFAULT 0 NOT NULL,
+      "scripted_events" jsonb,
+      "external_id" text,
+      "external_league" text,
+      "auto_sync" boolean DEFAULT true NOT NULL,
+      "ht_home_score" integer,
+      "ht_away_score" integer,
+      "real_stats" jsonb,
+      "feed_synced_at" timestamp,
+      "feed_finished_at" timestamp,
+      "feed_status_note" text
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "bets" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer DEFAULT 1 NOT NULL,
+      "match_id" integer REFERENCES "matches"("id"),
+      "sport" text NOT NULL,
+      "league" text NOT NULL,
+      "home_team" text NOT NULL,
+      "away_team" text NOT NULL,
+      "market" text DEFAULT 'result' NOT NULL,
+      "selection" text NOT NULL,
+      "selection_label" text NOT NULL,
+      "odds" double precision NOT NULL,
+      "stake" double precision NOT NULL,
+      "potential_win" double precision NOT NULL,
+      "status" text DEFAULT 'pending' NOT NULL,
+      "cash_out_amount" double precision,
+      "payout_multiplier" double precision DEFAULT 1 NOT NULL,
+      "stake_returned" double precision DEFAULT 0 NOT NULL,
+      "closing_odds" double precision,
+      "risk_flag" text,
+      "placed_at" timestamp DEFAULT now() NOT NULL,
+      "settled_at" timestamp
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "tap_history" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer DEFAULT 1 NOT NULL,
+      "bet_amount" double precision NOT NULL,
+      "target_multiplier" double precision NOT NULL,
+      "crash_multiplier" double precision NOT NULL,
+      "win" boolean NOT NULL,
+      "balance_after" double precision NOT NULL,
+      "description" text,
+      "created_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "accelerator_rounds" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer DEFAULT 1 NOT NULL,
+      "bet_amount" double precision NOT NULL,
+      "g_base" double precision NOT NULL,
+      "m_max" double precision DEFAULT 2.0 NOT NULL,
+      "auto_target" double precision,
+      "started_at" timestamp NOT NULL,
+      "last_ms" bigint NOT NULL,
+      "current_multiplier" double precision DEFAULT 1.01 NOT NULL,
+      "crash_point" double precision NOT NULL,
+      "cashout_multiplier" double precision,
+      "status" text DEFAULT 'active' NOT NULL,
+      "server_seed" text,
+      "seed_hash" text,
+      "ended_at" timestamp,
+      "created_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
   await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
