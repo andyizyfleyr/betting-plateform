@@ -8,20 +8,25 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleDollarSign,
+  Dices,
+  Eye,
   Flag,
   Goal,
   HelpCircle,
   Loader2,
+  Lock,
   Play,
   Plus,
   RefreshCw,
   RotateCcw,
   Search,
   ShieldCheck,
+  Target,
   Ticket,
   Trash2,
   TrendingUp,
   Trophy,
+  Unlock,
   Users,
   X,
 } from "lucide-react";
@@ -31,7 +36,7 @@ import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
-type TabKey = "dashboard" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
+type TabKey = "dashboard" | "forecasts" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
 
 const POLL_INTERVAL = 5_000;
 
@@ -189,6 +194,23 @@ interface PanelData {
   matches: AdminMatch[];
   questions: AdminQuestion[];
   ml?: AdminMlOverview;
+  scenarioMode?: "dynamic" | "locked";
+  matchForecasts?: Record<number, AdminMatchForecast>;
+}
+
+interface AdminMatchForecast {
+  matchId: number;
+  finalHomeScore: number;
+  finalAwayScore: number;
+  htHomeScore: number;
+  htAwayScore: number;
+  isLocked: boolean;
+  events: Array<{
+    type: string;
+    team: string;
+    minute: number;
+    player?: string;
+  }>;
 }
 
 interface AdminMlOverview {
@@ -252,8 +274,9 @@ interface AdminMlOverview {
 
 const TABS: { key: TabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "dashboard", label: "Synthèse", Icon: BarChart3 },
-  { key: "ml", label: "IA & ML", Icon: Brain },
+  { key: "forecasts", label: "Scores prévus", Icon: Eye },
   { key: "matches", label: "Matchs", Icon: Trophy },
+  { key: "ml", label: "IA & ML", Icon: Brain },
   { key: "questions", label: "Pronostics", Icon: HelpCircle },
   { key: "users", label: "Joueurs", Icon: Users },
   { key: "bets", label: "Paris", Icon: Ticket },
@@ -624,12 +647,23 @@ export default function AdminPage() {
       ) : (
         <div className="mt-3">
           {tab === "dashboard" && <Dashboard stats={panel.stats} />}
+          {tab === "forecasts" && (
+            <ScoresPrevusTab
+              matches={panel.matches}
+              scenarioMode={panel.scenarioMode ?? "dynamic"}
+              forecasts={panel.matchForecasts ?? {}}
+              busy={busy}
+              act={act}
+            />
+          )}
           {tab === "ml" && (
             <MlAdminTab ml={panel.ml} busy={busy} act={act} />
           )}
           {tab === "matches" && (
             <MatchesTab
               matches={panel.matches}
+              forecasts={panel.matchForecasts ?? {}}
+              onOpenForecasts={() => setTab("forecasts")}
               busy={busy}
               act={act}
               form={matchForm}
@@ -757,6 +791,8 @@ interface MatchFormState {
 
 function MatchesTab({
   matches,
+  forecasts,
+  onOpenForecasts,
   busy,
   act,
   form,
@@ -764,6 +800,8 @@ function MatchesTab({
   onAdd,
 }: {
   matches: AdminMatch[];
+  forecasts: Record<number, AdminMatchForecast>;
+  onOpenForecasts: () => void;
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
   form: MatchFormState;
@@ -1111,7 +1149,14 @@ function MatchesTab({
 
       <div className="flex flex-col gap-2.5">
         {filteredMatches.map((m) => (
-          <AdminMatchCard key={m.id} m={m} busy={busy} act={act} />
+          <AdminMatchCard
+            key={m.id}
+            m={m}
+            forecast={forecasts[m.id]}
+            onOpenForecasts={onOpenForecasts}
+            busy={busy}
+            act={act}
+          />
         ))}
       </div>
     </div>
@@ -1120,10 +1165,14 @@ function MatchesTab({
 
 function AdminMatchCard({
   m,
+  forecast,
+  onOpenForecasts,
   busy,
   act,
 }: {
   m: AdminMatch;
+  forecast?: AdminMatchForecast;
+  onOpenForecasts: () => void;
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
@@ -1190,6 +1239,40 @@ function AdminMatchCard({
           </button>
         </div>
       </div>
+
+      {/* Aperçu direct du score final prévu avant/pendant le match */}
+      {m.status !== "finished" && forecast && (
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/60 px-2.5 py-1.5 text-[11.5px]">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {forecast.isLocked ? (
+              <Lock className="h-3.5 w-3.5 shrink-0 text-win" strokeWidth={2.4} />
+            ) : (
+              <Eye className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
+            )}
+            <span className="truncate font-medium text-mist">
+              Score final prévu :{" "}
+              <strong className="font-display font-bold tabular-nums text-ink">
+                {forecast.finalHomeScore} – {forecast.finalAwayScore}
+              </strong>{" "}
+              <span className="text-[10.5px] text-dim">
+                (MT {forecast.htHomeScore}-{forecast.htAwayScore})
+              </span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenForecasts}
+            className={cn(
+              "shrink-0 rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+              forecast.isLocked
+                ? "bg-win/12 text-win"
+                : "bg-betclic-red/10 text-betclic-red"
+            )}
+          >
+            {forecast.isLocked ? "Figé 100 % →" : "Dynamique →"}
+          </button>
+        </div>
+      )}
 
       {/* Cotes 1/N/2 actuelles + édition rapide */}
       {m.status !== "finished" && (
@@ -3164,6 +3247,568 @@ function MlAdminTab({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+/* ---------------- Scores Finaux Prévus (Oracle Avant-Match & Live) ---------------- */
+
+function ScoresPrevusTab({
+  matches,
+  scenarioMode,
+  forecasts,
+  busy,
+  act,
+}: {
+  matches: AdminMatch[];
+  scenarioMode: "dynamic" | "locked";
+  forecasts: Record<number, AdminMatchForecast>;
+  busy: Record<string, boolean>;
+  act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
+}) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "upcoming" | "live">("all");
+  const [leagueFilter, setLeagueFilter] = useState<string>("all");
+  const [lockFilter, setLockFilter] = useState<"all" | "locked" | "dynamic">("all");
+  const [editingMatchId, setEditingMatchId] = useState<number | null>(null);
+  const [targetScore, setTargetScore] = useState<{ home: number; away: number }>({
+    home: 1,
+    away: 0,
+  });
+
+  // Tous les matchs ouverts ayant un scénario prévu, triés dans l'ordre exact de passage
+  const openScheduled = matches
+    .filter((m) => (m.status === "upcoming" || m.status === "live") && forecasts[m.id] != null)
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === "live" ? -1 : 1;
+      return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() || a.id - b.id;
+    });
+
+  const q = query.trim().toLowerCase();
+  const searched = q
+    ? openScheduled.filter(
+        (m) =>
+          m.homeTeam.toLowerCase().includes(q) ||
+          m.awayTeam.toLowerCase().includes(q) ||
+          m.league.toLowerCase().includes(q)
+      )
+    : openScheduled;
+
+  const byStatus =
+    statusFilter === "all"
+      ? searched
+      : searched.filter((m) => m.status === statusFilter);
+
+  const leagueOpts = Array.from(new Set(openScheduled.map((m) => m.league))).map((lg) => ({
+    value: lg,
+    label: lg,
+    count: byStatus.filter((m) => m.league === lg).length,
+  }));
+
+  const effectiveLeague =
+    leagueFilter === "all" || leagueOpts.some((o) => o.value === leagueFilter)
+      ? leagueFilter
+      : "all";
+
+  const byLeague =
+    effectiveLeague === "all"
+      ? byStatus
+      : byStatus.filter((m) => m.league === effectiveLeague);
+
+  const lockedCount = byLeague.filter((m) => forecasts[m.id]?.isLocked).length;
+  const dynamicCount = byLeague.length - lockedCount;
+
+  const visible =
+    lockFilter === "locked"
+      ? byLeague.filter((m) => forecasts[m.id]?.isLocked)
+      : lockFilter === "dynamic"
+        ? byLeague.filter((m) => !forecasts[m.id]?.isLocked)
+        : byLeague;
+
+  const upcomingOrderMap = new Map<number, number>();
+  let queueRank = 1;
+  for (const m of openScheduled) {
+    if (m.status === "upcoming") {
+      upcomingOrderMap.set(m.id, queueRank++);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Sélecteur des 2 modes demandés */}
+      <section className="glass-card rounded-2xl p-4">
+        <div className="flex items-center gap-2">
+          <Eye className="h-4 w-4 text-betclic-red" strokeWidth={2.3} />
+          <h2 className="font-display text-[15px] font-bold text-ink">
+            Mode des scores anticipés (Avant-match & Direct)
+          </h2>
+        </div>
+        <p className="mt-1 text-[11.5px] leading-relaxed text-dim">
+          Visible uniquement par l&apos;administrateur. Les joueurs ne reçoivent jamais ces données.
+        </p>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={Boolean(busy["mode-dynamic"]) || Boolean(busy["mode-locked"])}
+            onClick={() => {
+              if (scenarioMode !== "dynamic") {
+                void act(
+                  { action: "setScenarioMode", mode: "dynamic" },
+                  "mode-dynamic",
+                  "Mode 1 activé : Dynamique + verrouillage à la carte"
+                );
+              }
+            }}
+            className={cn(
+              "flex flex-col items-start rounded-2xl border p-3 text-left transition-all active:scale-[0.99]",
+              scenarioMode === "dynamic"
+                ? "border-betclic-red bg-betclic-red/[0.06] ring-1 ring-betclic-red/30"
+                : "border-edge bg-white hover:bg-elev/50"
+            )}
+          >
+            <div className="flex w-full items-center justify-between gap-2">
+              <span className="font-display text-[13px] font-bold text-ink">
+                Mode 1 · Dynamique + Verrouillage
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                  scenarioMode === "dynamic"
+                    ? "bg-betclic-red text-white"
+                    : "bg-elev text-dim"
+                )}
+              >
+                {scenarioMode === "dynamic" ? "Actif" : "Choisir"}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-snug text-mist">
+              Affiche les scores prévus à l&apos;avance tout en gardant le bouclier de la banque actif en live, avec bouton pour figer ou forcer chaque match.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            disabled={Boolean(busy["mode-dynamic"]) || Boolean(busy["mode-locked"])}
+            onClick={() => {
+              if (scenarioMode !== "locked") {
+                void act(
+                  { action: "setScenarioMode", mode: "locked" },
+                  "mode-locked",
+                  "Mode 2 activé : Tous les scores à venir sont figés à 100 %"
+                );
+              }
+            }}
+            className={cn(
+              "flex flex-col items-start rounded-2xl border p-3 text-left transition-all active:scale-[0.99]",
+              scenarioMode === "locked"
+                ? "border-win bg-win/[0.06] ring-1 ring-win/30"
+                : "border-edge bg-white hover:bg-elev/50"
+            )}
+          >
+            <div className="flex w-full items-center justify-between gap-2">
+              <span className="font-display text-[13px] font-bold text-ink">
+                Mode 2 · 100 % Figé d&apos;office
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                  scenarioMode === "locked"
+                    ? "bg-win text-white"
+                    : "bg-elev text-dim"
+                )}
+              >
+                {scenarioMode === "locked" ? "Actif" : "Choisir"}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-snug text-mist">
+              Verrouille automatiquement tous les scénarios dès l&apos;avant-match : le score final et les minutes des buts sont garantis à 100 % sans bouger.
+            </p>
+          </button>
+        </div>
+      </section>
+
+      {/* Barre de recherche */}
+      <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+        <Search className="h-4 w-4 shrink-0 text-dim" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher une affiche ou une ligue…"
+          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+        />
+        {query && (
+          <button type="button" onClick={() => setQuery("")} className="text-dim">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Rangée unique collante de 3 pastilles dropdown */}
+      <FilterDropdownRow
+        className="top-[105px] -my-3"
+        filters={[
+          {
+            id: "forecast-status",
+            placeholder: "Statut",
+            value: statusFilter,
+            defaultValue: "all",
+            onChange: setStatusFilter,
+            options: [
+              { value: "all", label: "Tous prévus", count: searched.length },
+              {
+                value: "upcoming",
+                label: "À venir",
+                count: searched.filter((m) => m.status === "upcoming").length,
+              },
+              {
+                value: "live",
+                label: "En direct",
+                count: searched.filter((m) => m.status === "live").length,
+              },
+            ],
+          },
+          {
+            id: "forecast-league",
+            placeholder: "Ligue",
+            value: effectiveLeague,
+            defaultValue: "all",
+            onChange: setLeagueFilter,
+            options: [
+              { value: "all", label: "Toutes ligues", count: byStatus.length },
+              ...leagueOpts,
+            ],
+          },
+          {
+            id: "forecast-lock",
+            placeholder: "Garantie",
+            value: lockFilter,
+            defaultValue: "all",
+            onChange: setLockFilter,
+            options: [
+              { value: "all", label: "Tous états", count: byLeague.length },
+              { value: "locked", label: "Figés 100 %", count: lockedCount },
+              { value: "dynamic", label: "Dynamiques", count: dynamicCount },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setStatusFilter("all");
+          setLeagueFilter("all");
+          setLockFilter("all");
+        }}
+        resultCountText={`${visible.length} match${visible.length > 1 ? "s" : ""} programmé${visible.length > 1 ? "s" : ""}`}
+      />
+
+      {visible.length === 0 ? (
+        <div className="glass-card rounded-2xl p-6 text-center text-[12.5px] text-dim">
+          Aucun match programmé dans ce filtre.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {visible.map((m) => {
+            const fc = forecasts[m.id];
+            if (!fc) return null;
+            const rank = upcomingOrderMap.get(m.id);
+            const isEditingScore = editingMatchId === m.id;
+            const minHome = m.status === "live" ? (m.homeScore ?? 0) : 0;
+            const minAway = m.status === "live" ? (m.awayScore ?? 0) : 0;
+
+            return (
+              <div key={m.id} className="glass-card rounded-2xl p-3.5">
+                {/* En-tête ligue + ordre file + badge Figé/Dynamique */}
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    {m.status === "live" ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+                        <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+                        Direct {m.minute ?? ""}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-bold text-ink">
+                        À venir {rank ? `#${rank}` : ""} · {formatKickoff(new Date(m.startsAt))}
+                      </span>
+                    )}
+                    <span className="truncate font-medium text-mist">{m.league}</span>
+                  </div>
+
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                      fc.isLocked
+                        ? "bg-win/12 text-win"
+                        : "bg-amber-500/15 text-amber-800"
+                    )}
+                  >
+                    {fc.isLocked ? (
+                      <>
+                        <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
+                        Figé 100 %
+                      </>
+                    ) : (
+                      <>⚡ Dynamique</>
+                    )}
+                  </span>
+                </div>
+
+                {/* Affiche + Score final prévu central */}
+                <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl bg-elev/55 px-3 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} />
+                    <span className="truncate font-display text-[13px] font-bold text-ink">
+                      {m.homeTeam}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-center px-2">
+                    <span className="text-[9.5px] font-semibold uppercase tracking-wider text-dim">
+                      Score final
+                    </span>
+                    <span className="font-display text-[21px] font-extrabold leading-tight tabular-nums text-ink">
+                      {fc.finalHomeScore} – {fc.finalAwayScore}
+                    </span>
+                    <span className="text-[10px] font-medium tabular-nums text-mist">
+                      MT {fc.htHomeScore} – {fc.htAwayScore}
+                      {m.status === "live" &&
+                        ` · Actuel ${m.homeScore ?? 0}-${m.awayScore ?? 0}`}
+                    </span>
+                  </div>
+
+                  <div className="flex min-w-0 items-center justify-end gap-2 text-right">
+                    <span className="truncate font-display text-[13px] font-bold text-ink">
+                      {m.awayTeam}
+                    </span>
+                    <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} />
+                  </div>
+                </div>
+
+                {/* Chronologie minute par minute des buts et cartons prévus */}
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {fc.events.length === 0 ? (
+                    <span className="rounded-lg bg-elev/60 px-2.5 py-1 text-[11px] font-medium text-dim">
+                      Aucun but ni carton prévu (0 – 0)
+                    </span>
+                  ) : (
+                    fc.events.map((ev, idx) => {
+                      const isHome = ev.team === "home";
+                      const isRed = ev.type === "red_card";
+                      return (
+                        <span
+                          key={`${ev.minute}-${ev.type}-${idx}`}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium",
+                            isRed
+                              ? "bg-betclic-red/10 text-betclic-red"
+                              : isHome
+                                ? "bg-ink/[0.06] text-ink"
+                                : "bg-sky-500/10 text-sky-900"
+                          )}
+                        >
+                          <span>{isRed ? "🟥" : "⚽"}</span>
+                          <strong className="font-display tabular-nums">{ev.minute}&apos;</strong>
+                          <span className="truncate max-w-[130px]">
+                            {ev.player ?? (isHome ? m.homeTeam : m.awayTeam)}
+                          </span>
+                          <span className="text-[10px] opacity-70">
+                            ({isHome ? "Dom." : "Ext."})
+                          </span>
+                        </span>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Éditeur rapide de score exact personnalisé */}
+                {isEditingScore && (
+                  <div className="mt-3 rounded-xl border border-edge bg-white p-3">
+                    <p className="text-[11.5px] font-semibold text-ink">
+                      Imposer le score final exact (génère automatiquement minutes & buteurs)
+                    </p>
+                    <div className="mt-2.5 flex items-center justify-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetScore((s) => ({
+                              ...s,
+                              home: Math.max(minHome, s.home - 1),
+                            }))
+                          }
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                        >
+                          −
+                        </button>
+                        <span className="w-7 text-center font-display text-[18px] font-extrabold tabular-nums text-ink">
+                          {targetScore.home}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetScore((s) => ({
+                              ...s,
+                              home: Math.min(9, s.home + 1),
+                            }))
+                          }
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <span className="font-display text-[14px] font-bold text-dim">–</span>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetScore((s) => ({
+                              ...s,
+                              away: Math.max(minAway, s.away - 1),
+                            }))
+                          }
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                        >
+                          −
+                        </button>
+                        <span className="w-7 text-center font-display text-[18px] font-extrabold tabular-nums text-ink">
+                          {targetScore.away}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetScore((s) => ({
+                              ...s,
+                              away: Math.min(9, s.away + 1),
+                            }))
+                          }
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 flex gap-2">
+                      <button
+                        type="button"
+                        disabled={Boolean(busy[`force-${m.id}`])}
+                        onClick={async () => {
+                          const ok = await act(
+                            {
+                              action: "forceMatchFinalScore",
+                              matchId: m.id,
+                              homeScore: targetScore.home,
+                              awayScore: targetScore.away,
+                            },
+                            `force-${m.id}`,
+                            `Score final fixé à ${targetScore.home} – ${targetScore.away}`
+                          );
+                          if (ok) setEditingMatchId(null);
+                        }}
+                        className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white disabled:opacity-50"
+                      >
+                        {busy[`force-${m.id}`] ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        )}
+                        Valider & Figer {targetScore.home} – {targetScore.away}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingMatchId(null)}
+                        className="h-9 rounded-xl bg-elev px-3 font-display text-[12px] font-semibold text-mist"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Barre de 3 actions rapides */}
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    disabled={Boolean(busy[`lock-${m.id}`])}
+                    onClick={() =>
+                      void act(
+                        {
+                          action: fc.isLocked ? "unlockMatchScenario" : "lockMatchScenario",
+                          matchId: m.id,
+                        },
+                        `lock-${m.id}`,
+                        fc.isLocked
+                          ? "Match repassé en mode dynamique"
+                          : `Score ${fc.finalHomeScore}–${fc.finalAwayScore} verrouillé à 100 %`
+                      )
+                    }
+                    className={cn(
+                      "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-display text-[11.5px] font-bold transition-colors disabled:opacity-50",
+                      fc.isLocked
+                        ? "bg-elev text-ink hover:bg-edge/70"
+                        : "bg-win/12 text-win hover:bg-win/18"
+                    )}
+                  >
+                    {busy[`lock-${m.id}`] ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : fc.isLocked ? (
+                      <Unlock className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    ) : (
+                      <Lock className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    )}
+                    <span>{fc.isLocked ? "Débloquer" : "Figer"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={Boolean(busy[`reroll-${m.id}`])}
+                    onClick={() =>
+                      void act(
+                        { action: "rerollMatchScenario", matchId: m.id },
+                        `reroll-${m.id}`,
+                        "Nouveau scénario généré"
+                      )
+                    }
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-elev font-display text-[11.5px] font-bold text-ink transition-colors hover:bg-edge/70 disabled:opacity-50"
+                  >
+                    {busy[`reroll-${m.id}`] ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Dices className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
+                    )}
+                    <span>Relancer</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isEditingScore) {
+                        setEditingMatchId(null);
+                      } else {
+                        setEditingMatchId(m.id);
+                        setTargetScore({
+                          home: Math.max(minHome, fc.finalHomeScore),
+                          away: Math.max(minAway, fc.finalAwayScore),
+                        });
+                      }
+                    }}
+                    className={cn(
+                      "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-display text-[11.5px] font-bold transition-colors",
+                      isEditingScore
+                        ? "bg-ink text-white"
+                        : "bg-betclic-red/10 text-betclic-red hover:bg-betclic-red/16"
+                    )}
+                  >
+                    <Target className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    <span>Choisir</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

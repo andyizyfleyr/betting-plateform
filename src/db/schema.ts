@@ -68,6 +68,14 @@ export const matches = pgTable("matches", {
   >(),
   /** Marqueur du moteur virtuel : seules les lignes "virtual" sont affichées. */
   source: text("source").notNull().default("virtual"),
+  /** Verrouillage individuel du scénario final (Mode 1 verrouillé ou score forcé par l'admin). */
+  scenarioLocked: boolean("scenario_locked").notNull().default(false),
+  /** Nonce incrémenté lorsque l'admin relance un tirage de scénario avant/pendant le match. */
+  scenarioNonce: integer("scenario_nonce").notNull().default(0),
+  /** Chronologie pré-calculée ou forcée (buts & cartons rouges minute par minute, strictement serveur). */
+  scriptedEvents: jsonb("scripted_events").$type<
+    Array<{ type: string; team: string; minute: number; player?: string }>
+  >(),
 });
 
 /**
@@ -314,6 +322,15 @@ export const mlModels = pgTable("ml_models", {
   brierScore: doublePrecision("brier_score").notNull().default(0.21),
   logLoss: doublePrecision("log_loss").notNull().default(0.61),
   state: jsonb("state").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+/**
+ * Paramètres globaux d'administration (ex. mode des scénarios de matchs : "dynamic" | "locked").
+ */
+export const adminSettings = pgTable("admin_settings", {
+  settingKey: text("setting_key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
