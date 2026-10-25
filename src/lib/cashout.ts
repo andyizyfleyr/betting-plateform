@@ -101,22 +101,37 @@ export function computePredictionCashOut(params: {
   resolvesAt: Date;
   currentOddsYes: number;
   currentOddsNo: number;
-  selection: "yes" | "no";
+  options?: Array<{ key: string; label: string; odds: number }> | null;
+  selection: string;
 }): number {
-  const { stake, potentialWin, selection, currentOddsYes, currentOddsNo, placedAt, resolvesAt } = params;
+  const {
+    stake,
+    potentialWin,
+    selection,
+    currentOddsYes,
+    currentOddsNo,
+    options,
+    placedAt,
+    resolvesAt,
+  } = params;
   const progress = predictionProgress(placedAt, resolvesAt);
 
-  const pYes = impliedYes(currentOddsYes, currentOddsNo);
-  const pOwn = selection === "yes" ? pYes : 1 - pYes;
+  let pOwn: number;
+  if (options && options.length >= 2) {
+    const weights = options.map((o) => (o.odds > 0 ? 1 / o.odds : 0));
+    const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+    const idx = options.findIndex((o) => o.key === selection);
+    pOwn = idx >= 0 ? weights[idx] / totalW : Math.min(0.9, 0.94 / Math.max(1.05, params.odds));
+  } else {
+    const pYes = impliedYes(currentOddsYes, currentOddsNo);
+    pOwn = selection === "yes" ? pYes : 1 - pYes;
+  }
 
-  const base = potentialWin * (0.12 + 0.62 * progress);
-  const favFactor = pOwn >= 0.5 ? 0.82 + (pOwn - 0.5) * 0.9 : 0.38 + pOwn * 0.5;
-  const dogFactor = pOwn >= 0.5 ? 0.4 : 0.16 + pOwn * 0.32;
+  // Valeur juste pondérée par la probabilité actuelle et une légère décote de rachat
+  const fairNow = potentialWin * pOwn * CASHOUT_HOUSE_FACTOR;
+  const timeBoost = 0.92 + 0.08 * progress;
+  const value = fairNow * timeBoost;
 
-  const value = pOwn >= 0.5
-    ? Math.min(base * favFactor, potentialWin * 0.96)
-    : base * dogFactor;
-
-  const min = Math.min(0.05, stake * 0.25);
+  const min = Math.min(0.05, stake * 0.15);
   return round2(Math.min(Math.max(value, min), potentialWin * 0.96));
 }

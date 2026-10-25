@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
     .select({
       questionId: predictionBets.questionId,
       selection: predictionBets.selection,
+      selectionLabel: predictionBets.selectionLabel,
       status: predictionBets.status,
       stake: predictionBets.stake,
       potentialWin: predictionBets.potentialWin,
@@ -88,6 +89,7 @@ export async function GET(req: NextRequest) {
       resolution: q.resolution,
       oddsYes: q.oddsYes,
       oddsNo: q.oddsNo,
+      options: q.options ?? null,
       volume: q.volume,
       yesCount: q.yesCount,
       noCount: q.noCount,
@@ -121,9 +123,6 @@ export async function POST(req: NextRequest) {
   if (!questionId || !selection || !stake || stake <= 0) {
     return NextResponse.json({ error: "Données du pari incomplètes" }, { status: 400 });
   }
-  if (!PRED_SELECTIONS.includes(selection as PredSelection)) {
-    return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
-  }
   if (stake < PRED_MIN_STAKE || stake > PRED_MAX_STAKE) {
     return NextResponse.json(
       { error: `Mise hors limites (${PRED_MIN_STAKE} € – ${PRED_MAX_STAKE} €)` },
@@ -155,15 +154,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Les paris sont clos sur cette question" }, { status: 400 });
   }
 
+  const isMultiChoice = Array.isArray(question.options) && question.options.length >= 2;
+  let odds: number;
+  let selectionLabel: string;
+  let incYes = 0;
+  let incNo = 0;
+
+  if (isMultiChoice && question.options) {
+    const matched = question.options.find((opt) => opt.key === selection);
+    if (!matched) {
+      return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
+    }
+    odds = matched.odds;
+    selectionLabel = matched.label;
+    incYes = 1; // yesCount sert aussi de compteur global de participations sur multi-choix
+  } else {
+    if (!PRED_SELECTIONS.includes(selection as PredSelection)) {
+      return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
+    }
+    const isYes = selection === "yes";
+    odds = isYes ? question.oddsYes : question.oddsNo;
+    selectionLabel = isYes ? "Oui" : "Non";
+    incYes = isYes ? 1 : 0;
+    incNo = isYes ? 0 : 1;
+  }
+
   const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
   if (!user || user.balance < stake) {
     return NextResponse.json({ error: "Solde insuffisant" }, { status: 400 });
   }
 
   // Cote fixe verrouillée au moment de la validation : gain = mise × cote garanti.
-  const isYes = selection === "yes";
-  const odds = isYes ? question.oddsYes : question.oddsNo;
-  const selectionLabel = isYes ? "Oui" : "Non";
   const roundedStakeValue = round2(stake);
   const potentialWin = round2(roundedStakeValue * odds);
 
@@ -194,8 +215,8 @@ export async function POST(req: NextRequest) {
       .update(predictionQuestions)
       .set({
         volume: sql`${predictionQuestions.volume} + ${roundedStakeValue}`,
-        yesCount: sql`${predictionQuestions.yesCount} + ${isYes ? 1 : 0}`,
-        noCount: sql`${predictionQuestions.noCount} + ${isYes ? 0 : 1}`,
+        yesCount: sql`${predictionQuestions.yesCount} + ${incYes}`,
+        noCount: sql`${predictionQuestions.noCount} + ${incNo}`,
       })
       .where(eq(predictionQuestions.id, question.id));
 

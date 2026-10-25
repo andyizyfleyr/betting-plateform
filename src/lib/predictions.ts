@@ -1,12 +1,30 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { appUser, predictionBets, predictionQuestions } from "@/db/schema";
+import {
+  appUser,
+  predictionBets,
+  predictionQuestions,
+  type PredictionOption,
+} from "@/db/schema";
 
 export const PRED_MIN_STAKE = 0.5;
 export const PRED_MAX_STAKE = 500;
 
 export function round2(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+/** Génère un identifiant propre pour une option à choix multiple. */
+export function slugifyOptionKey(label: string, idx: number): string {
+  const base = label
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32);
+  return base ? `${base}` : `opt_${idx + 1}`;
 }
 
 /** PRNG déterministe (mulberry32) : résolution stable, non déductible depuis l'UI. */
@@ -28,21 +46,39 @@ export function impliedYes(oddsYes: number, oddsNo: number) {
   return pYes / (pYes + pNo);
 }
 
-/** Issue déterministe d'une question échue, cohérente avec les cotes fixes affichées. */
+/** Probabilités implicites normalisées d'une liste d'options à cotes fixes. */
+export function impliedOptionProbs(options: PredictionOption[]): number[] {
+  const weights = options.map((o) => (o.odds > 0 ? 1 / o.odds : 0));
+  const sum = weights.reduce((a, b) => a + b, 0) || 1;
+  return weights.map((w) => w / sum);
+}
+
+/** Issue déterministe d'une question échue (binaire Oui/Non ou choix multiples). */
 export function resolveQuestion(q: {
   seedValue: number;
   oddsYes: number;
   oddsNo: number;
-}): "yes" | "no" {
-  return mulberry32(q.seedValue)() < impliedYes(q.oddsYes, q.oddsNo) ? "yes" : "no";
+  options?: PredictionOption[] | null;
+}): string {
+  const u = mulberry32(q.seedValue)();
+  if (q.options && q.options.length >= 2) {
+    const probs = impliedOptionProbs(q.options);
+    let cumul = 0;
+    for (let i = 0; i < q.options.length; i++) {
+      cumul += probs[i];
+      if (u < cumul) return q.options[i].key;
+    }
+    return q.options[q.options.length - 1].key;
+  }
+  return u < impliedYes(q.oddsYes, q.oddsNo) ? "yes" : "no";
 }
 
 /**
- * Règlement à cotes fixes (non mutualisé) :
+ * Règlement à cotes fixes (non mutualisé), compatible Oui/Non et choix multiples :
  * Chaque ticket gagnant touche exactement son gain garanti `mise × cote`
- * verrouillé au moment de la validation du pari (`b.potentialWin`).
+ * verrouillé au moment de la validation du pari.
  */
-export async function settleQuestion(questionId: number, resolution: "yes" | "no") {
+export async function settleQuestion(questionId: number, resolution: string) {
   await db.transaction(async (tx) => {
     await tx
       .update(predictionQuestions)
