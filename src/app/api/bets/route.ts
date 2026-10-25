@@ -273,6 +273,7 @@ export async function GET(req: NextRequest) {
         matchHomeScore: m?.homeScore ?? null,
         matchAwayScore: m?.awayScore ?? null,
         matchMinute: m?.minute ?? null,
+        matchStartsAt: m?.startsAt ? m.startsAt.toISOString() : null,
         matchSource: m ? (m.source === "manual" ? "manual" : "virtual") : null,
       };
     });

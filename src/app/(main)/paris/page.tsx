@@ -125,7 +125,8 @@ export default function ParisPage() {
         (b.legs ?? []).some(
           (l) =>
             l.title.toLowerCase().includes(q) ||
-            l.selectionLabel.toLowerCase().includes(q)
+            l.selectionLabel.toLowerCase().includes(q) ||
+            (l.league ?? "").toLowerCase().includes(q)
         )
     );
   }, [allBets, query]);
