@@ -858,7 +858,9 @@ function MatchesTab({
   onAdd: (e: FormEvent) => Promise<boolean>;
 }) {
   const [universe, setUniverse] = useState<"real" | "virtual">("real");
-  const [importerOpen, setImporterOpen] = useState(false);
+  const [importerOpen, setImporterOpen] = useState(
+    () => matches.filter((m) => m.source === "manual").length === 0
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [openLogos, setOpenLogos] = useState(false);
   const [openMarkets, setOpenMarkets] = useState(false);
@@ -866,6 +868,88 @@ function MatchesTab({
   const [leagueFilter, setLeagueFilter] = useState<string>("all");
   const [matchQuery, setMatchQuery] = useState("");
   const [nowTs, setNowTs] = useState(0);
+  const [optimisticSettleMode, setOptimisticSettleMode] = useState<"auto" | "confirm" | null>(
+    null
+  );
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [realBanner, setRealBanner] = useState<{
+    kind: "ok" | "err" | "info";
+    msg: string;
+  } | null>(null);
+
+  const activeSettleMode = optimisticSettleMode ?? realSettlementMode;
+
+  const handleSetSettlementMode = async (mode: "auto" | "confirm") => {
+    if (mode === activeSettleMode && !busy["real-settle-mode"]) return;
+    setOptimisticSettleMode(mode);
+    setRealBanner(null);
+    const ok = await act(
+      { action: "setRealSettlementMode", mode },
+      "real-settle-mode",
+      mode === "auto"
+        ? "Règlement automatique activé (confirmation anti-VAR 90s)"
+        : "Mode Confirmation Admin activé avant règlement final"
+    );
+    if (ok) {
+      setRealBanner({
+        kind: "ok",
+        msg:
+          mode === "auto"
+            ? "Mode Auto (Anti-VAR 90s) enregistré : les paris réels sont réglés automatiquement 90s après le coup de sifflet final."
+            : "Mode Confirmation Admin enregistré : le score final verrouille les marchés et attend votre validation en 1 clic.",
+      });
+    }
+    setOptimisticSettleMode(null);
+  };
+
+  const handleSyncAllReal = async () => {
+    setSyncingAll(true);
+    setRealBanner(null);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "syncAllRealMatches" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        summary?: {
+          activeCount: number;
+          syncedCount: number;
+          linkedCount: number;
+          liveCount: number;
+          settledCount: number;
+          pendingConfirmCount: number;
+        };
+      };
+      if (!res.ok) throw new Error(data.error ?? "Échec de la synchronisation");
+      await onReload();
+      const s = data.summary;
+      if (!s || s.activeCount === 0) {
+        setRealBanner({
+          kind: "info",
+          msg: "Aucun match réel actif à synchroniser — importez d'abord une affiche officielle ci-dessous.",
+        });
+      } else {
+        const details: string[] = [`${s.syncedCount}/${s.activeCount} match(s) synchronisé(s)`];
+        if (s.liveCount > 0) details.push(`${s.liveCount} en direct`);
+        if (s.linkedCount > 0) details.push(`${s.linkedCount} relié(s) auto`);
+        if (s.settledCount > 0) details.push(`${s.settledCount} clôturé(s) et réglé(s)`);
+        if (s.pendingConfirmCount > 0) details.push(`${s.pendingConfirmCount} en attente FT`);
+        setRealBanner({
+          kind: "ok",
+          msg: details.join(" · "),
+        });
+      }
+    } catch (e) {
+      setRealBanner({
+        kind: "err",
+        msg: e instanceof Error ? e.message : "Erreur réseau lors de la synchronisation",
+      });
+    } finally {
+      setSyncingAll(false);
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setNowTs(Date.now()), 0);
@@ -972,7 +1056,7 @@ function MatchesTab({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="font-display text-[12.5px] font-bold text-ink">
-                Flux officiel automatique (Scores, MT &amp; Stats)
+                Flux officiel automatique (Scores, MT et Stats)
               </p>
               <p className="text-[11px] text-mist">
                 {realMatches.filter((m) => Boolean(m.externalId) && m.autoSync !== false).length}{" "}
@@ -981,17 +1065,11 @@ function MatchesTab({
             </div>
             <button
               type="button"
-              disabled={busy["sync-all-real"]}
-              onClick={() =>
-                act(
-                  { action: "syncAllRealMatches" },
-                  "sync-all-real",
-                  "Scores et statistiques des matchs réels synchronisés"
-                )
-              }
+              disabled={syncingAll || busy["sync-all-real"]}
+              onClick={() => void handleSyncAllReal()}
               className="inline-flex h-8.5 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 font-display text-[11.5px] font-bold text-white active:scale-95 disabled:opacity-60"
             >
-              {busy["sync-all-real"] ? (
+              {syncingAll || busy["sync-all-real"] ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.4} />
@@ -1008,16 +1086,10 @@ function MatchesTab({
               <button
                 type="button"
                 disabled={busy["real-settle-mode"]}
-                onClick={() =>
-                  act(
-                    { action: "setRealSettlementMode", mode: "auto" },
-                    "real-settle-mode",
-                    "Règlement automatique activé (confirmation anti-VAR 90s)"
-                  )
-                }
+                onClick={() => void handleSetSettlementMode("auto")}
                 className={cn(
                   "h-8 rounded-lg px-2 font-display text-[11px] transition-colors",
-                  realSettlementMode === "auto"
+                  activeSettleMode === "auto"
                     ? "bg-emerald-600 font-bold text-white"
                     : "font-semibold text-mist"
                 )}
@@ -1027,16 +1099,10 @@ function MatchesTab({
               <button
                 type="button"
                 disabled={busy["real-settle-mode"]}
-                onClick={() =>
-                  act(
-                    { action: "setRealSettlementMode", mode: "confirm" },
-                    "real-settle-mode",
-                    "Validation finale opérateur requise avant paiement"
-                  )
-                }
+                onClick={() => void handleSetSettlementMode("confirm")}
                 className={cn(
                   "h-8 rounded-lg px-2 font-display text-[11px] transition-colors",
-                  realSettlementMode === "confirm"
+                  activeSettleMode === "confirm"
                     ? "bg-ink font-bold text-white"
                     : "font-semibold text-mist"
                 )}
@@ -1044,7 +1110,35 @@ function MatchesTab({
                 Confirmation Admin
               </button>
             </div>
+            <p className="text-[10.5px] text-mist">
+              {activeSettleMode === "auto"
+                ? "Actif : clôture et règlement automatiques 90 s après le coup de sifflet final officiel."
+                : "Actif : suspension automatique à la 90e et validation finale par l'administrateur en 1 clic."}
+            </p>
           </div>
+
+          {realBanner && (
+            <div
+              className={cn(
+                "flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-[11.5px] font-semibold",
+                realBanner.kind === "ok"
+                  ? "bg-emerald-600/12 text-emerald-800"
+                  : realBanner.kind === "info"
+                    ? "bg-amber-500/12 text-amber-900"
+                    : "bg-betclic-red/12 text-betclic-red"
+              )}
+            >
+              <span>{realBanner.msg}</span>
+              <button
+                type="button"
+                onClick={() => setRealBanner(null)}
+                className="shrink-0 opacity-70"
+                aria-label="Fermer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/70 px-3 py-2 text-[11.5px] text-mist">
@@ -1409,18 +1503,21 @@ function OfficialFixtureImporter({
   onReload: () => Promise<void>;
 }) {
   const [leagueSlug, setLeagueSlug] = useState<string>("all");
-  const [daysAhead, setDaysAhead] = useState<number>(3);
+  const [daysAhead, setDaysAhead] = useState<number>(7);
   const [loading, setLoading] = useState(false);
   const [importingKey, setImportingKey] = useState<string | null>(null);
   const [fixtures, setFixtures] = useState<DiscoveredOfficialFixture[] | null>(null);
+  const [reachable, setReachable] = useState<boolean>(true);
+  const [extendedWindow, setExtendedWindow] = useState<boolean>(false);
   const [oddsEdits, setOddsEdits] = useState<
     Record<string, { o1: string; oN: string; o2: string }>
   >({});
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; msg: string } | null>(
     null
   );
+  const autoLoadedRef = useRef(false);
 
-  const loadFixtures = async (slug = leagueSlug, days = daysAhead) => {
+  const loadFixtures = useCallback(async (slug: string, days: number) => {
     setLoading(true);
     setFeedback(null);
     try {
@@ -1435,11 +1532,15 @@ function OfficialFixtureImporter({
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
+        reachable?: boolean;
+        extendedWindow?: boolean;
         fixtures?: DiscoveredOfficialFixture[];
       };
       if (!res.ok) throw new Error(data.error ?? "Impossible de charger le calendrier");
       const list = data.fixtures ?? [];
       setFixtures(list);
+      setReachable(data.reachable !== false);
+      setExtendedWindow(Boolean(data.extendedWindow));
       const nextEdits: Record<string, { o1: string; oN: string; o2: string }> = {};
       for (const f of list) {
         nextEdits[f.externalId] = {
@@ -1457,7 +1558,16 @@ function OfficialFixtureImporter({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!open || autoLoadedRef.current) return;
+    autoLoadedRef.current = true;
+    const t = setTimeout(() => {
+      void loadFixtures("all", 7);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [open, loadFixtures]);
 
   const importItems = async (items: DiscoveredOfficialFixture[], key: string) => {
     if (items.length === 0) return;
@@ -1531,7 +1641,7 @@ function OfficialFixtureImporter({
               Importer du calendrier officiel (1 clic)
             </p>
             <p className="truncate text-[10.5px] text-mist">
-              Liaison ID officielle · Scores live, MT, buteurs &amp; stats automatiques
+              Liaison ID officielle · Scores live, MT, buteurs et stats automatiques
             </p>
           </div>
         </div>
@@ -1566,6 +1676,7 @@ function OfficialFixtureImporter({
                 { d: 1, label: "24h" },
                 { d: 3, label: "3 j" },
                 { d: 7, label: "7 j" },
+                { d: 14, label: "14 j" },
               ].map(({ d, label }) => (
                 <button
                   key={d}
@@ -1609,6 +1720,12 @@ function OfficialFixtureImporter({
             </div>
           )}
 
+          {extendedWindow && !loading && fixtures && fixtures.length > 0 && (
+            <div className="rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] font-medium text-amber-900">
+              Aucune rencontre dans le filtre court — prochaines journées officielles chargées automatiquement.
+            </div>
+          )}
+
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-8 text-[12.5px] text-mist">
               <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
@@ -1616,8 +1733,9 @@ function OfficialFixtureImporter({
             </div>
           ) : fixtures && fixtures.length === 0 ? (
             <div className="rounded-xl bg-elev/70 p-4 text-center text-[12px] text-mist">
-              Aucune affiche programmée dans cette fenêtre. Essayez un horizon de 7 jours ou une
-              autre compétition.
+              {!reachable
+                ? "Le flux sportif officiel est momentanément indisponible. Appuyez sur Actualiser pour réessayer."
+                : "Aucune affiche programmée actuellement pour cette compétition (hors saison ou trêve). Choisissez « Toutes les grandes compétitions » ou un horizon de 14 jours."}
             </div>
           ) : fixtures ? (
             <div className="space-y-2">
@@ -1771,13 +1889,22 @@ function AdminMatchCard({
   const isPendingAdminFt =
     isManual &&
     m.status !== "finished" &&
-    (m.feedStatusNote === "PENDING_ADMIN_FT" ||
+    (m.minute === "Fin (à valider)" ||
+      m.feedStatusNote === "PENDING_ADMIN_FT" ||
       Boolean(m.feedStatusNote?.startsWith("PENDING_FT_CONFIRM:")));
 
   const isPostponedAlert =
     isManual &&
     m.status !== "finished" &&
-    Boolean(m.feedStatusNote?.startsWith("POSTPONED:"));
+    (m.minute === "Reporté" || Boolean(m.feedStatusNote?.startsWith("POSTPONED:")));
+
+  const cleanFeedNote =
+    isManual &&
+    m.feedStatusNote &&
+    m.feedStatusNote !== "VOIDED" &&
+    m.feedStatusNote !== "ADMIN_CONFIRMED_FT"
+      ? m.feedStatusNote.replace(/^(PENDING_FT_CONFIRM|POSTPONED|ANTI_VAR_CHECK):\s*/, "")
+      : null;
 
   const effHtH = m.htHomeScore ?? m.realStats?.htHomeScore ?? null;
   const effHtA = m.htAwayScore ?? m.realStats?.htAwayScore ?? null;
@@ -1849,6 +1976,11 @@ function AdminMatchCard({
             {m.homeScore != null && ` · ${m.homeScore}-${m.awayScore}`}
             {effHtH != null && effHtA != null && ` (MT ${effHtH}-${effHtA})`}
           </p>
+          {cleanFeedNote && (
+            <p className="truncate text-[10.5px] font-medium text-emerald-700">
+              {cleanFeedNote}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {isManual && m.status !== "finished" && (
