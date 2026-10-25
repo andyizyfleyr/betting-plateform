@@ -77,11 +77,22 @@ export async function GET() {
         ? computeMatchTelemetry(m)
         : undefined;
 
-    // On masque strictement les variables internes du simulateur (`regime`, `homeForm`, `awayForm`)
-    const { regime: _regime, homeForm: _homeForm, awayForm: _awayForm, ...publicMatch } = m;
+    // On masque strictement les variables internes du simulateur et les scénarios anticipés admin
+    const {
+      regime: _regime,
+      homeForm: _homeForm,
+      awayForm: _awayForm,
+      scenarioLocked: _scenarioLocked,
+      scenarioNonce: _scenarioNonce,
+      scriptedEvents: _scriptedEvents,
+      ...publicMatch
+    } = m;
     void _regime;
     void _homeForm;
     void _awayForm;
+    void _scenarioLocked;
+    void _scenarioNonce;
+    void _scriptedEvents;
 
     return {
       ...publicMatch,

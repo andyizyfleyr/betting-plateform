@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { settleMatchBets } from "@/lib/settle";
-import { appUser, bets, comboBets, matches, type MatchRow } from "@/db/schema";
+import { adminSettings, appUser, bets, comboBets, matches, type MatchRow } from "@/db/schema";
 import {
   expectedGoals,
   goalTimeCDF,
@@ -702,16 +702,30 @@ async function syncUpcomingQueue(
     let awayForm = m.awayForm ?? 1;
 
     const hasPendingBets = (betsByMatch.get(m.id)?.length ?? 0) > 0;
+    const isScenarioPinned =
+      Boolean(m.scenarioLocked) ||
+      (m.scenarioNonce ?? 0) > 0 ||
+      Array.isArray(m.scriptedEvents);
     const strengthDiff = teamStrength(homeTeam) - teamStrength(awayTeam);
 
-    if (!hasPendingBets && homeStrongCount - awayStrongCount >= 2 && strengthDiff >= 1) {
+    if (
+      !hasPendingBets &&
+      !isScenarioPinned &&
+      homeStrongCount - awayStrongCount >= 2 &&
+      strengthDiff >= 1
+    ) {
       homeTeam = m.awayTeam;
       awayTeam = m.homeTeam;
       homeForm = m.awayForm ?? 1;
       awayForm = m.homeForm ?? 1;
       homeStrongCount--;
       awayStrongCount++;
-    } else if (!hasPendingBets && awayStrongCount - homeStrongCount >= 3 && strengthDiff <= -1) {
+    } else if (
+      !hasPendingBets &&
+      !isScenarioPinned &&
+      awayStrongCount - homeStrongCount >= 3 &&
+      strengthDiff <= -1
+    ) {
       homeTeam = m.awayTeam;
       awayTeam = m.homeTeam;
       homeForm = m.awayForm ?? 1;
@@ -878,7 +892,18 @@ async function ensureActiveSchedule(now: number): Promise<void> {
   });
 
   if (rows.length > 0) {
-    await db.insert(matches).values(rows);
+    const insertedRows = await db.insert(matches).values(rows).returning();
+    const mode = await getScenarioMode();
+    if (mode === "locked") {
+      const neutral: MatchBookPressure = { tickets: [], houseTightness: 1 };
+      for (const ins of insertedRows) {
+        const sim = simulateMatchRange(ins, 0, 90, 0, 0, 0, 0, [], neutral, false);
+        await db
+          .update(matches)
+          .set({ scenarioLocked: true, scriptedEvents: sim.events })
+          .where(eq(matches.id, ins.id));
+      }
+    }
   }
 }
 
@@ -1053,10 +1078,21 @@ async function bridgeIdleGapAndStartLive(
 
   if (!liveInserted) return null;
 
+  let readyLive = liveInserted;
+  if ((await getScenarioMode()) === "locked") {
+    const sim = simulateMatchRange(liveInserted, 0, 90, 0, 0, 0, 0, [], neutralPressure, false);
+    const [lockedRow] = await db
+      .update(matches)
+      .set({ scenarioLocked: true, scriptedEvents: sim.events })
+      .where(eq(matches.id, liveInserted.id))
+      .returning();
+    if (lockedRow) readyLive = lockedRow;
+  }
+
   // Garantit que targetLiveStart reste bien dans la fenêtre active du match inséré
-  const exactDur = matchDurationMs(liveInserted.id, "virtual");
+  const exactDur = matchDurationMs(readyLive.id, "virtual");
   const safeLiveStart = Math.max(now - Math.round(exactDur * 0.82), targetLiveStart);
-  return kickOffAtSchedule(liveInserted, safeLiveStart, now, neutralPressure);
+  return kickOffAtSchedule(readyLive, safeLiveStart, now, neutralPressure);
 }
 
 /**
@@ -1088,106 +1124,32 @@ async function tickLiveMatch(
   }
 
   const targetSimMin = clock.gameMinute;
-  const { lambdaHome, lambdaAway } = expectedGoals(m.homeTeam, m.awayTeam);
   let justScoredNow = false;
 
-  // Sur un match manuel créé par l'admin, le score n'évolue que sur action de l'admin !
-  const simulateEvents = m.source === "virtual";
+  const hasScripted = Boolean(m.scenarioLocked && Array.isArray(m.scriptedEvents));
+  // Sur un match manuel créé par l'admin, le score n'évolue que sur action de l'admin (sauf scénario verrouillé) !
+  const simulateEvents = m.source === "virtual" || hasScripted;
 
   if (simulateEvents && targetSimMin > prevSimMin) {
-    const baseEffH = lambdaHome * (m.homeForm ?? 1);
-    const baseEffA = lambdaAway * (m.awayForm ?? 1);
-
-    for (let min = prevSimMin + 1; min <= targetSimMin; min++) {
-      const share = minuteGoalShare(min);
-      const reg = regimeFactors(m.regime, min, baseEffH, baseEffA);
-
-      // Couplage tactique calibré sans dérive directionnelle (aligné sur Dixon-Coles) :
-      // - Prudence mutuelle légère à 0-0 et sur parité (1-1, 2-2) en fin de match (~27 % de nuls)
-      // - Réaction naturelle de l'équipe menée d'un but sans biais Domicile / Extérieur ni Favori / Outsider
-      const scoreDiff = home - away;
-      let tacH = 1.0;
-      let tacA = 1.0;
-
-      if (home === 0 && away === 0) {
-        tacH = 0.97;
-        tacA = 0.97;
-      } else if (home === 1 && away === 0) {
-        tacH = 0.98;
-        tacA = 1.07;
-      } else if (home === 0 && away === 1) {
-        tacH = 1.07;
-        tacA = 0.98;
-      } else if (scoreDiff === 0 && home >= 1 && min >= 66) {
-        tacH = 0.91;
-        tacA = 0.91;
-      } else if (Math.abs(scoreDiff) >= 2 && min >= 70) {
-        tacH = 0.94;
-        tacA = 0.94;
-      }
-
-      // Bouclier dynamique exact sur la grille des scores (tous marchés & combinés)
-      const shield = computeDynamicStepTilts(pressure, home, away, min, baseEffH, baseEffA);
-
-      const rateH =
-        baseEffH *
-        reg.hMult *
-        tacH *
-        shield.hTilt *
-        share *
-        Math.pow(0.68, redHome) *
-        (1 + 0.18 * redAway);
-      const rateA =
-        baseEffA *
-        reg.aMult *
-        tacA *
-        shield.aTilt *
-        share *
-        Math.pow(0.68, redAway) *
-        (1 + 0.18 * redHome);
-
-      const rng = createServerRng(`live-sim-v4|${m.id}|${m.startsAt.getTime()}|${min}`);
-      const uHome = rng();
-      const uAway = rng();
-      const scorerSeed = Math.floor(rng() * 100_000);
-      const uRed = rng();
-      const uRedSide = rng();
-
-      if (uHome < 1 - Math.exp(-rateH) && home < 7) {
-        home += 1;
-        const player = pickScorerName(m.homeTeam, scorerSeed);
-        events.push({
-          type: "goal",
-          team: "home",
-          minute: min,
-          ...(player ? { player } : {}),
-        });
-        if (min >= targetSimMin - 1 && targetSimMin - prevSimMin <= 4) {
-          justScoredNow = true;
-        }
-      }
-
-      if (uAway < 1 - Math.exp(-rateA) && away < 7) {
-        away += 1;
-        const player = pickScorerName(m.awayTeam, scorerSeed + 31);
-        events.push({
-          type: "goal",
-          team: "away",
-          minute: min,
-          ...(player ? { player } : {}),
-        });
-        if (min >= targetSimMin - 1 && targetSimMin - prevSimMin <= 4) {
-          justScoredNow = true;
-        }
-      }
-
-      if (min >= 18 && redHome + redAway < 2 && uRed < 0.0019) {
-        const side = uRedSide < 0.5 ? "home" : "away";
-        if (side === "home") redHome += 1;
-        else redAway += 1;
-        events.push({ type: "red_card", team: side, minute: min });
-      }
-    }
+    const simOut = simulateMatchRange(
+      m,
+      prevSimMin,
+      targetSimMin,
+      home,
+      away,
+      redHome,
+      redAway,
+      events,
+      pressure,
+      hasScripted
+    );
+    home = simOut.home;
+    away = simOut.away;
+    redHome = simOut.redHome;
+    redAway = simOut.redAway;
+    events.length = 0;
+    events.push(...simOut.events);
+    justScoredNow = simOut.justScoredNow;
   }
 
   const dynamicOdds = liveOddsFor(m.homeTeam, m.awayTeam, home, away, targetSimMin, {
@@ -1324,4 +1286,582 @@ async function tickLiveMatch(
   }
 
   return { finished: isOver, row: updated ?? m };
+}
+
+/* ============================================================================
+ *  MOTEUR D'APERÇU & CONTRÔLE DES SCORES ANTICIPÉS (ADMIN UNIQUEMENT)
+ *  - Mode 1 ("dynamic") : aperçu temps réel + bouclier actif, verrouillable/éditable par match
+ *  - Mode 2 ("locked")  : scénario 100 % figé d'office dès la mise en file
+ * ============================================================================ */
+
+export type ScenarioMode = "dynamic" | "locked";
+
+export interface ScriptedMatchEvent {
+  type: string;
+  team: string;
+  minute: number;
+  player?: string;
+}
+
+export interface AdminMatchForecast {
+  matchId: number;
+  finalHomeScore: number;
+  finalAwayScore: number;
+  htHomeScore: number;
+  htAwayScore: number;
+  isLocked: boolean;
+  events: ScriptedMatchEvent[];
+}
+
+let cachedScenarioMode: { mode: ScenarioMode; ts: number } | null = null;
+
+export async function getScenarioMode(): Promise<ScenarioMode> {
+  const now = Date.now();
+  if (cachedScenarioMode && now - cachedScenarioMode.ts < 5_000) {
+    return cachedScenarioMode.mode;
+  }
+  try {
+    const [row] = await db
+      .select()
+      .from(adminSettings)
+      .where(eq(adminSettings.settingKey, "scenario_mode"));
+    const raw = (row?.value as { mode?: string } | undefined)?.mode;
+    const mode: ScenarioMode = raw === "locked" ? "locked" : "dynamic";
+    cachedScenarioMode = { mode, ts: now };
+    return mode;
+  } catch {
+    return "dynamic";
+  }
+}
+
+function elapsedSimulatedMinute(m: MatchRow): number {
+  if (m.status !== "live") return 0;
+  const tickHistory = Array.isArray(m.tickHistory) ? m.tickHistory : [];
+  const simEntries = tickHistory.filter((t) => t.market === "sim" && t.selection === "clock");
+  if (simEntries.length > 0) {
+    return Math.max(0, Math.min(90, Math.max(...simEntries.map((t) => Math.round(t.to)))));
+  }
+  if ((m.homeScore ?? 0) > 0 || (m.awayScore ?? 0) > 0 || (m.events ?? []).length > 0) {
+    return Math.max(0, Math.min(90, minuteNumber(m.minute)));
+  }
+  return 0;
+}
+
+function simulateMatchRange(
+  m: Pick<
+    MatchRow,
+    | "id"
+    | "homeTeam"
+    | "awayTeam"
+    | "regime"
+    | "homeForm"
+    | "awayForm"
+    | "scenarioNonce"
+    | "scriptedEvents"
+  >,
+  fromMinExclusive: number,
+  toMinInclusive: number,
+  initHome: number,
+  initAway: number,
+  initRedHome: number,
+  initRedAway: number,
+  initEvents: ScriptedMatchEvent[],
+  pressure: MatchBookPressure,
+  useScripted: boolean
+): {
+  home: number;
+  away: number;
+  redHome: number;
+  redAway: number;
+  events: ScriptedMatchEvent[];
+  justScoredNow: boolean;
+} {
+  let home = initHome;
+  let away = initAway;
+  let redHome = initRedHome;
+  let redAway = initRedAway;
+  const events = initEvents.map((e) => ({ ...e }));
+  let justScoredNow = false;
+
+  if (toMinInclusive <= fromMinExclusive) {
+    return { home, away, redHome, redAway, events, justScoredNow };
+  }
+
+  if (useScripted && Array.isArray(m.scriptedEvents)) {
+    const ordered = [...m.scriptedEvents].sort((a, b) => a.minute - b.minute);
+    for (const ev of ordered) {
+      if (ev.minute <= fromMinExclusive || ev.minute > toMinInclusive) continue;
+      if (ev.type === "goal") {
+        if (ev.team === "home") home += 1;
+        else away += 1;
+        events.push({ ...ev });
+        if (ev.minute >= toMinInclusive - 1 && toMinInclusive - fromMinExclusive <= 4) {
+          justScoredNow = true;
+        }
+      } else if (ev.type === "red_card") {
+        if (ev.team === "home") redHome += 1;
+        else redAway += 1;
+        events.push({ ...ev });
+      }
+    }
+    return { home, away, redHome, redAway, events, justScoredNow };
+  }
+
+  const { lambdaHome, lambdaAway } = expectedGoals(m.homeTeam, m.awayTeam);
+  const baseEffH = lambdaHome * (m.homeForm ?? 1);
+  const baseEffA = lambdaAway * (m.awayForm ?? 1);
+  const nonce = m.scenarioNonce ?? 0;
+
+  for (let min = fromMinExclusive + 1; min <= toMinInclusive; min++) {
+    const share = minuteGoalShare(min);
+    const reg = regimeFactors(m.regime, min, baseEffH, baseEffA);
+
+    const scoreDiff = home - away;
+    let tacH = 1.0;
+    let tacA = 1.0;
+
+    if (home === 0 && away === 0) {
+      tacH = 0.97;
+      tacA = 0.97;
+    } else if (home === 1 && away === 0) {
+      tacH = 0.98;
+      tacA = 1.07;
+    } else if (home === 0 && away === 1) {
+      tacH = 1.07;
+      tacA = 0.98;
+    } else if (scoreDiff === 0 && home >= 1 && min >= 66) {
+      tacH = 0.91;
+      tacA = 0.91;
+    } else if (Math.abs(scoreDiff) >= 2 && min >= 70) {
+      tacH = 0.94;
+      tacA = 0.94;
+    }
+
+    const shield = computeDynamicStepTilts(pressure, home, away, min, baseEffH, baseEffA);
+
+    const rateH =
+      baseEffH *
+      reg.hMult *
+      tacH *
+      shield.hTilt *
+      share *
+      Math.pow(0.68, redHome) *
+      (1 + 0.18 * redAway);
+    const rateA =
+      baseEffA *
+      reg.aMult *
+      tacA *
+      shield.aTilt *
+      share *
+      Math.pow(0.68, redAway) *
+      (1 + 0.18 * redHome);
+
+    const rng = createServerRng(
+      `live-sim-v5|${m.id}|${m.homeTeam}|${m.awayTeam}|${nonce}|${min}`
+    );
+    const uHome = rng();
+    const uAway = rng();
+    const scorerSeed = Math.floor(rng() * 100_000);
+    const uRed = rng();
+    const uRedSide = rng();
+
+    if (uHome < 1 - Math.exp(-rateH) && home < 7) {
+      home += 1;
+      const player = pickScorerName(m.homeTeam, scorerSeed);
+      events.push({
+        type: "goal",
+        team: "home",
+        minute: min,
+        ...(player ? { player } : {}),
+      });
+      if (min >= toMinInclusive - 1 && toMinInclusive - fromMinExclusive <= 4) {
+        justScoredNow = true;
+      }
+    }
+
+    if (uAway < 1 - Math.exp(-rateA) && away < 7) {
+      away += 1;
+      const player = pickScorerName(m.awayTeam, scorerSeed + 31);
+      events.push({
+        type: "goal",
+        team: "away",
+        minute: min,
+        ...(player ? { player } : {}),
+      });
+      if (min >= toMinInclusive - 1 && toMinInclusive - fromMinExclusive <= 4) {
+        justScoredNow = true;
+      }
+    }
+
+    if (min >= 18 && redHome + redAway < 2 && uRed < 0.0019) {
+      const side = uRedSide < 0.5 ? "home" : "away";
+      if (side === "home") redHome += 1;
+      else redAway += 1;
+      events.push({ type: "red_card", team: side, minute: min });
+    }
+  }
+
+  return { home, away, redHome, redAway, events, justScoredNow };
+}
+
+function buildForecastForRow(
+  m: MatchRow,
+  pressure: MatchBookPressure
+): AdminMatchForecast {
+  const curMin = elapsedSimulatedMinute(m);
+  const initHome = m.status === "live" ? (m.homeScore ?? 0) : 0;
+  const initAway = m.status === "live" ? (m.awayScore ?? 0) : 0;
+  const initRedH = m.status === "live" ? (m.redHome ?? 0) : 0;
+  const initRedA = m.status === "live" ? (m.redAway ?? 0) : 0;
+  const initEvents =
+    m.status === "live" && Array.isArray(m.events)
+      ? m.events.filter((e) => e.minute <= curMin)
+      : [];
+
+  const isLocked = Boolean(m.scenarioLocked && Array.isArray(m.scriptedEvents));
+  const sim = simulateMatchRange(
+    m,
+    curMin,
+    90,
+    initHome,
+    initAway,
+    initRedH,
+    initRedA,
+    initEvents,
+    pressure,
+    isLocked
+  );
+
+  let htHome = 0;
+  let htAway = 0;
+  for (const ev of sim.events) {
+    if (ev.type === "goal" && ev.minute <= 45) {
+      if (ev.team === "home") htHome += 1;
+      else htAway += 1;
+    }
+  }
+
+  return {
+    matchId: m.id,
+    finalHomeScore: sim.home,
+    finalAwayScore: sim.away,
+    htHomeScore: htHome,
+    htAwayScore: htAway,
+    isLocked,
+    events: sim.events,
+  };
+}
+
+export async function getAdminMatchForecasts(
+  matchRows: MatchRow[]
+): Promise<{ mode: ScenarioMode; forecasts: Record<number, AdminMatchForecast> }> {
+  await ensureMlLoaded();
+  const mode = await getScenarioMode();
+
+  const openMatches = matchRows.filter(
+    (m) => m.status === "upcoming" || m.status === "live"
+  );
+  if (openMatches.length === 0) {
+    return { mode, forecasts: {} };
+  }
+
+  const openIds = openMatches.map((m) => m.id);
+  const openIdSet = new Set(openIds);
+  const [pendingBets, pendingCombos, houseHealth] = await Promise.all([
+    db
+      .select({
+        userId: bets.userId,
+        matchId: bets.matchId,
+        market: bets.market,
+        selection: bets.selection,
+        stake: bets.stake,
+        odds: bets.odds,
+      })
+      .from(bets)
+      .where(and(inArray(bets.matchId, openIds), eq(bets.status, "pending"))),
+    db
+      .select({
+        userId: comboBets.userId,
+        stake: comboBets.stake,
+        baseOdds: comboBets.baseOdds,
+        legs: comboBets.legs,
+      })
+      .from(comboBets)
+      .where(eq(comboBets.status, "pending")),
+    getGlobalHouseHealth(),
+  ]);
+
+  const userIds: number[] = [];
+  for (const b of pendingBets) userIds.push(b.userId);
+  for (const cb of pendingCombos) userIds.push(cb.userId);
+  const riskMap = await computeUserPatternRiskWeights(userIds);
+
+  const betsByMatch = new Map<number, PendingMatchTicket[]>();
+  for (const b of pendingBets) {
+    if (b.matchId == null) continue;
+    const arr = betsByMatch.get(b.matchId) ?? [];
+    arr.push({
+      market: b.market,
+      selection: b.selection,
+      stake: b.stake,
+      odds: b.odds,
+      riskWeight: riskMap.get(b.userId) ?? 1.0,
+    });
+    betsByMatch.set(b.matchId, arr);
+  }
+  for (const cb of pendingCombos) {
+    const uWeight = riskMap.get(cb.userId) ?? 1.0;
+    for (const leg of cb.legs ?? []) {
+      if (leg.kind !== "sport" || !leg.matchId || leg.status !== "pending") continue;
+      if (!openIdSet.has(leg.matchId)) continue;
+      const arr = betsByMatch.get(leg.matchId) ?? [];
+      const effectiveOdds = Math.min(
+        25,
+        leg.odds * Math.pow(Math.max(1, cb.baseOdds / Math.max(1.01, leg.odds)), 0.35)
+      );
+      arr.push({
+        market: leg.market,
+        selection: leg.selection,
+        stake: cb.stake,
+        odds: effectiveOdds,
+        riskWeight: uWeight,
+      });
+      betsByMatch.set(leg.matchId, arr);
+    }
+  }
+
+  const forecasts: Record<number, AdminMatchForecast> = {};
+  for (const m of openMatches) {
+    if (m.source === "manual" && !m.scenarioLocked) continue;
+    const pressure: MatchBookPressure = {
+      tickets: betsByMatch.get(m.id) ?? [],
+      houseTightness: houseHealth.tightness,
+    };
+    forecasts[m.id] = buildForecastForRow(m, pressure);
+  }
+
+  return { mode, forecasts };
+}
+
+export async function setScenarioMode(nextMode: ScenarioMode): Promise<ScenarioMode> {
+  await ensureSeeded();
+  await ensureMlLoaded();
+
+  await db
+    .insert(adminSettings)
+    .values({
+      settingKey: "scenario_mode",
+      value: { mode: nextMode },
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: adminSettings.settingKey,
+      set: {
+        value: { mode: nextMode },
+        updatedAt: new Date(),
+      },
+    });
+
+  cachedScenarioMode = { mode: nextMode, ts: Date.now() };
+
+  const openVirtual = await db
+    .select()
+    .from(matches)
+    .where(inArray(matches.status, ["upcoming", "live"]));
+
+  const neutral: MatchBookPressure = { tickets: [], houseTightness: 1 };
+
+  if (nextMode === "locked") {
+    for (const m of openVirtual) {
+      if (m.source !== "virtual") continue;
+      if (m.scenarioLocked && Array.isArray(m.scriptedEvents)) continue;
+      const fc = buildForecastForRow(m, neutral);
+      await db
+        .update(matches)
+        .set({ scenarioLocked: true, scriptedEvents: fc.events })
+        .where(eq(matches.id, m.id));
+    }
+  } else {
+    for (const m of openVirtual) {
+      if (m.source !== "virtual") continue;
+      if (m.status === "upcoming" && m.scenarioLocked) {
+        await db
+          .update(matches)
+          .set({ scenarioLocked: false, scriptedEvents: null })
+          .where(eq(matches.id, m.id));
+      }
+    }
+  }
+
+  return nextMode;
+}
+
+export async function lockMatchScenario(matchId: number): Promise<AdminMatchForecast | null> {
+  await ensureMlLoaded();
+  const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+  if (!m || m.status === "finished") return null;
+
+  const { forecasts } = await getAdminMatchForecasts([m]);
+  const fc =
+    forecasts[m.id] ?? buildForecastForRow(m, { tickets: [], houseTightness: 1 });
+
+  await db
+    .update(matches)
+    .set({ scenarioLocked: true, scriptedEvents: fc.events })
+    .where(eq(matches.id, matchId));
+
+  return { ...fc, isLocked: true };
+}
+
+export async function unlockMatchScenario(matchId: number): Promise<void> {
+  await db
+    .update(matches)
+    .set({ scenarioLocked: false, scriptedEvents: null })
+    .where(eq(matches.id, matchId));
+}
+
+export async function rerollMatchScenario(matchId: number): Promise<AdminMatchForecast | null> {
+  await ensureMlLoaded();
+  const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+  if (!m || m.status === "finished") return null;
+
+  const mode = await getScenarioMode();
+  const nextNonce = (m.scenarioNonce ?? 0) + 1;
+  const shouldRemainLocked = Boolean(m.scenarioLocked) || mode === "locked";
+
+  const draft: MatchRow = {
+    ...m,
+    scenarioNonce: nextNonce,
+    scenarioLocked: false,
+    scriptedEvents: null,
+  };
+  const fc = buildForecastForRow(draft, { tickets: [], houseTightness: 1 });
+
+  await db
+    .update(matches)
+    .set({
+      scenarioNonce: nextNonce,
+      scenarioLocked: shouldRemainLocked,
+      scriptedEvents: shouldRemainLocked ? fc.events : null,
+    })
+    .where(eq(matches.id, matchId));
+
+  return { ...fc, isLocked: shouldRemainLocked };
+}
+
+function drawWeightedMinute(rng: () => number, minMinute: number, maxMinute: number): number {
+  let totalW = 0;
+  for (let m = minMinute; m <= maxMinute; m++) {
+    totalW += minuteGoalShare(m);
+  }
+  let target = rng() * (totalW || 1);
+  for (let m = minMinute; m <= maxMinute; m++) {
+    target -= minuteGoalShare(m);
+    if (target <= 0) return m;
+  }
+  return maxMinute;
+}
+
+export async function forceMatchFinalScore(
+  matchId: number,
+  rawHome: number,
+  rawAway: number
+): Promise<AdminMatchForecast | null> {
+  await ensureMlLoaded();
+  const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+  if (!m || m.status === "finished") return null;
+
+  const curMin = elapsedSimulatedMinute(m);
+  const curHome = m.status === "live" ? (m.homeScore ?? 0) : 0;
+  const curAway = m.status === "live" ? (m.awayScore ?? 0) : 0;
+
+  const targetHome = Math.min(9, Math.max(curHome, Math.floor(rawHome)));
+  const targetAway = Math.min(9, Math.max(curAway, Math.floor(rawAway)));
+
+  const keptEvents: ScriptedMatchEvent[] =
+    m.status === "live" && Array.isArray(m.events)
+      ? m.events.filter((e) => e.minute <= curMin).map((e) => ({ ...e }))
+      : [];
+
+  const nextNonce = (m.scenarioNonce ?? 0) + 1;
+  const rng = createServerRng(
+    `admin-force-score|${m.id}|${targetHome}|${targetAway}|${nextNonce}`
+  );
+
+  const minGoalMin = Math.min(90, curMin + 1);
+  const newEvents: ScriptedMatchEvent[] = [];
+  const usedMinutes = new Set<number>(keptEvents.map((e) => e.minute));
+
+  const pickDistinctMin = () => {
+    for (let attempt = 0; attempt < 25; attempt++) {
+      const cand = drawWeightedMinute(rng, minGoalMin, 90);
+      if (!usedMinutes.has(cand)) {
+        usedMinutes.add(cand);
+        return cand;
+      }
+    }
+    return drawWeightedMinute(rng, minGoalMin, 90);
+  };
+
+  const addHome = targetHome - curHome;
+  const addAway = targetAway - curAway;
+
+  for (let i = 0; i < addHome; i++) {
+    const minute = pickDistinctMin();
+    const player = pickScorerName(m.homeTeam, Math.floor(rng() * 100_000));
+    newEvents.push({
+      type: "goal",
+      team: "home",
+      minute,
+      ...(player ? { player } : {}),
+    });
+  }
+
+  for (let i = 0; i < addAway; i++) {
+    const minute = pickDistinctMin();
+    const player = pickScorerName(m.awayTeam, Math.floor(rng() * 100_000) + 17);
+    newEvents.push({
+      type: "goal",
+      team: "away",
+      minute,
+      ...(player ? { player } : {}),
+    });
+  }
+
+  const allEvents = [...keptEvents, ...newEvents].sort((a, b) => a.minute - b.minute);
+
+  await db
+    .update(matches)
+    .set({
+      scenarioNonce: nextNonce,
+      scenarioLocked: true,
+      scriptedEvents: allEvents,
+      ...(m.status === "live" && curMin >= 90
+        ? {
+            homeScore: targetHome,
+            awayScore: targetAway,
+            events: allEvents,
+          }
+        : {}),
+    })
+    .where(eq(matches.id, matchId));
+
+  let htHome = 0;
+  let htAway = 0;
+  for (const ev of allEvents) {
+    if (ev.type === "goal" && ev.minute <= 45) {
+      if (ev.team === "home") htHome += 1;
+      else htAway += 1;
+    }
+  }
+
+  return {
+    matchId: m.id,
+    finalHomeScore: targetHome,
+    finalAwayScore: targetAway,
+    htHomeScore: htHome,
+    htAwayScore: htAway,
+    isLocked: true,
+    events: allEvents,
+  };
 }

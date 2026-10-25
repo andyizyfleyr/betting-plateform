@@ -42,6 +42,17 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "home_logo" text;
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "away_logo" text;
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "markets" jsonb;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_locked" boolean DEFAULT false NOT NULL;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_nonce" integer DEFAULT 0 NOT NULL;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scripted_events" jsonb;
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "admin_settings" (
+      "setting_key" text PRIMARY KEY NOT NULL,
+      "value" jsonb NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
   `);
 
   await db.execute(sql`

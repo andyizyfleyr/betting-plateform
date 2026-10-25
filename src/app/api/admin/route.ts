@@ -2,7 +2,17 @@ import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
-import { backdateStartsAtForMinute, demoteOtherLiveMatches, runLiveEngine } from "@/db/engine";
+import {
+  backdateStartsAtForMinute,
+  demoteOtherLiveMatches,
+  forceMatchFinalScore,
+  getAdminMatchForecasts,
+  lockMatchScenario,
+  rerollMatchScenario,
+  runLiveEngine,
+  setScenarioMode,
+  unlockMatchScenario,
+} from "@/db/engine";
 import { liveOddsFor, pickScorerName } from "@/db/fixtures";
 import {
   appUser,
@@ -135,10 +145,15 @@ export async function GET(req: NextRequest) {
   });
 
   const pendingDepCount = depRows.filter((d) => d.status === "pending_review").length;
-  const ml = await getAdminMlOverview();
+  const [ml, scenarioInfo] = await Promise.all([
+    getAdminMlOverview(),
+    getAdminMatchForecasts(matchRows),
+  ]);
 
   return NextResponse.json({
     ml,
+    scenarioMode: scenarioInfo.mode,
+    matchForecasts: scenarioInfo.forecasts,
     stats: {
       totalUsers: totalUsers?.value ?? 0,
       totalBets:
@@ -930,6 +945,59 @@ export async function POST(req: NextRequest) {
       await retrainAllMlModels();
       const ml = await getAdminMlOverview();
       return NextResponse.json({ ok: true, ml });
+    }
+
+    if (action === "setScenarioMode") {
+      const nextMode = body.mode === "locked" ? "locked" : "dynamic";
+      const applied = await setScenarioMode(nextMode);
+      return NextResponse.json({ ok: true, scenarioMode: applied });
+    }
+
+    if (action === "lockMatchScenario") {
+      const mid = Number(body.matchId);
+      if (!Number.isFinite(mid)) {
+        return NextResponse.json({ error: "matchId invalide" }, { status: 400 });
+      }
+      const forecast = await lockMatchScenario(mid);
+      if (!forecast) {
+        return NextResponse.json({ error: "Match introuvable ou déjà terminé" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, forecast });
+    }
+
+    if (action === "unlockMatchScenario") {
+      const mid = Number(body.matchId);
+      if (!Number.isFinite(mid)) {
+        return NextResponse.json({ error: "matchId invalide" }, { status: 400 });
+      }
+      await unlockMatchScenario(mid);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "rerollMatchScenario") {
+      const mid = Number(body.matchId);
+      if (!Number.isFinite(mid)) {
+        return NextResponse.json({ error: "matchId invalide" }, { status: 400 });
+      }
+      const forecast = await rerollMatchScenario(mid);
+      if (!forecast) {
+        return NextResponse.json({ error: "Match introuvable ou déjà terminé" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, forecast });
+    }
+
+    if (action === "forceMatchFinalScore") {
+      const mid = Number(body.matchId);
+      const hs = Number(body.homeScore);
+      const as = Number(body.awayScore);
+      if (!Number.isFinite(mid) || !Number.isFinite(hs) || !Number.isFinite(as)) {
+        return NextResponse.json({ error: "Paramètres de score invalides" }, { status: 400 });
+      }
+      const forecast = await forceMatchFinalScore(mid, hs, as);
+      if (!forecast) {
+        return NextResponse.json({ error: "Match introuvable ou déjà terminé" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, forecast });
     }
 
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
