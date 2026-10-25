@@ -48,6 +48,7 @@ export interface ParsedFeedMatch {
   redAway: number;
   events: MatchTimelineEvent[];
   realStats: RealMatchStats | null;
+  venue: string | null;
   suggestedOdds: {
     oddsHome: number;
     oddsDraw: number;
@@ -68,11 +69,27 @@ export interface DiscoveredOfficialFixture {
   minute: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
+  redHome?: number;
+  redAway?: number;
+  events?: MatchTimelineEvent[];
+  realStats?: RealMatchStats | null;
+  venue?: string | null;
   oddsHome: number;
   oddsDraw: number;
   oddsAway: number;
   alreadyImported: boolean;
   existingMatchId: number | null;
+}
+
+export interface RealSyncSummary {
+  activeCount: number;
+  syncedCount: number;
+  linkedCount: number;
+  liveCount: number;
+  settledCount: number;
+  pendingConfirmCount: number;
 }
 
 type JsonRec = Record<string, unknown>;
@@ -99,7 +116,10 @@ function asNum(v: unknown): number | null {
   }
   const obj = asRec(v);
   if (obj) {
-    if ("value" in obj) return asNum(obj.value);
+    if ("value" in obj) {
+      const nv = asNum(obj.value);
+      if (nv != null) return nv;
+    }
     if ("displayValue" in obj) return asNum(obj.displayValue);
   }
   return null;
@@ -118,6 +138,49 @@ function formatYmd(d: Date): string {
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}${m}${day}`;
+}
+
+/**
+ * Génère la liste ordonnée des dates UTC `YYYYMMDD` comprises entre `fromDate` et `toDate`.
+ * Crucial : l'endpoint ESPN Soccer v2 `/scoreboard` accepte `?dates=YYYYMMDD` par journée unique
+ * mais rejette les plages `?dates=YYYYMMDD-YYYYMMDD` avec HTTP 400.
+ */
+export function buildUtcDayYmds(fromDate: Date, toDate: Date, maxDays = 15): string[] {
+  const startUtc = Date.UTC(
+    fromDate.getUTCFullYear(),
+    fromDate.getUTCMonth(),
+    fromDate.getUTCDate()
+  );
+  const endUtc = Date.UTC(
+    toDate.getUTCFullYear(),
+    toDate.getUTCMonth(),
+    toDate.getUTCDate()
+  );
+  const out: string[] = [];
+  const stepMs = 24 * 3600_000;
+  for (let ts = startUtc; ts <= endUtc && out.length < maxDays; ts += stepMs) {
+    out.push(formatYmd(new Date(ts)));
+  }
+  if (out.length === 0) out.push(formatYmd(fromDate));
+  return out;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      results[idx] = await worker(items[idx]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
 }
 
 /** Alias français ↔ internationaux pour relier sans erreur un club saisi en français. */
@@ -219,44 +282,102 @@ function normalizeDisplayMinute(rawClock: string): string {
   return cleaned.endsWith("'") ? cleaned : `${cleaned}'`;
 }
 
-function parseClockMinuteInt(rawClock: string, period: number, secVal: number | null): number {
+function isExtraTimeDetail(
+  rawClock: string,
+  periodNum: number | null,
+  secVal: number | null
+): boolean {
+  if (periodNum != null && periodNum > 2) return true;
+  const mPlus = /(\d+)\s*'?\s*\+\s*(\d+)/.exec(rawClock);
+  if (mPlus) {
+    // 45'+2' -> base 45 (réglementaire) ; 90'+4' -> base 90 (réglementaire) ; 105'+1' -> prolongation
+    return Number(mPlus[1]) > 90;
+  }
+  const mSimple = /(\d+)/.exec(rawClock);
+  if (mSimple) {
+    return Number(mSimple[1]) > 90;
+  }
+  if (secVal != null && secVal > 6_000 && periodNum !== 2) {
+    return true;
+  }
+  return false;
+}
+
+function parseClockMinuteInt(
+  rawClock: string,
+  periodNum: number | null,
+  secVal: number | null
+): number {
   const mPlus = /(\d+)\s*'?\s*\+\s*(\d+)/.exec(rawClock);
   if (mPlus) {
     const base = Number(mPlus[1]);
-    if (period === 1 && base <= 45) return 45;
-    if (period === 2 && base <= 90) return 90;
-    return clamp(base + Number(mPlus[2]), 1, 120);
+    if (base <= 45) return 45;
+    if (base <= 90) return 90;
+    return clamp(base + Number(mPlus[2]), 91, 120);
   }
   const mSimple = /(\d+)/.exec(rawClock);
   if (mSimple) {
     const m = Number(mSimple[1]);
-    if (period === 1) return clamp(m, 1, 45);
-    if (period === 2) return clamp(Math.max(46, m), 46, 90);
-    return clamp(m, 1, 120);
+    if (periodNum === 1) return clamp(m, 1, 45);
+    if (periodNum === 2) return clamp(Math.max(46, m), 46, 90);
+    return clamp(m, 1, 90);
   }
   if (secVal != null && secVal >= 0) {
     const m = Math.max(1, Math.round(secVal / 60));
-    if (period === 1) return clamp(m, 1, 45);
-    if (period === 2) return clamp(Math.max(46, m), 46, 90);
-    return clamp(m, 1, 120);
+    if (periodNum === 1) return clamp(m, 1, 45);
+    if (periodNum === 2) return clamp(Math.max(46, m), 46, 90);
+    return clamp(m, 1, 90);
   }
-  return period === 1 ? 30 : 65;
+  return periodNum === 1 ? 30 : 65;
 }
 
-function moneylineToImpliedProb(ml: number | null): number | null {
-  if (ml == null || !Number.isFinite(ml) || ml === 0) return null;
-  if (ml < 0) {
-    const abs = Math.abs(ml);
+/**
+ * Convertit une cote américaine (`"+160"`, `"-185"`, `"EVEN"`) ou décimale (`2.45`)
+ * en probabilité implicite brute `(0..1)`.
+ */
+function oddsTokenToImpliedProb(raw: unknown): number | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    const upper = raw.trim().toUpperCase();
+    if (!upper) return null;
+    if (upper === "EVEN" || upper === "EV") return 0.5;
+  }
+  const n = asNum(raw);
+  if (n == null || !Number.isFinite(n) || n === 0) return null;
+  if (n > 1.01 && n < 50) {
+    return 1 / n;
+  }
+  if (n <= -100) {
+    const abs = Math.abs(n);
     return abs / (abs + 100);
   }
-  return 100 / (ml + 100);
+  if (n >= 100) {
+    return 100 / (n + 100);
+  }
+  return null;
+}
+
+function extractMoneylineSideProb(sideNode: unknown): number | null {
+  const rec = asRec(sideNode);
+  if (!rec) return null;
+  // Privilégie la cote pré-match (`close` puis `open`) sur la cote live (`current`)
+  // afin que l'import d'un match en direct conserve de vraies cotes de base 90 min.
+  const closeOdds = asRec(rec.close)?.odds;
+  const openOdds = asRec(rec.open)?.odds;
+  const currentOdds = asRec(rec.current)?.odds;
+  return (
+    oddsTokenToImpliedProb(closeOdds) ??
+    oddsTokenToImpliedProb(openOdds) ??
+    oddsTokenToImpliedProb(rec.moneyLine) ??
+    oddsTokenToImpliedProb(currentOdds)
+  );
 }
 
 function parseRecordStrength(comp: JsonRec): number {
-  const records = asArr(comp.records);
+  const records = asArr(comp.records ?? comp.record);
   for (const r of records) {
     const rec = asRec(r);
-    const sum = asStr(rec?.summary);
+    const sum = asStr(rec?.summary || rec?.displayValue);
     const m = /^(\d+)-(\d+)-(\d+)$/.exec(sum);
     if (m) {
       const w = Number(m[1]);
@@ -278,13 +399,17 @@ function computeSuggested1x2Odds(comp: JsonRec, homeComp: JsonRec, awayComp: Jso
 } {
   const firstOdds = asRec(asArr(comp.odds)[0]);
   if (firstOdds) {
-    const hObj = asRec(firstOdds.homeTeamOdds);
-    const aObj = asRec(firstOdds.awayTeamOdds);
-    const dObj = asRec(firstOdds.drawOdds);
-
-    const pH = moneylineToImpliedProb(asNum(hObj?.moneyLine));
-    const pA = moneylineToImpliedProb(asNum(aObj?.moneyLine));
-    const pD = moneylineToImpliedProb(asNum(dObj?.moneyLine));
+    const mlNode = asRec(firstOdds.moneyline);
+    const pH =
+      extractMoneylineSideProb(mlNode?.home) ??
+      extractMoneylineSideProb(firstOdds.homeTeamOdds);
+    const pA =
+      extractMoneylineSideProb(mlNode?.away) ??
+      extractMoneylineSideProb(firstOdds.awayTeamOdds);
+    const pD =
+      extractMoneylineSideProb(mlNode?.draw) ??
+      extractMoneylineSideProb(firstOdds.drawOdds) ??
+      oddsTokenToImpliedProb(firstOdds.drawOdds);
 
     if (pH != null && pA != null) {
       const rawD = pD ?? clamp(0.26 - Math.abs(pH - pA) * 0.14, 0.16, 0.31);
@@ -433,9 +558,13 @@ function parseDetailsEvents(
     if (!d) continue;
 
     const periodRec = asRec(d.period);
-    const period = asNum(periodRec?.number) ?? 1;
-    // Règlement paris 1xBet temps réglementaire (90 min) : on ignore prolongation (> 2) et tirs au but
-    if (period > 2 || d.shootout === true) continue;
+    const periodNum = asNum(periodRec?.number);
+    const clockObj = asRec(d.clock);
+    const rawClock = asStr(clockObj?.displayValue);
+    const secVal = asNum(clockObj?.value);
+
+    // Règlement paris 1xBet temps réglementaire (90 min) : on ignore prolongation (> 90') et tirs au but
+    if (d.shootout === true || isExtraTimeDetail(rawClock, periodNum, secVal)) continue;
 
     const teamObj = asRec(d.team);
     const teamId = asStr(teamObj?.id);
@@ -474,10 +603,7 @@ function parseDetailsEvents(
 
     if (!isGoal && !isRed) continue;
 
-    const clockObj = asRec(d.clock);
-    const rawClock = asStr(clockObj?.displayValue);
-    const secVal = asNum(clockObj?.value);
-    const minute = parseClockMinuteInt(rawClock, period, secVal);
+    const minute = parseClockMinuteInt(rawClock, periodNum, secVal);
 
     const athletes = asArr(d.athletesInvolved);
     const firstAth = asRec(athletes[0]);
@@ -524,13 +650,15 @@ function extractLinescores90AndHt(
   isCompleted: boolean,
   statusName: string
 ): { regScore: number | null; htScore: number | null } {
+  // Compatible à la fois avec `{ value: 0 }` (scoreboard) et `{ displayValue: "0" }` (summary)
   const ls = asArr(compSide.linescores)
-    .map((x) => asNum(asRec(x)?.value))
+    .map((x) => asNum(x))
     .filter((n): n is number => n != null);
 
-  const htScore = ls.length >= 1 && (period >= 2 || isCompleted || statusName === "STATUS_HALFTIME")
-    ? ls[0]
-    : null;
+  const htScore =
+    ls.length >= 1 && (period >= 2 || isCompleted || statusName === "STATUS_HALFTIME")
+      ? ls[0]
+      : null;
 
   const wentBeyond90 =
     period > 2 ||
@@ -544,6 +672,13 @@ function extractLinescores90AndHt(
   }
 
   return { regScore: rawScore, htScore };
+}
+
+function pickTeamLabel(teamObj: JsonRec | null): { display: string; full: string; short: string } {
+  const full = asStr(teamObj?.displayName || teamObj?.name);
+  const short = asStr(teamObj?.shortDisplayName || teamObj?.name);
+  const display = full && full.length <= 26 ? full : (short || full);
+  return { display, full: full || display, short: short || display };
 }
 
 /**
@@ -574,13 +709,10 @@ export function parseEspnScoreboardEvent(
   const homeTeamObj = asRec(homeComp.team);
   const awayTeamObj = asRec(awayComp.team);
 
-  const homeShort = asStr(homeTeamObj?.shortDisplayName || homeTeamObj?.name);
-  const homeFull = asStr(homeTeamObj?.displayName || homeShort);
-  const awayShort = asStr(awayTeamObj?.shortDisplayName || awayTeamObj?.name);
-  const awayFull = asStr(awayTeamObj?.displayName || awayShort);
-
-  const homeTeam = homeShort || homeFull;
-  const awayTeam = awayShort || awayFull;
+  const hNames = pickTeamLabel(homeTeamObj);
+  const aNames = pickTeamLabel(awayTeamObj);
+  const homeTeam = hNames.display;
+  const awayTeam = aNames.display;
   if (!homeTeam || !awayTeam) return null;
 
   const homeTeamId = asStr(homeTeamObj?.id || homeComp.id);
@@ -655,8 +787,8 @@ export function parseEspnScoreboardEvent(
     asArr(comp.details),
     homeTeamId,
     awayTeamId,
-    homeFull || homeTeam,
-    awayFull || awayTeam
+    hNames.full,
+    aNames.full
   );
 
   // Déduction complémentaire du score MT si tous les buts du match sont présents dans `events`
@@ -699,14 +831,21 @@ export function parseEspnScoreboardEvent(
             : normalizeDisplayMinute(displayClock)
           : null;
 
+  const venueObj = asRec(comp.venue);
+  const venue = asStr(venueObj?.fullName) || null;
+
   return {
     externalId,
     externalLeague,
     leagueLabel: leagueLabelFallback ?? officialLeagueLabel(externalLeague),
     homeTeam,
     awayTeam,
-    homeAliases: Array.from(new Set([homeTeam, homeFull, asStr(homeTeamObj?.abbreviation)].filter(Boolean))),
-    awayAliases: Array.from(new Set([awayTeam, awayFull, asStr(awayTeamObj?.abbreviation)].filter(Boolean))),
+    homeAliases: Array.from(
+      new Set([homeTeam, hNames.full, hNames.short, asStr(homeTeamObj?.abbreviation)].filter(Boolean))
+    ),
+    awayAliases: Array.from(
+      new Set([awayTeam, aNames.full, aNames.short, asStr(awayTeamObj?.abbreviation)].filter(Boolean))
+    ),
     homeLogo: homeLogoUrl || null,
     awayLogo: awayLogoUrl || null,
     startsAt,
@@ -720,6 +859,7 @@ export function parseEspnScoreboardEvent(
     redAway: Math.max(detailRedA, statRedA),
     events,
     realStats,
+    venue,
     suggestedOdds: computeSuggested1x2Odds(comp, homeComp, awayComp),
   };
 }
@@ -739,7 +879,17 @@ export function parseEspnSummaryPayload(
   const headerComp = asRec(asArr(header?.competitions)[0]);
   if (!headerComp) return null;
 
-  // Fusionne `keyEvents` dans `details` si `headerComp.details` est absent
+  const headerLeague = asRec(header?.league);
+  const resolvedLeague =
+    externalLeague && externalLeague !== "all"
+      ? externalLeague
+      : asStr(headerLeague?.slug) || "all";
+  const leagueFallback = officialLeagueLabel(
+    resolvedLeague,
+    asStr(headerLeague?.name) || "Football"
+  );
+
+  // Fusionne `keyEvents` dans `details` si `headerComp.details` est partiel ou absent
   const combinedDetails = [
     ...asArr(headerComp.details),
     ...asArr(root.keyEvents),
@@ -758,8 +908,8 @@ export function parseEspnSummaryPayload(
 
   const base = parseEspnScoreboardEvent(
     syntheticEvent,
-    externalLeague,
-    officialLeagueLabel(externalLeague),
+    resolvedLeague,
+    leagueFallback,
     nowIso
   );
   if (!base) return null;
@@ -768,8 +918,11 @@ export function parseEspnSummaryPayload(
   const boxscore = asRec(root.boxscore);
   const boxTeams = asArr(boxscore?.teams);
   if (boxTeams.length >= 2) {
-    const homeTeamComp = asRec(asArr(headerComp.competitors)[0]);
-    const awayTeamComp = asRec(asArr(headerComp.competitors)[1]);
+    const competitors = asArr(headerComp.competitors).map(asRec);
+    const homeTeamComp =
+      competitors.find((c) => asStr(c?.homeAway).toLowerCase() === "home") ?? competitors[0];
+    const awayTeamComp =
+      competitors.find((c) => asStr(c?.homeAway).toLowerCase() === "away") ?? competitors[1];
     const homeId = asStr(asRec(homeTeamComp?.team)?.id || homeTeamComp?.id);
     const awayId = asStr(asRec(awayTeamComp?.team)?.id || awayTeamComp?.id);
 
@@ -805,16 +958,16 @@ export function parseEspnSummaryPayload(
 }
 
 /* ============================================================================
- *  COUCHE RÉSEAU SÉCURISÉE & PARAMÈTRES D'ADMINISTRATION
+ *  COUCHE RÉSEAU SÉCURISÉE & REQUÊTES PAR JOURNÉE UNIQUE (`?dates=YYYYMMDD`)
  * ========================================================================== */
 
-async function fetchJsonSafe(url: string, timeoutMs = 4_500): Promise<unknown | null> {
+async function fetchJsonSafe(url: string, timeoutMs = 6_000): Promise<unknown | null> {
   try {
     const res = await fetch(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; SportsFeedSync/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; SportsFeedSync/1.1)",
       },
       cache: "no-store",
       signal: AbortSignal.timeout(timeoutMs),
@@ -826,27 +979,98 @@ async function fetchJsonSafe(url: string, timeoutMs = 4_500): Promise<unknown | 
   }
 }
 
-async function fetchLeagueScoreboard(
+interface SingleScoreboardResult {
+  ok: boolean;
+  calendarType: string;
+  calendarYmds: string[];
+  items: ParsedFeedMatch[];
+}
+
+function extractCalendarYmds(lgObj: JsonRec | null): string[] {
+  const cal = asArr(lgObj?.calendar);
+  const out = new Set<string>();
+  for (const entry of cal) {
+    if (typeof entry === "string") {
+      const d = new Date(entry);
+      if (!Number.isNaN(d.getTime())) out.add(formatYmd(d));
+    }
+  }
+  return [...out].sort();
+}
+
+async function fetchLeagueSingleScoreboard(
   leagueSlug: string,
-  fromDate: Date,
-  toDate: Date
-): Promise<ParsedFeedMatch[]> {
-  const range = `${formatYmd(fromDate)}-${formatYmd(toDate)}`;
-  const url = `${ESPN_SOCCER_BASE}/${encodeURIComponent(leagueSlug)}/scoreboard?dates=${range}&limit=100`;
-  const json = await fetchJsonSafe(url);
+  ymd?: string,
+  timeoutMs = 6_000
+): Promise<SingleScoreboardResult> {
+  const qs = ymd ? `?dates=${encodeURIComponent(ymd)}&limit=100` : "?limit=100";
+  const url = `${ESPN_SOCCER_BASE}/${encodeURIComponent(leagueSlug)}/scoreboard${qs}`;
+  const json = await fetchJsonSafe(url, timeoutMs);
   const root = asRec(json);
-  if (!root) return [];
+  if (!root) {
+    return { ok: false, calendarType: "", calendarYmds: [], items: [] };
+  }
 
   const lgObj = asRec(asArr(root.leagues)[0]);
+  const calendarType = asStr(lgObj?.calendarType).toLowerCase();
+  const calendarYmds = extractCalendarYmds(lgObj);
   const fallbackLabel = officialLeagueLabel(leagueSlug, asStr(lgObj?.name) || "Football");
   const nowIso = new Date().toISOString();
-  const out: ParsedFeedMatch[] = [];
+  const items: ParsedFeedMatch[] = [];
 
   for (const rawEv of asArr(root.events)) {
     const parsed = parseEspnScoreboardEvent(rawEv, leagueSlug, fallbackLabel, nowIso);
-    if (parsed) out.push(parsed);
+    if (parsed) items.push(parsed);
   }
-  return out;
+
+  return { ok: true, calendarType, calendarYmds, items };
+}
+
+function mergeParsedFeedMap(target: Map<string, ParsedFeedMatch>, incoming: ParsedFeedMatch[]): void {
+  const rank = (s: ParsedFeedMatch["status"]) =>
+    s === "finished" ? 4 : s === "live" ? 3 : s === "postponed" ? 2 : 1;
+
+  for (const item of incoming) {
+    const prev = target.get(item.externalId);
+    if (!prev || rank(item.status) >= rank(prev.status)) {
+      target.set(item.externalId, item);
+    }
+  }
+}
+
+async function fetchLeagueScoreboardForDays(
+  leagueSlug: string,
+  requestedYmds: string[]
+): Promise<ParsedFeedMatch[]> {
+  const uniqueDays = [...new Set(requestedYmds)].sort();
+  if (uniqueDays.length === 0) return [];
+
+  const merged = new Map<string, ParsedFeedMatch>();
+
+  if (uniqueDays.length === 1) {
+    const single = await fetchLeagueSingleScoreboard(leagueSlug, uniqueDays[0], 5_500);
+    mergeParsedFeedMap(merged, single.items);
+    return [...merged.values()];
+  }
+
+  // Appel initial sans `dates` pour récupérer à la fois la journée courante et `calendar`
+  const base = await fetchLeagueSingleScoreboard(leagueSlug, undefined, 5_500);
+  mergeParsedFeedMap(merged, base.items);
+
+  let daysToQuery = uniqueDays;
+  if (base.ok && base.calendarType === "day" && base.calendarYmds.length > 0) {
+    const calSet = new Set(base.calendarYmds);
+    daysToQuery = uniqueDays.filter((d) => calSet.has(d));
+  }
+
+  const dayResults = await mapWithConcurrency(daysToQuery, 5, (ymd) =>
+    fetchLeagueSingleScoreboard(leagueSlug, ymd, 5_500)
+  );
+  for (const res of dayResults) {
+    mergeParsedFeedMap(merged, res.items);
+  }
+
+  return [...merged.values()];
 }
 
 async function fetchMatchSummary(
@@ -855,9 +1079,17 @@ async function fetchMatchSummary(
 ): Promise<ParsedFeedMatch | null> {
   const slug = leagueSlug && leagueSlug.trim() ? leagueSlug.trim() : "all";
   const url = `${ESPN_SOCCER_BASE}/${encodeURIComponent(slug)}/summary?event=${encodeURIComponent(externalId)}`;
-  const json = await fetchJsonSafe(url);
-  if (!json) return null;
-  return parseEspnSummaryPayload(json, slug);
+  const json = await fetchJsonSafe(url, 6_000);
+  if (json) {
+    const parsed = parseEspnSummaryPayload(json, slug);
+    if (parsed) return parsed;
+  }
+  if (slug !== "all") {
+    const fallbackUrl = `${ESPN_SOCCER_BASE}/all/summary?event=${encodeURIComponent(externalId)}`;
+    const fallbackJson = await fetchJsonSafe(fallbackUrl, 6_000);
+    if (fallbackJson) return parseEspnSummaryPayload(fallbackJson, slug);
+  }
+  return null;
 }
 
 let cachedSettlementMode: { mode: RealMatchSettlementMode; ts: number } | null = null;
@@ -909,8 +1141,8 @@ export async function applyFeedUpdateToRealMatch(
   feed: ParsedFeedMatch,
   settlementMode: RealMatchSettlementMode,
   nowMs = Date.now()
-): Promise<void> {
-  if (m.source !== "manual") return; // Garde-fou absolu : ne touche jamais aux matchs virtuels
+): Promise<"upcoming" | "live" | "settled" | "pending_confirm" | "postponed" | "ignored"> {
+  if (m.source !== "manual") return "ignored"; // Garde-fou absolu : ne touche jamais aux matchs virtuels
 
   const now = new Date(nowMs);
   const prevHome = m.homeScore ?? 0;
@@ -928,10 +1160,10 @@ export async function applyFeedUpdateToRealMatch(
         suspended: true,
         minute: "Reporté",
         feedSyncedAt: now,
-        feedStatusNote: "Match officiellement reporté/interrompu — marchés suspendus",
+        feedStatusNote: "POSTPONED: Match officiellement reporté/interrompu — marchés suspendus",
       })
       .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
-    return;
+    return "postponed";
   }
 
   // Match toujours à venir : met à jour l'heure exacte du coup d'envoi et les logos si absents
@@ -948,7 +1180,7 @@ export async function applyFeedUpdateToRealMatch(
         feedStatusNote: "Relié au flux officiel · En attente du coup d'envoi",
       })
       .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
-    return;
+    return "upcoming";
   }
 
   const nextHome = feed.homeScore ?? prevHome;
@@ -995,7 +1227,7 @@ export async function applyFeedUpdateToRealMatch(
         feedStatusNote: `Direct synchronisé (${feed.minute ?? "LIVE"})`,
       })
       .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
-    return;
+    return "live";
   }
 
   // Coup de sifflet final détecté (`feed.status === "finished"`)
@@ -1026,12 +1258,14 @@ export async function applyFeedUpdateToRealMatch(
         redAway: nextRedA,
         events: mergedEvents,
         realStats: mergedStats,
+        homeLogo: m.homeLogo || feed.homeLogo,
+        awayLogo: m.awayLogo || feed.awayLogo,
         feedSyncedAt: now,
         feedFinishedAt: effectiveFtStart,
-        feedStatusNote: `Score final officiel ${nextHome}-${nextAway} prêt · En attente de validation admin`,
+        feedStatusNote: `PENDING_FT_CONFIRM: Score final officiel ${nextHome}-${nextAway} prêt · En attente de validation admin`,
       })
       .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
-    return;
+    return "pending_confirm";
   }
 
   if (!confirmationReady) {
@@ -1055,12 +1289,14 @@ export async function applyFeedUpdateToRealMatch(
         redAway: nextRedA,
         events: mergedEvents,
         realStats: mergedStats,
+        homeLogo: m.homeLogo || feed.homeLogo,
+        awayLogo: m.awayLogo || feed.awayLogo,
         feedSyncedAt: now,
         feedFinishedAt: effectiveFtStart,
-        feedStatusNote: `Fin officielle détectée (${nextHome}-${nextAway}) · Vérification anti-VAR (${secsLeft}s)`,
+        feedStatusNote: `ANTI_VAR_CHECK: Fin officielle détectée (${nextHome}-${nextAway}) · Vérification anti-VAR (${secsLeft}s)`,
       })
       .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
-    return;
+    return "pending_confirm";
   }
 
   // Confirmation anti-VAR écoulée en mode "auto" : clôture officielle -> règlement automatique immédiat
@@ -1080,12 +1316,15 @@ export async function applyFeedUpdateToRealMatch(
       redAway: nextRedA,
       events: mergedEvents,
       realStats: mergedStats,
+      homeLogo: m.homeLogo || feed.homeLogo,
+      awayLogo: m.awayLogo || feed.awayLogo,
       finishedAt: now,
       feedSyncedAt: now,
       feedFinishedAt: effectiveFtStart,
-      feedStatusNote: `Clôturé & réglé automatiquement (${nextHome}-${nextAway})`,
+      feedStatusNote: `Clôturé et réglé automatiquement (${nextHome}-${nextAway})`,
     })
     .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
+  return "settled";
 }
 
 /* ============================================================================
@@ -1093,20 +1332,28 @@ export async function applyFeedUpdateToRealMatch(
  * ========================================================================== */
 
 let lastRealSyncAt = 0;
-let inFlightRealSync: Promise<void> | null = null;
+let inFlightRealSync: Promise<RealSyncSummary> | null = null;
 
-export async function syncRealMatchesThrottled(force = false): Promise<void> {
+const EMPTY_SYNC_SUMMARY: RealSyncSummary = {
+  activeCount: 0,
+  syncedCount: 0,
+  linkedCount: 0,
+  liveCount: 0,
+  settledCount: 0,
+  pendingConfirmCount: 0,
+};
+
+export async function syncRealMatchesThrottled(force = false): Promise<RealSyncSummary> {
   if (inFlightRealSync) {
-    await inFlightRealSync;
-    return;
+    return inFlightRealSync;
   }
 
   const nowMs = Date.now();
   if (!force && nowMs - lastRealSyncAt < LIVE_FEED_SYNC_MS) {
-    return;
+    return EMPTY_SYNC_SUMMARY;
   }
 
-  inFlightRealSync = (async () => {
+  inFlightRealSync = (async (): Promise<RealSyncSummary> => {
     try {
       const openManual = await db
         .select()
@@ -1121,7 +1368,7 @@ export async function syncRealMatchesThrottled(force = false): Promise<void> {
 
       if (openManual.length === 0) {
         lastRealSyncAt = Date.now();
-        return;
+        return { ...EMPTY_SYNC_SUMMARY };
       }
 
       const hasUrgent = openManual.some(
@@ -1133,25 +1380,35 @@ export async function syncRealMatchesThrottled(force = false): Promise<void> {
       );
 
       if (!force && !hasUrgent && nowMs - lastRealSyncAt < IDLE_FEED_SYNC_MS) {
-        return;
+        return { ...EMPTY_SYNC_SUMMARY, activeCount: openManual.length };
       }
 
       const settlementMode = await getRealMatchSettlementMode();
 
-      // Regroupe les ligues à interroger en 1 appel par championnat
-      const slugsToFetch = new Set<string>();
+      // Regroupe uniquement les dates UTC exactes nécessaires par compétition (zéro requête inutile)
+      const daysBySlug = new Map<string, Set<string>>();
+      const todayYmd = formatYmd(new Date(nowMs));
+
       for (const m of openManual) {
         const slug = m.externalLeague || resolveEspnSlugForLeague(m.league);
-        if (slug) slugsToFetch.add(slug);
+        if (!slug) continue;
+        let bucket = daysBySlug.get(slug);
+        if (!bucket) {
+          bucket = new Set<string>();
+          daysBySlug.set(slug, bucket);
+        }
+        bucket.add(todayYmd);
+        bucket.add(formatYmd(m.startsAt));
+        if (!m.externalId) {
+          bucket.add(formatYmd(new Date(m.startsAt.getTime() - 24 * 3600_000)));
+          bucket.add(formatYmd(new Date(m.startsAt.getTime() + 24 * 3600_000)));
+        }
       }
 
-      const fromDate = new Date(nowMs - 24 * 3600_000);
-      const toDate = new Date(nowMs + 7 * 24 * 3600_000);
-
       const scoreboards = await Promise.all(
-        [...slugsToFetch].map(async (slug) => ({
+        [...daysBySlug.entries()].map(async ([slug, daySet]) => ({
           slug,
-          items: await fetchLeagueScoreboard(slug, fromDate, toDate),
+          items: await fetchLeagueScoreboardForDays(slug, [...daySet]),
         }))
       );
 
@@ -1164,7 +1421,17 @@ export async function syncRealMatchesThrottled(force = false): Promise<void> {
         }
       }
 
+      const summary: RealSyncSummary = {
+        activeCount: openManual.length,
+        syncedCount: 0,
+        linkedCount: 0,
+        liveCount: 0,
+        settledCount: 0,
+        pendingConfirmCount: 0,
+      };
+
       for (const m of openManual) {
+        const wasUnlinked = !m.externalId;
         let feedMatch: ParsedFeedMatch | null = m.externalId
           ? (byExternalId.get(m.externalId) ?? null)
           : null;
@@ -1172,20 +1439,21 @@ export async function syncRealMatchesThrottled(force = false): Promise<void> {
         // Auto-liaison prudente si le match a été créé manuellement sans `externalId`
         if (!feedMatch && !m.externalId) {
           const slug = m.externalLeague || resolveEspnSlugForLeague(m.league);
-          const candidates = slug ? (bySlugItems.get(slug) ?? []) : [];
+          const candidates = slug ? (bySlugItems.get(slug) ?? [...byExternalId.values()]) : [...byExternalId.values()];
           const hit = candidates.find(
             (cand) =>
-              Math.abs(cand.startsAt.getTime() - m.startsAt.getTime()) <= 36 * 3600_000 &&
+              Math.abs(cand.startsAt.getTime() - m.startsAt.getTime()) <= 48 * 3600_000 &&
               clubsMatchCanonical(m.homeTeam, cand.homeAliases) &&
               clubsMatchCanonical(m.awayTeam, cand.awayAliases)
           );
           if (hit) feedMatch = hit;
         }
 
-        // Si le match lié n'est plus dans la fenêtre du scoreboard (ou est en direct/terminé
-        // et mérite les stats complètes du boxscore), on interroge `summary?event=<id>`
+        // Enrichit via `summary?event=<id>` si le match est absent du scoreboard du jour
+        // ou s'il est en direct / terminé (pour récupérer le boxscore complet)
         const extId = feedMatch?.externalId ?? m.externalId;
-        const extLeague = feedMatch?.externalLeague ?? m.externalLeague ?? resolveEspnSlugForLeague(m.league);
+        const extLeague =
+          feedMatch?.externalLeague ?? m.externalLeague ?? resolveEspnSlugForLeague(m.league);
         const lastSum = extId ? (lastSummaryFetchByExtId.get(extId) ?? 0) : 0;
         const shouldEnrichSummary =
           Boolean(extId) &&
@@ -1202,17 +1470,25 @@ export async function syncRealMatchesThrottled(force = false): Promise<void> {
         }
 
         if (feedMatch) {
-          await applyFeedUpdateToRealMatch(m, feedMatch, settlementMode, Date.now());
+          const outcome = await applyFeedUpdateToRealMatch(m, feedMatch, settlementMode, Date.now());
+          if (outcome !== "ignored") {
+            summary.syncedCount += 1;
+            if (wasUnlinked) summary.linkedCount += 1;
+            if (outcome === "live") summary.liveCount += 1;
+            if (outcome === "settled") summary.settledCount += 1;
+            if (outcome === "pending_confirm") summary.pendingConfirmCount += 1;
+          }
         }
       }
 
       lastRealSyncAt = Date.now();
+      return summary;
     } finally {
       inFlightRealSync = null;
     }
   })();
 
-  await inFlightRealSync;
+  return inFlightRealSync;
 }
 
 /**
@@ -1228,17 +1504,24 @@ export async function syncSingleRealMatchNow(matchId: number): Promise<MatchRow 
   const slug = m.externalLeague || resolveEspnSlugForLeague(m.league);
   if (m.externalId) {
     feedMatch = await fetchMatchSummary(m.externalId, slug);
-  } else if (slug) {
-    const fromDate = new Date(m.startsAt.getTime() - 24 * 3600_000);
-    const toDate = new Date(m.startsAt.getTime() + 24 * 3600_000);
-    const list = await fetchLeagueScoreboard(slug, fromDate, toDate);
-    const hit = list.find(
-      (cand) =>
-        clubsMatchCanonical(m.homeTeam, cand.homeAliases) &&
-        clubsMatchCanonical(m.awayTeam, cand.awayAliases)
+  } else {
+    const candidateSlugs = slug ? [slug] : [...TOP_DISCOVERY_LEAGUE_SLUGS];
+    const searchDays = buildUtcDayYmds(
+      new Date(m.startsAt.getTime() - 24 * 3600_000),
+      new Date(m.startsAt.getTime() + 48 * 3600_000),
+      5
     );
-    if (hit) {
-      feedMatch = (await fetchMatchSummary(hit.externalId, slug)) ?? hit;
+    for (const candSlug of candidateSlugs) {
+      const list = await fetchLeagueScoreboardForDays(candSlug, searchDays);
+      const hit = list.find(
+        (cand) =>
+          clubsMatchCanonical(m.homeTeam, cand.homeAliases) &&
+          clubsMatchCanonical(m.awayTeam, cand.awayAliases)
+      );
+      if (hit) {
+        feedMatch = (await fetchMatchSummary(hit.externalId, candSlug)) ?? hit;
+        break;
+      }
     }
   }
 
@@ -1265,10 +1548,7 @@ export function isRealMatchFeedStale(
 
 /**
  * Vérification anti « pari tardif » avant l'acceptation d'un pari ou d'un cash-out
- * sur un ou plusieurs matchs réels en direct :
- * 1. Bloque immédiatement si un but/carton vient de tomber (< 18 s) ou si le match est suspendu.
- * 2. Sur un match réel relié au flux officiel, applique un léger délai d'acceptation live (3 s),
- *    rafraîchit le flux officiel en direct et refuse le ticket si le score, les cartons ou le statut ont bougé.
+ * sur un ou plusieurs matchs réels en direct.
  */
 export async function verifyLiveRealMatchesBeforeBet(
   targetMatches: MatchRow[]
@@ -1360,38 +1640,116 @@ export async function verifyLiveRealMatchesBeforeBet(
 export async function discoverUpcomingRealMatches(
   leagueSlug = "top",
   daysAhead = 7
-): Promise<{ fixtures: DiscoveredOfficialFixture[]; reachable: boolean }> {
+): Promise<{
+  fixtures: DiscoveredOfficialFixture[];
+  reachable: boolean;
+  extendedWindow: boolean;
+}> {
   const now = new Date();
-  const toDate = new Date(now.getTime() + clamp(daysAhead, 1, 14) * 24 * 3600_000);
-  const slugs =
-    leagueSlug === "top" || !leagueSlug
-      ? [...TOP_DISCOVERY_LEAGUE_SLUGS]
-      : [leagueSlug];
+  const clampedDays = clamp(daysAhead, 1, 14);
+  const toDate = new Date(now.getTime() + clampedDays * 24 * 3600_000);
+  const windowYmds = buildUtcDayYmds(now, toDate, 15);
+  const todayYmd = windowYmds[0];
+  const endYmd = windowYmds[windowYmds.length - 1];
 
-  const fetched = await Promise.all(
-    slugs.map(async (slug) => {
-      const url = `${ESPN_SOCCER_BASE}/${encodeURIComponent(slug)}/scoreboard?dates=${formatYmd(now)}-${formatYmd(toDate)}&limit=100`;
-      const json = await fetchJsonSafe(url, 6_000);
-      const root = asRec(json);
-      if (!root) return { ok: false, items: [] as ParsedFeedMatch[] };
-      const lgObj = asRec(asArr(root.leagues)[0]);
-      const label = officialLeagueLabel(slug, asStr(lgObj?.name) || "Football");
-      const nowIso = new Date().toISOString();
-      const items = asArr(root.events)
-        .map((ev) => parseEspnScoreboardEvent(ev, slug, label, nowIso))
-        .filter((x): x is ParsedFeedMatch => x != null);
-      return { ok: true, items };
-    })
+  const isSingleCompetition = Boolean(leagueSlug && leagueSlug !== "top");
+  const slugs = isSingleCompetition ? [leagueSlug] : [...TOP_DISCOVERY_LEAGUE_SLUGS];
+
+  let reachable = false;
+  let extendedWindow = false;
+  const merged = new Map<string, ParsedFeedMatch>();
+
+  // Étape 1 : appel initial léger par compétition (récupère la journée active + le calendrier officiel)
+  const baseResults = await Promise.all(
+    slugs.map(async (slug) => ({
+      slug,
+      res: await fetchLeagueSingleScoreboard(slug, undefined, 6_500),
+    }))
   );
 
-  const reachable = fetched.some((f) => f.ok);
-  const candidateItems = fetched
-    .flatMap((f) => f.items)
-    .filter((f) => f.status === "upcoming" || f.status === "live")
-    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const dayTasks: Array<{ slug: string; ymd: string }> = [];
+  const cupFallbackSlugs: string[] = [];
+
+  for (const { slug, res } of baseResults) {
+    if (res.ok) reachable = true;
+    // Conserve uniquement les événements dans l'horizon demandé (ou live aujourd'hui)
+    const relevantBase = res.items.filter((it) => {
+      if (it.status === "live") return true;
+      if (it.status !== "upcoming") return false;
+      const ymd = formatYmd(it.startsAt);
+      return ymd >= todayYmd && ymd <= endYmd;
+    });
+    mergeParsedFeedMap(merged, relevantBase);
+
+    if (res.ok && res.calendarType === "day" && res.calendarYmds.length > 0) {
+      let targetYmds = res.calendarYmds.filter((d) => d >= todayYmd && d <= endYmd);
+      // Si l'admin a choisi une ligue précise sans match dans la fenêtre (ex. trêve ou 24h en semaine),
+      // on remonte automatiquement les 3 prochaines dates officielles du calendrier !
+      if (targetYmds.length === 0 && isSingleCompetition) {
+        targetYmds = res.calendarYmds.filter((d) => d >= todayYmd).slice(0, 3);
+        if (targetYmds.length > 0) {
+          extendedWindow = true;
+          mergeParsedFeedMap(
+            merged,
+            res.items.filter((it) => it.status === "live" || it.status === "upcoming")
+          );
+        }
+      }
+      for (const ymd of targetYmds) {
+        dayTasks.push({ slug, ymd });
+      }
+    } else {
+      // Compétitions de coupe (ex. Ligue des Champions `calendarType: "list"`) : requête par jour
+      for (const ymd of windowYmds) {
+        dayTasks.push({ slug, ymd });
+      }
+      if (isSingleCompetition) {
+        cupFallbackSlugs.push(slug);
+      }
+    }
+  }
+
+  // Étape 2 : requêtes unitaires `?dates=YYYYMMDD` avec contrôle de concurrence
+  const dayFetched = await mapWithConcurrency(dayTasks, 8, async ({ slug, ymd }) =>
+    fetchLeagueSingleScoreboard(slug, ymd, 6_500)
+  );
+  for (const df of dayFetched) {
+    if (df.ok) reachable = true;
+    mergeParsedFeedMap(merged, df.items);
+  }
+
+  // Étape 3 : si une coupe précise (ex. C1 / C3) n'a aucun match sur 1–7 j, scan automatique jusqu'à J+14
+  let activeCandidates = [...merged.values()].filter(
+    (f) => f.status === "upcoming" || f.status === "live"
+  );
+  if (activeCandidates.length === 0 && cupFallbackSlugs.length > 0 && clampedDays < 14) {
+    const extStart = new Date(toDate.getTime() + 24 * 3600_000);
+    const extEnd = new Date(now.getTime() + 14 * 24 * 3600_000);
+    const extraYmds = buildUtcDayYmds(extStart, extEnd, 14);
+    const extraTasks = cupFallbackSlugs.flatMap((slug) =>
+      extraYmds.map((ymd) => ({ slug, ymd }))
+    );
+    const extraFetched = await mapWithConcurrency(extraTasks, 8, async ({ slug, ymd }) =>
+      fetchLeagueSingleScoreboard(slug, ymd, 6_500)
+    );
+    for (const ef of extraFetched) {
+      if (ef.ok) reachable = true;
+      mergeParsedFeedMap(merged, ef.items);
+    }
+    activeCandidates = [...merged.values()].filter(
+      (f) => f.status === "upcoming" || f.status === "live"
+    );
+    if (activeCandidates.length > 0) extendedWindow = true;
+  }
+
+  const candidateItems = activeCandidates.sort((a, b) => {
+    if (a.status === "live" && b.status !== "live") return -1;
+    if (b.status === "live" && a.status !== "live") return 1;
+    return a.startsAt.getTime() - b.startsAt.getTime();
+  });
 
   if (candidateItems.length === 0) {
-    return { fixtures: [], reachable };
+    return { fixtures: [], reachable, extendedWindow };
   }
 
   const extIds = candidateItems.map((c) => c.externalId);
@@ -1420,6 +1778,13 @@ export async function discoverUpcomingRealMatches(
       minute: item.minute,
       homeScore: item.homeScore,
       awayScore: item.awayScore,
+      htHomeScore: item.htHomeScore,
+      htAwayScore: item.htAwayScore,
+      redHome: item.redHome,
+      redAway: item.redAway,
+      events: item.events,
+      realStats: item.realStats,
+      venue: item.venue,
       oddsHome: item.suggestedOdds.oddsHome,
       oddsDraw: item.suggestedOdds.oddsDraw,
       oddsAway: item.suggestedOdds.oddsAway,
@@ -1428,5 +1793,5 @@ export async function discoverUpcomingRealMatches(
     };
   });
 
-  return { fixtures, reachable };
+  return { fixtures, reachable, extendedWindow };
 }

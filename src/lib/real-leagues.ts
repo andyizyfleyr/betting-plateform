@@ -134,6 +134,7 @@ export const OFFICIAL_SOCCER_LEAGUES: OfficialSoccerLeague[] = [
 
 export const TOP_DISCOVERY_LEAGUE_SLUGS = [
   "uefa.champions",
+  "uefa.europa",
   "eng.1",
   "fra.1",
   "esp.1",

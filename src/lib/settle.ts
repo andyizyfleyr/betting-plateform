@@ -14,6 +14,7 @@ function resolveBet(
   bet: { market: string; selection: string },
   match: MatchRow
 ): { won: boolean; voided: boolean } {
+  if (match.feedStatusNote === "VOIDED") return { won: false, voided: true };
   const home = match.homeScore ?? 0;
   const away = match.awayScore ?? 0;
   if (!isKnownMarket(bet.market)) return { won: false, voided: true };

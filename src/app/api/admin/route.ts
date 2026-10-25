@@ -12,7 +12,7 @@ import {
   setScenarioMode,
   unlockMatchScenario,
 } from "@/db/engine";
-import { liveOddsFor, pickScorerName } from "@/db/fixtures";
+import { liveOddsFor, pickScorerName, type MatchTimelineEvent } from "@/db/fixtures";
 import {
   appUser,
   bets,
@@ -24,6 +24,7 @@ import {
   walletAdjustments,
   withdrawals,
   type PredictionOption,
+  type RealMatchStats,
 } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
 import { settlePendingCombos } from "@/lib/combo";
@@ -444,10 +445,12 @@ export async function POST(req: NextRequest) {
         })
         .returning();
 
-      if (m && externalId && autoSync) {
-        await syncSingleRealMatchNow(m.id).catch(() => null);
+      let syncedMatch = m;
+      if (m && source === "manual" && autoSync) {
+        const refreshed = await syncSingleRealMatchNow(m.id).catch(() => null);
+        if (refreshed) syncedMatch = refreshed;
       }
-      return NextResponse.json({ ok: true, match: m });
+      return NextResponse.json({ ok: true, match: syncedMatch });
     }
 
     if (action === "discoverRealMatches") {
@@ -459,12 +462,16 @@ export async function POST(req: NextRequest) {
       const daysAhead =
         typeof body.daysAhead === "number" && Number.isFinite(body.daysAhead)
           ? Math.max(1, Math.min(14, Math.round(body.daysAhead)))
-          : 3;
+          : 7;
 
-      const { fixtures, reachable } = await discoverUpcomingRealMatches(leagueSlug, daysAhead);
+      const { fixtures, reachable, extendedWindow } = await discoverUpcomingRealMatches(
+        leagueSlug,
+        daysAhead
+      );
       return NextResponse.json({
         ok: true,
         reachable,
+        extendedWindow,
         fixtures,
       });
     }
@@ -520,6 +527,27 @@ export async function POST(req: NextRequest) {
             ? f.awayLogo.trim()
             : teamLogo(awayTeam);
 
+        const htHomeScore =
+          isLive && typeof f.htHomeScore === "number" ? Math.max(0, Math.round(f.htHomeScore)) : null;
+        const htAwayScore =
+          isLive && typeof f.htAwayScore === "number" ? Math.max(0, Math.round(f.htAwayScore)) : null;
+        const redHome =
+          isLive && typeof f.redHome === "number" ? Math.max(0, Math.round(f.redHome)) : 0;
+        const redAway =
+          isLive && typeof f.redAway === "number" ? Math.max(0, Math.round(f.redAway)) : 0;
+        const initialEvents =
+          isLive && Array.isArray(f.events) ? (f.events as MatchTimelineEvent[]) : [];
+        const initialStats =
+          isLive && f.realStats && typeof f.realStats === "object"
+            ? (f.realStats as RealMatchStats)
+            : null;
+        const liveMinute =
+          isLive && typeof f.minute === "string" && f.minute.trim()
+            ? f.minute.trim()
+            : isLive
+              ? "1'"
+              : null;
+
         const [created] = await db
           .insert(matches)
           .values({
@@ -531,16 +559,18 @@ export async function POST(req: NextRequest) {
             awayLogo,
             homeScore: isLive ? Math.max(0, Number(f.homeScore ?? 0)) : null,
             awayScore: isLive ? Math.max(0, Number(f.awayScore ?? 0)) : null,
+            htHomeScore,
+            htAwayScore,
             status: isLive ? "live" : "upcoming",
-            minute: isLive && typeof f.minute === "string" ? f.minute : isLive ? "1'" : null,
+            minute: liveMinute,
             startsAt,
             oddsHome,
             oddsDraw,
             oddsAway,
             suspended: false,
-            redHome: 0,
-            redAway: 0,
-            events: [],
+            redHome,
+            redAway,
+            events: initialEvents,
             tickHistory: [],
             regime: "balanced",
             homeForm: 1,
@@ -550,7 +580,11 @@ export async function POST(req: NextRequest) {
             externalId,
             externalLeague,
             autoSync: true,
+            realStats: initialStats,
             feedSyncedAt: new Date(),
+            feedStatusNote: isLive
+              ? `Direct synchronisé (${liveMinute ?? "LIVE"})`
+              : "Relié au flux officiel · En attente du coup d'envoi",
           })
           .returning({ id: matches.id });
 
@@ -581,13 +615,17 @@ export async function POST(req: NextRequest) {
         );
       }
       await Promise.all([settleFinishedBets(), settlePendingCombos()]);
-      return NextResponse.json({ ok: true, match: updated });
+      return NextResponse.json({
+        ok: true,
+        match: updated,
+        linked: Boolean(updated.externalId),
+      });
     }
 
     if (action === "syncAllRealMatches") {
-      await syncRealMatchesThrottled(true);
+      const summary = await syncRealMatchesThrottled(true);
       await Promise.all([settleFinishedBets(), settlePendingCombos()]);
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, summary });
     }
 
     if (action === "toggleAutoSync") {
