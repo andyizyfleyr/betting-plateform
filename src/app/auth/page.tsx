@@ -22,7 +22,9 @@ function AuthInner() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(() =>
+    params.get("mode") === "register" ? "register" : "login"
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

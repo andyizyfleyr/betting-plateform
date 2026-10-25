@@ -226,15 +226,15 @@ export default function ParametresPage() {
   const hue = teamHue(user?.name ?? "Pulse");
 
   return (
-    <div className="mx-auto w-full max-w-[1380px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
-      <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+    <div className="mx-auto w-full max-w-[1380px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
+      <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
         Compte
       </h1>
       <p className="text-[12px] text-mist lg:text-[13px]">
         Profil, portefeuille et préférences
       </p>
 
-      <div className="mt-3 lg:mt-5 lg:grid lg:grid-cols-[minmax(0,1.22fr)_minmax(340px,0.78fr)] lg:items-start lg:gap-6">
+      <div className="mt-3 space-y-4">
         {/* Colonne gauche desktop : Profil, Solde et Mouvements du portefeuille */}
         <div>
       {/* Profil + Solde + Dépôt / Retrait */}

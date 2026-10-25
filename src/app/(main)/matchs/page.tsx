@@ -17,6 +17,7 @@ import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { useApp } from "@/components/providers";
+import { resolveEspnSlugForLeague } from "@/lib/real-leagues";
 import { cn, todayLabel } from "@/lib/format";
 
 type Universe = "real" | "virtual";
@@ -149,10 +150,15 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 
 export default function MatchsPage() {
-  const { setFeedMatches } = useApp();
-  const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [leagueFilter, setLeagueFilter] = useState<string>("all");
+  const {
+    setFeedMatches,
+    sportUniverse: selectedUniverse,
+    setSportUniverse: setSelectedUniverse,
+    sportStatusFilter: filter,
+    setSportStatusFilter: setFilter,
+    sportLeagueFilter: leagueFilter,
+    setSportLeagueFilter: setLeagueFilter,
+  } = useApp();
   const [oddsProfile, setOddsProfile] = useState<OddsProfileFilter>("all");
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<ClientMatch[] | null>(null);
@@ -190,7 +196,6 @@ export default function MatchsPage() {
       cancelled = true;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
-      setFeedMatches(null);
     };
   }, [setFeedMatches]);
 
@@ -268,25 +273,40 @@ export default function MatchsPage() {
   const leaguesWithCounts = useMemo(() => {
     const allSet = new Set<string>();
     for (const m of universeMatches) allSet.add(m.league);
+    if (isRealUniverse && leagueFilter !== "all") {
+      allSet.add(leagueFilter);
+    }
     const counts = new Map<string, number>();
     for (const m of baseForTab) {
       counts.set(m.league, (counts.get(m.league) ?? 0) + 1);
     }
-    return [...allSet].map((lg) => ({ league: lg, count: counts.get(lg) ?? 0 }));
-  }, [universeMatches, baseForTab]);
+    return [...allSet].map((lg) => {
+      if (counts.has(lg)) return { league: lg, count: counts.get(lg) ?? 0 };
+      const targetSlug = resolveEspnSlugForLeague(lg);
+      if (!targetSlug) return { league: lg, count: 0 };
+      const aliasCount = baseForTab.filter(
+        (m) => resolveEspnSlugForLeague(m.league) === targetSlug
+      ).length;
+      return { league: lg, count: aliasCount };
+    });
+  }, [universeMatches, baseForTab, isRealUniverse, leagueFilter]);
 
   const effectiveLeague =
-    leagueFilter === "all" || leaguesWithCounts.some((l) => l.league === leagueFilter)
+    leagueFilter === "all" ||
+    isRealUniverse ||
+    leaguesWithCounts.some((l) => l.league === leagueFilter)
       ? leagueFilter
       : "all";
 
-  const byLeague = useMemo(
-    () =>
-      effectiveLeague === "all"
-        ? baseForTab
-        : baseForTab.filter((m) => m.league === effectiveLeague),
-    [baseForTab, effectiveLeague]
-  );
+  const byLeague = useMemo(() => {
+    if (effectiveLeague === "all") return baseForTab;
+    const selectedSlug = resolveEspnSlugForLeague(effectiveLeague);
+    return baseForTab.filter((m) => {
+      if (m.league === effectiveLeague) return true;
+      if (!selectedSlug) return false;
+      return resolveEspnSlugForLeague(m.league) === selectedSlug;
+    });
+  }, [baseForTab, effectiveLeague]);
 
   const favCount = useMemo(
     () => byLeague.filter(isClearFavoriteMatch).length,
@@ -347,12 +367,12 @@ export default function MatchsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
       {/* En-tête compact */}
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
-            Matchs
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+            {isRealUniverse && effectiveLeague !== "all" ? effectiveLeague : "Matchs"}
           </h1>
           <p className="capitalize text-[12px] text-mist lg:text-[13px]">{todayLabel()}</p>
         </div>
@@ -389,8 +409,8 @@ export default function MatchsPage() {
         </div>
       </div>
 
-      {/* Sélecteur strict d'univers + Barre de recherche côte à côte sur desktop */}
-      <div className="mt-3 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center lg:gap-3">
+      {/* Sélecteur strict d'univers + Barre de recherche côte à côte sur grand écran */}
+      <div className="mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
           <button
             type="button"
@@ -458,7 +478,7 @@ export default function MatchsPage() {
         </div>
 
         {/* Barre de recherche */}
-        <div className="mt-2.5 flex h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-3.5 max-lg:h-10 max-lg:rounded-xl max-lg:px-3 lg:mt-0">
+        <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 xl:mt-0 xl:h-12 xl:rounded-2xl xl:px-3.5">
           <Search className="h-4 w-4 shrink-0 text-dim" />
           <input
             type="text"
@@ -606,8 +626,7 @@ export default function MatchsPage() {
                 </div>
               ))}
             </div>
-            <div className="hidden grid-cols-1 gap-3 lg:grid xl:grid-cols-2">
-              <div className="shimmer h-[156px] rounded-2xl" />
+            <div className="hidden grid-cols-1 gap-3 lg:grid">
               <div className="shimmer h-[156px] rounded-2xl" />
               <div className="shimmer h-[156px] rounded-2xl" />
               <div className="shimmer h-[156px] rounded-2xl" />
@@ -616,7 +635,7 @@ export default function MatchsPage() {
         ) : (
           <div className="flex flex-col gap-3">
             <div className="shimmer h-[196px] rounded-2xl" />
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3">
               <div className="shimmer h-[136px] rounded-2xl" />
               <div className="shimmer h-[136px] rounded-2xl" />
             </div>
@@ -689,7 +708,7 @@ export default function MatchsPage() {
             )}
           </div>
 
-          {/* DESKTOP (>= lg) : Grilles larges multi-colonnes */}
+          {/* DESKTOP (>= lg) : Colonne centrale de cartes MatchCard pleine largeur */}
           <div className="hidden flex-col gap-5 lg:flex">
             {liveRest.length > 0 && (
               <section>
@@ -699,7 +718,7 @@ export default function MatchsPage() {
                   live
                   real
                 />
-                <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                <div className="mt-2 grid grid-cols-1 items-start gap-3">
                   {liveRest.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
@@ -713,7 +732,7 @@ export default function MatchsPage() {
                   label="Populaire en avant-match"
                   count={upcomingOrdered.length}
                 />
-                <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                <div className="mt-2 grid grid-cols-1 items-start gap-3">
                   {upcomingOrdered.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
@@ -734,7 +753,7 @@ export default function MatchsPage() {
                     Tout l&apos;historique →
                   </Link>
                 </div>
-                <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                <div className="mt-2 grid grid-cols-1 items-start gap-3">
                   {finishedList.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
@@ -754,7 +773,7 @@ export default function MatchsPage() {
                 count={liveRest.length}
                 live
               />
-              <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+              <div className="mt-2 grid grid-cols-1 items-start gap-3">
                 {liveRest.map((m) => (
                   <MatchCard key={m.id} match={m} />
                 ))}
@@ -768,7 +787,7 @@ export default function MatchsPage() {
                 label="À venir · À tour de rôle"
                 count={upcomingOrdered.length}
               />
-              <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+              <div className="mt-2 grid grid-cols-1 items-start gap-3">
                 {upcomingOrdered.map((m, idx) => (
                   <MatchCard
                     key={m.id}
@@ -793,7 +812,7 @@ export default function MatchsPage() {
                   Tout l&apos;historique →
                 </Link>
               </div>
-              <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+              <div className="mt-2 grid grid-cols-1 items-start gap-3">
                 {finishedList.map((m) => (
                   <MatchCard key={m.id} match={m} />
                 ))}

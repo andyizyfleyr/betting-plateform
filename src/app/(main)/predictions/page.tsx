@@ -168,7 +168,9 @@ export default function PredictionsPage() {
     selectionLabel: string,
     odds: number
   ) => {
-    if (comboQuickMode) {
+    const isDesktop =
+      typeof window !== "undefined" && window.innerWidth >= 1024;
+    if (comboQuickMode || isDesktop) {
       const res = toggleComboLeg({
         uid: `pred-${q.id}`,
         kind: "prediction",
@@ -189,7 +191,7 @@ export default function PredictionsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
       {/* En-tête compact + Barre de recherche en ligne sur desktop */}
       <div className="lg:flex lg:items-center lg:justify-between lg:gap-4">
         <div>
@@ -297,8 +299,8 @@ export default function PredictionsPage() {
 
       {/* Liste des questions */}
       {questions === null ? (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
+        <div className="grid grid-cols-1 gap-3">
+          {[0, 1, 2].map((i) => (
             <div key={i} className="shimmer h-[168px] rounded-2xl" />
           ))}
         </div>
@@ -317,13 +319,13 @@ export default function PredictionsPage() {
           </p>
         </div>
       ) : statusTab === "resolved" ? (
-        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+        <div className="grid grid-cols-1 items-start gap-3">
           {visibleQuestions.map((q) => (
             <ResolvedQuestionCard key={q.id} q={q} />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+        <div className="grid grid-cols-1 items-start gap-3">
           {visibleQuestions.map((q) =>
             isMultiChoiceQuestion(q) && q.options ? (
               <MultiChoiceQuestionCard

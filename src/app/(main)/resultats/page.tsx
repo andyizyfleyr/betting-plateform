@@ -626,7 +626,7 @@ function ResultatsContent() {
   }, [visible, focusedMatch]);
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pt-3.5 pb-6 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pt-3.5 pb-6 lg:px-0 lg:py-0">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
@@ -656,8 +656,8 @@ function ResultatsContent() {
         </Link>
       </div>
 
-      {/* Sélecteur d'univers + Recherche côte à côte sur desktop */}
-      <div className="mt-3.5 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center lg:gap-3">
+      {/* Sélecteur d'univers + Recherche côte à côte sur grand écran */}
+      <div className="mt-3.5 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
           <button
             type="button"
@@ -835,8 +835,7 @@ function ResultatsContent() {
 
       {/* Liste groupée par journée */}
       {history === null ? (
-        <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2 xl:gap-3.5">
-          <div className="shimmer h-[118px] rounded-2xl" />
+        <div className="grid grid-cols-1 gap-2.5">
           <div className="shimmer h-[118px] rounded-2xl" />
           <div className="shimmer h-[118px] rounded-2xl" />
           <div className="shimmer h-[118px] rounded-2xl" />
@@ -860,7 +859,7 @@ function ResultatsContent() {
               <h2 className="px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-dim">
                 {group.day}
               </h2>
-              <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+              <div className="grid grid-cols-1 items-start gap-3">
                 {group.items.map((m) => (
                   <MatchHistoryCard
                     key={m.id}
@@ -882,7 +881,7 @@ export default function ResultatsPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto w-full max-w-[1440px] px-4 pt-4 space-y-3 lg:px-8 lg:py-6">
+        <div className="mx-auto w-full max-w-[1440px] px-4 pt-4 space-y-3 lg:px-0 lg:py-0">
           <div className="shimmer h-10 rounded-xl" />
           <div className="shimmer h-[120px] rounded-2xl" />
           <div className="shimmer h-[120px] rounded-2xl" />

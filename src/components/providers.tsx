@@ -48,6 +48,9 @@ export type AdminTabKey =
   | "bets"
   | "deposits";
 
+export type SportUniverse = "real" | "virtual";
+export type SportStatusFilter = "all" | "live" | "upcoming" | "finished";
+
 interface AppContextValue {
   user: ClientUser | null;
   balance: number;
@@ -62,6 +65,12 @@ interface AppContextValue {
   closeMarkets: () => void;
   feedMatches: ClientMatch[] | null;
   setFeedMatches: (m: ClientMatch[] | null) => void;
+  sportUniverse: SportUniverse | null;
+  setSportUniverse: (u: SportUniverse | null) => void;
+  sportLeagueFilter: string;
+  setSportLeagueFilter: (league: string) => void;
+  sportStatusFilter: SportStatusFilter;
+  setSportStatusFilter: (status: SportStatusFilter) => void;
   rechargeOpen: boolean;
   openRecharge: () => void;
   closeRecharge: () => void;
@@ -107,6 +116,9 @@ export function Providers({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<BetTarget | null>(null);
   const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
   const [feedMatches, setFeedMatches] = useState<ClientMatch[] | null>(null);
+  const [sportUniverse, setSportUniverse] = useState<SportUniverse | null>(null);
+  const [sportLeagueFilter, setSportLeagueFilter] = useState("all");
+  const [sportStatusFilter, setSportStatusFilter] = useState<SportStatusFilter>("all");
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [comboLegs, setComboLegs] = useState<ComboSelection[]>([]);
   const [comboOpen, setComboOpen] = useState(false);
@@ -178,6 +190,36 @@ export function Providers({ children }: { children: ReactNode }) {
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
   const isAdminMode = isAdminRoute || user?.role === "admin";
   const loggedIn = user !== null && !isAuthRoute && !isAdminMode;
+
+  // Hydratation du flux matchs hors /matchs pour la colonne Ligues, le Betslip et le badge Live desktop
+  const isMatchsRoute = pathname === "/matchs" || pathname.startsWith("/matchs/");
+  useEffect(() => {
+    if (isAuthRoute || isAdminMode || isMatchsRoute) return;
+    let active = true;
+
+    const syncMatches = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      api
+        .matches()
+        .then((r) => {
+          if (active) setFeedMatches(r.matches);
+        })
+        .catch(() => undefined);
+    };
+
+    syncMatches();
+    const id = setInterval(syncMatches, 12_000);
+    const onVisible = () => {
+      if (!document.hidden) syncMatches();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      active = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isAuthRoute, isAdminMode, isMatchsRoute]);
 
   // Polling global unifié : solde, compteur « En cours » et alertes temps réel sur toutes les pages
   useEffect(() => {
@@ -329,6 +371,37 @@ export function Providers({ children }: { children: ReactNode }) {
       target,
       openBet: (t) => {
         triggerHaptic(user?.haptics, 10);
+        if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+          const comboSel: ComboSelection = {
+            uid: `sport-${t.match.id}`,
+            kind: "sport",
+            matchId: t.match.id,
+            matchSource: t.match.source,
+            title: `${t.match.homeTeam} – ${t.match.awayTeam}`,
+            homeTeam: t.match.homeTeam,
+            awayTeam: t.match.awayTeam,
+            homeLogo: t.match.homeLogo,
+            awayLogo: t.match.awayLogo,
+            league: t.match.league,
+            market: t.market,
+            selection: t.selection,
+            selectionLabel: t.label,
+            odds: t.odds,
+          };
+          const res = toggleComboLeg(comboSel);
+          if (res === "full") {
+            toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
+          } else if (res === "source_conflict") {
+            toast({
+              kind: "error",
+              title: "Mélange interdit",
+              description:
+                "Impossible de mélanger un match réel et un match virtuel dans le même coupon.",
+            });
+          }
+          setMarketMatch(null);
+          return;
+        }
         setTarget(t);
       },
       closeBet: () => setTarget(null),
@@ -340,6 +413,12 @@ export function Providers({ children }: { children: ReactNode }) {
       closeMarkets: () => setMarketMatch(null),
       feedMatches,
       setFeedMatches,
+      sportUniverse,
+      setSportUniverse,
+      sportLeagueFilter,
+      setSportLeagueFilter,
+      sportStatusFilter,
+      setSportStatusFilter,
       rechargeOpen,
       openRecharge: () => setRechargeOpen(true),
       closeRecharge: () => setRechargeOpen(false),
@@ -367,6 +446,9 @@ export function Providers({ children }: { children: ReactNode }) {
       target,
       marketMatch,
       feedMatches,
+      sportUniverse,
+      sportLeagueFilter,
+      sportStatusFilter,
       rechargeOpen,
       comboLegs,
       comboOpen,

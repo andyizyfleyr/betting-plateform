@@ -201,10 +201,10 @@ export default function ParisPage() {
   }, [visibleBets]);
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
             Mes paris
           </h1>
           <p className="text-[12px] text-mist lg:text-[13px]">
@@ -221,8 +221,8 @@ export default function ParisPage() {
         </Link>
       </div>
 
-      {/* Résumé portefeuille clair + Recherche côte à côte sur grand écran */}
-      <div className="mt-3 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-end lg:gap-4">
+      {/* Résumé portefeuille clair + Recherche */}
+      <div className="mt-3 space-y-2.5">
         <section className="glass-card rounded-2xl p-3.5 lg:flex lg:items-center lg:justify-between lg:gap-6 lg:px-5 lg:py-4">
           <div className="flex items-center justify-between gap-4 lg:shrink-0">
             <div>
@@ -398,8 +398,8 @@ export default function ParisPage() {
 
       {/* Liste des tickets */}
       {bets === null ? (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          {[0, 1, 2, 3].map((i) => (
+        <div className="grid grid-cols-1 gap-3">
+          {[0, 1, 2].map((i) => (
             <div key={i} className="shimmer h-[168px] rounded-2xl" />
           ))}
         </div>
@@ -437,7 +437,7 @@ export default function ParisPage() {
       ) : (
         <div>
           {tab === "ongoing" ? (
-            <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+            <div className="grid grid-cols-1 items-start gap-3">
               {visibleBets.map((b) => (
                 <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
               ))}
@@ -449,7 +449,7 @@ export default function ParisPage() {
                   {label}
                   <span className="ml-1.5 text-dim">({group.length})</span>
                 </p>
-                <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                <div className="grid grid-cols-1 items-start gap-3">
                   {group.map((b) => (
                     <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
                   ))}

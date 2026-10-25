@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Layers, Loader2, LogOut, Plus, ShieldCheck, Ticket, Zap } from "lucide-react";
+import { Loader2, LogOut, Plus, ShieldCheck, User, Zap } from "lucide-react";
 import { api } from "@/lib/api";
-import { computeComboQuote } from "@/lib/combo-math";
-import { eur, formatOdds } from "@/lib/format";
+import { cn, eur, initials } from "@/lib/format";
 import { AnimatedNumber } from "./animated-number";
 import { useApp, type AdminTabKey } from "./providers";
 
@@ -21,46 +20,19 @@ const ADMIN_TAB_TITLES: Record<AdminTabKey, string> = {
   ml: "Intelligence artificielle & Modèles",
 };
 
-function resolveDesktopRouteMeta(pathname: string): { title: string; subtitle: string } {
-  if (pathname.startsWith("/matchs")) {
-    return { title: "Matchs & Direct", subtitle: "Cotes fixes 1xBet · Matchs réels et virtuels" };
-  }
-  if (pathname.startsWith("/predictions")) {
-    return { title: "Prédictions", subtitle: "Questions à choix multiples et Oui / Non à cotes fixes" };
-  }
-  if (pathname.startsWith("/betslip")) {
-    return { title: "Coupon de pari", subtitle: "Validation de pari simple ou combiné jusqu'à +20 % de bonus" };
-  }
-  if (pathname.startsWith("/paris")) {
-    return { title: "Mes paris", subtitle: "Suivi en direct, vente de coupon et historique complet" };
-  }
-  if (pathname.startsWith("/resultats")) {
-    return { title: "Résultats & Archives", subtitle: "Scores officiels, mi-temps, buteurs et statistiques" };
-  }
-  if (pathname.startsWith("/jeux")) {
-    return { title: "Casino & Mini-jeux", subtitle: "Sessions instantanées reliées à votre solde" };
-  }
-  if (pathname.startsWith("/accelerator")) {
-    return { title: "Accelerator Pro", subtitle: "Maintenez l'accélérateur et encaissez avant le crash" };
-  }
-  if (pathname.startsWith("/parametres")) {
-    return { title: "Compte & Portefeuille", subtitle: "Dépôts, retraits, mouvements et préférences" };
-  }
-  return { title: "PULSE", subtitle: "Plateforme de paris sportifs et prédictions" };
-}
-
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const {
     balance,
     user,
-    oddsFormat,
     applyUser,
     clearCombo,
     openRecharge,
-    openCombo,
-    comboLegs,
+    feedMatches,
+    sportStatusFilter,
+    setSportStatusFilter,
+    setSportLeagueFilter,
     pendingCount,
     adminTab,
     toast,
@@ -69,6 +41,11 @@ export function AppHeader() {
 
   const isAdminShell =
     user?.role === "admin" || pathname === "/admin" || pathname.startsWith("/admin/");
+
+  const liveMatchesCount = useMemo(
+    () => (feedMatches ?? []).filter((m) => m.status === "live").length,
+    [feedMatches]
+  );
 
   const handleAdminLogout = async () => {
     if (loggingOut) return;
@@ -163,19 +140,25 @@ export function AppHeader() {
     );
   }
 
-  const routeMeta = resolveDesktopRouteMeta(pathname);
-  const slipCount = comboLegs.length;
-  const comboQuote =
-    slipCount > 0
-      ? computeComboQuote(
-          comboLegs.map((l) => l.odds),
-          10
-        )
-      : null;
+  const isOnMatchs = pathname === "/matchs" || pathname.startsWith("/matchs/");
+  const isSportActive = isOnMatchs && sportStatusFilter !== "live";
+  const isLiveActive = isOnMatchs && sportStatusFilter === "live";
+  const isPredictionsActive =
+    pathname === "/predictions" || pathname.startsWith("/predictions/");
+  const isParisActive = pathname === "/paris" || pathname.startsWith("/paris/");
+  const isResultatsActive =
+    pathname === "/resultats" || pathname.startsWith("/resultats/");
+  const isJeuxActive =
+    pathname === "/jeux" ||
+    pathname.startsWith("/jeux/") ||
+    pathname === "/accelerator" ||
+    pathname.startsWith("/accelerator/");
+  const isCompteActive =
+    pathname === "/parametres" || pathname.startsWith("/parametres/");
 
   return (
-    <header className="pt-safe sticky top-0 z-30 border-b border-edge bg-white/95 backdrop-blur-md">
-      {/* Barre mobile (< lg) */}
+    <header className="pt-safe sticky top-0 z-30 border-b border-edge bg-white/95 backdrop-blur-md lg:border-b-0 lg:bg-betclic-red lg:shadow-xs lg:backdrop-blur-none">
+      {/* Barre mobile (< lg) — inchangée */}
       <div className="flex h-[52px] items-center justify-between px-4 lg:hidden">
         <Link href="/predictions" className="flex items-center gap-2 active:opacity-80">
           <span className="grid h-7 w-7 place-items-center rounded-lg bg-betclic-red text-white">
@@ -214,77 +197,167 @@ export function AppHeader() {
         </div>
       </div>
 
-      {/* Barre desktop (lg+) */}
-      <div className="hidden h-[60px] items-center justify-between gap-4 px-8 lg:flex">
-        <div className="min-w-0">
-          <p className="truncate font-display text-[16px] font-bold tracking-tight text-ink">
-            {routeMeta.title}
-          </p>
-          <p className="truncate text-[11.5px] text-mist">{routeMeta.subtitle}</p>
-        </div>
+      {/* Barre de navigation supérieure desktop pleine largeur (lg+) */}
+      <div className="mx-auto hidden h-[58px] w-full max-w-[1480px] items-center justify-between gap-6 px-5 lg:flex">
+        {/* Marque PULSE + Navigation horizontale */}
+        <div className="flex min-w-0 items-center gap-7">
+          <Link
+            href="/matchs"
+            onClick={() => {
+              setSportStatusFilter("all");
+              setSportLeagueFilter("all");
+            }}
+            className="flex shrink-0 items-center gap-2 text-white transition-opacity hover:opacity-90"
+          >
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-betclic-red shadow-xs">
+              <Zap className="h-4.5 w-4.5 fill-betclic-red" strokeWidth={2.3} />
+            </span>
+            <span className="font-display text-[21px] font-black italic tracking-tight text-white">
+              PULSE
+            </span>
+          </Link>
 
-        <div className="flex shrink-0 items-center gap-2.5">
-          {pendingCount > 0 && (
+          <nav aria-label="Navigation principale" className="flex items-center gap-1.5">
             <Link
-              href="/paris"
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-edge bg-white px-3.5 font-display text-[12px] font-semibold text-ink transition-colors hover:bg-elev"
+              href="/matchs"
+              onClick={() => setSportStatusFilter("all")}
+              className={cn(
+                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                isSportActive
+                  ? "bg-white/18 text-white"
+                  : "text-white/88 hover:bg-white/10 hover:text-white"
+              )}
             >
-              <Ticket className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
-              <span>En cours</span>
-              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 text-[10.5px] font-bold text-white">
-                {pendingCount}
-              </span>
+              Sport
             </Link>
-          )}
 
-          {slipCount > 0 ? (
-            <button
-              type="button"
-              onClick={openCombo}
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-ink px-3.5 font-display text-[12px] font-bold text-white transition-opacity hover:opacity-95"
+            <Link
+              href="/matchs"
+              onClick={() => {
+                setSportStatusFilter("live");
+                setSportLeagueFilter("all");
+              }}
+              className={cn(
+                "relative inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                isLiveActive
+                  ? "bg-white/18 text-white"
+                  : "text-white/88 hover:bg-white/10 hover:text-white"
+              )}
             >
-              <Layers className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-              <span>Coupon ({slipCount})</span>
-              {comboQuote && (
-                <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-[11px] tabular-nums">
-                  {formatOdds(comboQuote.totalOdds, oddsFormat)}
+              <span>Live</span>
+              {liveMatchesCount > 0 && (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 font-display text-[10.5px] font-extrabold tabular-nums text-white">
+                  {liveMatchesCount}
                 </span>
               )}
-            </button>
-          ) : (
-            <Link
-              href="/betslip"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[12px] font-semibold text-mist transition-colors hover:bg-elev hover:text-ink"
-            >
-              <Layers className="h-3.5 w-3.5 text-dim" strokeWidth={2.1} />
-              <span>Coupon</span>
             </Link>
-          )}
 
-          {user ? (
-            <button
-              type="button"
-              onClick={openRecharge}
-              aria-label="Solde et rechargement"
-              className="flex h-9.5 items-center gap-2.5 rounded-full border border-edge bg-elev pl-3.5 pr-1.5 transition-colors hover:bg-edge/60"
-            >
-              <AnimatedNumber
-                value={balance}
-                format={eur}
-                className="font-display text-[13.5px] font-bold tabular-nums text-ink"
-              />
-              <span className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red px-2.5 font-display text-[11px] font-bold text-white">
-                <Plus className="h-3 w-3" strokeWidth={2.8} />
-                Dépôt
-              </span>
-            </button>
-          ) : (
             <Link
-              href="/auth"
-              className="flex h-9.5 items-center rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white transition-opacity hover:opacity-95"
+              href="/predictions"
+              className={cn(
+                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                isPredictionsActive
+                  ? "bg-white/18 text-white"
+                  : "text-white/88 hover:bg-white/10 hover:text-white"
+              )}
             >
-              Connexion
+              Prédictions
             </Link>
+
+            <Link
+              href="/paris"
+              className={cn(
+                "relative inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                isParisActive
+                  ? "bg-white/18 text-white"
+                  : "text-white/88 hover:bg-white/10 hover:text-white"
+              )}
+            >
+              <span>Mes paris</span>
+              {pendingCount > 0 && (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 font-display text-[10.5px] font-extrabold tabular-nums text-white">
+                  {pendingCount}
+                </span>
+              )}
+            </Link>
+
+            <Link
+              href="/resultats"
+              className={cn(
+                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                isResultatsActive
+                  ? "bg-white/18 text-white"
+                  : "text-white/88 hover:bg-white/10 hover:text-white"
+              )}
+            >
+              Résultats
+            </Link>
+
+            <Link
+              href="/jeux"
+              className={cn(
+                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                isJeuxActive
+                  ? "bg-white/18 text-white"
+                  : "text-white/88 hover:bg-white/10 hover:text-white"
+              )}
+            >
+              Mini-jeux
+            </Link>
+          </nav>
+        </div>
+
+        {/* Actions utilisateur à droite */}
+        <div className="flex shrink-0 items-center gap-2.5">
+          {user ? (
+            <>
+              <button
+                type="button"
+                onClick={openRecharge}
+                aria-label="Solde et dépôt"
+                className="flex h-9.5 items-center gap-2.5 rounded-full bg-white pl-3.5 pr-1.5 text-ink shadow-xs transition-transform hover:scale-[1.01] active:scale-[0.99]"
+              >
+                <AnimatedNumber
+                  value={balance}
+                  format={eur}
+                  className="font-display text-[13.5px] font-bold tabular-nums text-ink"
+                />
+                <span className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red px-2.5 font-display text-[11px] font-bold text-white">
+                  <Plus className="h-3 w-3" strokeWidth={2.8} />
+                  Dépôt
+                </span>
+              </button>
+
+              <Link
+                href="/parametres"
+                className={cn(
+                  "inline-flex h-9.5 items-center gap-2 rounded-full border px-3 font-display text-[12.5px] font-bold text-white transition-colors",
+                  isCompteActive
+                    ? "border-white bg-white/20"
+                    : "border-white/40 bg-white/10 hover:bg-white/18"
+                )}
+              >
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20 font-display text-[10.5px] font-extrabold text-white">
+                  {user.name ? initials(user.name) : <User className="h-3.5 w-3.5" />}
+                </span>
+                <span className="max-w-[110px] truncate">{user.name || "Compte"}</span>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth?mode=register"
+                className="inline-flex h-9 items-center rounded-full bg-white px-4 font-display text-[13px] font-bold text-ink shadow-xs transition-opacity hover:opacity-95"
+              >
+                Inscription
+              </Link>
+              <Link
+                href="/auth"
+                className="inline-flex h-9 items-center rounded-full border border-white/55 bg-white/10 px-4 font-display text-[13px] font-bold text-white transition-colors hover:bg-white/18"
+              >
+                Connexion
+              </Link>
+            </>
           )}
         </div>
       </div>
