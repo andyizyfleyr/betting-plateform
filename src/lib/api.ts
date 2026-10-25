@@ -25,6 +25,7 @@ export interface ClientComboLeg {
   matchHomeScore?: number | null;
   matchAwayScore?: number | null;
   matchMinute?: string | null;
+  matchStartsAt?: string | null;
   matchSource?: "virtual" | "manual" | null;
 }
 
