@@ -35,6 +35,7 @@ import {
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { requireUserId } from "@/lib/session";
 import { formatServerErrorResponse } from "@/lib/db-error";
+import { jsonWithEtag } from "@/lib/response-cache";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
@@ -59,7 +60,16 @@ export async function GET(req: NextRequest) {
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
   const SETTLED_HISTORY_LIMIT = 80;
 
-  const [pendingSportRows, settledSportRows, [user]] = await Promise.all([
+  // Exécution groupée en 1 seule vague parallèle (et réutilisation des matchs/questions déjà chargés pour les combinés)
+  const [
+    pendingSportRows,
+    settledSportRows,
+    pendingPredRows,
+    settledPredRows,
+    pendingComboRows,
+    settledComboRows,
+    [user],
+  ] = await Promise.all([
     filter === "finished"
       ? Promise.resolve([])
       : db
@@ -77,12 +87,49 @@ export async function GET(req: NextRequest) {
           .where(and(eq(bets.userId, uid), ne(bets.status, "pending")))
           .orderBy(sql`${bets.settledAt} DESC NULLS LAST`, desc(bets.placedAt))
           .limit(SETTLED_HISTORY_LIMIT),
+    filter === "finished"
+      ? Promise.resolve([])
+      : db
+          .select({ bet: predictionBets, question: predictionQuestions })
+          .from(predictionBets)
+          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
+          .where(and(eq(predictionBets.userId, uid), eq(predictionBets.status, "pending")))
+          .orderBy(desc(predictionBets.placedAt)),
+    filter === "ongoing"
+      ? Promise.resolve([])
+      : db
+          .select({ bet: predictionBets, question: predictionQuestions })
+          .from(predictionBets)
+          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
+          .where(and(eq(predictionBets.userId, uid), ne(predictionBets.status, "pending")))
+          .orderBy(
+            sql`${predictionBets.settledAt} DESC NULLS LAST`,
+            desc(predictionBets.placedAt)
+          )
+          .limit(SETTLED_HISTORY_LIMIT),
+    filter === "finished"
+      ? Promise.resolve([])
+      : db
+          .select()
+          .from(comboBets)
+          .where(and(eq(comboBets.userId, uid), eq(comboBets.status, "pending")))
+          .orderBy(desc(comboBets.placedAt)),
+    filter === "ongoing"
+      ? Promise.resolve([])
+      : db
+          .select()
+          .from(comboBets)
+          .where(and(eq(comboBets.userId, uid), ne(comboBets.status, "pending")))
+          .orderBy(sql`${comboBets.settledAt} DESC NULLS LAST`, desc(comboBets.placedAt))
+          .limit(SETTLED_HISTORY_LIMIT),
     db
       .select({ balance: appUser.balance })
       .from(appUser)
       .where(eq(appUser.id, uid)),
   ]);
   const rows = [...pendingSportRows, ...settledSportRows];
+  const predRows = [...pendingPredRows, ...settledPredRows];
+  const comboRows = [...pendingComboRows, ...settledComboRows];
 
   const mapped = rows.map(({ bet, match }) => {
     const livePending = bet.status === "pending" && match?.status === "live";
@@ -164,30 +211,6 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const [pendingPredRows, settledPredRows] = await Promise.all([
-    filter === "finished"
-      ? Promise.resolve([])
-      : db
-          .select({ bet: predictionBets, question: predictionQuestions })
-          .from(predictionBets)
-          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
-          .where(and(eq(predictionBets.userId, uid), eq(predictionBets.status, "pending")))
-          .orderBy(desc(predictionBets.placedAt)),
-    filter === "ongoing"
-      ? Promise.resolve([])
-      : db
-          .select({ bet: predictionBets, question: predictionQuestions })
-          .from(predictionBets)
-          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
-          .where(and(eq(predictionBets.userId, uid), ne(predictionBets.status, "pending")))
-          .orderBy(
-            sql`${predictionBets.settledAt} DESC NULLS LAST`,
-            desc(predictionBets.placedAt)
-          )
-          .limit(SETTLED_HISTORY_LIMIT),
-  ]);
-  const predRows = [...pendingPredRows, ...settledPredRows];
-
   const predMapped = predRows.map(({ bet: pb, question: q }) => {
     const livePending = pb.status === "pending" && q && q.status === "open" && q.resolvesAt.getTime() > Date.now();
     const cashOutVal = livePending && q
@@ -236,50 +259,45 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const [pendingComboRows, settledComboRows] = await Promise.all([
-    filter === "finished"
-      ? Promise.resolve([])
-      : db
-          .select()
-          .from(comboBets)
-          .where(and(eq(comboBets.userId, uid), eq(comboBets.status, "pending")))
-          .orderBy(desc(comboBets.placedAt)),
-    filter === "ongoing"
-      ? Promise.resolve([])
-      : db
-          .select()
-          .from(comboBets)
-          .where(and(eq(comboBets.userId, uid), ne(comboBets.status, "pending")))
-          .orderBy(sql`${comboBets.settledAt} DESC NULLS LAST`, desc(comboBets.placedAt))
-          .limit(SETTLED_HISTORY_LIMIT),
-  ]);
-  const comboRows = [...pendingComboRows, ...settledComboRows];
-
-  let comboMatchMap = new Map<number, MatchRow>();
-  let comboQuestionMap = new Map<number, PredictionQuestionRow>();
+  const comboMatchMap = new Map<number, MatchRow>();
+  const comboQuestionMap = new Map<number, PredictionQuestionRow>();
 
   if (comboRows.length > 0) {
-    const cMatchIds = new Set<number>();
-    const cQuestionIds = new Set<number>();
+    for (const r of rows) {
+      if (r.match) comboMatchMap.set(r.match.id, r.match);
+    }
+    for (const pr of predRows) {
+      if (pr.question) comboQuestionMap.set(pr.question.id, pr.question);
+    }
+
+    const missingMatchIds = new Set<number>();
+    const missingQuestionIds = new Set<number>();
     for (const c of comboRows) {
       for (const l of c.legs ?? []) {
-        if (l.kind === "sport" && l.matchId) cMatchIds.add(l.matchId);
-        if (l.kind === "prediction" && l.questionId) cQuestionIds.add(l.questionId);
+        if (l.kind === "sport" && l.matchId && !comboMatchMap.has(l.matchId)) {
+          missingMatchIds.add(l.matchId);
+        }
+        if (l.kind === "prediction" && l.questionId && !comboQuestionMap.has(l.questionId)) {
+          missingQuestionIds.add(l.questionId);
+        }
       }
     }
-    const [mRows, qRows] = await Promise.all([
-      cMatchIds.size > 0
-        ? db.select().from(matches).where(inArray(matches.id, [...cMatchIds]))
-        : Promise.resolve([] as MatchRow[]),
-      cQuestionIds.size > 0
-        ? db
-            .select()
-            .from(predictionQuestions)
-            .where(inArray(predictionQuestions.id, [...cQuestionIds]))
-        : Promise.resolve([] as PredictionQuestionRow[]),
-    ]);
-    comboMatchMap = new Map(mRows.map((m) => [m.id, m]));
-    comboQuestionMap = new Map(qRows.map((q) => [q.id, q]));
+
+    if (missingMatchIds.size > 0 || missingQuestionIds.size > 0) {
+      const [mRows, qRows] = await Promise.all([
+        missingMatchIds.size > 0
+          ? db.select().from(matches).where(inArray(matches.id, [...missingMatchIds]))
+          : Promise.resolve([] as MatchRow[]),
+        missingQuestionIds.size > 0
+          ? db
+              .select()
+              .from(predictionQuestions)
+              .where(inArray(predictionQuestions.id, [...missingQuestionIds]))
+          : Promise.resolve([] as PredictionQuestionRow[]),
+      ]);
+      for (const m of mRows) comboMatchMap.set(m.id, m);
+      for (const q of qRows) comboQuestionMap.set(q.id, q);
+    }
   }
 
   const comboMapped = comboRows.map((cb) => {
@@ -373,7 +391,7 @@ export async function GET(req: NextRequest) {
         ? combined.filter((b) => b.status !== "pending")
         : combined;
 
-  return NextResponse.json({ bets: filtered, balance: user?.balance ?? null });
+  return jsonWithEtag(req, { bets: filtered, balance: user?.balance ?? null });
   } catch (err) {
     return formatServerErrorResponse(err, "GET /api/bets");
   }

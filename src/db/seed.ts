@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v7";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v8";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -51,26 +51,27 @@ async function runSeedInternal(): Promise<void> {
   // (`POSTGRES_URL`, `STORAGE_DATABASE_URL`, etc.) si `DATABASE_URL` pointe vers une base supprimée.
   await ensureHealthyDbConnection();
 
-  // Fast-path serverless : si la migration `v6` a déjà abouti et qu'au moins un compte
-  // existe (dont l'admin), inutile de rejouer les 20+ DDL `ALTER TABLE` à chaque cold start.
+  // Fast-path serverless en UNE SEULE requête SQL (au lieu de 2 allers-retours séquentiels) :
+  // vérifie simultanément le marqueur `schema_seed_v8` et l'existence du compte administrateur.
   try {
-    const [marker] = await db
-      .select({ key: adminSettings.settingKey })
-      .from(adminSettings)
-      .where(eq(adminSettings.settingKey, SCHEMA_SEED_MARKER_KEY))
-      .limit(1);
-    if (marker) {
-      const adminEmailFast = (process.env.ADMIN_EMAIL ?? "admin@pulse.app")
-        .trim()
-        .toLowerCase();
-      const [existingAdmin] = await db
-        .select({ id: appUser.id })
-        .from(appUser)
-        .where(eq(appUser.email, adminEmailFast))
-        .limit(1);
-      if (existingAdmin) {
-        return;
-      }
+    const adminEmailFast = (process.env.ADMIN_EMAIL ?? "admin@pulse.app")
+      .trim()
+      .toLowerCase();
+    const fastCheck = await db.execute(sql`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM "admin_settings" WHERE "setting_key" = ${SCHEMA_SEED_MARKER_KEY}
+        ) AS has_marker,
+        EXISTS (
+          SELECT 1 FROM "app_user" WHERE "email" = ${adminEmailFast}
+        ) AS has_admin
+    `);
+    const chk = (fastCheck.rows?.[0] ?? {}) as {
+      has_marker?: boolean;
+      has_admin?: boolean;
+    };
+    if (chk.has_marker && chk.has_admin) {
+      return;
     }
   } catch {
     // Table `admin_settings` ou colonne absente sur une base neuve : exécute la migration complète.
@@ -279,6 +280,7 @@ async function runSeedInternal(): Promise<void> {
     .orderBy(sql`${matches.id} DESC`)
     .limit(200);
 
+  const eventFixTuples: ReturnType<typeof sql>[] = [];
   for (const row of rowsWithEvents) {
     const rawEvents = row.events ?? [];
     const cleanEvents = sanitizeMatchEvents(rawEvents, row.homeScore, row.awayScore);
@@ -293,15 +295,21 @@ async function runSeedInternal(): Promise<void> {
       cleanRedH !== (row.redHome ?? 0) || cleanRedA !== (row.redAway ?? 0);
 
     if (eventsChanged || redsChanged) {
-      await db
-        .update(matches)
-        .set({
-          events: cleanEvents,
-          redHome: cleanRedH,
-          redAway: cleanRedA,
-        })
-        .where(eq(matches.id, row.id));
+      eventFixTuples.push(
+        sql`(${row.id}::int, ${JSON.stringify(cleanEvents)}::jsonb, ${cleanRedH}::int, ${cleanRedA}::int)`
+      );
     }
+  }
+  if (eventFixTuples.length > 0) {
+    await db.execute(sql`
+      UPDATE "matches" AS m
+      SET
+        "events" = v.events,
+        "red_home" = v.red_home,
+        "red_away" = v.red_away
+      FROM (VALUES ${sql.join(eventFixTuples, sql`, `)}) AS v(id, events, red_home, red_away)
+      WHERE m."id" = v.id
+    `);
   }
 
   const [{ count }] = await db
@@ -499,6 +507,91 @@ async function runSeedInternal(): Promise<void> {
       "created_at" timestamp DEFAULT now() NOT NULL,
       "updated_at" timestamp DEFAULT now() NOT NULL
     );
+  `);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  Suite complète d'index B-tree composites & partiels (Zéro Seq Scan)
+  //  Exécutée en 1 seul lot DDL pour éliminer tout scan séquentiel PostgreSQL
+  //  sur les lectures temps réel, les règlements groupés et les agrégations 24h.
+  // ──────────────────────────────────────────────────────────────────────────
+  await db.execute(sql`
+    -- Matchs (actifs, historique paginé, synchro externe ESPN)
+    CREATE INDEX IF NOT EXISTS "matches_active_idx"
+      ON "matches" ("source", "starts_at" ASC, "id" DESC)
+      WHERE "status" <> 'finished';
+    CREATE INDEX IF NOT EXISTS "matches_finished_source_idx"
+      ON "matches" ("source", "finished_at" DESC NULLS LAST, "id" DESC)
+      WHERE "status" = 'finished';
+    CREATE INDEX IF NOT EXISTS "matches_live_idx"
+      ON "matches" ("id")
+      WHERE "status" = 'live';
+
+    -- Paris sportifs simples (règlements partiels O(1), jointure match_id, historique parieur, fenêtre 24h)
+    CREATE INDEX IF NOT EXISTS "bets_pending_match_idx"
+      ON "bets" ("match_id")
+      WHERE "status" = 'pending';
+    CREATE INDEX IF NOT EXISTS "bets_match_id_idx"
+      ON "bets" ("match_id")
+      WHERE "match_id" IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS "bets_user_settled_idx"
+      ON "bets" ("user_id", "status", "settled_at" DESC NULLS LAST, "placed_at" DESC);
+    CREATE INDEX IF NOT EXISTS "bets_user_id_desc_idx"
+      ON "bets" ("user_id", "id" DESC);
+    CREATE INDEX IF NOT EXISTS "bets_placed_at_idx"
+      ON "bets" ("placed_at" DESC);
+
+    -- Questions & paris de prédictions (questions ouvertes/échues, règlements partiels, parieur, 24h)
+    CREATE INDEX IF NOT EXISTS "pred_questions_status_resolves_idx"
+      ON "prediction_questions" ("status", "resolves_at" ASC, "id" DESC);
+    CREATE INDEX IF NOT EXISTS "pred_questions_cat_status_idx"
+      ON "prediction_questions" ("category", "status", "resolves_at" ASC);
+    CREATE INDEX IF NOT EXISTS "pred_bets_pending_question_idx"
+      ON "prediction_bets" ("question_id")
+      WHERE "status" = 'pending';
+    CREATE INDEX IF NOT EXISTS "pred_bets_user_question_idx"
+      ON "prediction_bets" ("user_id", "question_id");
+    CREATE INDEX IF NOT EXISTS "pred_bets_user_status_idx"
+      ON "prediction_bets" ("user_id", "status", "settled_at" DESC NULLS LAST, "placed_at" DESC);
+    CREATE INDEX IF NOT EXISTS "pred_bets_placed_at_idx"
+      ON "prediction_bets" ("placed_at" DESC);
+
+    -- Paris combinés (index partiel sur les tickets ayant encore >= 1 sélection ouverte, parieur, 24h)
+    CREATE INDEX IF NOT EXISTS "combo_bets_open_legs_idx"
+      ON "combo_bets" ("id")
+      WHERE "status" = 'pending' OR "legs" @> '[{"status":"pending"}]'::jsonb;
+    CREATE INDEX IF NOT EXISTS "combo_bets_pending_idx"
+      ON "combo_bets" ("id")
+      WHERE "status" = 'pending';
+    CREATE INDEX IF NOT EXISTS "combo_bets_user_status_idx"
+      ON "combo_bets" ("user_id", "status", "settled_at" DESC NULLS LAST, "placed_at" DESC);
+    CREATE INDEX IF NOT EXISTS "combo_bets_placed_at_idx"
+      ON "combo_bets" ("placed_at" DESC);
+
+    -- Portefeuille, dépôts, retraits, jeux & ajustements (historiques paginés + agrégation House Brain 24h)
+    CREATE INDEX IF NOT EXISTS "deposits_user_created_idx"
+      ON "deposits" ("user_id", "created_at" DESC);
+    CREATE INDEX IF NOT EXISTS "deposits_status_created_idx"
+      ON "deposits" ("status", "created_at" DESC);
+    CREATE INDEX IF NOT EXISTS "deposits_provider_ref_idx"
+      ON "deposits" ("provider_ref");
+    CREATE INDEX IF NOT EXISTS "withdrawals_user_created_idx"
+      ON "withdrawals" ("user_id", "created_at" DESC);
+    CREATE INDEX IF NOT EXISTS "withdrawals_pending_idx"
+      ON "withdrawals" ("created_at" DESC)
+      WHERE "status" = 'pending';
+    CREATE INDEX IF NOT EXISTS "wallet_adj_user_created_idx"
+      ON "wallet_adjustments" ("user_id", "created_at" DESC);
+    CREATE INDEX IF NOT EXISTS "tap_history_user_created_idx"
+      ON "tap_history" ("user_id", "created_at" DESC);
+    CREATE INDEX IF NOT EXISTS "tap_history_created_idx"
+      ON "tap_history" ("created_at" DESC);
+    CREATE INDEX IF NOT EXISTS "accel_rounds_user_id_idx"
+      ON "accelerator_rounds" ("user_id", "id" DESC);
+    CREATE INDEX IF NOT EXISTS "accel_rounds_active_idx"
+      ON "accelerator_rounds" ("last_ms")
+      WHERE "status" = 'active';
+    CREATE INDEX IF NOT EXISTS "accel_rounds_started_idx"
+      ON "accelerator_rounds" ("started_at" DESC);
   `);
 
   const day = 86_400_000;
@@ -881,66 +974,81 @@ async function runSeedInternal(): Promise<void> {
     existingQuestionRows.map((r) => r.question.trim().toLowerCase())
   );
 
+  const missingQuestions: Array<typeof predictionQuestions.$inferInsert> = [];
   for (const q of questionsSeed) {
     const normTitle = q.question.trim().toLowerCase();
     if (!existingTitlesSet.has(normTitle)) {
+      existingTitlesSet.add(normTitle);
       const { question, category, status, seedValue, oddsYes, oddsNo, volume, yesCount, noCount, resolvesAt } = q;
       const options = "options" in q ? q.options : undefined;
       const resolution = "resolution" in q ? q.resolution : undefined;
       const resolvedAt = "resolvedAt" in q ? q.resolvedAt : undefined;
-      const [inserted] = await db
-        .insert(predictionQuestions)
-        .values({
-          question,
-          category,
-          status,
-          seedValue,
-          oddsYes,
-          oddsNo,
-          ...(options ? { options } : {}),
-          volume,
-          yesCount,
-          noCount,
-          resolvesAt,
-          ...(resolution ? { resolution } : {}),
-          ...(resolvedAt ? { resolvedAt } : {}),
-        })
-        .onConflictDoNothing()
-        .returning();
-      existingTitlesSet.add(normTitle);
+      missingQuestions.push({
+        question,
+        category,
+        status,
+        seedValue,
+        oddsYes,
+        oddsNo,
+        ...(options ? { options } : {}),
+        volume,
+        yesCount,
+        noCount,
+        resolvesAt,
+        ...(resolution ? { resolution } : {}),
+        ...(resolvedAt ? { resolvedAt } : {}),
+      });
+    }
+  }
 
-      if (inserted && q.status === "resolved" && freshDb) {
-        await db.insert(predictionBets).values([
-          {
-            userId: 1,
-            questionId: inserted.id,
-            selection: "yes",
-            selectionLabel: "Oui",
-            question: inserted.question,
-            category: inserted.category,
-            odds: inserted.oddsYes,
-            stake: 20,
-            potentialWin: round2(20 * inserted.oddsYes),
-            status: "won",
-            placedAt: new Date(now - 3 * day),
-          },
-          {
-            userId: 1,
-            questionId: inserted.id,
-            selection: "no",
-            selectionLabel: "Non",
-            question: inserted.question,
-            category: inserted.category,
-            odds: inserted.oddsNo,
-            stake: 10,
-            potentialWin: round2(10 * inserted.oddsNo),
-            status: "lost",
-            placedAt: new Date(now - 2.5 * day),
-          },
-        ]);
+  if (missingQuestions.length > 0) {
+    const insertedQuestions = await db
+      .insert(predictionQuestions)
+      .values(missingQuestions)
+      .onConflictDoNothing()
+      .returning();
+
+    if (freshDb) {
+      const demoPredBets: Array<typeof predictionBets.$inferInsert> = [];
+      let demoBonusCount = 0;
+      for (const inserted of insertedQuestions) {
+        if (inserted.status === "resolved") {
+          demoBonusCount++;
+          demoPredBets.push(
+            {
+              userId: 1,
+              questionId: inserted.id,
+              selection: "yes",
+              selectionLabel: "Oui",
+              question: inserted.question,
+              category: inserted.category,
+              odds: inserted.oddsYes,
+              stake: 20,
+              potentialWin: round2(20 * inserted.oddsYes),
+              status: "won",
+              placedAt: new Date(now - 3 * day),
+            },
+            {
+              userId: 1,
+              questionId: inserted.id,
+              selection: "no",
+              selectionLabel: "Non",
+              question: inserted.question,
+              category: inserted.category,
+              odds: inserted.oddsNo,
+              stake: 10,
+              potentialWin: round2(10 * inserted.oddsNo),
+              status: "lost",
+              placedAt: new Date(now - 2.5 * day),
+            }
+          );
+        }
+      }
+      if (demoPredBets.length > 0) {
+        await db.insert(predictionBets).values(demoPredBets);
         await db
           .update(appUser)
-          .set({ balance: sql`${appUser.balance} + 8` })
+          .set({ balance: sql`${appUser.balance} + ${demoBonusCount * 8}` })
           .where(sql`id = 1`);
       }
     }

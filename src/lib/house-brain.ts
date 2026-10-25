@@ -48,103 +48,112 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-const HOUSE_CACHE_TTL_MS = 20_000;
+const HOUSE_CACHE_TTL_MS = 45_000;
+const USER_RISK_CACHE_TTL_MS = 20_000;
 let houseCache: { at: number; data: GlobalHouseHealth } | null = null;
+let houseInFlight: Promise<GlobalHouseHealth> | null = null;
+const userRiskCache = new Map<number, { weight: number; expiresAt: number }>();
 
 export function invalidateHouseHealthCache() {
   houseCache = null;
+  userRiskCache.clear();
 }
 
-/** Calcule l'équilibre financier global sur 24h toutes verticales confondues. */
+/** Calcule l'équilibre financier global sur 24h en UNE SEULE requête SQL CTE (au lieu de 5). */
 export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
   if (houseCache && Date.now() - houseCache.at < HOUSE_CACHE_TTL_MS) {
     return houseCache.data;
   }
+  if (houseInFlight) return houseInFlight;
 
-  const [[sportAgg], [predAgg], [comboAgg], [tapAgg], [accelAgg]] = await Promise.all([
-    db
-      .select({
-        staked: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
-        paid: sql<number>`COALESCE(SUM(CASE
-          WHEN ${bets.status} = 'won' THEN ${bets.potentialWin}
-          WHEN ${bets.status} = 'cashed' THEN COALESCE(${bets.cashOutAmount}, 0)
-          WHEN ${bets.status} = 'void' THEN ${bets.stake}
-          ELSE 0 END), 0)::float8`,
-      })
-      .from(bets)
-      .where(sql`${bets.placedAt} > now() - interval '24 hours'`),
-    db
-      .select({
-        staked: sql<number>`COALESCE(SUM(${predictionBets.stake}), 0)::float8`,
-        paid: sql<number>`COALESCE(SUM(CASE
-          WHEN ${predictionBets.status} = 'won' THEN ${predictionBets.potentialWin}
-          WHEN ${predictionBets.status} = 'cashed' THEN COALESCE(${predictionBets.cashOutAmount}, 0)
-          WHEN ${predictionBets.status} = 'void' THEN ${predictionBets.stake}
-          ELSE 0 END), 0)::float8`,
-      })
-      .from(predictionBets)
-      .where(sql`${predictionBets.placedAt} > now() - interval '24 hours'`),
-    db
-      .select({
-        staked: sql<number>`COALESCE(SUM(${comboBets.stake}), 0)::float8`,
-        paid: sql<number>`COALESCE(SUM(CASE
-          WHEN ${comboBets.status} = 'won' THEN ${comboBets.potentialWin}
-          WHEN ${comboBets.status} = 'cashed' THEN COALESCE(${comboBets.cashOutAmount}, 0)
-          WHEN ${comboBets.status} = 'void' THEN ${comboBets.stake}
-          ELSE 0 END), 0)::float8`,
-      })
-      .from(comboBets)
-      .where(sql`${comboBets.placedAt} > now() - interval '24 hours'`),
-    db
-      .select({
-        staked: sql<number>`COALESCE(SUM(${tapHistory.betAmount}), 0)::float8`,
-        paid: sql<number>`COALESCE(SUM(CASE
-          WHEN ${tapHistory.win} = true THEN ${tapHistory.betAmount} * ${tapHistory.targetMultiplier}
-          ELSE 0 END), 0)::float8`,
-      })
-      .from(tapHistory)
-      .where(sql`${tapHistory.createdAt} > now() - interval '24 hours'`),
-    db
-      .select({
-        staked: sql<number>`COALESCE(SUM(${acceleratorRounds.betAmount}), 0)::float8`,
-        paid: sql<number>`COALESCE(SUM(CASE
-          WHEN ${acceleratorRounds.status} = 'cashed' THEN ${acceleratorRounds.betAmount} * COALESCE(${acceleratorRounds.cashoutMultiplier}, 1)
-          ELSE 0 END), 0)::float8`,
-      })
-      .from(acceleratorRounds)
-      .where(sql`${acceleratorRounds.startedAt} > now() - interval '24 hours'`),
-  ]);
+  houseInFlight = (async () => {
+    const res = await db.execute(sql`
+      WITH sport AS (
+        SELECT
+          COALESCE(SUM("stake"), 0)::float8 AS staked,
+          COALESCE(SUM(CASE
+            WHEN "status" = 'won' THEN "potential_win"
+            WHEN "status" = 'cashed' THEN COALESCE("cash_out_amount", 0)
+            WHEN "status" = 'void' THEN "stake"
+            ELSE 0 END), 0)::float8 AS paid
+        FROM "bets"
+        WHERE "placed_at" > now() - interval '24 hours'
+      ),
+      pred AS (
+        SELECT
+          COALESCE(SUM("stake"), 0)::float8 AS staked,
+          COALESCE(SUM(CASE
+            WHEN "status" = 'won' THEN "potential_win"
+            WHEN "status" = 'cashed' THEN COALESCE("cash_out_amount", 0)
+            WHEN "status" = 'void' THEN "stake"
+            ELSE 0 END), 0)::float8 AS paid
+        FROM "prediction_bets"
+        WHERE "placed_at" > now() - interval '24 hours'
+      ),
+      combo AS (
+        SELECT
+          COALESCE(SUM("stake"), 0)::float8 AS staked,
+          COALESCE(SUM(CASE
+            WHEN "status" = 'won' THEN "potential_win"
+            WHEN "status" = 'cashed' THEN COALESCE("cash_out_amount", 0)
+            WHEN "status" = 'void' THEN "stake"
+            ELSE 0 END), 0)::float8 AS paid
+        FROM "combo_bets"
+        WHERE "placed_at" > now() - interval '24 hours'
+      ),
+      tap AS (
+        SELECT
+          COALESCE(SUM("bet_amount"), 0)::float8 AS staked,
+          COALESCE(SUM(CASE
+            WHEN "win" = true THEN "bet_amount" * "target_multiplier"
+            ELSE 0 END), 0)::float8 AS paid
+        FROM "tap_history"
+        WHERE "created_at" > now() - interval '24 hours'
+      ),
+      accel AS (
+        SELECT
+          COALESCE(SUM("bet_amount"), 0)::float8 AS staked,
+          COALESCE(SUM(CASE
+            WHEN "status" = 'cashed' THEN "bet_amount" * COALESCE("cashout_multiplier", 1)
+            ELSE 0 END), 0)::float8 AS paid
+        FROM "accelerator_rounds"
+        WHERE "started_at" > now() - interval '24 hours'
+      )
+      SELECT
+        (sport.staked + pred.staked + combo.staked + tap.staked + accel.staked)::float8 AS total_in,
+        (sport.paid + pred.paid + combo.paid + tap.paid + accel.paid)::float8 AS total_out
+      FROM sport, pred, combo, tap, accel
+    `);
 
-  const totalIn24h =
-    (sportAgg?.staked ?? 0) +
-    (predAgg?.staked ?? 0) +
-    (comboAgg?.staked ?? 0) +
-    (tapAgg?.staked ?? 0) +
-    (accelAgg?.staked ?? 0);
-  const totalOut24h =
-    (sportAgg?.paid ?? 0) +
-    (predAgg?.paid ?? 0) +
-    (comboAgg?.paid ?? 0) +
-    (tapAgg?.paid ?? 0) +
-    (accelAgg?.paid ?? 0);
+    const row = (res.rows?.[0] ?? {}) as {
+      total_in?: number | string | null;
+      total_out?: number | string | null;
+    };
+    const totalIn24h = Number(row.total_in ?? 0) || 0;
+    const totalOut24h = Number(row.total_out ?? 0) || 0;
 
-  // Ancre minimale de 80 € pour éviter les sur-réactions à froid sur les toutes premières mises
-  const payoutRatio = (totalOut24h + 30) / (totalIn24h + 40);
+    // Ancre minimale de 80 € pour éviter les sur-réactions à froid sur les toutes premières mises
+    const payoutRatio = (totalOut24h + 30) / (totalIn24h + 40);
 
-  let tightness = 1.0;
-  if (payoutRatio > 1.15) tightness = 0.78;
-  else if (payoutRatio > 0.98) tightness = 0.86;
-  else if (payoutRatio > 0.9) tightness = 0.94;
-  else if (payoutRatio < 0.65 && totalIn24h > 50) tightness = 1.06;
+    let tightness = 1.0;
+    if (payoutRatio > 1.15) tightness = 0.78;
+    else if (payoutRatio > 0.98) tightness = 0.86;
+    else if (payoutRatio > 0.9) tightness = 0.94;
+    else if (payoutRatio < 0.65 && totalIn24h > 50) tightness = 1.06;
 
-  const data: GlobalHouseHealth = {
-    totalIn24h,
-    totalOut24h,
-    payoutRatio,
-    tightness,
-  };
-  houseCache = { at: Date.now(), data };
-  return data;
+    const data: GlobalHouseHealth = {
+      totalIn24h,
+      totalOut24h,
+      payoutRatio,
+      tightness,
+    };
+    houseCache = { at: Date.now(), data };
+    return data;
+  })().finally(() => {
+    houseInFlight = null;
+  });
+
+  return houseInFlight;
 }
 
 /**
@@ -283,7 +292,19 @@ export async function computeUserPatternRiskWeights(
   userIds: number[]
 ): Promise<Map<number, number>> {
   const result = new Map<number, number>();
-  const uniqueIds = [...new Set(userIds.filter((id) => Number.isFinite(id) && id > 0))];
+  const allUniqueIds = [...new Set(userIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (allUniqueIds.length === 0) return result;
+
+  const now = Date.now();
+  const uniqueIds: number[] = [];
+  for (const uid of allUniqueIds) {
+    const cached = userRiskCache.get(uid);
+    if (cached && cached.expiresAt > now) {
+      result.set(uid, cached.weight);
+    } else {
+      uniqueIds.push(uid);
+    }
+  }
   if (uniqueIds.length === 0) return result;
 
   const recent = await db
@@ -424,6 +445,11 @@ export async function computeUserPatternRiskWeights(
     }
   } catch {
     // En cas d'indisponibilité transitoire, conserve les poids heuristiques
+  }
+
+  const expiresAt = Date.now() + USER_RISK_CACHE_TTL_MS;
+  for (const uid of uniqueIds) {
+    userRiskCache.set(uid, { weight: result.get(uid) ?? 1.0, expiresAt });
   }
 
   return result;

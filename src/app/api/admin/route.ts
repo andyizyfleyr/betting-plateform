@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -78,54 +78,54 @@ export async function GET(req: NextRequest) {
   // Synchronise le moteur live et les règlements sans forcer les appels externes à chaque poll
   await syncPlatformStateThrottled(false);
 
-  const [
-    [totalUsers],
-    [totalBets],
-    [totalPredBets],
-    [totalComboBets],
-    [totalDeposits],
-    [pendingWdCount],
-    [sportTotals],
-    [predTotals],
-    [comboTotals],
-    [liveMatch],
-    [openQuestions],
-    [totalBalance],
-  ] = await Promise.all([
-    db.select({ value: count() }).from(appUser),
-    db.select({ value: count() }).from(bets),
-    db.select({ value: count() }).from(predictionBets),
-    db.select({ value: count() }).from(comboBets),
-    db.select({ value: count() }).from(deposits),
-    db.select({ value: count() }).from(withdrawals).where(eq(withdrawals.status, "pending")),
-    db
-      .select({
-        stake: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
-        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${bets.status} = 'won' THEN ${bets.potentialWin} WHEN ${bets.status} = 'cashed' THEN COALESCE(${bets.cashOutAmount}, 0) WHEN ${bets.status} = 'void' THEN ${bets.stake} ELSE 0 END), 0)::float8`,
-      })
-      .from(bets),
-    db
-      .select({
-        stake: sql<number>`COALESCE(SUM(${predictionBets.stake}), 0)::float8`,
-        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${predictionBets.status} = 'won' THEN ${predictionBets.potentialWin} WHEN ${predictionBets.status} = 'cashed' THEN COALESCE(${predictionBets.cashOutAmount}, 0) WHEN ${predictionBets.status} = 'void' THEN ${predictionBets.stake} ELSE 0 END), 0)::float8`,
-      })
-      .from(predictionBets),
-    db
-      .select({
-        stake: sql<number>`COALESCE(SUM(${comboBets.stake}), 0)::float8`,
-        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${comboBets.status} = 'won' THEN ${comboBets.potentialWin} WHEN ${comboBets.status} = 'cashed' THEN COALESCE(${comboBets.cashOutAmount}, 0) WHEN ${comboBets.status} = 'void' THEN ${comboBets.stake} ELSE 0 END), 0)::float8`,
-      })
-      .from(comboBets),
-    db.select({ n: count() }).from(matches).where(eq(matches.status, "live")),
-    db.select({ n: count() }).from(predictionQuestions).where(eq(predictionQuestions.status, "open")),
-    db.select({ value: sql<number>`COALESCE(SUM(${appUser.balance}), 0)::float8` }).from(appUser),
-  ]);
+  // 1 seule requête SQL CTE pour agréger les 12 indicateurs globaux du dashboard admin (au lieu de 12 allers-retours SQL)
+  const aggRes = await db.execute(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM "app_user") AS total_users,
+      (SELECT COALESCE(SUM("balance"), 0)::float8 FROM "app_user") AS total_balance,
+      (SELECT COUNT(*)::int FROM "bets") AS total_bets,
+      (SELECT COUNT(*)::int FROM "prediction_bets") AS total_pred_bets,
+      (SELECT COUNT(*)::int FROM "combo_bets") AS total_combo_bets,
+      (SELECT COUNT(*)::int FROM "deposits") AS total_deposits,
+      (SELECT COUNT(*)::int FROM "withdrawals" WHERE "status" = 'pending') AS pending_wd_count,
+      (SELECT COUNT(*)::int FROM "matches" WHERE "status" = 'live') AS live_matches,
+      (SELECT COUNT(*)::int FROM "prediction_questions" WHERE "status" = 'open') AS open_questions,
+      (SELECT COALESCE(SUM("stake"), 0)::float8 FROM "bets") AS sport_stake,
+      (SELECT COALESCE(SUM(CASE
+        WHEN "status" = 'won' THEN "potential_win"
+        WHEN "status" = 'cashed' THEN COALESCE("cash_out_amount", 0)
+        WHEN "status" = 'void' THEN "stake"
+        ELSE 0 END), 0)::float8 FROM "bets") AS sport_payouts,
+      (SELECT COALESCE(SUM("stake"), 0)::float8 FROM "prediction_bets") AS pred_stake,
+      (SELECT COALESCE(SUM(CASE
+        WHEN "status" = 'won' THEN "potential_win"
+        WHEN "status" = 'cashed' THEN COALESCE("cash_out_amount", 0)
+        WHEN "status" = 'void' THEN "stake"
+        ELSE 0 END), 0)::float8 FROM "prediction_bets") AS pred_payouts,
+      (SELECT COALESCE(SUM("stake"), 0)::float8 FROM "combo_bets") AS combo_stake,
+      (SELECT COALESCE(SUM(CASE
+        WHEN "status" = 'won' THEN "potential_win"
+        WHEN "status" = 'cashed' THEN COALESCE("cash_out_amount", 0)
+        WHEN "status" = 'void' THEN "stake"
+        ELSE 0 END), 0)::float8 FROM "combo_bets") AS combo_payouts
+  `);
+
+  const agg = (aggRes.rows?.[0] ?? {}) as Record<string, number | string | null>;
+  const totalUsers = { value: Number(agg.total_users ?? 0) };
+  const totalBets = { value: Number(agg.total_bets ?? 0) };
+  const totalPredBets = { value: Number(agg.total_pred_bets ?? 0) };
+  const totalComboBets = { value: Number(agg.total_combo_bets ?? 0) };
+  const totalDeposits = { value: Number(agg.total_deposits ?? 0) };
+  const pendingWdCount = { value: Number(agg.pending_wd_count ?? 0) };
+  const liveMatch = { n: Number(agg.live_matches ?? 0) };
+  const openQuestions = { n: Number(agg.open_questions ?? 0) };
+  const totalBalance = { value: Number(agg.total_balance ?? 0) };
 
   const stake = round2(
-    (sportTotals?.stake ?? 0) + (predTotals?.stake ?? 0) + (comboTotals?.stake ?? 0)
+    Number(agg.sport_stake ?? 0) + Number(agg.pred_stake ?? 0) + Number(agg.combo_stake ?? 0)
   );
   const payouts = round2(
-    (sportTotals?.payouts ?? 0) + (predTotals?.payouts ?? 0) + (comboTotals?.payouts ?? 0)
+    Number(agg.sport_payouts ?? 0) + Number(agg.pred_payouts ?? 0) + Number(agg.combo_payouts ?? 0)
   );
 
   const [
@@ -522,7 +522,8 @@ export async function POST(req: NextRequest) {
           .filter((x): x is string => typeof x === "string" && x.length > 0)
       );
 
-      const insertedIds: number[] = [];
+      const rowsToInsert: Array<typeof matches.$inferInsert> = [];
+      const liveExternalIds = new Set<string>();
       let skipped = 0;
 
       for (const item of rawFixtures.slice(0, 30)) {
@@ -537,6 +538,7 @@ export async function POST(req: NextRequest) {
           skipped++;
           continue;
         }
+        importedSet.add(externalId);
 
         const startsAtParsed =
           typeof f.startsAt === "string" ? new Date(f.startsAt) : new Date();
@@ -548,6 +550,7 @@ export async function POST(req: NextRequest) {
         const oddsDraw = Math.max(1.04, roundNumber(f.oddsDraw ?? f.suggestedOddsDraw) ?? 3.3);
         const oddsAway = Math.max(1.04, roundNumber(f.oddsAway ?? f.suggestedOddsAway) ?? 3.2);
         const isLive = f.status === "live";
+        if (isLive) liveExternalIds.add(externalId);
         const homeLogo =
           typeof f.homeLogo === "string" && f.homeLogo.trim()
             ? f.homeLogo.trim()
@@ -586,58 +589,65 @@ export async function POST(req: NextRequest) {
               ? "1'"
               : null;
 
-        const [created] = await db
-          .insert(matches)
-          .values({
-            sport: "football",
-            league,
-            homeTeam,
-            awayTeam,
-            homeLogo,
-            awayLogo,
-            homeScore: isLive ? Math.max(0, Number(f.homeScore ?? 0)) : null,
-            awayScore: isLive ? Math.max(0, Number(f.awayScore ?? 0)) : null,
-            htHomeScore,
-            htAwayScore,
-            status: isLive ? "live" : "upcoming",
-            minute: liveMinute,
-            startsAt,
-            oddsHome,
-            oddsDraw,
-            oddsAway,
-            suspended: false,
-            redHome,
-            redAway,
-            events: initialEvents,
-            tickHistory: [],
-            regime: "balanced",
-            homeForm: 1,
-            awayForm: 1,
-            markets: null,
-            source: "manual",
-            externalId,
-            externalLeague,
-            autoSync: true,
-            realStats: initialStats,
-            feedSyncedAt: new Date(),
-            feedStatusNote: isLive
-              ? `Direct synchronisé (${liveMinute ?? "LIVE"})`
-              : "Relié au flux officiel · En attente du coup d'envoi",
-          })
-          .returning({ id: matches.id });
+        rowsToInsert.push({
+          sport: "football",
+          league,
+          homeTeam,
+          awayTeam,
+          homeLogo,
+          awayLogo,
+          homeScore: liveHomeScore,
+          awayScore: liveAwayScore,
+          htHomeScore,
+          htAwayScore,
+          status: isLive ? "live" : "upcoming",
+          minute: liveMinute,
+          startsAt,
+          oddsHome,
+          oddsDraw,
+          oddsAway,
+          suspended: false,
+          redHome,
+          redAway,
+          events: initialEvents,
+          tickHistory: [],
+          regime: "balanced",
+          homeForm: 1,
+          awayForm: 1,
+          markets: null,
+          source: "manual",
+          externalId,
+          externalLeague,
+          autoSync: true,
+          realStats: initialStats,
+          feedSyncedAt: new Date(),
+          feedStatusNote: isLive
+            ? `Direct synchronisé (${liveMinute ?? "LIVE"})`
+            : "Relié au flux officiel · En attente du coup d'envoi",
+        });
+      }
 
-        if (created) {
-          importedSet.add(externalId);
-          insertedIds.push(created.id);
-          if (isLive) {
-            await syncSingleRealMatchNow(created.id).catch(() => null);
-          }
-        }
+      // Insertion groupée en UNE SEULE requête multi-lignes `INSERT INTO matches VALUES (...), (...)`
+      const createdRows =
+        rowsToInsert.length > 0
+          ? await db
+              .insert(matches)
+              .values(rowsToInsert)
+              .returning({ id: matches.id, externalId: matches.externalId })
+          : [];
+
+      const liveCreated = createdRows.filter(
+        (c) => c.externalId && liveExternalIds.has(c.externalId)
+      );
+      if (liveCreated.length > 0) {
+        await Promise.all(
+          liveCreated.map((c) => syncSingleRealMatchNow(c.id).catch(() => null))
+        );
       }
 
       return NextResponse.json({
         ok: true,
-        importedCount: insertedIds.length,
+        importedCount: createdRows.length,
         skippedCount: skipped,
       });
     }
@@ -768,19 +778,22 @@ export async function POST(req: NextRequest) {
       const matchId = Number(body.matchId);
       if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
 
+      // Remboursement groupé + suppression en cascade en 1 seule transaction SQL sans boucle N+1
       await db.transaction(async (tx) => {
-        const pendingBets = await tx
-          .select({ id: bets.id, userId: bets.userId, stake: bets.stake })
-          .from(bets)
-          .where(and(eq(bets.matchId, matchId), eq(bets.status, "pending")));
-
-        for (const pb of pendingBets) {
-          await tx
-            .update(appUser)
-            .set({ balance: sql`${appUser.balance} + ${round2(pb.stake)}` })
-            .where(eq(appUser.id, pb.userId));
-        }
-
+        await tx.execute(sql`
+          WITH refunded AS (
+            SELECT "user_id", SUM(ROUND(("stake" * 100)::numeric)::float8 / 100.0)::float8 AS refund
+            FROM "bets"
+            WHERE "match_id" = ${matchId}
+              AND "status" = 'pending'
+            GROUP BY "user_id"
+          )
+          UPDATE "app_user" AS u
+          SET "balance" = u."balance" + refunded.refund
+          FROM refunded
+          WHERE u."id" = refunded."user_id"
+            AND refunded.refund > 0
+        `);
         await tx.delete(bets).where(eq(bets.matchId, matchId));
         await tx.delete(matches).where(eq(matches.id, matchId));
       });
@@ -1048,7 +1061,7 @@ export async function POST(req: NextRequest) {
         .where(eq(matches.id, matchId))
         .returning();
 
-      await Promise.all([settleMatchBets(matchId), settlePendingCombos()]);
+      await settleMatchBets(matchId);
       invalidateHouseHealthCache();
 
       return NextResponse.json({ ok: true, match: updated, settled: true });
@@ -1068,30 +1081,33 @@ export async function POST(req: NextRequest) {
       let updatedMatch = m;
 
       await db.transaction(async (tx) => {
-        const settled = await tx
-          .select()
-          .from(bets)
-          .where(and(eq(bets.matchId, matchId), inArray(bets.status, ["won", "lost", "void"])));
-
-        for (const b of settled) {
-          if (b.status === "won" || b.status === "void") {
-            const clawback =
-              b.status === "void"
-                ? round2(b.stake)
-                : round2(b.stake * b.odds * (b.payoutMultiplier ?? 1) + (b.stakeReturned ?? 0));
-            await tx
-              .update(appUser)
-              .set({ balance: sql`GREATEST(0, ${appUser.balance} - ${clawback})` })
-              .where(eq(appUser.id, b.userId));
-          }
-          await tx
-            .update(bets)
-            .set({
-              status: "pending",
-              potentialWin: round2(b.stake * b.odds),
-            })
-            .where(eq(bets.id, b.id));
-        }
+        await tx.execute(sql`
+          WITH reopened AS (
+            UPDATE "bets" AS b
+            SET
+              "status" = 'pending',
+              "potential_win" = ROUND((b."stake" * b."odds" * 100)::numeric)::float8 / 100.0,
+              "settled_at" = NULL
+            WHERE b."match_id" = ${matchId}
+              AND b."status" IN ('won', 'lost', 'void')
+            RETURNING
+              b."user_id",
+              CASE
+                WHEN b."status" = 'void' THEN ROUND((b."stake" * 100)::numeric)::float8 / 100.0
+                WHEN b."status" = 'won' THEN ROUND(((b."stake" * b."odds" * COALESCE(b."payout_multiplier", 1) + COALESCE(b."stake_returned", 0)) * 100)::numeric)::float8 / 100.0
+                ELSE 0::float8
+              END AS clawback
+          )
+          UPDATE "app_user" AS u
+          SET "balance" = GREATEST(0, u."balance" - agg.total_clawback)
+          FROM (
+            SELECT "user_id", SUM(clawback)::float8 AS total_clawback
+            FROM reopened
+            WHERE clawback > 0
+            GROUP BY "user_id"
+          ) AS agg
+          WHERE u."id" = agg."user_id"
+        `);
 
         const [u] = await tx
           .update(matches)
@@ -1250,19 +1266,21 @@ export async function POST(req: NextRequest) {
       if (!questionId) return NextResponse.json({ error: "questionId requis" }, { status: 400 });
 
       await db.transaction(async (tx) => {
-        // Rembourse proprement toute mise en attente avant suppression en cascade
-        const pendingBets = await tx
-          .select({ id: predictionBets.id, userId: predictionBets.userId, stake: predictionBets.stake })
-          .from(predictionBets)
-          .where(and(eq(predictionBets.questionId, questionId), eq(predictionBets.status, "pending")));
-
-        for (const pb of pendingBets) {
-          await tx
-            .update(appUser)
-            .set({ balance: sql`${appUser.balance} + ${round2(pb.stake)}` })
-            .where(eq(appUser.id, pb.userId));
-        }
-
+        // Remboursement groupé en 1 seule requête SQL + suppression en cascade
+        await tx.execute(sql`
+          WITH refunded AS (
+            SELECT "user_id", SUM(ROUND(("stake" * 100)::numeric)::float8 / 100.0)::float8 AS refund
+            FROM "prediction_bets"
+            WHERE "question_id" = ${questionId}
+              AND "status" = 'pending'
+            GROUP BY "user_id"
+          )
+          UPDATE "app_user" AS u
+          SET "balance" = u."balance" + refunded.refund
+          FROM refunded
+          WHERE u."id" = refunded."user_id"
+            AND refunded.refund > 0
+        `);
         await tx.delete(predictionBets).where(eq(predictionBets.questionId, questionId));
         await tx.delete(predictionQuestions).where(eq(predictionQuestions.id, questionId));
       });

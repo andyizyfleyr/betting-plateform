@@ -1,9 +1,9 @@
 import { pruneOldFinishedVirtualMatches, runLiveEngine } from "@/db/engine";
 import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
-import { settlePendingCombos } from "@/lib/combo";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
 import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
 import { syncRealMatchesThrottled } from "@/lib/real-sports-feed";
+import { invalidatePublicApiCaches } from "@/lib/response-cache";
 import { settleFinishedBets } from "@/lib/settle";
 
 /**
@@ -15,7 +15,7 @@ import { settleFinishedBets } from "@/lib/settle";
  * - Borne l'attente réseau externe (ESPN) à 2,5 s sur les lectures utilisateurs pour
  *   qu'aucune lenteur d'API tierce ne bloque ni ne provoque de 504 sur Vercel Serverless.
  */
-const SYNC_THROTTLE_MS = 1_500;
+const SYNC_THROTTLE_MS = 3_000;
 const HOUSEKEEPING_THROTTLE_MS = 60_000;
 const PRUNE_THROTTLE_MS = 5 * 60_000;
 const USER_READ_FEED_BUDGET_MS = 2_500;
@@ -74,8 +74,9 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
         }
       }
 
+      // `settleFinishedBets()` appelle déjà `settlePendingCombos()` une fois ses tickets réglés
       await Promise.all([settleFinishedBets(), settleResolvedQuestions()]);
-      await settlePendingCombos();
+      invalidatePublicApiCaches();
 
       const hkNow = Date.now();
       if (force || hkNow - lastHousekeepingAt >= HOUSEKEEPING_THROTTLE_MS) {
@@ -114,4 +115,5 @@ export async function syncAllSettlementsThrottled(force = false): Promise<void> 
 export function resetSyncThrottle(): void {
   lastFullSyncAt = 0;
   lastHousekeepingAt = 0;
+  invalidatePublicApiCaches();
 }

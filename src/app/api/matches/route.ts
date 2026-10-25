@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
-import { NextResponse } from "next/server";
+import { and, asc, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
+import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
@@ -15,6 +15,11 @@ import {
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
+import {
+  getMatchesPayloadCache,
+  jsonWithEtag,
+  setMatchesPayloadCache,
+} from "@/lib/response-cache";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
@@ -22,18 +27,28 @@ import { teamLogo } from "@/lib/team-logos";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function GET() {
+// Projection SQL légère : exclut la colonne JSONB lourde `scripted_events` dès PostgreSQL
+const { scriptedEvents: _omitScriptedEvents, ...publicMatchColumns } = getTableColumns(matches);
+void _omitScriptedEvents;
+
+export async function GET(req: NextRequest) {
   try {
     await ensureSeeded();
     await ensureMlLoaded();
     await syncLiveMatchesThrottled();
 
+    // Fast-path mémoire (2,5 s, invalidé dès qu'un tick ou une action admin modifie l'état)
+    const cached = getMatchesPayloadCache();
+    if (cached) {
+      return jsonWithEtag(req, null, cached);
+    }
+
   const now = Date.now();
-  // Filtrage et LIMIT directement en SQL (au lieu d'un `SELECT *` complet de tout l'historique)
+  // Filtrage, projection sans `scripted_events` et LIMIT directement en SQL
   // pour réduire de > 99 % le transfert réseau PostgreSQL (Neon egress) à chaque rafraîchissement.
   const [activeRows, finishedManual, finishedVirtual] = await Promise.all([
     db
-      .select()
+      .select(publicMatchColumns)
       .from(matches)
       .where(ne(matches.status, "finished"))
       .orderBy(
@@ -42,13 +57,13 @@ export async function GET() {
         desc(matches.id)
       ),
     db
-      .select()
+      .select(publicMatchColumns)
       .from(matches)
       .where(and(eq(matches.source, "manual"), eq(matches.status, "finished")))
       .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
       .limit(20),
     db
-      .select()
+      .select(publicMatchColumns)
       .from(matches)
       .where(and(ne(matches.source, "manual"), eq(matches.status, "finished")))
       .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
@@ -87,7 +102,6 @@ export async function GET() {
       awayForm: _awayForm,
       scenarioLocked: _scenarioLocked,
       scenarioNonce: _scenarioNonce,
-      scriptedEvents: _scriptedEvents,
       ...publicMatch
     } = m;
     void _regime;
@@ -95,7 +109,6 @@ export async function GET() {
     void _awayForm;
     void _scenarioLocked;
     void _scenarioNonce;
-    void _scriptedEvents;
 
     if (isReal) {
       // Moteur dédié aux matchs réels : cotes officielles de l'admin, verrouillage pré-match à l'heure
@@ -191,7 +204,9 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ matches: withMarkets });
+  const payload = { matches: withMarkets };
+  const stored = setMatchesPayloadCache(payload);
+  return jsonWithEtag(req, payload, stored);
   } catch (err) {
     return formatServerErrorResponse(err, "GET /api/matches");
   }

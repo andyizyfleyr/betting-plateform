@@ -490,22 +490,35 @@ export function regimeFactors(
   }
 }
 
-async function executeTick(now: number): Promise<void> {
+let cachedLiveSim: { enabled: boolean; ts: number } | null = null;
+const LIVE_SIM_CACHE_TTL_MS = 30_000;
+
+export function invalidateLiveSimCache() {
+  cachedLiveSim = null;
+}
+
+async function isLiveSimEnabled(): Promise<boolean> {
+  const now = Date.now();
+  if (cachedLiveSim && now - cachedLiveSim.ts < LIVE_SIM_CACHE_TTL_MS) {
+    return cachedLiveSim.enabled;
+  }
   const [user] = await db
     .select({ liveSim: appUser.liveSim })
     .from(appUser)
-    .where(eq(appUser.id, 1));
-  if (user && !user.liveSim) return;
+    .where(eq(appUser.id, 1))
+    .limit(1);
+  const enabled = user ? Boolean(user.liveSim) : true;
+  cachedLiveSim = { enabled, ts: now };
+  return enabled;
+}
+
+async function executeTick(now: number): Promise<void> {
+  if (!(await isLiveSimEnabled())) return;
 
   await ensureMlLoaded();
-  await ensureActiveSchedule(now);
-
-  // Le moteur de simulation 24h/24 ne pilote QUE les matchs virtuels (`source = "virtual"`).
-  // Les matchs réels ajoutés manuellement par l'admin (`source = "manual"`) sont 100 % isolés.
-  const openMatches = await db
-    .select()
-    .from(matches)
-    .where(and(inArray(matches.status, ["upcoming", "live"]), eq(matches.source, "virtual")));
+  // `ensureActiveSchedule` retourne directement la liste des matchs virtuels actifs
+  // (évite un second `SELECT * FROM matches` identique à chaque tick).
+  const openMatches = await ensureActiveSchedule(now);
 
   if (openMatches.length === 0) return;
 
@@ -692,11 +705,8 @@ async function executeTick(now: number): Promise<void> {
 
   // 6. Regarnit la file virtuelle si le rattrapage a consommé des matchs, puis aligne les coups d'envoi
   if (upcomingMatches.filter((m) => m.source === "virtual").length < MIN_ACTIVE_VIRTUAL) {
-    await ensureActiveSchedule(now);
-    const refreshedUpcoming = await db
-      .select()
-      .from(matches)
-      .where(and(eq(matches.status, "upcoming"), eq(matches.source, "virtual")));
+    const refreshedActive = await ensureActiveSchedule(now);
+    const refreshedUpcoming = refreshedActive.filter((m) => m.status === "upcoming");
     await syncUpcomingQueue(refreshedUpcoming, activeLive, now, betsByMatch);
   } else {
     await syncUpcomingQueue(upcomingMatches, activeLive, now, betsByMatch);
@@ -731,6 +741,22 @@ async function syncUpcomingQueue(
   let cursorMs = activeLive
     ? expectedMatchEndMs(activeLive, now) + INTER_MATCH_GAP_MS
     : now + INTER_MATCH_GAP_MS;
+
+  interface QueuedMatchPatch {
+    id: number;
+    homeTeam: string;
+    awayTeam: string;
+    homeForm: number;
+    awayForm: number;
+    startsAtIso: string;
+    oddsHome: number;
+    oddsDraw: number;
+    oddsAway: number;
+    homeLogo: string | null;
+    awayLogo: string | null;
+  }
+
+  const patches: QueuedMatchPatch[] = [];
 
   for (const m of virtualQueue) {
     const desiredStartsAt = cursorMs;
@@ -791,35 +817,62 @@ async function syncUpcomingQueue(
       Math.abs(m.oddsAway - freshOdds.oddsAway) > 0.02;
 
     if (swapped || driftMs > 6_000 || oddsChanged || homeLogo !== m.homeLogo || awayLogo !== m.awayLogo) {
-      await db
-        .update(matches)
-        .set({
-          homeTeam,
-          awayTeam,
-          homeForm,
-          awayForm,
-          startsAt: new Date(desiredStartsAt),
-          oddsHome: freshOdds.oddsHome,
-          oddsDraw: freshOdds.oddsDraw,
-          oddsAway: freshOdds.oddsAway,
-          homeLogo,
-          awayLogo,
-        })
-        .where(eq(matches.id, m.id));
+      patches.push({
+        id: m.id,
+        homeTeam,
+        awayTeam,
+        homeForm,
+        awayForm,
+        startsAtIso: new Date(desiredStartsAt).toISOString(),
+        oddsHome: freshOdds.oddsHome,
+        oddsDraw: freshOdds.oddsDraw,
+        oddsAway: freshOdds.oddsAway,
+        homeLogo: homeLogo ?? null,
+        awayLogo: awayLogo ?? null,
+      });
     }
+  }
+
+  // Mise à jour groupée en UNE SEULE requête SQL `UPDATE ... FROM (VALUES ...)` (au lieu de 7 requêtes séquentielles)
+  if (patches.length > 0) {
+    const tuples = sql.join(
+      patches.map(
+        (p) =>
+          sql`(${p.id}::int, ${p.homeTeam}::text, ${p.awayTeam}::text, ${p.homeForm}::float8, ${p.awayForm}::float8, ${p.startsAtIso}::timestamptz::timestamp, ${p.oddsHome}::float8, ${p.oddsDraw}::float8, ${p.oddsAway}::float8, ${p.homeLogo}::text, ${p.awayLogo}::text)`
+      ),
+      sql`, `
+    );
+    await db.execute(sql`
+      UPDATE "matches" AS m
+      SET
+        "home_team" = v.home_team,
+        "away_team" = v.away_team,
+        "home_form" = v.home_form,
+        "away_form" = v.away_form,
+        "starts_at" = v.starts_at,
+        "odds_home" = v.odds_home,
+        "odds_draw" = v.odds_draw,
+        "odds_away" = v.odds_away,
+        "home_logo" = v.home_logo,
+        "away_logo" = v.away_logo
+      FROM (VALUES ${tuples}) AS v(
+        id, home_team, away_team, home_form, away_form, starts_at, odds_home, odds_draw, odds_away, home_logo, away_logo
+      )
+      WHERE m."id" = v.id
+    `);
   }
 
   // Les matchs réels (`source = "manual"`) ne sont JAMAIS modifiés par `syncUpcomingQueue` :
   // leurs cotes, équipes, logos et horaires appartiennent exclusivement à l'administrateur.
 }
 
-async function ensureActiveSchedule(now: number): Promise<void> {
+async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
   const activeVirtual = await db
     .select()
     .from(matches)
     .where(and(inArray(matches.status, ["upcoming", "live"]), eq(matches.source, "virtual")));
 
-  if (activeVirtual.length >= MIN_ACTIVE_VIRTUAL) return;
+  if (activeVirtual.length >= MIN_ACTIVE_VIRTUAL) return activeVirtual;
 
   const busyTeams = new Set<string>();
   let tailEndMs = now;
@@ -904,17 +957,24 @@ async function ensureActiveSchedule(now: number): Promise<void> {
   if (rows.length > 0) {
     const insertedRows = await db.insert(matches).values(rows).returning();
     const mode = await getScenarioMode();
-    if (mode === "locked") {
+    if (mode === "locked" && insertedRows.length > 0) {
       const neutral: MatchBookPressure = { tickets: [], houseTightness: 1 };
-      for (const ins of insertedRows) {
+      const lockTuples = insertedRows.map((ins) => {
         const sim = simulateMatchRange(ins, 0, 90, 0, 0, 0, 0, [], neutral, false);
-        await db
-          .update(matches)
-          .set({ scenarioLocked: true, scriptedEvents: sim.events })
-          .where(eq(matches.id, ins.id));
-      }
+        ins.scenarioLocked = true;
+        ins.scriptedEvents = sim.events;
+        return sql`(${ins.id}::int, ${JSON.stringify(sim.events)}::jsonb)`;
+      });
+      await db.execute(sql`
+        UPDATE "matches" AS m
+        SET "scenario_locked" = true, "scripted_events" = v.scripted_events
+        FROM (VALUES ${sql.join(lockTuples, sql`, `)}) AS v(id, scripted_events)
+        WHERE m."id" = v.id
+      `);
     }
+    return [...activeVirtual, ...insertedRows];
   }
+  return activeVirtual;
 }
 
 async function kickOffAtSchedule(
@@ -1357,7 +1417,7 @@ let cachedScenarioMode: { mode: ScenarioMode; ts: number } | null = null;
 
 export async function getScenarioMode(): Promise<ScenarioMode> {
   const now = Date.now();
-  if (cachedScenarioMode && now - cachedScenarioMode.ts < 5_000) {
+  if (cachedScenarioMode && now - cachedScenarioMode.ts < 45_000) {
     return cachedScenarioMode.mode;
   }
   try {

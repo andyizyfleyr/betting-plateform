@@ -256,6 +256,10 @@ export interface ClientWalletData {
 
 let redirectingToAuth = false;
 
+const CLIENT_ETAG_CACHE_MAX = 60;
+const clientEtagCache = new Map<string, { etag: string; data: unknown }>();
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
+
 export class ApiRequestError extends Error {
   status: number;
   code?: string;
@@ -268,8 +272,27 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  const isGet = !init?.method || init.method.toUpperCase() === "GET";
+  const cached = isGet ? clientEtagCache.get(url) : undefined;
+
+  let mergedInit = init;
+  if (isGet && cached?.etag) {
+    const hdrs = new Headers(init?.headers);
+    if (!hdrs.has("If-None-Match")) {
+      hdrs.set("If-None-Match", cached.etag);
+    }
+    mergedInit = { ...init, headers: hdrs };
+  } else if (!isGet) {
+    // Toute mutation invalide les ETag clients afin de forcer une lecture fraîche immédiate
+    clientEtagCache.clear();
+  }
+
+  const res = await fetch(url, mergedInit);
+  if (res.status === 304 && cached) {
+    return cached.data as T;
+  }
+
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;
     code?: string;
@@ -283,6 +306,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       !redirectingToAuth
     ) {
       redirectingToAuth = true;
+      clientEtagCache.clear();
       void fetch("/api/auth/logout", { method: "POST" })
         .catch(() => undefined)
         .finally(() => {
@@ -299,7 +323,38 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       data.code
     );
   }
+
+  if (isGet) {
+    const etag = res.headers.get("etag");
+    if (etag) {
+      if (clientEtagCache.size >= CLIENT_ETAG_CACHE_MAX) {
+        const oldestKey = clientEtagCache.keys().next().value;
+        if (oldestKey !== undefined) clientEtagCache.delete(oldestKey);
+      }
+      clientEtagCache.set(url, { etag, data });
+    }
+  }
+
   return data as T;
+}
+
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const isGet = !init?.method || init.method.toUpperCase() === "GET";
+  if (!isGet) {
+    return executeRequest<T>(url, init);
+  }
+
+  // Déduplique les appels GET simultanés vers la même URL (ex. montage concurrent Providers + page)
+  const existing = inFlightGetRequests.get(url);
+  if (existing) {
+    return existing as Promise<T>;
+  }
+
+  const p = executeRequest<T>(url, init).finally(() => {
+    inFlightGetRequests.delete(url);
+  });
+  inFlightGetRequests.set(url, p);
+  return p;
 }
 
 export interface ClientMatchHistoryItem {

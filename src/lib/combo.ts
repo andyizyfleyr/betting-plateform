@@ -139,25 +139,24 @@ export function resolveComboLegStatus(
  *   exact sur les sélections gagnantes (remboursement si 100 % annulé) et crédite le solde.
  */
 export async function settlePendingCombos(): Promise<void> {
-  const [pending, settledWithPendingLegs] = await Promise.all([
-    db.select().from(comboBets).where(eq(comboBets.status, "pending")),
-    db
-      .select()
-      .from(comboBets)
-      .where(
-        and(
-          ne(comboBets.status, "pending"),
-          sql`${comboBets.legs}::text LIKE '%"status":"pending"%'`
-        )
-      ),
-  ]);
+  // 1 seule requête SQL couverte par l'index partiel `combo_bets_open_legs_idx`
+  // (remplace les 2 requêtes séparées et le `legs::text LIKE` qui scannait toute la table).
+  const openLegRows = await db
+    .select()
+    .from(comboBets)
+    .where(
+      sql`${comboBets.status} = 'pending' OR ${comboBets.legs} @> '[{"status":"pending"}]'::jsonb`
+    );
 
-  if (pending.length === 0 && settledWithPendingLegs.length === 0) return;
+  if (openLegRows.length === 0) return;
+
+  const pending = openLegRows.filter((cb) => cb.status === "pending");
+  const settledWithPendingLegs = openLegRows.filter((cb) => cb.status !== "pending");
 
   const matchIds = new Set<number>();
   const questionIds = new Set<number>();
 
-  for (const cb of [...pending, ...settledWithPendingLegs]) {
+  for (const cb of openLegRows) {
     for (const leg of cb.legs ?? []) {
       if (leg.kind === "sport" && leg.matchId) matchIds.add(leg.matchId);
       if (leg.kind === "prediction" && leg.questionId) questionIds.add(leg.questionId);
@@ -185,7 +184,23 @@ export async function settlePendingCombos(): Promise<void> {
   const evalNowMs = Date.now();
   const legOpts = { realSettlementMode, nowMs: evalNowMs };
 
-  // 1. Met à jour les sélections désormais terminées sur les combinés déjà réglés (ex. perdus tôt)
+  interface LegsOnlyPatch {
+    id: number;
+    legsJson: string;
+  }
+  interface StatusTransitionPatch {
+    id: number;
+    legsJson: string;
+    status: "lost" | "won" | "void";
+    potentialWin: number;
+    payout: number;
+    settledAtIso: string;
+  }
+
+  const legsOnlyPatches: LegsOnlyPatch[] = [];
+  const statusPatches: StatusTransitionPatch[] = [];
+
+  // 1. Collecte les sélections désormais terminées sur les combinés déjà réglés (ex. perdus tôt)
   for (const cb of settledWithPendingLegs) {
     let changed = false;
     const updatedLegs: ComboLeg[] = (cb.legs ?? []).map((leg) => {
@@ -198,16 +213,25 @@ export async function settlePendingCombos(): Promise<void> {
       return leg;
     });
     if (changed) {
-      await db
-        .update(comboBets)
-        .set({ legs: updatedLegs })
-        .where(eq(comboBets.id, cb.id));
+      legsOnlyPatches.push({
+        id: cb.id,
+        legsJson: JSON.stringify(updatedLegs),
+      });
     }
   }
 
-  if (pending.length === 0) return;
-
-  let settledAny = false;
+  const legResolvedMs = (leg: ComboLeg): number | null => {
+    if (leg.kind === "sport" && leg.matchId) {
+      const m = matchMap.get(leg.matchId);
+      return m?.finishedAt ? m.finishedAt.getTime() : null;
+    }
+    if (leg.kind === "prediction" && leg.questionId) {
+      const q = questionMap.get(leg.questionId);
+      const dt = q?.resolvedAt ?? q?.resolvesAt ?? null;
+      return dt ? dt.getTime() : null;
+    }
+    return null;
+  };
 
   for (const cb of pending) {
     let legsChanged = false;
@@ -223,86 +247,107 @@ export async function settlePendingCombos(): Promise<void> {
 
     const hasLost = nextLegs.some((l) => l.status === "lost");
     const allSettled = nextLegs.length > 0 && nextLegs.every((l) => l.status !== "pending");
-
-    const legResolvedMs = (leg: ComboLeg): number | null => {
-      if (leg.kind === "sport" && leg.matchId) {
-        const m = matchMap.get(leg.matchId);
-        return m?.finishedAt ? m.finishedAt.getTime() : null;
-      }
-      if (leg.kind === "prediction" && leg.questionId) {
-        const q = questionMap.get(leg.questionId);
-        const dt = q?.resolvedAt ?? q?.resolvesAt ?? null;
-        return dt ? dt.getTime() : null;
-      }
-      return null;
-    };
-
-    const nowMs = Date.now();
     const minSettledMs = cb.placedAt ? cb.placedAt.getTime() + 1_000 : 0;
 
     if (hasLost) {
-      settledAny = true;
       const lostTimes = nextLegs
         .filter((l) => l.status === "lost")
         .map(legResolvedMs)
         .filter((t): t is number => t != null);
-      const rawLostMs = lostTimes.length > 0 ? Math.min(...lostTimes) : nowMs;
-      const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawLostMs)));
+      const rawLostMs = lostTimes.length > 0 ? Math.min(...lostTimes) : evalNowMs;
+      const settledAt = new Date(Math.min(evalNowMs, Math.max(minSettledMs, rawLostMs)));
 
-      await db
-        .update(comboBets)
-        .set({ legs: nextLegs, status: "lost", settledAt })
-        .where(eq(comboBets.id, cb.id));
+      statusPatches.push({
+        id: cb.id,
+        legsJson: JSON.stringify(nextLegs),
+        status: "lost",
+        potentialWin: cb.potentialWin,
+        payout: 0,
+        settledAtIso: settledAt.toISOString(),
+      });
       continue;
     }
 
     if (allSettled) {
-      settledAny = true;
       const allTimes = nextLegs
         .map(legResolvedMs)
         .filter((t): t is number => t != null);
-      const rawWonMs = allTimes.length > 0 ? Math.max(...allTimes) : nowMs;
-      const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawWonMs)));
+      const rawWonMs = allTimes.length > 0 ? Math.max(...allTimes) : evalNowMs;
+      const settledAt = new Date(Math.min(evalNowMs, Math.max(minSettledMs, rawWonMs)));
 
       const wonOdds = nextLegs.filter((l) => l.status === "won").map((l) => l.odds);
       const allVoid = wonOdds.length === 0;
       const quote = allVoid ? null : computeComboQuote(wonOdds, cb.stake);
       const payout =
         quote == null
-          ? round2(cb.stake) // toutes les sélections annulées → remboursement mise
+          ? round2(cb.stake)
           : round2(Math.min(cb.potentialWin, quote.potentialWin));
 
-      await db.transaction(async (tx) => {
-        const [updated] = await tx
-          .update(comboBets)
-          .set({
-            legs: nextLegs,
-            status: allVoid ? "void" : "won",
-            potentialWin: payout,
-            settledAt,
-          })
-          .where(sql`${comboBets.id} = ${cb.id} AND ${comboBets.status} = 'pending'`)
-          .returning({ id: comboBets.id });
-
-        if (updated && payout > 0) {
-          await tx
-            .update(appUser)
-            .set({ balance: sql`${appUser.balance} + ${payout}` })
-            .where(eq(appUser.id, cb.userId));
-        }
+      statusPatches.push({
+        id: cb.id,
+        legsJson: JSON.stringify(nextLegs),
+        status: allVoid ? "void" : "won",
+        potentialWin: payout,
+        payout,
+        settledAtIso: settledAt.toISOString(),
       });
       continue;
     }
 
     if (legsChanged) {
-      await db
-        .update(comboBets)
-        .set({ legs: nextLegs })
-        .where(eq(comboBets.id, cb.id));
+      legsOnlyPatches.push({
+        id: cb.id,
+        legsJson: JSON.stringify(nextLegs),
+      });
     }
   }
 
-  if (settledAny) {
+  // Exécute les mises à jour de `legs` (sans transition de statut) en 1 seul lot SQL
+  if (legsOnlyPatches.length > 0) {
+    const legValues = sql.join(
+      legsOnlyPatches.map((p) => sql`(${p.id}::int, ${p.legsJson}::jsonb)`),
+      sql`, `
+    );
+    await db.execute(sql`
+      UPDATE "combo_bets" AS cb
+      SET "legs" = v.legs
+      FROM (VALUES ${legValues}) AS v(id, legs)
+      WHERE cb."id" = v.id
+    `);
+  }
+
+  // Exécute tous les règlements finaux de combinés + crédits groupés de soldes en 1 seule requête SQL CTE atomique
+  if (statusPatches.length > 0) {
+    const settleValues = sql.join(
+      statusPatches.map(
+        (p) =>
+          sql`(${p.id}::int, ${p.legsJson}::jsonb, ${p.status}::text, ${p.potentialWin}::float8, ${p.payout}::float8, ${p.settledAtIso}::timestamptz::timestamp)`
+      ),
+      sql`, `
+    );
+    await db.execute(sql`
+      WITH updated AS (
+        UPDATE "combo_bets" AS cb
+        SET
+          "legs" = v.legs,
+          "status" = v.status,
+          "potential_win" = v.potential_win,
+          "settled_at" = v.settled_at
+        FROM (VALUES ${settleValues}) AS v(id, legs, status, potential_win, payout, settled_at)
+        WHERE cb."id" = v.id
+          AND cb."status" = 'pending'
+        RETURNING cb."user_id", v.payout
+      )
+      UPDATE "app_user" AS u
+      SET "balance" = u."balance" + agg.total_payout
+      FROM (
+        SELECT "user_id", SUM(payout)::float8 AS total_payout
+        FROM updated
+        WHERE payout > 0
+        GROUP BY "user_id"
+      ) AS agg
+      WHERE u."id" = agg."user_id"
+    `);
     invalidateHouseHealthCache();
   }
 }
