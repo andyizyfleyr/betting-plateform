@@ -5,6 +5,7 @@ import { matches, type MatchRow } from "@/db/schema";
 import { extractMatchTimelineStats, hasVerifiedGoalTimeline } from "@/db/fixtures";
 import { ensureSeeded } from "@/db/seed";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
+import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
@@ -19,7 +20,24 @@ function toIso(v: Date | string | null | undefined): string | null {
   return v.toISOString();
 }
 
-function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
+function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
+  const cleanEvents = sanitizeMatchEvents(
+    rawMatch.events,
+    rawMatch.homeScore,
+    rawMatch.awayScore
+  );
+  const { redHome: cleanRedHome, redAway: cleanRedAway } = reconcileRedCardCounts(
+    rawMatch.events,
+    cleanEvents,
+    rawMatch.redHome,
+    rawMatch.redAway
+  );
+  const m: MatchRow = {
+    ...rawMatch,
+    events: cleanEvents,
+    redHome: cleanRedHome,
+    redAway: cleanRedAway,
+  };
   const isReal = m.source === "manual";
   const hasScore = m.homeScore != null && m.awayScore != null;
   const h = m.homeScore ?? 0;

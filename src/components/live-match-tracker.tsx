@@ -12,6 +12,7 @@ import {
   type MatchColors,
 } from "@/lib/live-telemetry";
 import { teamLogoCandidates } from "@/lib/team-logos";
+import { sanitizeMatchEvents } from "@/lib/match-events";
 import { cn, initials } from "@/lib/format";
 
 type TrackerTab = "pitch" | "momentum" | "stats";
@@ -77,7 +78,10 @@ export function LiveMatchTracker({
     frame.kind === "corner" ||
     frame.kind === "free_kick";
 
-  const events = useMemo(() => match.events ?? [], [match.events]);
+  const events = useMemo(
+    () => sanitizeMatchEvents(match.events, match.homeScore, match.awayScore),
+    [match.events, match.homeScore, match.awayScore]
+  );
   const activePinIdx = pinnedEvent?.matchId === match.id ? pinnedEvent.idx : null;
   const activePinnedEvent: ClientMatchEvent | null =
     activePinIdx != null ? (events[activePinIdx] ?? null) : null;

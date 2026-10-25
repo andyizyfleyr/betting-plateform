@@ -18,7 +18,11 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
   const isReal = match.source === "manual";
   const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const marketCount = match.markets?.length ?? 0;
-  const { homeGoals, awayGoals } = formatGoalSummary(match.events);
+  const { homeGoals, awayGoals } = formatGoalSummary(
+    match.events,
+    match.homeScore,
+    match.awayScore
+  );
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
   const hasLiveSidePanel =

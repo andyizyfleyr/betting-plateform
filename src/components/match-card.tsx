@@ -12,6 +12,7 @@ import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
 import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
+import { formatGoalSummaryStrings } from "@/lib/match-events";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
 export function LiveStatusBadge({
@@ -48,21 +49,15 @@ export function LiveStatusBadge({
   );
 }
 
-export function formatGoalSummary(events?: ClientMatchEvent[]): {
+export function formatGoalSummary(
+  events?: ClientMatchEvent[],
+  homeScore?: number | null,
+  awayScore?: number | null
+): {
   homeGoals: string[];
   awayGoals: string[];
 } {
-  const homeGoals: string[] = [];
-  const awayGoals: string[] = [];
-  if (!events || events.length === 0) return { homeGoals, awayGoals };
-
-  for (const ev of events) {
-    if (ev.type !== "goal") continue;
-    const item = ev.player ? `${ev.minute}' ${ev.player}` : `${ev.minute}'`;
-    if (ev.team === "home") homeGoals.push(item);
-    else awayGoals.push(item);
-  }
-  return { homeGoals, awayGoals };
+  return formatGoalSummaryStrings(events, homeScore, awayScore);
 }
 
 export function MatchCard({
@@ -81,7 +76,11 @@ export function MatchCard({
   const isReal = match.source === "manual";
   const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const marketCount = match.markets?.length ?? 0;
-  const { homeGoals, awayGoals } = formatGoalSummary(match.events);
+  const { homeGoals, awayGoals } = formatGoalSummary(
+    match.events,
+    match.homeScore,
+    match.awayScore
+  );
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
   return (

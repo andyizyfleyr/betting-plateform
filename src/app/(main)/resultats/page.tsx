@@ -19,6 +19,7 @@ import { hasAnyRealStats, RealMatchStatsCard } from "@/components/real-match-sta
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
+import { sanitizeMatchEvents } from "@/lib/match-events";
 import { cn, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 
 type Universe = "real" | "virtual";
@@ -84,8 +85,11 @@ function MatchHistoryCard({
           : "—";
 
   const sortedEvents = useMemo(
-    () => [...(match.events ?? [])].sort((x, y) => x.minute - y.minute),
-    [match.events]
+    () =>
+      sanitizeMatchEvents(match.events, match.homeScore, match.awayScore).sort(
+        (x, y) => x.minute - y.minute
+      ),
+    [match.events, match.homeScore, match.awayScore]
   );
 
   return (
