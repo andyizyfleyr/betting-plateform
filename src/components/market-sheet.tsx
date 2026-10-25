@@ -65,7 +65,7 @@ export function MarketSheet() {
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
   const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
-  const [showTracker, setShowTracker] = useState(false);
+  const [showTracker, setShowTracker] = useState(true);
 
   const sharedFromFeed = useMemo(
     () => (marketMatch && feedMatches ? feedMatches.find((m) => m.id === marketMatch.id) ?? null : null),
@@ -206,7 +206,7 @@ export function MarketSheet() {
                         Valider
                       </button>
                     )}
-                    {isLive && (
+                    {(isLive || isFinished) && (
                       <button
                         type="button"
                         onPointerDown={(e) => e.stopPropagation()}
@@ -217,7 +217,7 @@ export function MarketSheet() {
                         )}
                       >
                         <Radio className="h-3 w-3" strokeWidth={2.4} />
-                        2D
+                        {isLive ? "2D" : "Stats"}
                       </button>
                     )}
                     <button
@@ -340,7 +340,14 @@ export function MarketSheet() {
 
             {/* Zone scrollable en bloc standard : aucune compression verticale possible */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pb-8 pt-3">
-              {isLive && showTracker && <LiveMatchTracker match={match} className="mb-3" />}
+              {(isLive || isFinished) && showTracker && (
+                <LiveMatchTracker
+                  key={match.id}
+                  match={match}
+                  defaultTab={isFinished ? "stats" : "pitch"}
+                  className="mb-3"
+                />
+              )}
               {isFinished || filteredGroups.length === 0 ? (
                 <div className="py-10 text-center text-[13px] text-mist">
                   {isFinished

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
@@ -69,6 +70,11 @@ export async function GET() {
     const oddsAway =
       resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
 
+    const telemetry =
+      m.status === "live" || m.status === "finished"
+        ? computeMatchTelemetry(m)
+        : undefined;
+
     return {
       ...m,
       homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
@@ -76,6 +82,7 @@ export async function GET() {
       oddsHome,
       oddsDraw,
       oddsAway,
+      ...(telemetry ? { telemetry } : {}),
       markets,
     };
   });
