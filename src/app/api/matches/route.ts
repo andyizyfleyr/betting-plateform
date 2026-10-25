@@ -1,10 +1,11 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { asc, desc, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
+import { settleFinishedBets } from "@/lib/settle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +13,11 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   await ensureSeeded();
   await runLiveEngine();
+  await settleFinishedBets();
 
   const allRows = await db
     .select()
     .from(matches)
-    .where(eq(matches.source, "manual"))
     .orderBy(
       asc(sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`),
       asc(matches.startsAt),
@@ -35,8 +36,15 @@ export async function GET() {
 
   const rows = [...activeRows, ...finishedRows];
 
-  // Cotes fixes bookmaker : basées uniquement sur le match (forces, score, minute), sans pool mutuel
+  // Cotes fixes bookmaker basées sur le match (forces, forme, score, minute)
   const withMarkets = rows.map((m) => {
+    const formOpts = {
+      homeForm: m.homeForm ?? 1,
+      awayForm: m.awayForm ?? 1,
+      redHome: m.redHome ?? 0,
+      redAway: m.redAway ?? 0,
+    };
+
     const markets =
       m.status === "finished"
         ? []
@@ -49,14 +57,9 @@ export async function GET() {
                 m.homeScore ?? 0,
                 m.awayScore ?? 0,
                 minuteNumber(m.minute),
-                {
-                  homeForm: m.homeForm ?? 1,
-                  awayForm: m.awayForm ?? 1,
-                  redHome: m.redHome ?? 0,
-                  redAway: m.redAway ?? 0,
-                }
+                formOpts
               )
-            : buildMarkets(m.homeTeam, m.awayTeam);
+            : buildMarkets(m.homeTeam, m.awayTeam, formOpts);
 
     const resGroup = markets.find((g) => g.key === "result");
     const oddsHome =

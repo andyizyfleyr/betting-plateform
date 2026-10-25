@@ -1,15 +1,32 @@
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
-import { appUser, bets, deposits, matches, predictionBets, predictionQuestions, type PredictionOption } from "@/db/schema";
+import { backdateStartsAtForMinute, runLiveEngine } from "@/db/engine";
+import { liveOddsFor, pickScorerName } from "@/db/fixtures";
+import {
+  appUser,
+  bets,
+  deposits,
+  matches,
+  predictionBets,
+  predictionQuestions,
+  type PredictionOption,
+} from "@/db/schema";
 import { publicUser } from "@/lib/auth";
+import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
-import { getAuthUserId } from "@/lib/session";
-import { settleQuestion, slugifyOptionKey } from "@/lib/predictions";
-import { settleMatchBets } from "@/lib/settle";
-import { backdateStartsAtForMinute } from "@/db/engine";
+import {
+  reopenSettledQuestion,
+  round2,
+  settleQuestion,
+  settleResolvedQuestions,
+  slugifyOptionKey,
+} from "@/lib/predictions";
 import { STALE_LATENCY_MS } from "@/lib/risk";
+import { getAuthUserId } from "@/lib/session";
+import { settleFinishedBets, settleMatchBets } from "@/lib/settle";
+import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
@@ -24,70 +41,74 @@ async function requireAdmin(req: NextRequest): Promise<number | NextResponse> {
   return uid;
 }
 
-/** Statistiques du tableau de bord + liste des données pour la gestion. */
+/** Statistiques synchronisées du tableau de bord + listes de pilotage. */
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (typeof auth !== "number") return auth;
 
-  const [totalUsers] = await db
-    .select({ value: count() })
-    .from(appUser);
-  const [totalBets] = await db.select({ value: count() }).from(bets);
-  const [totalPredBets] = await db.select({ value: count() }).from(predictionBets);
-  const [totalDeposits] = await db.select({ value: count() }).from(deposits);
-  const [totalStake] = await db
-    .select({ value: sql<string>`COALESCE(SUM(${bets.stake}), 0)` })
-    .from(bets);
-  const [totalPayouts] = await db
-    .select({
-      value: sql<string>`COALESCE(SUM(CASE WHEN ${bets.status} = 'won' THEN ${bets.potentialWin} WHEN ${bets.status} = 'cashed' THEN ${bets.cashOutAmount} ELSE 0 END), 0)`,
-    })
-    .from(bets);
-  const [liveMatch] = await db
-    .select({ n: count() })
-    .from(matches)
-    .where(eq(matches.status, "live"));
-  const [openQuestions] = await db
-    .select({ n: count() })
-    .from(predictionQuestions)
-    .where(eq(predictionQuestions.status, "open"));
-  const [totalBalance] = await db
-    .select({ value: sql<string>`COALESCE(SUM(${appUser.balance}), 0)` })
-    .from(appUser);
+  // Synchronise le moteur live et les règlements pour afficher l'état exact en temps réel
+  await runLiveEngine();
+  await settleFinishedBets();
+  await settleResolvedQuestions();
 
-  const depositValue = Number(totalDeposits?.value ?? 0);
-  const stake = Number(totalStake?.value ?? 0);
-  const payouts = Number(totalPayouts?.value ?? 0);
+  const [
+    [totalUsers],
+    [totalBets],
+    [totalPredBets],
+    [totalDeposits],
+    [sportTotals],
+    [predTotals],
+    [liveMatch],
+    [openQuestions],
+    [totalBalance],
+  ] = await Promise.all([
+    db.select({ value: count() }).from(appUser),
+    db.select({ value: count() }).from(bets),
+    db.select({ value: count() }).from(predictionBets),
+    db.select({ value: count() }).from(deposits),
+    db
+      .select({
+        stake: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
+        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${bets.status} = 'won' THEN ${bets.potentialWin} WHEN ${bets.status} = 'cashed' THEN COALESCE(${bets.cashOutAmount}, 0) ELSE 0 END), 0)::float8`,
+      })
+      .from(bets),
+    db
+      .select({
+        stake: sql<number>`COALESCE(SUM(${predictionBets.stake}), 0)::float8`,
+        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${predictionBets.status} = 'won' THEN ${predictionBets.potentialWin} WHEN ${predictionBets.status} = 'cashed' THEN COALESCE(${predictionBets.cashOutAmount}, 0) ELSE 0 END), 0)::float8`,
+      })
+      .from(predictionBets),
+    db.select({ n: count() }).from(matches).where(eq(matches.status, "live")),
+    db.select({ n: count() }).from(predictionQuestions).where(eq(predictionQuestions.status, "open")),
+    db.select({ value: sql<number>`COALESCE(SUM(${appUser.balance}), 0)::float8` }).from(appUser),
+  ]);
 
-  const users = await db
-    .select()
-    .from(appUser)
-    .orderBy(desc(appUser.id));
-  const betsRows = await db
-    .select()
-    .from(bets)
-    .orderBy(desc(bets.placedAt))
-    .limit(300);
-  const depRows = await db
-    .select()
-    .from(deposits)
-    .orderBy(desc(deposits.createdAt))
-    .limit(200);
-  const matchRows = await db
-    .select()
-    .from(matches)
-    .orderBy(desc(matches.id))
-    .limit(200);
-  const questionRows = await db
-    .select()
-    .from(predictionQuestions)
-    .orderBy(desc(predictionQuestions.id))
-    .limit(200);
-  const predBetsRows = await db
-    .select()
-    .from(predictionBets)
-    .orderBy(desc(predictionBets.placedAt))
-    .limit(300);
+  const stake = round2((sportTotals?.stake ?? 0) + (predTotals?.stake ?? 0));
+  const payouts = round2((sportTotals?.payouts ?? 0) + (predTotals?.payouts ?? 0));
+
+  const [users, betsRows, depRows, matchRows, questionRows, predBetsRows] = await Promise.all([
+    db.select().from(appUser).orderBy(desc(appUser.id)),
+    db.select().from(bets).orderBy(desc(bets.placedAt)).limit(300),
+    db.select().from(deposits).orderBy(desc(deposits.createdAt)).limit(200),
+    db
+      .select()
+      .from(matches)
+      .orderBy(
+        sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`,
+        desc(matches.id)
+      )
+      .limit(120),
+    db.select().from(predictionQuestions).orderBy(desc(predictionQuestions.id)).limit(200),
+    db.select().from(predictionBets).orderBy(desc(predictionBets.placedAt)).limit(300),
+  ]);
+
+  const seenQ = new Set<string>();
+  const uniqueQuestions = questionRows.filter((q) => {
+    const k = q.question.trim().toLowerCase();
+    if (seenQ.has(k)) return false;
+    seenQ.add(k);
+    return true;
+  });
 
   return NextResponse.json({
     stats: {
@@ -95,54 +116,30 @@ export async function GET(req: NextRequest) {
       totalBets: (totalBets?.value ?? 0) + (totalPredBets?.value ?? 0),
       sportsBets: totalBets?.value ?? 0,
       predBets: totalPredBets?.value ?? 0,
-      deposits: depositValue,
+      deposits: Number(totalDeposits?.value ?? 0),
       stake,
       payouts,
-      balance: Number(totalBalance?.value ?? 0),
+      balance: round2(Number(totalBalance?.value ?? 0)),
       liveMatches: liveMatch?.n ?? 0,
       openQuestions: openQuestions?.n ?? 0,
-      netRevenue: stake - payouts,
+      netRevenue: round2(stake - payouts),
     },
     users: users.map(publicUser),
     bets: betsRows,
     predictionBets: predBetsRows,
     deposits: depRows,
-    matches: matchRows,
-    questions: questionRows.map((q) => ({
+    matches: matchRows.map((m) => ({
+      ...m,
+      homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
+      awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
+    })),
+    questions: uniqueQuestions.map((q) => ({
       ...q,
       resolvesAt: q.resolvesAt.toISOString(),
       resolvedAt: q.resolvedAt ? q.resolvedAt.toISOString() : null,
     })),
   });
 }
-
-type Action =
-  | { action: "setBalance"; userId: number; amount: number }
-  | {
-      action: "addMatch";
-      home: string;
-      away: string;
-      league?: string;
-      oddsHome?: number;
-      oddsDraw?: number;
-      oddsAway?: number;
-      startsAt?: string;
-      status?: "upcoming" | "live";
-      homeLogo?: string | null;
-      awayLogo?: string | null;
-      markets?: unknown;
-    }
-  | { action: "deleteMatch"; matchId: number }
-  | { action: "toggleMatch"; matchId: number; suspended: boolean }
-  | { action: "markGoal"; matchId: number; team: "home" | "away"; minute?: number | string }
-  | { action: "setMinute"; matchId: number; minute: string }
-  | { action: "startMatch"; matchId: number }
-  | { action: "finishMatch"; matchId: number; homeScore?: number; awayScore?: number }
-  | { action: "reopenMatch"; matchId: number }
-  | { action: "addQuestion"; question: string; category?: string; oddsYes?: number; oddsNo?: number; options?: unknown; hours?: number }
-  | { action: "resolveQuestion"; questionId: number; resolution: string }
-  | { action: "deleteQuestion"; questionId: number }
-  | { action: "selectAll"; from: string };
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
@@ -155,418 +152,626 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
   }
 
-  const action = body.action as string;
+  const action = String(body.action ?? "");
 
-  if (action === "setBalance") {
-    const userId = Number(body.userId);
-    const amount = roundNumber(body.amount);
-    if (!userId || amount == null) {
-      return NextResponse.json({ error: "userId et amount requis" }, { status: 400 });
+  try {
+    if (action === "setBalance") {
+      const userId = Number(body.userId);
+      const amount = roundNumber(body.amount);
+      if (!userId || amount == null || amount < 0) {
+        return NextResponse.json({ error: "Montant valide requis (≥ 0 €)" }, { status: 400 });
+      }
+      const [u] = await db
+        .update(appUser)
+        .set({ balance: amount })
+        .where(eq(appUser.id, userId))
+        .returning();
+      if (!u) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+      return NextResponse.json({ ok: true, user: publicUser(u) });
     }
-    const [u] = await db
-      .update(appUser)
-      .set({ balance: amount })
-      .where(eq(appUser.id, userId))
-      .returning();
-    if (!u) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
-    return NextResponse.json({ ok: true, user: publicUser(u) });
-  }
 
-  if (action === "addMatch") {
-    const home = String(body.home ?? "").trim();
-    const away = String(body.away ?? "").trim();
-    if (!home || !away) {
-      return NextResponse.json({ error: "Les deux équipes sont requises" }, { status: 400 });
-    }
-    const league = String(body.league ?? "Football").trim();
-    const oddsHome = roundNumber(body.oddsHome) ?? 1.9;
-    const oddsDraw = roundNumber(body.oddsDraw) ?? 3.3;
-    const oddsAway = roundNumber(body.oddsAway) ?? 3.1;
-    const status = body.status === "live" ? "live" : "upcoming";
-    // Date/heure de coup d'envoi saisie par l'admin (défaut : dans 10 min,
-    // ou maintenant si le match est créé directement en direct).
-    let startsAt = new Date(status === "live" ? Date.now() : Date.now() + 10 * 60_000);
-    if (typeof body.startsAt === "string") {
-      const parsed = new Date(body.startsAt);
-      if (!Number.isNaN(parsed.getTime())) startsAt = parsed;
-    }
-    // Marchés personnalisés : validation légère + cotes par défaut si absentes.
-    const rawMarkets = Array.isArray(body.markets) ? (body.markets as unknown[]) : null;
-    const markets = rawMarkets
-      ? rawMarkets.map((mm) => {
-          const g = mm as {
-            key?: string;
-            label?: string;
-            short?: string;
-            outcomes?: unknown[];
-            rows?: unknown[];
-          };
-          return {
-            key: String(g.key ?? ""),
-            label: String(g.label ?? ""),
-            short: String(g.short ?? ""),
-            outcomes: Array.isArray(g.outcomes)
-              ? g.outcomes.map((oo) => {
-                  const o = oo as { key?: string; label?: string; short?: string; odds?: number };
-                  return { key: String(o.key ?? ""), label: String(o.label ?? ""), short: String(o.short ?? ""), odds: roundNumber(o.odds) ?? 2 };
-                })
-              : [],
-            rows: Array.isArray(g.rows)
-              ? g.rows.map((rr) => {
-                  const r = rr as { label?: string; outcomes?: unknown[] };
-                  return {
-                    label: String(r.label ?? ""),
-                    outcomes: Array.isArray(r.outcomes)
-                      ? r.outcomes.map((oo) => {
-                          const o = oo as { key?: string; label?: string; short?: string; odds?: number };
-                          return { key: String(o.key ?? ""), label: String(o.label ?? ""), short: String(o.short ?? ""), odds: roundNumber(o.odds) ?? 2 };
-                        })
-                      : [],
-                  };
-                })
-              : undefined,
-          };
+    if (action === "addMatch") {
+      const home = String(body.home ?? "").trim();
+      const away = String(body.away ?? "").trim();
+      if (!home || !away) {
+        return NextResponse.json({ error: "Les deux équipes sont requises" }, { status: 400 });
+      }
+      if (home.toLowerCase() === away.toLowerCase()) {
+        return NextResponse.json({ error: "Les deux équipes doivent être différentes" }, { status: 400 });
+      }
+      const league = String(body.league ?? "Football").trim() || "Football";
+      const oddsHome = Math.max(1.02, roundNumber(body.oddsHome) ?? 1.9);
+      const oddsDraw = Math.max(1.02, roundNumber(body.oddsDraw) ?? 3.3);
+      const oddsAway = Math.max(1.02, roundNumber(body.oddsAway) ?? 3.1);
+      const status = body.status === "live" ? "live" : "upcoming";
+      const source = body.source === "virtual" ? "virtual" : "manual";
+
+      let startsAt = new Date(status === "live" ? Date.now() : Date.now() + 10 * 60_000);
+      if (typeof body.startsAt === "string" && body.startsAt.trim()) {
+        const parsed = new Date(body.startsAt);
+        if (!Number.isNaN(parsed.getTime())) startsAt = parsed;
+      }
+
+      const rawMarkets = Array.isArray(body.markets) ? (body.markets as unknown[]) : null;
+      const markets =
+        rawMarkets && rawMarkets.length > 0
+          ? rawMarkets.map((mm) => {
+              const g = mm as {
+                key?: string;
+                label?: string;
+                short?: string;
+                outcomes?: unknown[];
+                rows?: unknown[];
+              };
+              return {
+                key: String(g.key ?? ""),
+                label: String(g.label ?? ""),
+                short: String(g.short ?? ""),
+                outcomes: Array.isArray(g.outcomes)
+                  ? g.outcomes.map((oo) => {
+                      const o = oo as { key?: string; label?: string; short?: string; odds?: number };
+                      return {
+                        key: String(o.key ?? ""),
+                        label: String(o.label ?? ""),
+                        short: String(o.short ?? ""),
+                        odds: Math.max(1.02, roundNumber(o.odds) ?? 2),
+                      };
+                    })
+                  : [],
+                rows: Array.isArray(g.rows)
+                  ? g.rows.map((rr) => {
+                      const r = rr as { label?: string; outcomes?: unknown[] };
+                      return {
+                        label: String(r.label ?? ""),
+                        outcomes: Array.isArray(r.outcomes)
+                          ? r.outcomes.map((oo) => {
+                              const o = oo as { key?: string; label?: string; short?: string; odds?: number };
+                              return {
+                                key: String(o.key ?? ""),
+                                label: String(o.label ?? ""),
+                                short: String(o.short ?? ""),
+                                odds: Math.max(1.02, roundNumber(o.odds) ?? 2),
+                              };
+                            })
+                          : [],
+                      };
+                    })
+                  : undefined,
+              };
+            })
+          : null;
+
+      let h = oddsHome;
+      let d = oddsDraw;
+      let a = oddsAway;
+      if (markets) {
+        const res = markets.find((m) => m.key === "result");
+        const pick = (k: string) => res?.outcomes.find((o) => o.key === k)?.odds;
+        const vh = pick("home");
+        const vd = pick("draw");
+        const va = pick("away");
+        if (vh) h = vh;
+        if (vd) d = vd;
+        if (va) a = va;
+      }
+
+      const customHomeLogo =
+        typeof body.homeLogo === "string" && body.homeLogo.trim() ? body.homeLogo.trim() : null;
+      const customAwayLogo =
+        typeof body.awayLogo === "string" && body.awayLogo.trim() ? body.awayLogo.trim() : null;
+
+      const [m] = await db
+        .insert(matches)
+        .values({
+          sport: "football",
+          league,
+          homeTeam: home,
+          awayTeam: away,
+          homeLogo: customHomeLogo ?? teamLogo(home),
+          awayLogo: customAwayLogo ?? teamLogo(away),
+          homeScore: status === "live" ? 0 : null,
+          awayScore: status === "live" ? 0 : null,
+          status,
+          minute: status === "live" ? "1'" : null,
+          startsAt,
+          oddsHome: h,
+          oddsDraw: d,
+          oddsAway: a,
+          suspended: false,
+          redHome: 0,
+          redAway: 0,
+          events: [],
+          tickHistory: [],
+          regime: "balanced",
+          homeForm: 1,
+          awayForm: 1,
+          markets,
+          source,
         })
-      : null;
-
-    // Synchronise les cotes 1/N/2 du match avec le marché "result" perso si présent.
-    let h = oddsHome, d = oddsDraw, a = oddsAway;
-    if (markets) {
-      const res = markets.find((m) => m.key === "result");
-      const pick = (k: string) => res?.outcomes.find((o) => o.key === k)?.odds;
-      const vh = pick("home"), vd = pick("draw"), va = pick("away");
-      if (vh) h = vh;
-      if (vd) d = vd;
-      if (va) a = va;
+        .returning();
+      return NextResponse.json({ ok: true, match: m });
     }
 
-    const [m] = await db
-      .insert(matches)
-      .values({
-        sport: "football",
-        league,
-        homeTeam: home,
-        awayTeam: away,
-        homeLogo: typeof body.homeLogo === "string" && body.homeLogo.trim() ? body.homeLogo.trim() : null,
-        awayLogo: typeof body.awayLogo === "string" && body.awayLogo.trim() ? body.awayLogo.trim() : null,
-        homeScore: null,
-        awayScore: null,
-        status,
-        minute: status === "live" ? "1'" : null,
-        startsAt,
-        oddsHome: h,
-        oddsDraw: d,
-        oddsAway: a,
-        suspended: false,
-        redHome: 0,
-        redAway: 0,
-        events: [],
-        tickHistory: [],
-        regime: "balanced",
-        homeForm: 1,
-        awayForm: 1,
-        markets,
-        source: "manual",
-      })
-      .returning();
-    return NextResponse.json({ ok: true, match: m });
-  }
+    if (action === "editMatch") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
 
-  if (action === "deleteMatch") {
-    const matchId = Number(body.matchId);
-    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
-    const linked = await db.select({ id: bets.id }).from(bets).where(eq(bets.matchId, matchId)).limit(1);
-    if (linked[0]) {
-      return NextResponse.json({ error: "Ce match a des paris liés, suppression bloquée" }, { status: 400 });
-    }
-    await db.delete(matches).where(eq(matches.id, matchId));
-    return NextResponse.json({ ok: true });
-  }
+      const homeTeam = String(body.home ?? m.homeTeam).trim() || m.homeTeam;
+      const awayTeam = String(body.away ?? m.awayTeam).trim() || m.awayTeam;
+      const league = String(body.league ?? m.league).trim() || m.league;
+      const oddsHome = Math.max(1.02, roundNumber(body.oddsHome) ?? m.oddsHome);
+      const oddsDraw = Math.max(1.02, roundNumber(body.oddsDraw) ?? m.oddsDraw ?? 3.2);
+      const oddsAway = Math.max(1.02, roundNumber(body.oddsAway) ?? m.oddsAway);
 
-  if (action === "toggleMatch") {
-    const matchId = Number(body.matchId);
-    const suspended = Boolean(body.suspended);
-    await db.update(matches).set({ suspended }).where(eq(matches.id, matchId));
-    return NextResponse.json({ ok: true });
-  }
-
-  if (action === "markGoal") {
-    const matchId = Number(body.matchId);
-    const team = body.team === "away" ? "away" : "home";
-    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
-
-    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
-    if (m.source !== "manual") {
-      return NextResponse.json({ error: "Le score d'un match virtuel est géré automatiquement" }, { status: 400 });
-    }
-    if (m.status === "finished") {
-      return NextResponse.json({ error: "Impossible de marquer un but : match déjà terminé" }, { status: 400 });
-    }
-
-    const currentHome = m.homeScore ?? 0;
-    const currentAway = m.awayScore ?? 0;
-    const homeScore = team === "home" ? currentHome + 1 : currentHome;
-    const awayScore = team === "away" ? currentAway + 1 : currentAway;
-
-    let gameMinute = minuteNumber(m.minute);
-    if (typeof body.minute === "number" && Number.isFinite(body.minute)) {
-      gameMinute = body.minute;
-    }
-    gameMinute = Math.max(1, Math.min(90, Math.round(gameMinute)));
-
-    const events = [...(m.events ?? [])];
-    events.push({ type: "goal", team, minute: gameMinute });
-
-    // But : blocage du marché (3 s) puis réouverture auto par le moteur avec cotes
-    // ajustées — la suspension est levée au prochain tick une fois le délai écoulé.
-    const reprice = await db
-      .update(matches)
-      .set({
-        homeScore,
-        awayScore,
-        minute: `${gameMinute}'`,
-        status: "live",
-        lastGoalAt: new Date(),
-        startsAt: backdateStartsAt(gameMinute),
-        suspended: true,
-        events,
-      })
-      .where(eq(matches.id, matchId))
-      .returning();
-
-    // Latence admin-clic : les paris « pending » placés dans la fenêtre précédant le
-    // but, sur une issue que ce but vient de rendre mathématiquement décidée, sont
-    // flaggés pour revue manuelle a posteriori (audit risque).
-    const staleCutoff = new Date(Date.now() - STALE_LATENCY_MS);
-    const staleBets = await db
-      .select({ id: bets.id, market: bets.market, selection: bets.selection })
-      .from(bets)
-      .where(and(eq(bets.matchId, matchId), eq(bets.status, "pending"), sql`${bets.placedAt} >= ${staleCutoff}`));
-    for (const sb of staleBets) {
-      const settledAfterGoal = marketOutcomeSettled(sb.market, sb.selection, homeScore, awayScore, gameMinute);
-      const settledBeforeGoal = marketOutcomeSettled(sb.market, sb.selection, currentHome, currentAway, gameMinute);
-      if (settledAfterGoal && !settledBeforeGoal) {
-        await db
-          .update(bets)
-          .set({ riskFlag: "stale_mark_goal" })
-          .where(eq(bets.id, sb.id));
+      let updatedMarkets = m.markets;
+      if (updatedMarkets && updatedMarkets.length > 0) {
+        updatedMarkets = updatedMarkets.map((g) => {
+          if (g.key !== "result" || g.rows) return g;
+          return {
+            ...g,
+            outcomes: g.outcomes.map((o) => {
+              if (o.key === "home") return { ...o, odds: oddsHome };
+              if (o.key === "draw") return { ...o, odds: oddsDraw };
+              if (o.key === "away") return { ...o, odds: oddsAway };
+              return o;
+            }),
+          };
+        });
       }
+
+      const [updated] = await db
+        .update(matches)
+        .set({
+          homeTeam,
+          awayTeam,
+          league,
+          oddsHome,
+          oddsDraw,
+          oddsAway,
+          homeLogo: teamLogo(homeTeam) || m.homeLogo,
+          awayLogo: teamLogo(awayTeam) || m.awayLogo,
+          markets: updatedMarkets,
+        })
+        .where(eq(matches.id, matchId))
+        .returning();
+
+      return NextResponse.json({ ok: true, match: updated });
     }
 
-    return NextResponse.json({ ok: true, match: reprice[0] });
-  }
+    if (action === "deleteMatch") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
 
-  if (action === "setMinute") {
-    const matchId = Number(body.matchId);
-    const minuteText = String(body.minute ?? "").trim();
-    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
-    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
-    if (m.source !== "manual" || m.status === "finished") {
-      return NextResponse.json({ error: "Minute modifiable uniquement sur un match réel en cours" }, { status: 400 });
-    }
-    const target = minuteNumber(minuteText);
-    const [updated] = await db
-      .update(matches)
-      .set({
-        minute: minuteText || null,
-        status: m.status === "upcoming" ? "live" : m.status,
-        startsAt: target > 1 ? backdateStartsAt(target) : new Date(),
-      })
-      .where(eq(matches.id, matchId))
-      .returning();
-    return NextResponse.json({ ok: true, match: updated });
-  }
+      await db.transaction(async (tx) => {
+        const pendingBets = await tx
+          .select({ id: bets.id, userId: bets.userId, stake: bets.stake })
+          .from(bets)
+          .where(and(eq(bets.matchId, matchId), eq(bets.status, "pending")));
 
-  if (action === "startMatch") {
-    const matchId = Number(body.matchId);
-    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
-    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
-    if (m.source !== "manual") {
-      return NextResponse.json({ error: "Un match virtuel débute automatiquement" }, { status: 400 });
-    }
-    const [updated] = await db
-      .update(matches)
-      .set({
-        status: "live",
-        minute: "1'",
-        startsAt: new Date(),
-        lastGoalAt: null,
-      })
-      .where(eq(matches.id, matchId))
-      .returning();
-    return NextResponse.json({ ok: true, match: updated });
-  }
+        for (const pb of pendingBets) {
+          await tx
+            .update(appUser)
+            .set({ balance: sql`${appUser.balance} + ${round2(pb.stake)}` })
+            .where(eq(appUser.id, pb.userId));
+        }
 
-  if (action === "finishMatch") {
-    const matchId = Number(body.matchId);
-    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
-    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
-    if (m.source !== "manual") {
-      return NextResponse.json({ error: "Un match virtuel se termine automatiquement" }, { status: 400 });
-    }
-    if (m.status === "finished") {
-      return NextResponse.json({ error: "Le match est déjà terminé" }, { status: 400 });
+        await tx.delete(bets).where(eq(bets.matchId, matchId));
+        await tx.delete(matches).where(eq(matches.id, matchId));
+      });
+      invalidateHouseHealthCache();
+      return NextResponse.json({ ok: true });
     }
 
-    const givenHome = roundNumber(body.homeScore);
-    const givenAway = roundNumber(body.awayScore);
-    const homeScore = givenHome != null ? Math.round(givenHome) : m.homeScore ?? 0;
-    const awayScore = givenAway != null ? Math.round(givenAway) : m.awayScore ?? 0;
-
-    const [updated] = await db
-      .update(matches)
-      .set({ status: "finished", minute: "Terminé", homeScore, awayScore, finishedAt: new Date() })
-      .where(eq(matches.id, matchId))
-      .returning();
-
-    // Bascule immédiate des paris : tous les paris en cours du match sont réglés selon le score.
-    await settleMatchBets(matchId);
-
-    return NextResponse.json({ ok: true, match: updated, settled: true });
-  }
-
-  if (action === "reopenMatch") {
-    const matchId = Number(body.matchId);
-    if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
-    const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-    if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
-    if (m.source !== "manual") {
-      return NextResponse.json({ error: "Un match virtuel ne peut pas être rouvert" }, { status: 400 });
-    }
-    if (m.status !== "finished") {
-      return NextResponse.json({ error: "Seul un match terminé peut être rouvert" }, { status: 400 });
-    }
-    const [updated] = await db
-      .update(matches)
-      .set({ status: "live", minute: `${minuteNumber(m.minute) || 90}'`, finishedAt: null })
-      .where(eq(matches.id, matchId))
-      .returning();
-    return NextResponse.json({ ok: true, match: updated });
-  }
-
-  if (action === "addQuestion") {
-    const question = String(body.question ?? "").trim();
-    if (!question) return NextResponse.json({ error: "La question est requise" }, { status: 400 });
-    const category = String(body.category ?? "Sport").trim();
-    const isMultiMode = body.mode === "multi" || Array.isArray(body.options);
-    const parsedOptions = isMultiMode ? parseQuestionOptions(body.options) : null;
-    if (isMultiMode && (!parsedOptions || parsedOptions.length < 2)) {
-      return NextResponse.json(
-        { error: "Ajoutez au moins 2 choix avec un nom et une cote valide (> 1,01)" },
-        { status: 400 }
-      );
+    if (action === "toggleMatch") {
+      const matchId = Number(body.matchId);
+      const suspended = Boolean(body.suspended);
+      await db.update(matches).set({ suspended }).where(eq(matches.id, matchId));
+      return NextResponse.json({ ok: true });
     }
 
-    const oddsYes = roundNumber(body.oddsYes) ?? 1.9;
-    const oddsNo = roundNumber(body.oddsNo) ?? 1.8;
-    const hours = Math.max(1, Number(body.resolvesAt) || 72);
-    const resolvesAt = new Date(Date.now() + hours * 3_600_000);
+    if (action === "markGoal") {
+      const matchId = Number(body.matchId);
+      const team = body.team === "away" ? "away" : "home";
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
 
-    const existingSeeds = await db.select({ seedValue: predictionQuestions.seedValue }).from(predictionQuestions);
-    const usedSeeds = new Set(existingSeeds.map((s) => s.seedValue));
-    let seedValue = Math.floor(Math.random() * 10000) + 1;
-    let attempts = 0;
-    while (usedSeeds.has(seedValue) && attempts < 100) {
-      seedValue = Math.floor(Math.random() * 10000) + 1;
-      attempts++;
-    }
-
-    const [q] = await db
-      .insert(predictionQuestions)
-      .values({
-        question,
-        category,
-        status: "open",
-        resolution: null,
-        seedValue,
-        oddsYes,
-        oddsNo,
-        options: parsedOptions,
-        volume: 0,
-        yesCount: 0,
-        noCount: 0,
-        resolvesAt,
-      })
-      .returning();
-    return NextResponse.json({ ok: true, question: q });
-  }
-
-  if (action === "editQuestion") {
-    const questionId = Number(body.questionId);
-    const question = String(body.question ?? "").trim();
-    const category = String(body.category ?? "Sport").trim();
-    const oddsYes = roundNumber(body.oddsYes) ?? 1.9;
-    const oddsNo = roundNumber(body.oddsNo) ?? 1.8;
-    const hasOptionsField = Array.isArray(body.options);
-    const parsedOptions = hasOptionsField ? parseQuestionOptions(body.options) : undefined;
-    if (hasOptionsField && (!parsedOptions || parsedOptions.length < 2)) {
-      return NextResponse.json(
-        { error: "Une question à choix multiples doit comporter au moins 2 choix valides" },
-        { status: 400 }
-      );
-    }
-
-    const [updated] = await db
-      .update(predictionQuestions)
-      .set({
-        ...(question ? { question } : {}),
-        category,
-        oddsYes,
-        oddsNo,
-        ...(parsedOptions !== undefined ? { options: parsedOptions } : {}),
-      })
-      .where(eq(predictionQuestions.id, questionId))
-      .returning();
-    if (!updated) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
-    return NextResponse.json({ ok: true, question: updated });
-  }
-
-  if (action === "resolveQuestion") {
-    const questionId = Number(body.questionId);
-    const rawRes = String(body.resolution ?? "").trim();
-    const [q] = await db
-      .select()
-      .from(predictionQuestions)
-      .where(eq(predictionQuestions.id, questionId));
-    if (!q) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
-
-    let resolution: string;
-    if (Array.isArray(q.options) && q.options.length >= 2) {
-      const matched = q.options.find((o) => o.key === rawRes);
-      if (!matched) {
-        return NextResponse.json({ error: "Choix gagnant invalide" }, { status: 400 });
+      const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+      if (m.status === "finished") {
+        return NextResponse.json(
+          { error: "Impossible de marquer un but : match déjà terminé" },
+          { status: 400 }
+        );
       }
-      resolution = matched.key;
-    } else {
-      resolution = rawRes === "yes" ? "yes" : "no";
+
+      const currentHome = m.homeScore ?? 0;
+      const currentAway = m.awayScore ?? 0;
+      const homeScore = team === "home" ? currentHome + 1 : currentHome;
+      const awayScore = team === "away" ? currentAway + 1 : currentAway;
+
+      let gameMinute = minuteNumber(m.minute);
+      if (typeof body.minute === "number" && Number.isFinite(body.minute)) {
+        gameMinute = body.minute;
+      }
+      gameMinute = Math.max(1, Math.min(90, Math.round(gameMinute || 1)));
+
+      const scorer = pickScorerName(
+        team === "home" ? m.homeTeam : m.awayTeam,
+        matchId * 37 + homeScore + awayScore
+      );
+      const events = [...(m.events ?? [])];
+      events.push({
+        type: "goal",
+        team,
+        minute: gameMinute,
+        ...(scorer ? { player: scorer } : {}),
+      });
+
+      const dynOdds = liveOddsFor(m.homeTeam, m.awayTeam, homeScore, awayScore, gameMinute, {
+        homeForm: m.homeForm ?? 1,
+        awayForm: m.awayForm ?? 1,
+        redHome: m.redHome ?? 0,
+        redAway: m.redAway ?? 0,
+      });
+
+      const reprice = await db
+        .update(matches)
+        .set({
+          homeScore,
+          awayScore,
+          minute: `${gameMinute}'`,
+          status: "live",
+          oddsHome: dynOdds.oddsHome,
+          oddsDraw: dynOdds.oddsDraw,
+          oddsAway: dynOdds.oddsAway,
+          lastGoalAt: new Date(),
+          startsAt: backdateStartsAtForMinute(gameMinute, Date.now(), m.source, m.id),
+          suspended: true,
+          events,
+        })
+        .where(eq(matches.id, matchId))
+        .returning();
+
+      const staleCutoff = new Date(Date.now() - STALE_LATENCY_MS);
+      const staleBets = await db
+        .select({ id: bets.id, market: bets.market, selection: bets.selection })
+        .from(bets)
+        .where(
+          and(
+            eq(bets.matchId, matchId),
+            eq(bets.status, "pending"),
+            sql`${bets.placedAt} >= ${staleCutoff}`
+          )
+        );
+      for (const sb of staleBets) {
+        const settledAfterGoal = marketOutcomeSettled(
+          sb.market,
+          sb.selection,
+          homeScore,
+          awayScore,
+          gameMinute
+        );
+        const settledBeforeGoal = marketOutcomeSettled(
+          sb.market,
+          sb.selection,
+          currentHome,
+          currentAway,
+          gameMinute
+        );
+        if (settledAfterGoal && !settledBeforeGoal) {
+          await db.update(bets).set({ riskFlag: "stale_mark_goal" }).where(eq(bets.id, sb.id));
+        }
+      }
+
+      return NextResponse.json({ ok: true, match: reprice[0] });
     }
 
-    await settleQuestion(questionId, resolution);
-    return NextResponse.json({ ok: true });
-  }
+    if (action === "setMinute") {
+      const matchId = Number(body.matchId);
+      const minuteText = String(body.minute ?? "").trim();
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+      if (m.status === "finished") {
+        return NextResponse.json({ error: "Rouvrir d'abord le match avant de modifier la minute" }, { status: 400 });
+      }
+      const target = Math.max(1, Math.min(90, minuteNumber(minuteText) || 1));
+      const dynOdds = liveOddsFor(
+        m.homeTeam,
+        m.awayTeam,
+        m.homeScore ?? 0,
+        m.awayScore ?? 0,
+        target,
+        {
+          homeForm: m.homeForm ?? 1,
+          awayForm: m.awayForm ?? 1,
+          redHome: m.redHome ?? 0,
+          redAway: m.redAway ?? 0,
+        }
+      );
 
-  if (action === "reopenQuestion") {
-    const questionId = Number(body.questionId);
-    const [updated] = await db
-      .update(predictionQuestions)
-      .set({ status: "open", resolution: null, resolvedAt: null })
-      .where(eq(predictionQuestions.id, questionId))
-      .returning();
-    if (!updated) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
-    return NextResponse.json({ ok: true });
-  }
+      const [updated] = await db
+        .update(matches)
+        .set({
+          minute: `${target}'`,
+          status: "live",
+          homeScore: m.homeScore ?? 0,
+          awayScore: m.awayScore ?? 0,
+          oddsHome: dynOdds.oddsHome,
+          oddsDraw: dynOdds.oddsDraw,
+          oddsAway: dynOdds.oddsAway,
+          startsAt: backdateStartsAtForMinute(target, Date.now(), m.source, m.id),
+        })
+        .where(eq(matches.id, matchId))
+        .returning();
+      return NextResponse.json({ ok: true, match: updated });
+    }
 
-  if (action === "deleteQuestion") {
-    const questionId = Number(body.questionId);
-    await db.delete(predictionQuestions).where(eq(predictionQuestions.id, questionId));
-    return NextResponse.json({ ok: true });
-  }
+    if (action === "startMatch") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+      const [updated] = await db
+        .update(matches)
+        .set({
+          status: "live",
+          homeScore: m.homeScore ?? 0,
+          awayScore: m.awayScore ?? 0,
+          minute: "1'",
+          startsAt: new Date(),
+          lastGoalAt: null,
+        })
+        .where(eq(matches.id, matchId))
+        .returning();
+      return NextResponse.json({ ok: true, match: updated });
+    }
 
-  return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
+    if (action === "finishMatch") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+      if (m.status === "finished") {
+        return NextResponse.json({ error: "Le match est déjà terminé" }, { status: 400 });
+      }
+
+      const givenHome = roundNumber(body.homeScore);
+      const givenAway = roundNumber(body.awayScore);
+      const homeScore = givenHome != null ? Math.max(0, Math.round(givenHome)) : m.homeScore ?? 0;
+      const awayScore = givenAway != null ? Math.max(0, Math.round(givenAway)) : m.awayScore ?? 0;
+
+      const [updated] = await db
+        .update(matches)
+        .set({
+          status: "finished",
+          minute: "Terminé",
+          suspended: false,
+          homeScore,
+          awayScore,
+          finishedAt: new Date(),
+        })
+        .where(eq(matches.id, matchId))
+        .returning();
+
+      await settleMatchBets(matchId);
+      invalidateHouseHealthCache();
+
+      return NextResponse.json({ ok: true, match: updated, settled: true });
+    }
+
+    if (action === "reopenMatch") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+      if (m.status !== "finished") {
+        return NextResponse.json({ error: "Seul un match terminé peut être rouvert" }, { status: 400 });
+      }
+
+      const reopenMin = 75;
+      let updatedMatch = m;
+
+      await db.transaction(async (tx) => {
+        const settled = await tx
+          .select()
+          .from(bets)
+          .where(and(eq(bets.matchId, matchId), inArray(bets.status, ["won", "lost"])));
+
+        for (const b of settled) {
+          if (b.status === "won") {
+            const clawback = round2(
+              b.stake * b.odds * (b.payoutMultiplier ?? 1) + (b.stakeReturned ?? 0)
+            );
+            await tx
+              .update(appUser)
+              .set({ balance: sql`GREATEST(0, ${appUser.balance} - ${clawback})` })
+              .where(eq(appUser.id, b.userId));
+          }
+          await tx.update(bets).set({ status: "pending" }).where(eq(bets.id, b.id));
+        }
+
+        const [u] = await tx
+          .update(matches)
+          .set({
+            status: "live",
+            minute: `${reopenMin}'`,
+            finishedAt: null,
+            suspended: false,
+            startsAt: backdateStartsAtForMinute(reopenMin, Date.now(), m.source, m.id),
+          })
+          .where(eq(matches.id, matchId))
+          .returning();
+        if (u) updatedMatch = u;
+      });
+
+      invalidateHouseHealthCache();
+      return NextResponse.json({ ok: true, match: updatedMatch });
+    }
+
+    if (action === "addQuestion") {
+      const question = String(body.question ?? "").trim();
+      if (!question) {
+        return NextResponse.json({ error: "La question est requise" }, { status: 400 });
+      }
+
+      const [dup] = await db
+        .select({ id: predictionQuestions.id })
+        .from(predictionQuestions)
+        .where(sql`LOWER(TRIM(${predictionQuestions.question})) = LOWER(TRIM(${question}))`)
+        .limit(1);
+      if (dup) {
+        return NextResponse.json({ error: "Cette question existe déjà" }, { status: 400 });
+      }
+
+      const category = String(body.category ?? "Sport").trim() || "Sport";
+      const isMultiMode = body.mode === "multi" || Array.isArray(body.options);
+      const parsedOptions = isMultiMode ? parseQuestionOptions(body.options) : null;
+      if (isMultiMode && (!parsedOptions || parsedOptions.length < 2)) {
+        return NextResponse.json(
+          { error: "Ajoutez au moins 2 choix avec un nom et une cote valide (> 1,01)" },
+          { status: 400 }
+        );
+      }
+
+      const oddsYes = Math.max(1.02, roundNumber(body.oddsYes) ?? 1.9);
+      const oddsNo = Math.max(1.02, roundNumber(body.oddsNo) ?? 1.8);
+      const hours = Math.max(0.1, Number(body.resolvesAt) || 72);
+      const resolvesAt = new Date(Date.now() + hours * 3_600_000);
+
+      const existingSeeds = await db
+        .select({ seedValue: predictionQuestions.seedValue })
+        .from(predictionQuestions);
+      const usedSeeds = new Set(existingSeeds.map((s) => s.seedValue));
+      let seedValue = Math.floor(Math.random() * 10000) + 1;
+      let attempts = 0;
+      while (usedSeeds.has(seedValue) && attempts < 100) {
+        seedValue = Math.floor(Math.random() * 10000) + 1;
+        attempts++;
+      }
+
+      const [q] = await db
+        .insert(predictionQuestions)
+        .values({
+          question,
+          category,
+          status: "open",
+          resolution: null,
+          seedValue,
+          oddsYes,
+          oddsNo,
+          options: parsedOptions,
+          volume: 0,
+          yesCount: 0,
+          noCount: 0,
+          resolvesAt,
+        })
+        .returning();
+      return NextResponse.json({ ok: true, question: q });
+    }
+
+    if (action === "editQuestion") {
+      const questionId = Number(body.questionId);
+      if (!questionId) return NextResponse.json({ error: "questionId requis" }, { status: 400 });
+      const question = String(body.question ?? "").trim();
+      const category = String(body.category ?? "Sport").trim() || "Sport";
+      const oddsYes = Math.max(1.02, roundNumber(body.oddsYes) ?? 1.9);
+      const oddsNo = Math.max(1.02, roundNumber(body.oddsNo) ?? 1.8);
+      const hasOptionsField = Array.isArray(body.options);
+      const parsedOptions = hasOptionsField ? parseQuestionOptions(body.options) : undefined;
+      if (hasOptionsField && (!parsedOptions || parsedOptions.length < 2)) {
+        return NextResponse.json(
+          { error: "Une question à choix multiples doit comporter au moins 2 choix valides" },
+          { status: 400 }
+        );
+      }
+
+      const hoursRaw = roundNumber(body.hours);
+      const nextResolvesAt =
+        hoursRaw != null && hoursRaw > 0
+          ? new Date(Date.now() + hoursRaw * 3_600_000)
+          : undefined;
+
+      const [updated] = await db
+        .update(predictionQuestions)
+        .set({
+          ...(question ? { question } : {}),
+          category,
+          oddsYes,
+          oddsNo,
+          ...(parsedOptions !== undefined ? { options: parsedOptions } : {}),
+          ...(nextResolvesAt ? { resolvesAt: nextResolvesAt } : {}),
+        })
+        .where(eq(predictionQuestions.id, questionId))
+        .returning();
+      if (!updated) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
+      return NextResponse.json({ ok: true, question: updated });
+    }
+
+    if (action === "resolveQuestion") {
+      const questionId = Number(body.questionId);
+      const rawRes = String(body.resolution ?? "").trim();
+      const [q] = await db
+        .select()
+        .from(predictionQuestions)
+        .where(eq(predictionQuestions.id, questionId));
+      if (!q) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
+
+      let resolution: string;
+      if (Array.isArray(q.options) && q.options.length >= 2) {
+        const matched = q.options.find((o) => o.key === rawRes);
+        if (!matched) {
+          return NextResponse.json({ error: "Choix gagnant invalide" }, { status: 400 });
+        }
+        resolution = matched.key;
+      } else {
+        resolution = rawRes === "yes" ? "yes" : "no";
+      }
+
+      await settleQuestion(questionId, resolution);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "reopenQuestion") {
+      const questionId = Number(body.questionId);
+      if (!questionId) return NextResponse.json({ error: "questionId requis" }, { status: 400 });
+      const found = await reopenSettledQuestion(questionId);
+      if (!found) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "deleteQuestion") {
+      const questionId = Number(body.questionId);
+      if (!questionId) return NextResponse.json({ error: "questionId requis" }, { status: 400 });
+
+      await db.transaction(async (tx) => {
+        // Rembourse proprement toute mise en attente avant suppression en cascade
+        const pendingBets = await tx
+          .select({ id: predictionBets.id, userId: predictionBets.userId, stake: predictionBets.stake })
+          .from(predictionBets)
+          .where(and(eq(predictionBets.questionId, questionId), eq(predictionBets.status, "pending")));
+
+        for (const pb of pendingBets) {
+          await tx
+            .update(appUser)
+            .set({ balance: sql`${appUser.balance} + ${round2(pb.stake)}` })
+            .where(eq(appUser.id, pb.userId));
+        }
+
+        await tx.delete(predictionBets).where(eq(predictionBets.questionId, questionId));
+        await tx.delete(predictionQuestions).where(eq(predictionQuestions.id, questionId));
+      });
+      invalidateHouseHealthCache();
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
+  } catch (err) {
+    console.error("[admin API error]", err);
+    const msg = err instanceof Error ? err.message : "Erreur interne lors de l'opération";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 function roundNumber(v: unknown): number | null {
@@ -595,13 +800,4 @@ function parseQuestionOptions(raw: unknown): PredictionOption[] | null {
     out.push({ key, label, odds });
   });
   return out.length >= 2 ? out : null;
-}
-
-/**
- * Retourne une heure de coup d'envoi telle que le moteur (1 min = MANUAL_MINUTE_REAL_MS)
- * réaffiche exactement la minute voulue à l'instant présent. Ainsi les minutes saisies
- * par l'admin et l'horloge automatique restent synchronisées.
- */
-function backdateStartsAt(targetMinute: number): Date {
-  return backdateStartsAtForMinute(targetMinute, Date.now());
 }

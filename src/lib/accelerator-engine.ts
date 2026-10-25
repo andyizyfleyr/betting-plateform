@@ -2,10 +2,18 @@ import { and, desc, eq } from "drizzle-orm";
 import { createHash, createHmac, randomBytes } from "crypto";
 import { db } from "@/db";
 import { acceleratorRounds, appUser, type AcceleratorRoundRow } from "@/db/schema";
+import {
+  analyzeAcceleratorProfile,
+  getGlobalHouseHealth,
+  invalidateHouseHealthCache,
+} from "./house-brain";
 
 /**
- * Moteur du jeu Accelerator Pro — port fidèle de accelerator.php.
- * Jauge ×1.01 → ×2.00, provably fair (HMAC-SHA256), état des manches en base.
+ * Moteur intelligent (« rusé ») du jeu Accelerator Pro :
+ * - Jauge ×1.01 → ×2.00 avec engagement SHA-256 par manche (`seedHash`)
+ * - Calibration adaptative de la tension selon la santé globale de la banque,
+ *   l'anti-martingale, l'anti-micro-scalping (sorties systématiques à ×1.02–×1.08)
+ *   et des fins de course haletantes entre ×1.72 et ×1.97 juste avant le jackpot ×2.00.
  */
 
 export const ACCEL_CONFIG = {
@@ -18,17 +26,14 @@ export const ACCEL_CONFIG = {
   COOLDOWN_MS: 0,
   CURRENCY_SYMBOL: "$",
   DECIMALS: 2,
-  /** Fenêtre (en points de multiplicateur) pour honorer le multiplicateur affiché
-   * côté client au relâchement malgré la latence réseau. */
-  CASHOUT_LATENCY_WINDOW: 0.5,
-  /** Marge de la maison (~2 %) pour le calcul provably fair du crash. */
-  CRASH_HOUSE: 0.98,
+  /** Fenêtre anti-triche resserrée pour honorer la latence réseau sans offrir d'arbitrage gratuit. */
+  CASHOUT_LATENCY_WINDOW: 0.18,
+  /** Facteur maison de base (~8 % d'avantage maison équilibré). */
+  CRASH_HOUSE: 0.92,
 } as const;
 
-/** Arrondi homogène à 2 décimales (half-up) — r2() du PHP. */
 export const r2 = (v: number) => Math.round(v * 100) / 100;
 
-/** Vitesse de montée : (2.00 - 1.01) / 34 ≈ 0.0291176 par seconde. */
 export function gBaseRate(): number {
   return (ACCEL_CONFIG.M_MAX - ACCEL_CONFIG.M_MIN) / ACCEL_CONFIG.ANIM_TO_TEN_SECONDS;
 }
@@ -37,17 +42,36 @@ export function nowMs(): number {
   return Date.now();
 }
 
-/** Crash point provably fair — pf_crash_from_seed(). */
-export function pfCrashFromSeed(seedHex: string, roundId: number): number {
+/**
+ * Crash point déterministe depuis la graine serveur + calibration dynamique :
+ * - Protège contre le micro-scalping à ×1.02–×1.08
+ * - Réduit la probabilité brute d'atteindre ×2.00 (~18–26 % au lieu de 49 %)
+ *   en créant une zone de suspense réaliste entre ×1.68 et ×1.97.
+ */
+export function pfCrashFromSeed(
+  seedHex: string,
+  roundId: number,
+  effectiveHouse: number = ACCEL_CONFIG.CRASH_HOUSE,
+  microScalpGuard = false
+): number {
   const seed = Buffer.from(seedHex, "hex");
   const hmac = createHmac("sha256", seed).update(String(roundId)).digest("hex");
-  const slice = hmac.slice(0, 13);
-  const int = parseInt(slice, 16);
-  const ratio = int / Math.pow(16, 13);
-  // Formule provably fair standard : house / (1 - ratio), plafonnée à [M_MIN, M_MAX].
-  // L'original (0.7 / (1-ratio)) donnait ~30 % de crash instantané à ×1.01, rendant le
-  // jeu injouable. Avec ~0.98 : ~3 % de crash immédiat, ~49 % atteignent ×2.00.
-  const val = ACCEL_CONFIG.CRASH_HOUSE / (1.0 - ratio);
+  const u1 = parseInt(hmac.slice(0, 13), 16) / Math.pow(16, 13);
+  const u2 = parseInt(hmac.slice(13, 21), 16) / Math.pow(16, 8);
+
+  // Garde anti-micro-scalp : empêche l'exploitation par relâchement instantané à ×1.02
+  if (microScalpGuard && u2 < 0.28) {
+    return ACCEL_CONFIG.M_MIN;
+  }
+
+  let val = effectiveHouse / Math.max(0.0001, 1.0 - u1);
+
+  // Compression haletante de la queue haute : une partie des tirages > 2.00 s'arrête
+  // dans la zone rouge de tension [1.72 .. 1.98] juste sous le jackpot ×2.00 !
+  if (val >= ACCEL_CONFIG.M_MAX && u2 < 0.52) {
+    val = 1.72 + (u2 / 0.52) * 0.26;
+  }
+
   return r2(Math.max(ACCEL_CONFIG.M_MIN, Math.min(ACCEL_CONFIG.M_MAX, val)));
 }
 
@@ -79,6 +103,7 @@ async function setRoundStatus(rid: number, status: string, extra?: Partial<Accel
     .update(acceleratorRounds)
     .set({ status, endedAt: new Date(), ...extra })
     .where(and(eq(acceleratorRounds.id, rid), eq(acceleratorRounds.status, "active")));
+  invalidateHouseHealthCache();
 }
 
 export interface StartResult {
@@ -89,7 +114,6 @@ export interface StartResult {
   gBase: number;
   mMax: number;
   seedHash: string;
-  /** true si une manche fraîche déjà active a été reprise (réseau faible). */
   resumed?: boolean;
 }
 
@@ -109,8 +133,10 @@ export interface CashoutResult {
   jackpot: boolean;
 }
 
-/** Démarre une manche : vérifie/abandonne l'ancienne, débite la mise, calcule le crash. */
-export async function startRound(uid: number, betInput: number): Promise<StartResult | { status: "error"; message: string }> {
+export async function startRound(
+  uid: number,
+  betInput: number
+): Promise<StartResult | { status: "error"; message: string }> {
   const betUsd = Math.min(ACCEL_CONFIG.BET_MAX_USD, Math.max(ACCEL_CONFIG.BET_MIN_USD, betInput));
 
   const balance = await getUserBalance(uid);
@@ -120,8 +146,6 @@ export async function startRound(uid: number, betInput: number): Promise<StartRe
   if (latest && latest.status === "active") {
     const stale = nowMs() - Number(latest.lastMs) > ACCEL_CONFIG.TTL_MS;
     if (!stale) {
-      // Manche fraîche déjà active (ex. réponse de start_game perdue sur un
-      // réseau faible) : on reprend sans redébiter la mise.
       return {
         status: "success",
         roundId: latest.id,
@@ -137,6 +161,16 @@ export async function startRound(uid: number, betInput: number): Promise<StartRe
   }
 
   await setUserBalance(uid, balance - betUsd);
+
+  const [health, signal] = await Promise.all([
+    getGlobalHouseHealth(),
+    analyzeAcceleratorProfile(uid, betUsd),
+  ]);
+
+  // Calibration dynamique du facteur maison dans [0.78 .. 0.95]
+  const rawHouse = ACCEL_CONFIG.CRASH_HOUSE * Math.min(1.03, signal.cautionFactor * health.tightness);
+  const effectiveHouse = Math.min(0.95, Math.max(0.78, rawHouse));
+  const microScalpGuard = signal.archetype === "MICRO_SCALPER" || signal.lowExitRate >= 0.6;
 
   const gBase = gBaseRate();
   const seedHex = randomBytes(32).toString("hex");
@@ -159,8 +193,11 @@ export async function startRound(uid: number, betInput: number): Promise<StartRe
     })
     .returning();
 
-  const crash = pfCrashFromSeed(seedHex, row.id);
-  await db.update(acceleratorRounds).set({ crashPoint: crash }).where(eq(acceleratorRounds.id, row.id));
+  const crash = pfCrashFromSeed(seedHex, row.id, effectiveHouse, microScalpGuard);
+  await db
+    .update(acceleratorRounds)
+    .set({ crashPoint: crash })
+    .where(eq(acceleratorRounds.id, row.id));
 
   return {
     status: "success",
@@ -180,17 +217,6 @@ export interface HoldStartResult {
   message?: string;
 }
 
-/**
- * Début du maintien : gèle le chrono (la montée ne commence qu'au maintien, pas au
- * placement de la mise) et renvoie le multiplicateur autoritaire pour resynchroniser
- * le client. Les manches dont le crash est à M_MIN crashent ici, proprement.
- *
- * IMPORTANT : le temps écoulé entre la mise et le maintien ne fait PAS crasher la
- * manche. Sur un réseau/DB lent, start_game + reprise peuvent prendre plus de
- * TTL_MS ; écraser la manche ici rendrait le jeu injouable (crash systématique au
- * clic sur MAINTENIR). Le nettoyage des manches abandonnées est déjà assuré par
- * startRound. Le chrono est simplement réinitialisé au maintien.
- */
 export async function holdStartRound(uid: number): Promise<HoldStartResult> {
   const row = await getActiveRound(uid);
   if (!row) return { status: "error", message: "Aucune partie en cours" };
@@ -210,8 +236,10 @@ export async function holdStartRound(uid: number): Promise<HoldStartResult> {
   return { status: "ok", multiplier: ACCEL_CONFIG.M_MIN, roundId: row.id };
 }
 
-/** Avance le multiplicateur en fonction du temps réel écoulé. Retourne "crashed" si dépassé. */
-export async function advanceRound(row: AcceleratorRoundRow, reason: "tap" | "tap_final"): Promise<AdvanceResult> {
+export async function advanceRound(
+  row: AcceleratorRoundRow,
+  reason: "tap" | "tap_final"
+): Promise<AdvanceResult> {
   const rid = row.id;
   const now = nowMs();
   const last = Number(row.lastMs);
@@ -242,10 +270,10 @@ export async function advanceRound(row: AcceleratorRoundRow, reason: "tap" | "ta
   return { status: reason === "tap" ? "ok" : "synced", multiplier: cur, roundId: rid };
 }
 
-/** Encaissement : avance l'état, vérifie le crash, puis paie (jackpot si ×2.00).
- * `clientMult` = multiplicateur affiché côté client au relâchement ; il permet de
- * créditer le joueur malgré la latence réseau (crédité = min(client, serveur)). */
-export async function cashoutRound(row: AcceleratorRoundRow, clientMult?: number | null): Promise<CashoutResult> {
+export async function cashoutRound(
+  row: AcceleratorRoundRow,
+  clientMult?: number | null
+): Promise<CashoutResult> {
   const uid = row.userId;
   const rid = row.id;
   const now = nowMs();
@@ -269,8 +297,6 @@ export async function cashoutRound(row: AcceleratorRoundRow, clientMult?: number
 
   const crash = Number(row.crashPoint);
 
-  // Compensation de latence : on honore le multiplicateur relevé au relâchement,
-  // borné par l'état serveur et une fenêtre anti-triche (valeurs absurdes ignorées).
   let eff = cur;
   const cm = clientMult ?? null;
   if (
@@ -294,9 +320,6 @@ export async function cashoutRound(row: AcceleratorRoundRow, clientMult?: number
   const mult = jackpot ? mMax : eff;
   const win = r2(Number(row.betAmount) * mult);
 
-  // Bascule atomique active → cashed AVANT de créditer : les retries client
-  // (réseau faible) ne peuvent plus encaisser deux fois la même manche. Si un
-  // autre cashout a déjà gagné la course (rowCount === 0), on ne crédite pas.
   const flipped = await db
     .update(acceleratorRounds)
     .set({ cashoutMultiplier: mult, status: "cashed", endedAt: new Date(), currentMultiplier: mult })
@@ -317,6 +340,7 @@ export async function cashoutRound(row: AcceleratorRoundRow, clientMult?: number
 
   const balance = await getUserBalance(uid);
   await setUserBalance(uid, balance + win);
+  invalidateHouseHealthCache();
 
   return {
     status: "cashed",
@@ -328,7 +352,6 @@ export async function cashoutRound(row: AcceleratorRoundRow, clientMult?: number
   };
 }
 
-/** Manche active la plus récente (ou null). */
 export async function getActiveRound(uid: number): Promise<AcceleratorRoundRow | null> {
   const latest = await getLatestRound(uid);
   if (latest && latest.status === "active") return latest;

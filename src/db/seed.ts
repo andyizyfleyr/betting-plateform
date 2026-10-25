@@ -1,20 +1,37 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, matches, predictionBets, predictionQuestions } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
-import { findLeague, clubLogo } from "@/lib/leagues";
-import { oddsFor } from "@/db/fixtures";
-import { teamLogo } from "@/lib/team-logos";
 
 let seededOnce = false;
+let seedPromise: Promise<void> | null = null;
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-export async function ensureSeeded() {
+/**
+ * Initialisation atomique et idempotente de la base :
+ * - Verrou mémoire `seedPromise` contre les requêtes concurrentes au démarrage
+ * - Déduplication SQL automatique des questions en doublon + index UNIQUE
+ * - Nettoyage des anciens matchs auto-générés bloqués sur le rythme de 55 min.
+ */
+export async function ensureSeeded(): Promise<void> {
   if (seededOnce) return;
+  if (!seedPromise) {
+    seedPromise = runSeedInternal()
+      .then(() => {
+        seededOnce = true;
+      })
+      .catch((err) => {
+        seedPromise = null;
+        throw err;
+      });
+  }
+  return seedPromise;
+}
 
+async function runSeedInternal(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
   `);
@@ -30,17 +47,31 @@ export async function ensureSeeded() {
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "risk_flag" text;
   `);
 
-  const virtualLeft = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(matches)
-    .where(eq(matches.source, "virtual"));
-  if (virtualLeft[0].n > 0) {
-    await db.execute(sql`
-      DELETE FROM "bets" WHERE "match_id" IN (SELECT "id" FROM "matches" WHERE "source" = 'virtual');
-      DELETE FROM "matches" WHERE "source" = 'virtual';
-    `);
-  }
   await db.execute(sql`DROP TABLE IF EXISTS "sim_state";`);
+
+  // Nettoie les anciens matchs auto-seedés en mode "manual" sans marchés perso ni paris liés
+  // afin que le nouveau moteur virtuel (2–3 minutes) prenne le relais proprement sans doublons.
+  await db.execute(sql`
+    DELETE FROM "matches" m
+    WHERE m."source" = 'manual'
+      AND m."markets" IS NULL
+      AND m."status" = 'upcoming'
+      AND m."home_score" IS NULL
+      AND m."starts_at" > now() + interval '15 minutes'
+      AND NOT EXISTS (SELECT 1 FROM "bets" b WHERE b."match_id" = m."id");
+  `);
+
+  // Déduplique aussi d'éventuels matchs "upcoming" identiques créés en parallèle sans paris
+  await db.execute(sql`
+    DELETE FROM "matches" m1
+    USING "matches" m2
+    WHERE m1."id" > m2."id"
+      AND m1."status" = 'upcoming'
+      AND m2."status" = 'upcoming'
+      AND m1."home_team" = m2."home_team"
+      AND m1."away_team" = m2."away_team"
+      AND NOT EXISTS (SELECT 1 FROM "bets" b WHERE b."match_id" = m1."id");
+  `);
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -48,83 +79,14 @@ export async function ensureSeeded() {
 
   const freshDb = count === 0;
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const [{ manualToday }] = await db
-    .select({ manualToday: sql<number>`count(*)::int` })
-    .from(matches)
-    .where(
-      and(
-        eq(matches.source, "manual"),
-        eq(matches.homeTeam, "Paris SG"),
-        eq(matches.awayTeam, "Marseille"),
-        gte(matches.startsAt, todayStart)
-      )
-    );
-
-  if (manualToday === 0) {
-    const now = Date.now();
-    const MIN = 60_000;
-    const HOUR = 3_600_000;
-
-    const realFixtures: Array<{
-      league: string;
-      home: string;
-      away: string;
-      offsetMs: number;
-    }> = [
-      { league: "Ligue 1", home: "Paris SG", away: "Marseille", offsetMs: -14 * MIN },
-      { league: "Premier League", home: "Arsenal", away: "Chelsea", offsetMs: -6 * MIN },
-      { league: "Ligue 1", home: "Lyon", away: "Monaco", offsetMs: 18 * MIN },
-      { league: "Liga", home: "Real Betis", away: "Villarreal", offsetMs: 42 * MIN },
-      { league: "Premier League", home: "Liverpool", away: "Manchester City", offsetMs: 1 * HOUR + 15 * MIN },
-      { league: "Bundesliga", home: "Bayern Munich", away: "Dortmund", offsetMs: 1 * HOUR + 50 * MIN },
-      { league: "Serie A", home: "Inter Milan", away: "AC Milan", offsetMs: 2 * HOUR + 30 * MIN },
-      { league: "Liga", home: "Atlético Madrid", away: "FC Séville", offsetMs: 3 * HOUR + 10 * MIN },
-      { league: "Bundesliga", home: "Leverkusen", away: "RB Leipzig", offsetMs: 3 * HOUR + 50 * MIN },
-      { league: "Serie A", home: "Juventus", away: "Naples", offsetMs: 4 * HOUR + 30 * MIN },
-    ];
-
-    const manualSeed = realFixtures.map((f) => {
-      const leagueDef = findLeague(f.league);
-      const startsAt = new Date(now + f.offsetMs);
-      const o = oddsFor(f.home, f.away);
-      const homeLogo = teamLogo(f.home) ?? (leagueDef ? clubLogo(leagueDef, f.home) : null);
-      const awayLogo = teamLogo(f.away) ?? (leagueDef ? clubLogo(leagueDef, f.away) : null);
-      return {
-        sport: "football",
-        league: f.league,
-        homeTeam: f.home,
-        awayTeam: f.away,
-        homeLogo,
-        awayLogo,
-        homeScore: null,
-        awayScore: null,
-        status: "upcoming" as const,
-        minute: null,
-        startsAt,
-        oddsHome: o.oddsHome,
-        oddsDraw: o.oddsDraw,
-        oddsAway: o.oddsAway,
-        suspended: false,
-        redHome: 0,
-        redAway: 0,
-        events: [],
-        tickHistory: [],
-        regime: "balanced",
-        homeForm: 1,
-        awayForm: 1,
-        markets: null,
-        source: "manual",
-      };
-    });
-
-    await db.insert(matches).values(manualSeed);
-  }
-
-  const [user] = await db.select().from(appUser).limit(1);
+  let [user] = await db.select().from(appUser).limit(1);
   if (!user) {
-    await db.insert(appUser).values({ id: 1 });
+    const [insertedUser] = await db
+      .insert(appUser)
+      .values({ id: 1 })
+      .onConflictDoNothing()
+      .returning();
+    user = insertedUser ?? (await db.select().from(appUser).limit(1))[0];
   }
 
   await db.execute(sql`
@@ -171,6 +133,72 @@ export async function ensureSeeded() {
 
   await db.execute(sql`
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
+  `);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  //  Déduplication automatique des questions en base + contrainte d'unicité
+  // ──────────────────────────────────────────────────────────────────────────
+  await db.execute(sql`
+    WITH canon AS (
+      SELECT LOWER(TRIM("question")) AS norm_q,
+             MIN("id") AS keep_id,
+             SUM("volume") AS sum_vol,
+             SUM("yes_count") AS sum_yes,
+             SUM("no_count") AS sum_no
+      FROM "prediction_questions"
+      GROUP BY LOWER(TRIM("question"))
+      HAVING COUNT(*) > 1
+    )
+    UPDATE "prediction_bets" pb
+    SET "question_id" = c.keep_id
+    FROM "prediction_questions" pq
+    JOIN canon c ON LOWER(TRIM(pq."question")) = c.norm_q
+    WHERE pb."question_id" = pq."id"
+      AND pq."id" <> c.keep_id;
+  `);
+
+  await db.execute(sql`
+    WITH canon AS (
+      SELECT LOWER(TRIM("question")) AS norm_q,
+             MIN("id") AS keep_id,
+             SUM("volume") AS sum_vol,
+             SUM("yes_count") AS sum_yes,
+             SUM("no_count") AS sum_no
+      FROM "prediction_questions"
+      GROUP BY LOWER(TRIM("question"))
+      HAVING COUNT(*) > 1
+    )
+    UPDATE "prediction_questions" pq
+    SET "volume" = c.sum_vol,
+        "yes_count" = c.sum_yes,
+        "no_count" = c.sum_no
+    FROM canon c
+    WHERE pq."id" = c.keep_id;
+  `);
+
+  await db.execute(sql`
+    DELETE FROM "prediction_questions" pq1
+    USING "prediction_questions" pq2
+    WHERE pq1."id" > pq2."id"
+      AND LOWER(TRIM(pq1."question")) = LOWER(TRIM(pq2."question"));
+  `);
+
+  // Supprime aussi les deux anciennes questions binaires redondantes avec les nouveaux choix multiples
+  // uniquement si aucun pari n'y est attaché.
+  await db.execute(sql`
+    DELETE FROM "prediction_questions" pq
+    WHERE pq."question" IN (
+      'Le prochain Ballon d''Or sera-t-il remporté par un joueur de Liga ?',
+      'Le Real Madrid remportera-t-il la Ligue des Champions cette saison ?'
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM "prediction_bets" pb WHERE pb."question_id" = pq."id"
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "prediction_questions_question_uniq"
+    ON "prediction_questions" ("question");
   `);
 
   await db.execute(sql`
@@ -311,6 +339,24 @@ export async function ensureSeeded() {
       resolvesAt: new Date(now + 50 * day),
     },
     {
+      question: "Quel film remportera l'Oscar du meilleur film lors de la prochaine cérémonie ?",
+      category: "Culture",
+      status: "open" as const,
+      seedValue: 507,
+      oddsYes: 2.0,
+      oddsNo: 2.0,
+      options: [
+        { key: "dune_messiah", label: "Dune : Messiah", odds: 2.7 },
+        { key: "the_odyssey", label: "The Odyssey (C. Nolan)", odds: 3.1 },
+        { key: "mickey_17", label: "Mickey 17", odds: 5.4 },
+        { key: "autre_film", label: "Un film indépendant", odds: 6.2 },
+      ],
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 110 * day),
+    },
+    {
       question: "Le PSG remportera-t-il son prochain match de Ligue 1 ?",
       category: "Sport",
       status: "open" as const,
@@ -359,18 +405,6 @@ export async function ensureSeeded() {
       resolvesAt: new Date(Date.UTC(2026, 11, 31, 18, 0, 0)),
     },
     {
-      question: "Le prochain Ballon d'Or sera-t-il remporté par un joueur de Liga ?",
-      category: "Culture",
-      status: "open" as const,
-      seedValue: 29,
-      oddsYes: 1.9,
-      oddsNo: 1.8,
-      volume: 0,
-      yesCount: 0,
-      noCount: 0,
-      resolvesAt: new Date(now + 120 * day),
-    },
-    {
       question: "L'OM terminera-t-il dans le top 3 de la Ligue 1 ?",
       category: "Sport",
       status: "open" as const,
@@ -393,18 +427,6 @@ export async function ensureSeeded() {
       yesCount: 0,
       noCount: 0,
       resolvesAt: new Date(now + 45 * day),
-    },
-    {
-      question: "Le Real Madrid remportera-t-il la Ligue des Champions cette saison ?",
-      category: "Sport",
-      status: "open" as const,
-      seedValue: 142,
-      oddsYes: 2.5,
-      oddsNo: 1.5,
-      volume: 0,
-      yesCount: 0,
-      noCount: 0,
-      resolvesAt: new Date(now + 60 * day),
     },
     {
       question: "Apple lancera-t-il un iPhone entièrement pliable cette année ?",
@@ -570,7 +592,8 @@ export async function ensureSeeded() {
     const [existing] = await db
       .select({ id: predictionQuestions.id })
       .from(predictionQuestions)
-      .where(eq(predictionQuestions.question, q.question));
+      .where(sql`LOWER(TRIM(${predictionQuestions.question})) = LOWER(TRIM(${q.question}))`)
+      .limit(1);
 
     if (!existing) {
       const { question, category, status, seedValue, oddsYes, oddsNo, volume, yesCount, noCount, resolvesAt } = q;
@@ -594,8 +617,10 @@ export async function ensureSeeded() {
           ...(resolution ? { resolution } : {}),
           ...(resolvedAt ? { resolvedAt } : {}),
         })
+        .onConflictDoNothing()
         .returning();
-      if (q.status === "resolved" && freshDb) {
+
+      if (inserted && q.status === "resolved" && freshDb) {
         await db.insert(predictionBets).values([
           {
             userId: 1,
@@ -666,6 +691,4 @@ export async function ensureSeeded() {
       role: "admin",
     });
   }
-
-  seededOnce = true;
 }

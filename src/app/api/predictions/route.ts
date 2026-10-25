@@ -79,7 +79,16 @@ export async function GET(req: NextRequest) {
   }
 
   // Cotes fixes bookmaker : ne dépendent pas d'un pool mutuel entre joueurs.
-  const questions = rows.map((q) => {
+  // Filet de sécurité anti-doublon d'affichage (au cas où deux intitulés proches existeraient).
+  const seenTitles = new Set<string>();
+  const dedupedRows = rows.filter((q) => {
+    const k = q.question.trim().toLowerCase();
+    if (seenTitles.has(k)) return false;
+    seenTitles.add(k);
+    return true;
+  });
+
+  const questions = dedupedRows.map((q) => {
     const mine = myBetsByQuestion.get(q.id) ?? [];
     return {
       id: q.id,

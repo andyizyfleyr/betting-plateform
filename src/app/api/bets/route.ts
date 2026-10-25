@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const MIN_STAKE = 0.5;
 const BET_COOLDOWN_MS = 700;
 /** Délai de validation des paris en direct (recotation serveur + vérification anti-but). */
-const LIVE_VALIDATION_MS = 1200;
+const LIVE_VALIDATION_MS = 450;
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
@@ -161,6 +161,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
+  await runLiveEngine();
   const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { matchId?: number; selection?: string; market?: string; stake?: number };
@@ -182,6 +183,42 @@ export async function POST(req: NextRequest) {
   if (stake < MIN_STAKE) {
     return NextResponse.json(
       { error: `Mise hors limites (minimum ${MIN_STAKE} €)` },
+      { status: 400 }
+    );
+  }
+
+  // Profilage risque intelligent du joueur (détection sharp / ROI / CLV sur les 20 derniers paris)
+  const recentSettled = await db
+    .select({
+      odds: bets.odds,
+      stake: bets.stake,
+      status: bets.status,
+      potentialWin: bets.potentialWin,
+      cashOutAmount: bets.cashOutAmount,
+      closingOdds: bets.closingOdds,
+    })
+    .from(bets)
+    .where(eq(bets.userId, uid))
+    .orderBy(desc(bets.id))
+    .limit(25);
+
+  const settledHistory = recentSettled
+    .filter((b) => b.status !== "pending")
+    .map((b) => ({
+      odds: b.odds,
+      stake: b.stake,
+      payout:
+        b.status === "won"
+          ? b.potentialWin
+          : b.status === "cashed"
+            ? (b.cashOutAmount ?? 0)
+            : 0,
+      closingOdds: b.closingOdds ?? null,
+    }));
+  const maxAllowedStake = maxStakeFor(playerRiskProfile(settledHistory));
+  if (stake > maxAllowedStake) {
+    return NextResponse.json(
+      { error: `Mise maximale autorisée sur ce marché : ${maxAllowedStake} €` },
       { status: 400 }
     );
   }
@@ -305,7 +342,12 @@ export async function POST(req: NextRequest) {
               redAway: pricedMatch.redAway ?? 0,
             }
           )
-        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
+        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam, {
+            homeForm: pricedMatch.homeForm ?? 1,
+            awayForm: pricedMatch.awayForm ?? 1,
+            redHome: pricedMatch.redHome ?? 0,
+            redAway: pricedMatch.redAway ?? 0,
+          });
     selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
     if (odds == null || selectionLabel == null) {
       return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
