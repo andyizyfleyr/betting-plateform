@@ -63,10 +63,12 @@ export function formatGoalSummary(
 export function MatchCard({
   match,
   nextUp,
+  className,
 }: {
   match: ClientMatch;
   index?: number;
   nextUp?: boolean;
+  className?: string;
 }) {
   const router = useRouter();
   const { openMarkets } = useApp();
@@ -93,7 +95,8 @@ export function MatchCard({
         }
       }}
       className={cn(
-        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45"
+        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45",
+        className
       )}
     >
       {(isLive || isReal) && (
@@ -248,11 +251,13 @@ export function MatchCard({
 
       {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés */}
       {!isFinished && (
-        <div className="mt-3">
+        <div className="mt-auto pt-3">
           <ResultOdds match={match} />
           {marketCount > 1 && (
-            <div className="mt-2 flex items-center justify-between border-t border-edge/60 pt-2 text-[11px]">
-              <span className="text-dim">Total, Double chance, Handicap, Score exact…</span>
+            <div className="mt-2 flex items-center justify-between gap-2 border-t border-edge/60 pt-2 text-[11px]">
+              <span className="truncate text-dim">
+                Total, Double chance, Handicap, Score exact…
+              </span>
               <span className="inline-flex shrink-0 items-center gap-0.5 font-display font-bold text-ink">
                 +{marketCount - 1} marchés
                 <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />

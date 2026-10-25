@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarClock, Cpu, History, Search, Trophy, X } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
+  Cpu,
+  History,
+  Search,
+  Trophy,
+  X,
+} from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
@@ -16,6 +25,123 @@ type OddsProfileFilter = "all" | "favorite" | "tight";
 
 function isClearFavoriteMatch(m: ClientMatch): boolean {
   return Math.min(m.oddsHome, m.oddsAway) <= 1.85;
+}
+
+const TIER_S_CLUBS = [
+  "real madrid",
+  "barcelon",
+  "paris saint-germain",
+  "psg",
+  "manchester city",
+  "liverpool",
+  "arsenal",
+  "bayern",
+  "inter milan",
+  "internazionale",
+];
+
+const TIER_A_CLUBS = [
+  "chelsea",
+  "manchester united",
+  "atletico",
+  "atlético",
+  "juventus",
+  "ac milan",
+  "dortmund",
+  "marseille",
+  "naples",
+  "napoli",
+  "leverkusen",
+  "tottenham",
+];
+
+const TIER_B_CLUBS = [
+  "monaco",
+  "lyon",
+  "lille",
+  "aston villa",
+  "newcastle",
+  "athletic",
+  "real betis",
+  "villarreal",
+  "rome",
+  "roma",
+  "atalanta",
+  "benfica",
+  "porto",
+  "sporting",
+  "ajax",
+  "psv",
+  "galatasaray",
+  "fenerbah",
+];
+
+function clubPopularityScore(teamName: string): number {
+  const n = teamName.toLowerCase();
+  if (TIER_S_CLUBS.some((c) => n.includes(c))) return 20;
+  if (TIER_A_CLUBS.some((c) => n.includes(c))) return 14;
+  if (TIER_B_CLUBS.some((c) => n.includes(c))) return 9;
+  return 4;
+}
+
+function leaguePopularityScore(league: string): number {
+  const l = league.toLowerCase();
+  if (
+    l.includes("champions") ||
+    l.includes("coupe du monde") ||
+    l.includes("world cup") ||
+    l === "can" ||
+    l.includes("euro ")
+  ) {
+    return 50;
+  }
+  if (
+    l.includes("premier league") ||
+    l.includes("ligue 1") ||
+    l.includes("laliga") ||
+    l.includes("la liga") ||
+    l.includes("serie a") ||
+    l.includes("bundesliga")
+  ) {
+    return 42;
+  }
+  if (l.includes("ligue europa") || l.includes("europa league") || l.includes("nations")) {
+    return 34;
+  }
+  if (
+    l.includes("conference") ||
+    l.includes("fa cup") ||
+    l.includes("copa del rey") ||
+    l.includes("portugal") ||
+    l.includes("eredivisie")
+  ) {
+    return 26;
+  }
+  return 18;
+}
+
+function scoreRealMatchBasePopularity(m: ClientMatch): number {
+  const leaguePts = leaguePopularityScore(m.league);
+  const clubsPts = clubPopularityScore(m.homeTeam) + clubPopularityScore(m.awayTeam);
+  const oddsGap = Math.abs(m.oddsHome - m.oddsAway);
+  const suspensePts = oddsGap <= 0.8 ? 8 : oddsGap <= 1.6 ? 4 : 0;
+  return leaguePts + clubsPts + suspensePts;
+}
+
+function scoreRealLivePopularity(m: ClientMatch): number {
+  const base = scoreRealMatchBasePopularity(m);
+  const openBonus = m.suspended ? 0 : 12;
+  const goalsBonus = Math.min(8, ((m.homeScore ?? 0) + (m.awayScore ?? 0)) * 2);
+  return base + openBonus + goalsBonus;
+}
+
+function scoreRealPreMatchPopularity(m: ClientMatch, earliestUpcomingMs: number): number {
+  const base = scoreRealMatchBasePopularity(m);
+  const kickoffMs = new Date(m.startsAt).getTime();
+  const hoursAfterNext = Math.max(0, (kickoffMs - earliestUpcomingMs) / 3_600_000);
+  const proximityPts =
+    hoursAfterNext <= 10 ? 24 : hoursAfterNext <= 26 ? 15 : hoursAfterNext <= 54 ? 7 : 0;
+  return base + proximityPts;
 }
 
 const POLL_INTERVAL = 3_000;
@@ -186,15 +312,29 @@ export default function MatchsPage() {
     ? (visible.find((m) => m.status === "live") ?? visible[0] ?? null)
     : null;
 
-  const liveRest = visible.filter((m) => m.status === "live" && m.id !== featured?.id);
+  const liveRest = useMemo(() => {
+    const raw = visible.filter((m) => m.status === "live" && m.id !== featured?.id);
+    if (!isRealUniverse) return raw;
+    return [...raw].sort(
+      (a, b) => scoreRealLivePopularity(b) - scoreRealLivePopularity(a) || a.id - b.id
+    );
+  }, [visible, featured, isRealUniverse]);
 
-  const upcomingOrdered = useMemo(
-    () =>
-      visible
-        .filter((m) => m.status === "upcoming" && m.id !== featured?.id)
-        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
-    [visible, featured]
-  );
+  const upcomingOrdered = useMemo(() => {
+    const raw = visible.filter((m) => m.status === "upcoming" && m.id !== featured?.id);
+    if (!isRealUniverse || raw.length <= 1) {
+      return [...raw].sort(
+        (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+      );
+    }
+    const earliestMs = Math.min(...raw.map((m) => new Date(m.startsAt).getTime()));
+    return [...raw].sort(
+      (a, b) =>
+        scoreRealPreMatchPopularity(b, earliestMs) -
+          scoreRealPreMatchPopularity(a, earliestMs) ||
+        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+    );
+  }, [visible, featured, isRealUniverse]);
 
   const finishedList = useMemo(
     () => visible.filter((m) => m.status === "finished"),
@@ -382,7 +522,7 @@ export default function MatchsPage() {
               },
               {
                 value: "upcoming",
-                label: "À venir",
+                label: isRealUniverse ? "Avant-match" : "À venir",
                 count: matches !== null ? upcomingCount : undefined,
               },
               {
@@ -452,19 +592,36 @@ export default function MatchsPage() {
 
       {/* Contenu */}
       {matches === null ? (
-        <div className="flex flex-col gap-3">
-          {!isRealUniverse && <div className="shimmer h-[196px] rounded-2xl" />}
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            <div className="shimmer h-[136px] rounded-2xl" />
-            <div className="shimmer h-[136px] rounded-2xl" />
-            {isRealUniverse && (
-              <>
-                <div className="shimmer h-[136px] rounded-2xl" />
-                <div className="shimmer h-[136px] rounded-2xl" />
-              </>
-            )}
+        isRealUniverse ? (
+          <>
+            {/* Squelette mobile sur 2 lignes carrousel (Populaire EN DIRECT + Populaire en avant-match) */}
+            <div className="flex flex-col gap-5 lg:hidden">
+              {[0, 1].map((rowIdx) => (
+                <div key={rowIdx} className="space-y-2">
+                  <div className="shimmer h-4 w-44 rounded-md" />
+                  <div className="-mx-4 flex gap-3 overflow-hidden px-4">
+                    <div className="shimmer h-[168px] w-[85vw] max-w-[332px] shrink-0 rounded-2xl" />
+                    <div className="shimmer h-[168px] w-[85vw] max-w-[332px] shrink-0 rounded-2xl" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden grid-cols-1 gap-3 lg:grid xl:grid-cols-2">
+              <div className="shimmer h-[156px] rounded-2xl" />
+              <div className="shimmer h-[156px] rounded-2xl" />
+              <div className="shimmer h-[156px] rounded-2xl" />
+              <div className="shimmer h-[156px] rounded-2xl" />
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className="shimmer h-[196px] rounded-2xl" />
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              <div className="shimmer h-[136px] rounded-2xl" />
+              <div className="shimmer h-[136px] rounded-2xl" />
+            </div>
           </div>
-        </div>
+        )
       ) : visible.length === 0 ? (
         <div className="mt-10 flex flex-col items-center text-center">
           <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
@@ -501,6 +658,91 @@ export default function MatchsPage() {
             </div>
           )}
         </div>
+      ) : isRealUniverse ? (
+        <>
+          {/* MOBILE (< lg) : Classement 1xBet sur 2 lignes carrousel défilables gauche-droite */}
+          <div className="flex flex-col gap-5 lg:hidden">
+            {(filter === "all" || filter === "live") && (
+              <RealMatchCarouselRow
+                label="Populaire EN DIRECT"
+                items={liveRest}
+                live
+                emptyMessage="Aucun match réel en direct pour le moment"
+              />
+            )}
+
+            {(filter === "all" || filter === "upcoming") && (
+              <RealMatchCarouselRow
+                label="Populaire en avant-match"
+                items={upcomingOrdered}
+                emptyMessage="Aucun match réel en avant-match dans cette sélection"
+              />
+            )}
+
+            {filter === "finished" && finishedList.length > 0 && (
+              <RealMatchCarouselRow
+                label="Résultats officiels récents"
+                items={finishedList}
+                trailingHref={`/resultats?universe=${universe}`}
+                trailingLabel="Tout l'historique →"
+              />
+            )}
+          </div>
+
+          {/* DESKTOP (>= lg) : Grilles larges multi-colonnes */}
+          <div className="hidden flex-col gap-5 lg:flex">
+            {liveRest.length > 0 && (
+              <section>
+                <SectionHeader
+                  label="Populaire EN DIRECT"
+                  count={liveRest.length}
+                  live
+                  real
+                />
+                <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                  {liveRest.map((m) => (
+                    <MatchCard key={m.id} match={m} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {upcomingOrdered.length > 0 && (
+              <section>
+                <SectionHeader
+                  label="Populaire en avant-match"
+                  count={upcomingOrdered.length}
+                />
+                <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                  {upcomingOrdered.map((m) => (
+                    <MatchCard key={m.id} match={m} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {finishedList.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between px-0.5">
+                  <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                    Résultats officiels récents
+                  </h2>
+                  <Link
+                    href={`/resultats?universe=${universe}`}
+                    className="font-display text-[11.5px] font-bold text-betclic-red"
+                  >
+                    Tout l&apos;historique →
+                  </Link>
+                </div>
+                <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                  {finishedList.map((m) => (
+                    <MatchCard key={m.id} match={m} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </>
       ) : (
         <div className="flex flex-col gap-5">
           {featured && <FeaturedMatch match={featured} />}
@@ -508,10 +750,9 @@ export default function MatchsPage() {
           {liveRest.length > 0 && (
             <section>
               <SectionHeader
-                label={isRealUniverse ? "Matchs réels en direct" : "En direct"}
+                label="En direct"
                 count={liveRest.length}
                 live
-                real={isRealUniverse}
               />
               <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
                 {liveRest.map((m) => (
@@ -524,11 +765,7 @@ export default function MatchsPage() {
           {upcomingOrdered.length > 0 && (
             <section>
               <SectionHeader
-                label={
-                  isRealUniverse
-                    ? "Calendrier officiel · À venir"
-                    : "À venir · À tour de rôle"
-                }
+                label="À venir · À tour de rôle"
                 count={upcomingOrdered.length}
               />
               <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
@@ -536,7 +773,7 @@ export default function MatchsPage() {
                   <MatchCard
                     key={m.id}
                     match={m}
-                    nextUp={!isRealUniverse && idx === 0 && effectiveLeague === "all"}
+                    nextUp={idx === 0 && effectiveLeague === "all"}
                   />
                 ))}
               </div>
@@ -547,7 +784,7 @@ export default function MatchsPage() {
             <section>
               <div className="flex items-center justify-between px-0.5">
                 <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
-                  {isRealUniverse ? "Résultats officiels récents" : "Résultats virtuels récents"}
+                  Résultats virtuels récents
                 </h2>
                 <Link
                   href={`/resultats?universe=${universe}`}
@@ -566,6 +803,145 @@ export default function MatchsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function RealMatchCarouselRow({
+  label,
+  items,
+  live,
+  emptyMessage,
+  trailingHref,
+  trailingLabel,
+}: {
+  label: string;
+  items: ClientMatch[];
+  live?: boolean;
+  emptyMessage?: string;
+  trailingHref?: string;
+  trailingLabel?: string;
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(items.length > 1);
+
+  const syncScrollEdges = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    setCanLeft(el.scrollLeft > 6);
+    setCanRight(maxScroll - el.scrollLeft > 6);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const raf = window.requestAnimationFrame(syncScrollEdges);
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => syncScrollEdges())
+        : null;
+    ro?.observe(el);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
+  }, [items.length, syncScrollEdges]);
+
+  const scrollStep = (dir: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const step = Math.max(260, Math.round(el.clientWidth * 0.84));
+    el.scrollBy({ left: dir * step, behavior: "smooth" });
+  };
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <div className="flex min-w-0 items-center gap-2">
+          {live && <span className="live-dot h-2 w-2 shrink-0 rounded-full bg-emerald-600" />}
+          <h2 className="truncate font-display text-[13.5px] font-bold tracking-tight text-ink">
+            {label}
+          </h2>
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums",
+              live && items.length > 0
+                ? "bg-emerald-600/12 text-emerald-700"
+                : "bg-elev text-dim"
+            )}
+          >
+            {items.length}
+          </span>
+        </div>
+
+        {trailingHref && trailingLabel ? (
+          <Link
+            href={trailingHref}
+            className="shrink-0 font-display text-[11.5px] font-bold text-betclic-red"
+          >
+            {trailingLabel}
+          </Link>
+        ) : items.length > 1 ? (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => scrollStep(-1)}
+              disabled={!canLeft}
+              aria-label={`Défiler ${label} vers la gauche`}
+              className={cn(
+                "grid h-7 w-7 place-items-center rounded-full border transition-all active:scale-95",
+                canLeft
+                  ? "border-edge bg-white text-ink shadow-2xs"
+                  : "border-transparent bg-elev/60 text-dim/45"
+              )}
+            >
+              <ChevronLeft className="h-4 w-4" strokeWidth={2.3} />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollStep(1)}
+              disabled={!canRight}
+              aria-label={`Défiler ${label} vers la droite`}
+              className={cn(
+                "grid h-7 w-7 place-items-center rounded-full border transition-all active:scale-95",
+                canRight
+                  ? "border-edge bg-white text-ink shadow-2xs"
+                  : "border-transparent bg-elev/60 text-dim/45"
+              )}
+            >
+              <ChevronRight className="h-4 w-4" strokeWidth={2.3} />
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {items.length === 0 ? (
+        <div className="mt-2 flex h-12 items-center justify-center rounded-2xl border border-dashed border-edge bg-white/75 px-3.5 text-[12px] font-medium text-mist">
+          {emptyMessage ?? "Aucun match disponible"}
+        </div>
+      ) : (
+        <div
+          ref={scrollerRef}
+          onScroll={syncScrollEdges}
+          className="-mx-4 mt-2 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-3 overflow-x-auto px-4 pb-1 scroll-smooth no-scrollbar"
+        >
+          {items.map((m) => (
+            <div
+              key={m.id}
+              className={cn(
+                "shrink-0 snap-start",
+                items.length === 1
+                  ? "w-full"
+                  : "w-[85vw] max-w-[332px] sm:w-[328px]"
+              )}
+            >
+              <MatchCard match={m} className="h-full" />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
