@@ -408,8 +408,7 @@ const emptyMarkets = () =>
   }));
 
 export default function AdminPage() {
-  const { user } = useApp();
-  const [tab, setTab] = useState<TabKey>("dashboard");
+  const { user, adminTab: tab, setAdminTab: setTab, setAdminPendingFinance } = useApp();
   const [panel, setPanel] = useState<PanelData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -448,9 +447,12 @@ export default function AdminPage() {
     loadingRef.current = true;
     try {
       const res = await fetch("/api/admin", { cache: "no-store" });
-      const data = await res.json();
+      const data = (await res.json()) as PanelData & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Erreur");
       setPanel(data);
+      setAdminPendingFinance(
+        (data.stats?.pendingWithdrawals ?? 0) + (data.stats?.pendingDeposits ?? 0)
+      );
     } catch (e) {
       if (!isBackground) {
         setNotice({
@@ -462,7 +464,7 @@ export default function AdminPage() {
       loadingRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [setAdminPendingFinance]);
 
   useEffect(() => {
     const initTimer = setTimeout(() => {
@@ -596,18 +598,20 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="px-4 pb-8 pt-4">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
             Administration
           </h1>
-          <p className="text-[12px] text-mist">Pilotage des matchs, pronostics et joueurs</p>
+          <p className="text-[12px] text-mist lg:text-[13px]">
+            Pilotage des matchs, pronostics et joueurs
+          </p>
         </div>
         <button
           type="button"
           onClick={() => load()}
-          className="glass-card flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold text-ink active:bg-elev"
+          className="glass-card flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold text-ink hover:bg-elev/60 active:bg-elev"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} strokeWidth={2.3} />
           Actualiser
@@ -647,8 +651,8 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Onglets collants */}
-      <div className="sticky top-[52px] z-30 -mx-4 mt-3 border-b border-edge/70 bg-deep/95 px-4 py-2 backdrop-blur-md">
+      {/* Onglets collants mobiles (remplacés par la barre latérale à gauche sur desktop) */}
+      <div className="sticky top-[52px] z-30 -mx-4 mt-3 border-b border-edge/70 bg-deep/95 px-4 py-2 backdrop-blur-md lg:hidden">
         <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
           {TABS.map(({ key, label, Icon }) => {
             const active = tab === key;
@@ -789,14 +793,14 @@ function Dashboard({ stats }: { stats: PanelData["stats"] }) {
         </div>
       </section>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6 xl:gap-3">
         {cards.map((c) => (
-          <div key={c.label} className="glass-card rounded-2xl p-3.5">
+          <div key={c.label} className="glass-card rounded-2xl p-3.5 lg:p-4">
             <c.Icon
               className={cn("h-4 w-4", c.accent ? "text-betclic-red" : "text-dim")}
               strokeWidth={2.1}
             />
-            <p className="mt-2 font-display text-[17px] font-bold tabular-nums text-ink">
+            <p className="mt-2 font-display text-[17px] font-bold tabular-nums text-ink lg:text-[19px]">
               {c.value}
             </p>
             <p className="text-[11px] font-medium text-dim">{c.label}</p>
@@ -804,7 +808,7 @@ function Dashboard({ stats }: { stats: PanelData["stats"] }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 xl:gap-3">
         <StatPill label="Sport" value={stats.sportsBets} />
         <StatPill label="Pronostics" value={stats.predBets} />
         <StatPill label="Dépôts" value={stats.deposits} />
@@ -1420,7 +1424,7 @@ function MatchesTab({
       </div>
 
       <FilterDropdownRow
-        className="top-[105px] -my-3"
+        className="top-[105px] lg:top-[60px] -my-3"
         filters={[
           {
             id: "admin-match-status",
@@ -1475,7 +1479,7 @@ function MatchesTab({
             : "Aucun match dans cette sélection."}
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
           {filteredMatches.map((m) => (
             <AdminMatchCard
               key={m.id}
@@ -1759,7 +1763,7 @@ function OfficialFixtureImporter({
                 </div>
               )}
 
-              <div className="max-h-[380px] space-y-2 overflow-y-auto pr-0.5">
+              <div className="grid max-h-[420px] grid-cols-1 gap-2 overflow-y-auto pr-0.5 xl:grid-cols-2">
                 {fixtures.map((f) => {
                   const ed = oddsEdits[f.externalId] ?? {
                     o1: String(f.oddsHome),
@@ -2987,7 +2991,7 @@ function QuestionsTab({
       </div>
 
       <FilterDropdownRow
-        className="top-[105px] -my-3"
+        className="top-[105px] lg:top-[60px] -my-3"
         filters={[
           {
             id: "admin-q-status",
@@ -3033,7 +3037,7 @@ function QuestionsTab({
         resultCountText={`${visibleQuestions.length} prédiction${visibleQuestions.length > 1 ? "s" : ""}`}
       />
 
-      <div className="flex flex-col gap-2.5">
+      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
         {visibleQuestions.map((q) => {
           const isEditing = editingId === q.id;
           const isMulti = Array.isArray(q.options) && q.options.length >= 2;
@@ -3382,7 +3386,7 @@ function UsersTab({
       </div>
 
       <FilterDropdownRow
-        className="top-[105px] -my-2.5"
+        className="top-[105px] lg:top-[60px] -my-2.5"
         filters={[
           {
             id: "admin-user-role",
@@ -3433,6 +3437,7 @@ function UsersTab({
         }}
         resultCountText={`${filteredUsers.length} joueur${filteredUsers.length > 1 ? "s" : ""}`}
       />
+      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
       {filteredUsers.map((u) => (
         <div key={u.id} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-center justify-between gap-2">
@@ -3487,6 +3492,7 @@ function UsersTab({
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -3590,7 +3596,7 @@ function BetsTab({
       </div>
 
       <FilterDropdownRow
-        className="top-[105px] -my-2.5"
+        className="top-[105px] lg:top-[60px] -my-2.5"
         filters={[
           {
             id: "admin-bet-status",
@@ -3660,6 +3666,7 @@ function BetsTab({
         resultCountText={`${filteredRows.length} pari${filteredRows.length > 1 ? "s" : ""}`}
       />
 
+      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
       {filteredRows.map((b) => (
         <div key={`${b.kind}-${b.id}`} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-start justify-between gap-2">
@@ -3697,6 +3704,7 @@ function BetsTab({
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -3919,7 +3927,7 @@ function DepositsTab({
       {settledDeposits.length === 0 ? (
         <p className="py-6 text-center text-[12.5px] text-dim">Aucun dépôt enregistré.</p>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-1 gap-2 xl:grid-cols-2 xl:gap-3">
           {settledDeposits.map((d) => (
             <div key={d.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev text-ink">
@@ -4205,7 +4213,7 @@ function MlAdminTab({
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {ml.models.map((m) => (
             <div
               key={m.key}
@@ -4604,7 +4612,7 @@ function ScoresPrevusTab({
 
       {/* Rangée unique collante de 3 pastilles dropdown */}
       <FilterDropdownRow
-        className="top-[105px] -my-3"
+        className="top-[105px] lg:top-[60px] -my-3"
         filters={[
           {
             id: "forecast-status",
@@ -4663,7 +4671,7 @@ function ScoresPrevusTab({
           Aucun match programmé dans ce filtre.
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
           {visible.map((m) => {
             const fc = forecasts[m.id];
             if (!fc) return null;

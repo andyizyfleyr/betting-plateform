@@ -227,7 +227,7 @@ function PredictionBetSheet({
         onDragEnd={(_, info) => {
           if (info.offset.y > 120 || info.velocity.y > 550) onClose();
         }}
-        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] w-full max-w-[440px] flex-col overflow-hidden rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] w-full max-w-[440px] flex-col overflow-hidden rounded-t-3xl border-t border-edge bg-surface shadow-2xl lg:inset-0 lg:m-auto lg:h-fit lg:max-h-[86dvh] lg:max-w-[480px] lg:rounded-3xl lg:border"
       >
         {phase === "success" && placed ? (
           <SuccessView
@@ -241,10 +241,10 @@ function PredictionBetSheet({
             onContinue={onClose}
           />
         ) : (
-          <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-2">
+          <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-2 lg:px-6 lg:pb-6 lg:pt-4">
             <div
               onPointerDown={(e) => dragControls.start(e)}
-              className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing"
+              className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing lg:hidden"
             />
 
             <div className="mt-3 flex items-center justify-between">

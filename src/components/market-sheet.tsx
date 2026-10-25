@@ -188,16 +188,16 @@ export function MarketSheet() {
             onDragEnd={(_, info) => {
               if (info.offset.y > 120 || info.velocity.y > 550) closeMarkets();
             }}
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl lg:inset-0 lg:m-auto lg:h-[85dvh] lg:max-h-[820px] lg:max-w-[780px] lg:rounded-3xl lg:border"
           >
             {/* En-tête fixe de la feuille */}
-            <div className="shrink-0 rounded-t-3xl border-b border-edge bg-surface px-4 pb-2.5 pt-2">
+            <div className="shrink-0 rounded-t-3xl border-b border-edge bg-surface px-4 pb-2.5 pt-2 lg:px-6 lg:pt-3.5">
               {/* Zone de glissement vertical uniquement sur la barre supérieure */}
               <div
                 onPointerDown={(e) => dragControls.start(e)}
-                className="touch-none cursor-grab pb-1 active:cursor-grabbing"
+                className="touch-none cursor-grab pb-1 active:cursor-grabbing lg:cursor-default"
               >
-                <div className="mx-auto h-1 w-10 rounded-full bg-edge" />
+                <div className="mx-auto h-1 w-10 rounded-full bg-edge lg:hidden" />
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-mist">
                     <span
@@ -425,7 +425,7 @@ export function MarketSheet() {
                     : "Aucun marché ouvert dans cette catégorie pour le moment."}
                 </div>
               ) : (
-                <div className="space-y-2.5 pb-safe">
+                <div className="space-y-2.5 pb-safe lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
                   {filteredGroups.map((g) => {
                     const isOpen =
                       category !== "all" ? (openMap[g.key] ?? true) : Boolean(openMap[g.key]);

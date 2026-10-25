@@ -201,13 +201,15 @@ export default function ParisPage() {
   }, [visibleBets]);
 
   return (
-    <div className="px-4 pb-8 pt-4">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
             Mes paris
           </h1>
-          <p className="text-[12px] text-mist">Coupons en cours et historique des paris</p>
+          <p className="text-[12px] text-mist lg:text-[13px]">
+            Coupons en cours et historique des paris
+          </p>
         </div>
 
         <Link
@@ -219,69 +221,71 @@ export default function ParisPage() {
         </Link>
       </div>
 
-      {/* Résumé portefeuille clair (sans fausse carte bancaire) */}
-      <section className="glass-card mt-3 rounded-2xl p-3.5">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="text-[11px] font-medium text-dim">Solde disponible</p>
-            <AnimatedNumber
-              value={user?.balance ?? 0}
-              format={eur}
-              className="mt-0.5 block font-display text-[24px] font-bold leading-none tabular-nums text-ink"
-            />
+      {/* Résumé portefeuille clair + Recherche côte à côte sur grand écran */}
+      <div className="mt-3 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-end lg:gap-4">
+        <section className="glass-card rounded-2xl p-3.5 lg:flex lg:items-center lg:justify-between lg:gap-6 lg:px-5 lg:py-4">
+          <div className="flex items-center justify-between gap-4 lg:shrink-0">
+            <div>
+              <p className="text-[11px] font-medium text-dim">Solde disponible</p>
+              <AnimatedNumber
+                value={user?.balance ?? 0}
+                format={eur}
+                className="mt-0.5 block font-display text-[24px] font-bold leading-none tabular-nums text-ink"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={openRecharge}
+              className="flex h-9 items-center gap-1.5 rounded-xl bg-betclic-red px-3.5 font-display text-[12.5px] font-bold text-white active:opacity-90 lg:hidden"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
+              Recharger
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={openRecharge}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-betclic-red px-3.5 font-display text-[12.5px] font-bold text-white active:opacity-90"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
-            Recharger
-          </button>
-        </div>
 
-        <div className="mt-3 grid grid-cols-3 divide-x divide-edge border-t border-edge pt-2.5 text-center">
-          <div className="px-1">
-            <p className="text-[10px] font-medium text-dim">En jeu</p>
-            <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink">
-              {eur(staked)}
-            </p>
+          <div className="mt-3 grid grid-cols-3 divide-x divide-edge border-t border-edge pt-2.5 text-center lg:mt-0 lg:flex-1 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+            <div className="px-1">
+              <p className="text-[10px] font-medium text-dim">En jeu</p>
+              <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink lg:text-[15px]">
+                {eur(staked)}
+              </p>
+            </div>
+            <div className="px-1">
+              <p className="text-[10px] font-medium text-dim">Gain potentiel</p>
+              <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-win lg:text-[15px]">
+                {eur(potential)}
+              </p>
+            </div>
+            <div className="px-1">
+              <p className="text-[10px] font-medium text-dim">Réussite</p>
+              <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink lg:text-[15px]">
+                {settled ? `${winRate}%` : "—"}
+              </p>
+            </div>
           </div>
-          <div className="px-1">
-            <p className="text-[10px] font-medium text-dim">Gain potentiel</p>
-            <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-win">
-              {eur(potential)}
-            </p>
-          </div>
-          <div className="px-1">
-            <p className="text-[10px] font-medium text-dim">Réussite</p>
-            <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink">
-              {settled ? `${winRate}%` : "—"}
-            </p>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Barre de recherche (marge 16 px gauche/droite) */}
-      <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
-        <Search className="h-4 w-4 shrink-0 text-dim" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher un match, un coupon, un combiné…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Effacer la recherche"
-            className="text-dim active:text-ink"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        {/* Barre de recherche */}
+        <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:mt-0 lg:h-[68px] lg:rounded-2xl lg:px-4">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un match, un coupon, un combiné…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Effacer la recherche"
+              className="text-dim active:text-ink"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Rangée unique collante de 3 pastilles dropdown */}
@@ -394,8 +398,8 @@ export default function ParisPage() {
 
       {/* Liste des tickets */}
       {bets === null ? (
-        <div className="flex flex-col gap-3">
-          {[0, 1].map((i) => (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
             <div key={i} className="shimmer h-[168px] rounded-2xl" />
           ))}
         </div>
@@ -433,19 +437,19 @@ export default function ParisPage() {
       ) : (
         <div>
           {tab === "ongoing" ? (
-            <div className="flex flex-col gap-2.5">
+            <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
               {visibleBets.map((b) => (
                 <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
               ))}
             </div>
           ) : (
             finishedGroups.map(([label, group]) => (
-              <div key={label} className="mb-4 last:mb-0">
+              <div key={label} className="mb-5 last:mb-0">
                 <p className="mb-2 px-0.5 text-[11.5px] font-semibold capitalize text-mist">
                   {label}
                   <span className="ml-1.5 text-dim">({group.length})</span>
                 </p>
-                <div className="flex flex-col gap-2.5">
+                <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
                   {group.map((b) => (
                     <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
                   ))}

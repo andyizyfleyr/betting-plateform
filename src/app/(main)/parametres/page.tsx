@@ -226,14 +226,19 @@ export default function ParametresPage() {
   const hue = teamHue(user?.name ?? "Pulse");
 
   return (
-    <div className="px-4 pb-8 pt-4">
-      <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
+    <div className="mx-auto w-full max-w-[1380px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
+      <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
         Compte
       </h1>
-      <p className="text-[12px] text-mist">Profil, portefeuille et préférences</p>
+      <p className="text-[12px] text-mist lg:text-[13px]">
+        Profil, portefeuille et préférences
+      </p>
 
+      <div className="mt-3 lg:mt-5 lg:grid lg:grid-cols-[minmax(0,1.22fr)_minmax(340px,0.78fr)] lg:items-start lg:gap-6">
+        {/* Colonne gauche desktop : Profil, Solde et Mouvements du portefeuille */}
+        <div>
       {/* Profil + Solde + Dépôt / Retrait */}
-      <section className="glass-card mt-3 rounded-2xl p-4">
+      <section className="glass-card rounded-2xl p-4 lg:p-5">
         <div className="flex items-center gap-3">
           <span
             className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl font-display text-[15px] font-bold text-white"
@@ -524,9 +529,12 @@ export default function ParametresPage() {
           </button>
         )}
       </section>
+        </div>
 
+        {/* Colonne droite desktop : Préférences + Assistance & Session */}
+        <div className="lg:sticky lg:top-[84px]">
       {/* Préférences réelles */}
-      <h2 className="mt-5 px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-mist">
+      <h2 className="mt-5 px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-mist lg:mt-0">
         Préférences
       </h2>
       <div className="glass-card mt-2 overflow-hidden rounded-2xl">
@@ -635,6 +643,8 @@ export default function ParametresPage() {
             <p className="text-[11.5px] text-dim">Fermer votre session sur cet appareil</p>
           </div>
         </button>
+      </div>
+        </div>
       </div>
 
       <p className="mt-6 text-center text-[10.5px] leading-relaxed text-dim">

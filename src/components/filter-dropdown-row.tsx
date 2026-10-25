@@ -133,9 +133,9 @@ export function FilterDropdownRow({
     <>
       <div
         className={cn(
-          bleedHorizontal ? "-mx-4 px-4" : "",
+          bleedHorizontal ? "-mx-4 px-4 lg:mx-0 lg:px-0" : "",
           "py-3",
-          sticky && "sticky top-[52px] z-30 bg-deep/95 backdrop-blur-md",
+          sticky && "sticky top-[52px] z-30 bg-deep/95 backdrop-blur-md lg:top-[60px]",
           className
         )}
       >

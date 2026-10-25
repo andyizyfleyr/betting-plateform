@@ -317,8 +317,8 @@ export default function BetslipPage() {
   // État après validation réussie
   if (receipt && comboLegs.length === 0) {
     return (
-      <div className="px-4 pt-6 pb-8">
-        <div className="glass-card rounded-3xl p-5 text-center">
+      <div className="mx-auto w-full max-w-[1360px] px-4 pt-6 pb-8 lg:px-8 lg:py-10">
+        <div className="glass-card mx-auto max-w-[540px] rounded-3xl p-5 text-center lg:p-7">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
             <Check className="h-7 w-7" strokeWidth={2.6} />
           </div>
@@ -381,13 +381,13 @@ export default function BetslipPage() {
   }
 
   return (
-    <div className="px-4 pt-4 pb-8">
+    <div className="mx-auto w-full max-w-[1360px] px-4 pt-4 pb-8 lg:px-8 lg:py-6">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
-              Betslip
+            <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+              Coupon de pari
             </h1>
             {enrichedLegs.length > 0 && (
               <span className="rounded-full bg-betclic-red px-2 py-0.5 font-display text-[11px] font-bold text-white">
@@ -395,7 +395,7 @@ export default function BetslipPage() {
               </span>
             )}
           </div>
-          <p className="text-[12px] text-mist">
+          <p className="text-[12px] text-mist lg:text-[13px]">
             {enrichedLegs.length === 0
               ? "Coupon de pari · Simple & Combiné"
               : isCombo
@@ -411,7 +411,7 @@ export default function BetslipPage() {
               clearCombo();
               setError(null);
             }}
-            className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-3 font-display text-[11.5px] font-bold text-mist active:bg-edge active:text-ink"
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-3 font-display text-[11.5px] font-bold text-mist hover:bg-edge/80 hover:text-ink active:bg-edge active:text-ink"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />
             Vider
@@ -421,12 +421,12 @@ export default function BetslipPage() {
 
       {/* État vide */}
       {enrichedLegs.length === 0 ? (
-        <div className="mt-8 glass-card rounded-3xl p-6 text-center">
+        <div className="glass-card mx-auto mt-8 max-w-[560px] rounded-3xl p-6 text-center lg:p-8">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-betclic-red/10 text-betclic-red">
             <Layers className="h-6 w-6" strokeWidth={2.1} />
           </div>
           <h2 className="mt-3.5 font-display text-[16.5px] font-bold text-ink">
-            Votre Betslip est vide
+            Votre coupon de pari est vide
           </h2>
           <p className="mx-auto mt-1.5 max-w-[290px] text-[12.5px] leading-relaxed text-mist">
             Faites un <strong className="font-semibold text-ink">appui long</strong> sur
@@ -452,7 +452,9 @@ export default function BetslipPage() {
           </div>
         </div>
       ) : (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3 lg:mt-5 lg:grid lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start lg:gap-6 lg:space-y-0">
+          {/* Colonne gauche desktop : Bonus Combiné + Sélections */}
+          <div className="space-y-3">
           {/* Jauge Bonus Combiné 1xBet */}
           <div className="rounded-2xl border border-edge bg-white p-3">
             <div className="flex items-center justify-between gap-2 text-[11.5px]">
@@ -565,15 +567,16 @@ export default function BetslipPage() {
           {enrichedLegs.length < MAX_COMBO_LEGS && (
             <Link
               href="/matchs"
-              className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-edge bg-white/70 font-display text-[12.5px] font-semibold text-mist active:bg-elev"
+              className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-edge bg-white/70 font-display text-[12.5px] font-semibold text-mist hover:bg-elev/60 active:bg-elev"
             >
               <Plus className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-              Ajouter une sélection (appui long sur une cote)
+              Ajouter une sélection (appui long ou mode Combiné 1-clic)
             </Link>
           )}
+          </div>
 
-          {/* Bloc Mise & Validation */}
-          <div className="glass-card rounded-2xl p-3.5 space-y-3">
+          {/* Bloc Mise & Validation (collant à droite sur desktop) */}
+          <div className="glass-card rounded-2xl p-3.5 space-y-3 lg:sticky lg:top-[84px] lg:p-5">
             <div className="flex items-center justify-between">
               <span className="text-[12px] font-semibold text-mist">Votre mise</span>
               <span className="text-[11.5px] text-dim">
