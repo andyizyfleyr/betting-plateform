@@ -16,19 +16,27 @@ const ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { pendingCount, comboLegs, user } = useApp();
+  const { pendingCount, comboLegs, user, closeMarkets, closeBet, closeCombo } =
+    useApp();
   const slipCount = comboLegs.length;
 
   if (
     user?.role === "admin" ||
     pathname === "/admin" ||
-    pathname.startsWith("/admin/")
+    pathname.startsWith("/admin/") ||
+    pathname === "/tap" ||
+    pathname.startsWith("/tap/") ||
+    pathname === "/accelerator" ||
+    pathname.startsWith("/accelerator/")
   ) {
     return null;
   }
 
   return (
-    <nav className="sticky bottom-0 z-40 w-full border-t border-edge bg-white/98 backdrop-blur-md lg:hidden">
+    <nav
+      aria-label="Navigation principale mobile"
+      className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[480px] border-t border-edge bg-white/98 shadow-[0_-2px_10px_rgba(17,24,39,0.05)] backdrop-blur-md select-none sm:border-x lg:hidden"
+    >
       <div
         className="pb-safe grid grid-cols-5"
         style={{
@@ -49,8 +57,13 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
+              onClick={() => {
+                closeMarkets();
+                closeBet();
+                closeCombo();
+              }}
               aria-current={active ? "page" : undefined}
-              className="relative flex min-h-[56px] flex-col items-center justify-center gap-1 py-2 transition-colors active:bg-elev/60"
+              className="relative flex min-h-[56px] min-w-0 touch-manipulation flex-col items-center justify-center gap-1 px-1 py-2 transition-colors active:bg-elev/60"
             >
               {active && (
                 <span className="absolute inset-x-0 top-0 mx-auto h-[2.5px] w-7 rounded-b-full bg-betclic-red" />
@@ -76,7 +89,7 @@ export function BottomNav() {
               </span>
               <span
                 className={cn(
-                  "font-display text-[10px] leading-none",
+                  "max-w-full truncate font-display text-[10px] leading-none",
                   active ? "font-bold text-betclic-red" : "font-medium text-dim"
                 )}
               >
