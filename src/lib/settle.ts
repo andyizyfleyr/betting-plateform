@@ -18,7 +18,16 @@ function resolveBet(
   const away = match.awayScore ?? 0;
   if (!isKnownMarket(bet.market)) return { won: false, voided: true };
   if (match.source === "manual") {
-    return realMatchSettle(bet.market, bet.selection, home, away, match.events ?? null, match.id);
+    return realMatchSettle(
+      bet.market,
+      bet.selection,
+      home,
+      away,
+      match.events ?? null,
+      match.id,
+      match.htHomeScore ?? null,
+      match.htAwayScore ?? null
+    );
   }
   return marketSettle(bet.market, bet.selection, home, away, match.events ?? null, match.id);
 }
@@ -135,5 +144,36 @@ export async function settleMatchBets(matchId: number) {
     .leftJoin(matches, eq(bets.matchId, matches.id))
     .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
   await settleRows(rows);
+  await settlePendingCombos();
+}
+
+/** Rembourse intégralement (void) tous les paris simples et sélections combinées d'un match annulé/reporté. */
+export async function voidMatchBets(matchId: number) {
+  const pendingRows = await db
+    .select()
+    .from(bets)
+    .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
+
+  const now = new Date();
+  for (const bet of pendingRows) {
+    const refund = Math.round(bet.stake * 100) / 100;
+    const [updated] = await db
+      .update(bets)
+      .set({
+        status: "void",
+        potentialWin: refund,
+        settledAt: now,
+      })
+      .where(and(eq(bets.id, bet.id), eq(bets.status, "pending")))
+      .returning({ id: bets.id });
+
+    if (updated && refund > 0) {
+      await db
+        .update(appUser)
+        .set({ balance: sql`${appUser.balance} + ${refund}` })
+        .where(eq(appUser.id, bet.userId));
+    }
+  }
+
   await settlePendingCombos();
 }

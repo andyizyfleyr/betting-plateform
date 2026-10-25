@@ -14,12 +14,14 @@ import { computeComboQuote } from "@/lib/combo-math";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import {
   isKnownMarket,
+  isRealMatchPostIncidentSuspended,
   liveOutcomeProbability,
   marketSettle,
   minuteNumber,
   realMatchLiveProbability,
   realMatchSettle,
 } from "@/lib/markets";
+import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -39,6 +41,7 @@ export function resolveComboLegStatus(
   if (leg.kind === "sport") {
     const m = leg.matchId ? matchMap.get(leg.matchId) : undefined;
     if (!m) return "void";
+    if (m.feedStatusNote === "VOIDED") return "void";
     if (m.status !== "finished") return "pending";
 
     const home = m.homeScore ?? 0;
@@ -63,7 +66,9 @@ export function resolveComboLegStatus(
             home,
             away,
             m.events ?? null,
-            m.id
+            m.id,
+            m.htHomeScore ?? null,
+            m.htAwayScore ?? null
           )
         : marketSettle(
             leg.market,
@@ -293,6 +298,12 @@ export function computeComboCashOut(
       if (m.status === "finished") return null; // en attente de règlement imminent
       if (m.status === "live") {
         if (m.suspended) return null;
+        if (
+          m.source === "manual" &&
+          (isRealMatchPostIncidentSuspended(m) || isRealMatchFeedStale(m))
+        ) {
+          return null;
+        }
         const min = minuteNumber(m.minute);
         if (min >= 88) return null;
         hasLiveProgress = true;

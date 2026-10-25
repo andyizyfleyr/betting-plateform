@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, ChevronUp, Lock, Radio } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronRight, ChevronUp, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
@@ -11,6 +11,7 @@ import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
+import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
 export function LiveStatusBadge({
@@ -78,6 +79,7 @@ export function MatchCard({
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
   const isReal = match.source === "manual";
+  const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const marketCount = match.markets?.length ?? 0;
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
@@ -125,7 +127,24 @@ export function MatchCard({
         <div className="flex shrink-0 items-center gap-1.5">
           {isLive ? (
             <>
-              {!isReal && (
+              {isReal ? (
+                realStatsAvailable && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowTracker((s) => !s);
+                    }}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors",
+                      showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
+                    )}
+                  >
+                    <BarChart3 className="h-2.5 w-2.5" strokeWidth={2.4} />
+                    Stats
+                  </button>
+                )
+              ) : (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -208,8 +227,19 @@ export function MatchCard({
         </div>
       )}
 
-      {/* Tracker 2D dépliable exclusivement réservé aux matchs virtuels */}
+      {/* Tracker 2D virtuel ou statistiques officielles du match réel */}
       {!isReal && isLive && showTracker && <LiveMatchTracker match={match} className="mt-2.5" />}
+      {isReal && isLive && showTracker && realStatsAvailable && (
+        <RealMatchStatsCard
+          stats={match.realStats}
+          homeTeam={match.homeTeam}
+          awayTeam={match.awayTeam}
+          htHomeScore={match.htHomeScore}
+          htAwayScore={match.htAwayScore}
+          compact
+          className="mt-2.5"
+        />
+      )}
 
       {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés */}
       {!isFinished && (

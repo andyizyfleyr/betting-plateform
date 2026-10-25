@@ -10,6 +10,29 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 
+/** Statistiques officielles d'un match réel récupérées gratuitement depuis le flux sportif public. */
+export interface RealMatchStats {
+  possessionHome: number | null;
+  possessionAway: number | null;
+  shotsTotalHome: number | null;
+  shotsTotalAway: number | null;
+  shotsOnTargetHome: number | null;
+  shotsOnTargetAway: number | null;
+  cornersHome: number | null;
+  cornersAway: number | null;
+  foulsHome: number | null;
+  foulsAway: number | null;
+  offsidesHome: number | null;
+  offsidesAway: number | null;
+  savesHome: number | null;
+  savesAway: number | null;
+  yellowCardsHome: number | null;
+  yellowCardsAway: number | null;
+  htHomeScore: number | null;
+  htAwayScore: number | null;
+  updatedAt: string;
+}
+
 /**
  * Matchs de football.
  * status: "live" | "upcoming" | "finished"
@@ -76,6 +99,23 @@ export const matches = pgTable("matches", {
   scriptedEvents: jsonb("scripted_events").$type<
     Array<{ type: string; team: string; minute: number; player?: string }>
   >(),
+  /** Identifiant officiel externe du match réel (ex. événement ESPN public sans clé API). */
+  externalId: text("external_id"),
+  /** Code ligue externe officiel (ex. "uefa.champions", "eng.1", "fra.1"). */
+  externalLeague: text("external_league"),
+  /** Active la synchronisation automatique du direct, des stats et du score final sur un match réel. */
+  autoSync: boolean("auto_sync").notNull().default(true),
+  /** Score officiel à la mi-temps (lorsqu'il est connu / remonté par le flux réel). */
+  htHomeScore: integer("ht_home_score"),
+  htAwayScore: integer("ht_away_score"),
+  /** Vraies statistiques officielles du match réel (possession, tirs, corners, fautes, arrêts…). */
+  realStats: jsonb("real_stats").$type<RealMatchStats | null>(),
+  /** Horodatage de la dernière synchronisation réussie depuis le flux sportif public. */
+  feedSyncedAt: timestamp("feed_synced_at", { mode: "date" }),
+  /** Premier horodatage où la fin officielle du match a été détectée (fenêtre anti-VAR). */
+  feedFinishedAt: timestamp("feed_finished_at", { mode: "date" }),
+  /** Note d'état du flux officiel affichée dans l'administration. */
+  feedStatusNote: text("feed_status_note"),
 });
 
 /**

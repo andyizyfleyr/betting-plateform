@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Lock, Radio } from "lucide-react";
+import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { formatGoalSummary, LiveStatusBadge, ResultOdds } from "./match-card";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
+import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { cn, formatKickoff } from "@/lib/format";
 
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
@@ -15,6 +16,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
   const [showTracker, setShowTracker] = useState(true);
   const isLive = match.status === "live";
   const isReal = match.source === "manual";
+  const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const marketCount = match.markets?.length ?? 0;
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
@@ -38,7 +40,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {!isReal && isLive && (
+          {isLive && (isReal ? realStatsAvailable : true) && (
             <button
               type="button"
               onClick={(e) => {
@@ -52,8 +54,17 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
                   : "bg-elev text-mist"
               )}
             >
-              <Radio className="h-3 w-3" strokeWidth={2.4} />
-              Terrain 2D
+              {isReal ? (
+                <>
+                  <BarChart3 className="h-3 w-3" strokeWidth={2.4} />
+                  Stats
+                </>
+              ) : (
+                <>
+                  <Radio className="h-3 w-3" strokeWidth={2.4} />
+                  Terrain 2D
+                </>
+              )}
             </button>
           )}
           <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-bold text-ink">
@@ -142,6 +153,17 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
       )}
 
       {!isReal && isLive && showTracker && <LiveMatchTracker match={match} className="mb-3" />}
+      {isReal && isLive && showTracker && realStatsAvailable && (
+        <RealMatchStatsCard
+          stats={match.realStats}
+          homeTeam={match.homeTeam}
+          awayTeam={match.awayTeam}
+          htHomeScore={match.htHomeScore}
+          htAwayScore={match.htAwayScore}
+          compact
+          className="mb-3"
+        />
+      )}
 
       <ResultOdds match={match} />
     </section>

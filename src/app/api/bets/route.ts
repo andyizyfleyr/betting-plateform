@@ -18,6 +18,7 @@ import { computeComboCashOut, resolveComboLegStatus } from "@/lib/combo";
 import {
   isKnownMarket,
   isRealMatchKickoffReached,
+  isRealMatchPostIncidentSuspended,
   liveMarketOddsFor,
   liveOutcomeProbability,
   marketLabelFor,
@@ -27,6 +28,10 @@ import {
   realMatchOddsFor,
 } from "@/lib/markets";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
+import {
+  isRealMatchFeedStale,
+  verifyLiveRealMatchesBeforeBet,
+} from "@/lib/real-sports-feed";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled, syncLiveMatchesThrottled } from "@/lib/sync-throttle";
@@ -92,7 +97,13 @@ export async function GET(req: NextRequest) {
       clv: clvOf(bet.odds, bet.closingOdds),
       cashOutAmount: bet.cashOutAmount ?? null,
       cashOut:
-        livePending && match && !match.suspended
+        livePending &&
+        match &&
+        !match.suspended &&
+        !(
+          match.source === "manual" &&
+          (isRealMatchPostIncidentSuspended(match) || isRealMatchFeedStale(match))
+        )
           ? computeCashOut({
               stake: bet.stake,
               odds: bet.odds,
@@ -299,7 +310,7 @@ export async function POST(req: NextRequest) {
   if (typeof auth !== "number") return auth;
   const uid = auth;
   await ensureMlLoaded();
-  await runLiveEngine();
+  await syncLiveMatchesThrottled();
 
   let body: { matchId?: number; selection?: string; market?: string; stake?: number };
   try {
@@ -441,40 +452,55 @@ export async function POST(req: NextRequest) {
   // événement réel (but, carton rouge, suspension ou fin de match) survient pendant l'attente.
   let pricedMatch = match;
   if (match.status === "live") {
-    if (match.suspended || (match.source === "virtual" && minuteNumber(match.minute) >= 85)) {
+    if (
+      match.suspended ||
+      (match.source === "virtual" && minuteNumber(match.minute) >= 85) ||
+      (match.source === "manual" && minuteNumber(match.minute) >= 88)
+    ) {
       return NextResponse.json(
         { error: "Marché verrouillé (fin de match ou action en cours)" },
         { status: 400 }
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
-    if (match.source === "virtual") {
+
+    if (match.source === "manual") {
+      // Garde-fou anti-late-bet sur match réel : synchronisation fraîche + délai live + détection but/carton
+      const realGuard = await verifyLiveRealMatchesBeforeBet([match]);
+      if (!realGuard.ok) {
+        return NextResponse.json(
+          { error: realGuard.error },
+          { status: 409 }
+        );
+      }
+      pricedMatch = realGuard.refreshedMap.get(match.id) ?? match;
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
       await runLiveEngine();
+      const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (
+        !freshMatch ||
+        freshMatch.status === "finished" ||
+        freshMatch.suspended ||
+        minuteNumber(freshMatch.minute) >= 85
+      ) {
+        return NextResponse.json(
+          { error: "Pari rejeté : marché suspendu ou match terminé pendant la validation" },
+          { status: 400 }
+        );
+      }
+      if (
+        (freshMatch.homeScore ?? 0) !== initialHomeScore ||
+        (freshMatch.awayScore ?? 0) !== initialAwayScore ||
+        (freshMatch.redHome ?? 0) !== initialRedHome ||
+        (freshMatch.redAway ?? 0) !== initialRedAway
+      ) {
+        return NextResponse.json(
+          { error: "Action décisive survenue pendant la validation — cote mise à jour, réessayez" },
+          { status: 409 }
+        );
+      }
+      pricedMatch = freshMatch;
     }
-    const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
-    if (
-      !freshMatch ||
-      freshMatch.status === "finished" ||
-      freshMatch.suspended ||
-      (freshMatch.source === "virtual" && minuteNumber(freshMatch.minute) >= 85)
-    ) {
-      return NextResponse.json(
-        { error: "Pari rejeté : marché suspendu ou match terminé pendant la validation" },
-        { status: 400 }
-      );
-    }
-    if (
-      (freshMatch.homeScore ?? 0) !== initialHomeScore ||
-      (freshMatch.awayScore ?? 0) !== initialAwayScore ||
-      (freshMatch.redHome ?? 0) !== initialRedHome ||
-      (freshMatch.redAway ?? 0) !== initialRedAway
-    ) {
-      return NextResponse.json(
-        { error: "Action décisive survenue pendant la validation — cote mise à jour, réessayez" },
-        { status: 409 }
-      );
-    }
-    pricedMatch = freshMatch;
   }
 
   const homeScore = pricedMatch.homeScore ?? 0;
@@ -549,7 +575,6 @@ export async function POST(req: NextRequest) {
   // Bloque en direct les issues quasi certaines (scalping à 1,01–1,03 en fin de match)
   if (
     pricedMatch.status === "live" &&
-    pricedMatch.source === "virtual" &&
     (odds <= 1.03 || (liveProb != null && liveProb >= 0.945))
   ) {
     return NextResponse.json(

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { api, type ClientMatchHistoryItem } from "@/lib/api";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { hasAnyRealStats, RealMatchStatsCard } from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
@@ -308,7 +309,13 @@ function MatchHistoryCard({
                           {isGoal ? "⚽" : "🟥"}
                         </span>
                         <span className="truncate font-medium text-ink">
-                          {isGoal ? `But ${teamName}` : `Carton rouge ${teamName}`}
+                          {isGoal
+                            ? ev.player
+                              ? `${ev.player} (${teamName})`
+                              : `But ${teamName}`
+                            : ev.player
+                              ? `${ev.player} — Carton rouge (${teamName})`
+                              : `Carton rouge ${teamName}`}
                         </span>
                       </div>
                       <span className="shrink-0 text-[10.5px] font-semibold text-dim">
@@ -321,8 +328,20 @@ function MatchHistoryCard({
             )}
           </div>
 
-          {/* Statistiques du match */}
-          {match.telemetry && (
+          {/* Statistiques officielles (Match réel) */}
+          {match.source === "manual" && hasAnyRealStats(match.realStats) && (
+            <RealMatchStatsCard
+              stats={match.realStats}
+              homeTeam={match.homeTeam}
+              awayTeam={match.awayTeam}
+              htHomeScore={match.htHome}
+              htAwayScore={match.htAway}
+              className="bg-white ring-1 ring-edge/70 border-0 shadow-none"
+            />
+          )}
+
+          {/* Statistiques du match (Virtuel) */}
+          {match.source !== "manual" && match.telemetry && (
             <div>
               <p className="text-[10.5px] font-bold uppercase tracking-wider text-dim">
                 Statistiques

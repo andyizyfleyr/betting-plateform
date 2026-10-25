@@ -9,11 +9,10 @@ import {
   getAdminMatchForecasts,
   lockMatchScenario,
   rerollMatchScenario,
-  runLiveEngine,
   setScenarioMode,
   unlockMatchScenario,
 } from "@/db/engine";
-import { hasVerifiedGoalTimeline, liveOddsFor, pickScorerName } from "@/db/fixtures";
+import { liveOddsFor, pickScorerName } from "@/db/fixtures";
 import {
   appUser,
   bets,
@@ -35,12 +34,19 @@ import {
   reopenSettledQuestion,
   round2,
   settleQuestion,
-  settleResolvedQuestions,
   slugifyOptionKey,
 } from "@/lib/predictions";
+import { OFFICIAL_SOCCER_LEAGUES } from "@/lib/real-leagues";
+import {
+  discoverUpcomingRealMatches,
+  getRealMatchSettlementMode,
+  setRealMatchSettlementMode,
+  syncRealMatchesThrottled,
+  syncSingleRealMatchNow,
+} from "@/lib/real-sports-feed";
 import { STALE_LATENCY_MS } from "@/lib/risk";
 import { getAuthUserId } from "@/lib/session";
-import { settleFinishedBets, settleMatchBets } from "@/lib/settle";
+import { settleFinishedBets, settleMatchBets, voidMatchBets } from "@/lib/settle";
 import { resetSyncThrottle, syncPlatformStateThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
@@ -165,14 +171,17 @@ export async function GET(req: NextRequest) {
   });
 
   const pendingDepCount = depRows.filter((d) => d.status === "pending_review").length;
-  const [ml, scenarioInfo] = await Promise.all([
+  const [ml, scenarioInfo, realSettlementMode] = await Promise.all([
     getAdminMlOverview(),
     getAdminMatchForecasts(matchRows),
+    getRealMatchSettlementMode(),
   ]);
 
   return NextResponse.json({
     ml,
     scenarioMode: scenarioInfo.mode,
+    realSettlementMode,
+    officialLeagues: OFFICIAL_SOCCER_LEAGUES,
     matchForecasts: scenarioInfo.forecasts,
     stats: {
       totalUsers: totalUsers?.value ?? 0,
@@ -222,8 +231,14 @@ export async function GET(req: NextRequest) {
     })),
     matches: matchRows.map((m) => ({
       ...m,
-      homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
-      awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
+      homeLogo:
+        m.source === "manual"
+          ? m.homeLogo || teamLogo(m.homeTeam)
+          : teamLogo(m.homeTeam) || m.homeLogo,
+      awayLogo:
+        m.source === "manual"
+          ? m.awayLogo || teamLogo(m.awayTeam)
+          : teamLogo(m.awayTeam) || m.awayLogo,
     })),
     questions: uniqueQuestions.map((q) => ({
       ...q,
@@ -365,6 +380,36 @@ export async function POST(req: NextRequest) {
         typeof body.homeLogo === "string" && body.homeLogo.trim() ? body.homeLogo.trim() : null;
       const customAwayLogo =
         typeof body.awayLogo === "string" && body.awayLogo.trim() ? body.awayLogo.trim() : null;
+      const externalId =
+        source === "manual" && typeof body.externalId === "string" && body.externalId.trim()
+          ? body.externalId.trim()
+          : null;
+      const externalLeague =
+        source === "manual" &&
+        typeof body.externalLeague === "string" &&
+        body.externalLeague.trim()
+          ? body.externalLeague.trim()
+          : null;
+      const autoSync =
+        source === "manual"
+          ? body.autoSync === undefined
+            ? true
+            : Boolean(body.autoSync)
+          : false;
+
+      if (externalId) {
+        const [dup] = await db
+          .select({ id: matches.id })
+          .from(matches)
+          .where(eq(matches.externalId, externalId))
+          .limit(1);
+        if (dup) {
+          return NextResponse.json(
+            { error: "Cette affiche officielle est déjà importée dans les matchs réels" },
+            { status: 400 }
+          );
+        }
+      }
 
       const [m] = await db
         .insert(matches)
@@ -393,9 +438,206 @@ export async function POST(req: NextRequest) {
           awayForm: 1,
           markets,
           source,
+          externalId,
+          externalLeague,
+          autoSync,
         })
         .returning();
+
+      if (m && externalId && autoSync) {
+        await syncSingleRealMatchNow(m.id).catch(() => null);
+      }
       return NextResponse.json({ ok: true, match: m });
+    }
+
+    if (action === "discoverRealMatches") {
+      const rawSlug =
+        typeof body.leagueSlug === "string" && body.leagueSlug.trim()
+          ? body.leagueSlug.trim()
+          : "top";
+      const leagueSlug = rawSlug === "all" ? "top" : rawSlug;
+      const daysAhead =
+        typeof body.daysAhead === "number" && Number.isFinite(body.daysAhead)
+          ? Math.max(1, Math.min(14, Math.round(body.daysAhead)))
+          : 3;
+
+      const { fixtures, reachable } = await discoverUpcomingRealMatches(leagueSlug, daysAhead);
+      return NextResponse.json({
+        ok: true,
+        reachable,
+        fixtures,
+      });
+    }
+
+    if (action === "importRealMatches") {
+      const rawFixtures = Array.isArray(body.fixtures) ? body.fixtures : [];
+      if (rawFixtures.length === 0) {
+        return NextResponse.json({ error: "Aucune affiche sélectionnée" }, { status: 400 });
+      }
+
+      const existingRows = await db
+        .select({ externalId: matches.externalId })
+        .from(matches)
+        .where(eq(matches.source, "manual"));
+      const importedSet = new Set(
+        existingRows
+          .map((r) => r.externalId)
+          .filter((x): x is string => typeof x === "string" && x.length > 0)
+      );
+
+      const insertedIds: number[] = [];
+      let skipped = 0;
+
+      for (const item of rawFixtures.slice(0, 30)) {
+        const f = item as Record<string, unknown>;
+        const externalId = String(f.externalId ?? "").trim();
+        const externalLeague = String(f.leagueSlug ?? f.externalLeague ?? "").trim() || null;
+        const league = String(f.leagueLabel ?? f.league ?? "Football").trim() || "Football";
+        const homeTeam = String(f.homeTeam ?? "").trim();
+        const awayTeam = String(f.awayTeam ?? "").trim();
+        if (!externalId || !homeTeam || !awayTeam) continue;
+        if (importedSet.has(externalId)) {
+          skipped++;
+          continue;
+        }
+
+        const startsAtParsed =
+          typeof f.startsAt === "string" ? new Date(f.startsAt) : new Date();
+        const startsAt = Number.isNaN(startsAtParsed.getTime())
+          ? new Date(Date.now() + 3600_000)
+          : startsAtParsed;
+
+        const oddsHome = Math.max(1.04, roundNumber(f.oddsHome ?? f.suggestedOddsHome) ?? 2.1);
+        const oddsDraw = Math.max(1.04, roundNumber(f.oddsDraw ?? f.suggestedOddsDraw) ?? 3.3);
+        const oddsAway = Math.max(1.04, roundNumber(f.oddsAway ?? f.suggestedOddsAway) ?? 3.2);
+        const isLive = f.status === "live";
+        const homeLogo =
+          typeof f.homeLogo === "string" && f.homeLogo.trim()
+            ? f.homeLogo.trim()
+            : teamLogo(homeTeam);
+        const awayLogo =
+          typeof f.awayLogo === "string" && f.awayLogo.trim()
+            ? f.awayLogo.trim()
+            : teamLogo(awayTeam);
+
+        const [created] = await db
+          .insert(matches)
+          .values({
+            sport: "football",
+            league,
+            homeTeam,
+            awayTeam,
+            homeLogo,
+            awayLogo,
+            homeScore: isLive ? Math.max(0, Number(f.homeScore ?? 0)) : null,
+            awayScore: isLive ? Math.max(0, Number(f.awayScore ?? 0)) : null,
+            status: isLive ? "live" : "upcoming",
+            minute: isLive && typeof f.minute === "string" ? f.minute : isLive ? "1'" : null,
+            startsAt,
+            oddsHome,
+            oddsDraw,
+            oddsAway,
+            suspended: false,
+            redHome: 0,
+            redAway: 0,
+            events: [],
+            tickHistory: [],
+            regime: "balanced",
+            homeForm: 1,
+            awayForm: 1,
+            markets: null,
+            source: "manual",
+            externalId,
+            externalLeague,
+            autoSync: true,
+            feedSyncedAt: new Date(),
+          })
+          .returning({ id: matches.id });
+
+        if (created) {
+          importedSet.add(externalId);
+          insertedIds.push(created.id);
+          if (isLive) {
+            await syncSingleRealMatchNow(created.id).catch(() => null);
+          }
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        importedCount: insertedIds.length,
+        skippedCount: skipped,
+      });
+    }
+
+    if (action === "syncRealMatch") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const updated = await syncSingleRealMatchNow(matchId);
+      if (!updated) {
+        return NextResponse.json(
+          { error: "Match réel introuvable" },
+          { status: 404 }
+        );
+      }
+      await Promise.all([settleFinishedBets(), settlePendingCombos()]);
+      return NextResponse.json({ ok: true, match: updated });
+    }
+
+    if (action === "syncAllRealMatches") {
+      await syncRealMatchesThrottled(true);
+      await Promise.all([settleFinishedBets(), settlePendingCombos()]);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "toggleAutoSync") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const autoSync = Boolean(body.autoSync);
+      const [updated] = await db
+        .update(matches)
+        .set({ autoSync })
+        .where(eq(matches.id, matchId))
+        .returning();
+      if (updated && autoSync) {
+        await syncSingleRealMatchNow(updated.id).catch(() => null);
+      }
+      return NextResponse.json({ ok: true, match: updated });
+    }
+
+    if (action === "setRealSettlementMode") {
+      const mode = body.mode === "confirm" ? "confirm" : "auto";
+      const applied = await setRealMatchSettlementMode(mode);
+      return NextResponse.json({ ok: true, realSettlementMode: applied });
+    }
+
+    if (action === "voidMatch") {
+      const matchId = Number(body.matchId);
+      if (!matchId) return NextResponse.json({ error: "matchId requis" }, { status: 400 });
+      const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
+      if (!m) return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
+      if (m.status === "finished" && m.feedStatusNote === "VOIDED") {
+        return NextResponse.json({ error: "Ce match a déjà été annulé et remboursé" }, { status: 400 });
+      }
+
+      const [updated] = await db
+        .update(matches)
+        .set({
+          status: "finished",
+          minute: "Annulé",
+          suspended: false,
+          autoSync: false,
+          feedStatusNote: "VOIDED",
+          finishedAt: new Date(),
+        })
+        .where(eq(matches.id, matchId))
+        .returning();
+
+      const refundedCount = await voidMatchBets(matchId);
+      await settlePendingCombos();
+      invalidateHouseHealthCache();
+
+      return NextResponse.json({ ok: true, match: updated, refundedCount });
     }
 
     if (action === "editMatch") {
@@ -704,22 +946,14 @@ export async function POST(req: NextRequest) {
 
       const givenHtHome = roundNumber(body.htHomeScore);
       const givenHtAway = roundNumber(body.htAwayScore);
-      let nextEvents = m.events ?? [];
-      if (
-        m.source === "manual" &&
-        givenHtHome != null &&
-        givenHtAway != null &&
-        !hasVerifiedGoalTimeline(homeScore, awayScore, nextEvents)
-      ) {
-        const htH = Math.max(0, Math.min(homeScore, Math.round(givenHtHome)));
-        const htA = Math.max(0, Math.min(awayScore, Math.round(givenHtAway)));
-        const synth: Array<{ type: string; team: string; minute: number }> = [];
-        for (let i = 0; i < htH; i++) synth.push({ type: "goal", team: "home", minute: 20 + i * 5 });
-        for (let i = 0; i < htA; i++) synth.push({ type: "goal", team: "away", minute: 22 + i * 5 });
-        for (let i = 0; i < homeScore - htH; i++) synth.push({ type: "goal", team: "home", minute: 60 + i * 5 });
-        for (let i = 0; i < awayScore - htA; i++) synth.push({ type: "goal", team: "away", minute: 62 + i * 5 });
-        nextEvents = synth;
-      }
+      const htHomeScore =
+        givenHtHome != null
+          ? Math.max(0, Math.min(homeScore, Math.round(givenHtHome)))
+          : (m.htHomeScore ?? m.realStats?.htHomeScore ?? null);
+      const htAwayScore =
+        givenHtAway != null
+          ? Math.max(0, Math.min(awayScore, Math.round(givenHtAway)))
+          : (m.htAwayScore ?? m.realStats?.htAwayScore ?? null);
 
       const [updated] = await db
         .update(matches)
@@ -729,13 +963,16 @@ export async function POST(req: NextRequest) {
           suspended: false,
           homeScore,
           awayScore,
-          events: nextEvents,
+          htHomeScore,
+          htAwayScore,
+          feedStatusNote:
+            m.source === "manual" ? "ADMIN_CONFIRMED_FT" : m.feedStatusNote,
           finishedAt: new Date(),
         })
         .where(eq(matches.id, matchId))
         .returning();
 
-      await settleMatchBets(matchId);
+      await Promise.all([settleMatchBets(matchId), settlePendingCombos()]);
       invalidateHouseHealthCache();
 
       return NextResponse.json({ ok: true, match: updated, settled: true });

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ChevronDown, Layers, Lock, Radio, X } from "lucide-react";
+import { BarChart3, ChevronDown, Layers, Lock, Radio, X } from "lucide-react";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
@@ -12,6 +12,7 @@ import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
+import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { formatGoalSummary, LiveStatusBadge } from "./match-card";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
@@ -156,6 +157,7 @@ export function MarketSheet() {
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
   const isReal = match.source === "manual";
+  const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const suspended = Boolean(match.suspended);
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
@@ -235,7 +237,7 @@ export function MarketSheet() {
                       />
                       Betslip{comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}
                     </button>
-                    {!isReal && (isLive || isFinished) && (
+                    {(isLive || isFinished) && (isReal ? realStatsAvailable : true) && (
                       <button
                         type="button"
                         onPointerDown={(e) => e.stopPropagation()}
@@ -245,8 +247,17 @@ export function MarketSheet() {
                           showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                         )}
                       >
-                        <Radio className="h-3 w-3" strokeWidth={2.4} />
-                        {isLive ? "2D" : "Stats"}
+                        {isReal ? (
+                          <>
+                            <BarChart3 className="h-3 w-3" strokeWidth={2.4} />
+                            Stats
+                          </>
+                        ) : (
+                          <>
+                            <Radio className="h-3 w-3" strokeWidth={2.4} />
+                            {isLive ? "2D" : "Stats"}
+                          </>
+                        )}
                       </button>
                     )}
                     <button
@@ -286,6 +297,13 @@ export function MarketSheet() {
                         <span className="font-display text-[20px] font-bold leading-none tabular-nums text-ink">
                           {match.homeScore ?? 0} – {match.awayScore ?? 0}
                         </span>
+                        {isReal &&
+                          match.htHomeScore != null &&
+                          match.htAwayScore != null && (
+                            <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim">
+                              MT {match.htHomeScore} - {match.htAwayScore}
+                            </span>
+                          )}
                         <div className="mt-1">
                           {isFinished ? (
                             <span className="text-[10px] font-bold text-dim">Terminé</span>
@@ -337,9 +355,11 @@ export function MarketSheet() {
                   <span>
                     {isReal && !isLive && match.kickoffReached
                       ? "Coup d'envoi officiel atteint — paris pré-match clôturés en attente du direct."
-                      : isReal
-                        ? "Marchés temporairement suspendus par l'opérateur."
-                        : "Action en cours — réouverture automatique des cotes…"}
+                      : isReal && isLive
+                        ? "Action décisive ou actualisation en direct — cotes momentanément suspendues."
+                        : isReal
+                          ? "Marchés temporairement suspendus par l'opérateur."
+                          : "Action en cours — réouverture automatique des cotes…"}
                   </span>
                 </div>
               )}
@@ -384,6 +404,17 @@ export function MarketSheet() {
                   key={match.id}
                   match={match}
                   defaultTab={isFinished ? "stats" : "pitch"}
+                  className="mb-3"
+                />
+              )}
+              {isReal && (isLive || isFinished) && showTracker && realStatsAvailable && (
+                <RealMatchStatsCard
+                  key={`real-stats-${match.id}`}
+                  stats={match.realStats}
+                  homeTeam={match.homeTeam}
+                  awayTeam={match.awayTeam}
+                  htHomeScore={match.htHomeScore}
+                  htAwayScore={match.htAwayScore}
                   className="mb-3"
                 />
               )}

@@ -34,6 +34,7 @@ import { useApp } from "@/components/providers";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
+import { OFFICIAL_SOCCER_LEAGUES } from "@/lib/real-leagues";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 type TabKey = "dashboard" | "forecasts" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
@@ -89,6 +90,8 @@ interface AdminMatch {
   awayLogo?: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
   status: string;
   minute: string | null;
   startsAt: string;
@@ -97,6 +100,44 @@ interface AdminMatch {
   oddsAway: number;
   suspended: boolean;
   source?: string | null;
+  externalId?: string | null;
+  externalLeague?: string | null;
+  autoSync?: boolean;
+  feedSyncedAt?: string | null;
+  feedStatusNote?: string | null;
+  realStats?: {
+    possessionHome: number | null;
+    possessionAway: number | null;
+    shotsTotalHome: number | null;
+    shotsTotalAway: number | null;
+    shotsOnTargetHome: number | null;
+    shotsOnTargetAway: number | null;
+    cornersHome: number | null;
+    cornersAway: number | null;
+    htHomeScore: number | null;
+    htAwayScore: number | null;
+    updatedAt: string;
+  } | null;
+}
+
+interface DiscoveredOfficialFixture {
+  externalId: string;
+  externalLeague: string;
+  leagueLabel: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeLogo: string | null;
+  awayLogo: string | null;
+  startsAt: string;
+  status: "upcoming" | "live";
+  minute: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  oddsHome: number;
+  oddsDraw: number;
+  oddsAway: number;
+  alreadyImported?: boolean;
+  existingMatchId?: number | null;
 }
 
 interface AdminQuestionOption {
@@ -195,6 +236,7 @@ interface PanelData {
   questions: AdminQuestion[];
   ml?: AdminMlOverview;
   scenarioMode?: "dynamic" | "locked";
+  realSettlementMode?: "auto" | "confirm";
   matchForecasts?: Record<number, AdminMatchForecast>;
 }
 
@@ -664,7 +706,9 @@ export default function AdminPage() {
             <MatchesTab
               matches={panel.matches}
               forecasts={panel.matchForecasts ?? {}}
+              realSettlementMode={panel.realSettlementMode ?? "auto"}
               onOpenForecasts={() => setTab("forecasts")}
+              onReload={() => load(false)}
               busy={busy}
               act={act}
               form={matchForm}
@@ -793,7 +837,9 @@ interface MatchFormState {
 function MatchesTab({
   matches,
   forecasts,
+  realSettlementMode,
   onOpenForecasts,
+  onReload,
   busy,
   act,
   form,
@@ -802,7 +848,9 @@ function MatchesTab({
 }: {
   matches: AdminMatch[];
   forecasts: Record<number, AdminMatchForecast>;
+  realSettlementMode: "auto" | "confirm";
   onOpenForecasts: () => void;
+  onReload: () => Promise<void>;
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
   form: MatchFormState;
@@ -810,6 +858,7 @@ function MatchesTab({
   onAdd: (e: FormEvent) => Promise<boolean>;
 }) {
   const [universe, setUniverse] = useState<"real" | "virtual">("real");
+  const [importerOpen, setImporterOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [openLogos, setOpenLogos] = useState(false);
   const [openMarkets, setOpenMarkets] = useState(false);
@@ -919,10 +968,83 @@ function MatchesTab({
       </div>
 
       {isReal ? (
-        <div className="rounded-xl border border-emerald-600/20 bg-emerald-600/8 px-3 py-2 text-[11.5px] text-emerald-900">
-          <strong className="font-display font-bold">Mode Opérateur Réel :</strong> plusieurs matchs
-          peuvent être en direct simultanément. Le simulateur virtuel ne touche jamais à vos matchs
-          réels, vos cotes ni vos scores.
+        <div className="glass-card rounded-2xl p-3 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-display text-[12.5px] font-bold text-ink">
+                Flux officiel automatique (Scores, MT &amp; Stats)
+              </p>
+              <p className="text-[11px] text-mist">
+                {realMatches.filter((m) => Boolean(m.externalId) && m.autoSync !== false).length}{" "}
+                match(s) lié(s) en Auto-Sync · sans clé API payante
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={busy["sync-all-real"]}
+              onClick={() =>
+                act(
+                  { action: "syncAllRealMatches" },
+                  "sync-all-real",
+                  "Scores et statistiques des matchs réels synchronisés"
+                )
+              }
+              className="inline-flex h-8.5 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 font-display text-[11.5px] font-bold text-white active:scale-95 disabled:opacity-60"
+            >
+              {busy["sync-all-real"] ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.4} />
+              )}
+              Synchroniser
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-1 border-t border-edge/70 pt-2">
+            <span className="text-[10.5px] font-semibold text-dim">
+              Règlement de fin de match (protection anti-VAR) :
+            </span>
+            <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
+              <button
+                type="button"
+                disabled={busy["real-settle-mode"]}
+                onClick={() =>
+                  act(
+                    { action: "setRealSettlementMode", mode: "auto" },
+                    "real-settle-mode",
+                    "Règlement automatique activé (confirmation anti-VAR 90s)"
+                  )
+                }
+                className={cn(
+                  "h-8 rounded-lg px-2 font-display text-[11px] transition-colors",
+                  realSettlementMode === "auto"
+                    ? "bg-emerald-600 font-bold text-white"
+                    : "font-semibold text-mist"
+                )}
+              >
+                Auto (Anti-VAR 90s)
+              </button>
+              <button
+                type="button"
+                disabled={busy["real-settle-mode"]}
+                onClick={() =>
+                  act(
+                    { action: "setRealSettlementMode", mode: "confirm" },
+                    "real-settle-mode",
+                    "Validation finale opérateur requise avant paiement"
+                  )
+                }
+                className={cn(
+                  "h-8 rounded-lg px-2 font-display text-[11px] transition-colors",
+                  realSettlementMode === "confirm"
+                    ? "bg-ink font-bold text-white"
+                    : "font-semibold text-mist"
+                )}
+              >
+                Confirmation Admin
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/70 px-3 py-2 text-[11.5px] text-mist">
@@ -940,7 +1062,16 @@ function MatchesTab({
         </div>
       )}
 
-      {/* Tiroir de création réservé aux matchs réels */}
+      {/* Catalogue officiel 1 clic (Auto-Sync) réservé aux matchs réels */}
+      {isReal && (
+        <OfficialFixtureImporter
+          open={importerOpen}
+          setOpen={setImporterOpen}
+          onReload={onReload}
+        />
+      )}
+
+      {/* Tiroir de création manuelle réservé aux matchs réels */}
       {isReal && (
       <div className="glass-card overflow-hidden rounded-2xl">
         <button
@@ -950,7 +1081,7 @@ function MatchesTab({
         >
           <span className="flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
             <Plus className="h-4 w-4 text-emerald-600" strokeWidth={2.5} />
-            Ajouter un match réel
+            Créer un match réel manuellement
           </span>
           <ChevronDown
             className={cn("h-4 w-4 text-dim transition-transform", formOpen && "rotate-180")}
@@ -1246,7 +1377,7 @@ function MatchesTab({
       {filteredMatches.length === 0 ? (
         <div className="glass-card rounded-2xl p-5 text-center text-[12.5px] text-mist">
           {isReal && realMatches.length === 0
-            ? "Aucun match réel créé pour l'instant. Ouvrez « Ajouter un match réel » ci-dessus pour publier votre première rencontre officielle."
+            ? "Aucun match réel créé pour l'instant. Importez une affiche officielle en 1 clic ci-dessus ou créez une rencontre manuelle."
             : "Aucun match dans cette sélection."}
         </div>
       ) : (
@@ -1262,6 +1393,346 @@ function MatchesTab({
               act={act}
             />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfficialFixtureImporter({
+  open,
+  setOpen,
+  onReload,
+}: {
+  open: boolean;
+  setOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
+  onReload: () => Promise<void>;
+}) {
+  const [leagueSlug, setLeagueSlug] = useState<string>("all");
+  const [daysAhead, setDaysAhead] = useState<number>(3);
+  const [loading, setLoading] = useState(false);
+  const [importingKey, setImportingKey] = useState<string | null>(null);
+  const [fixtures, setFixtures] = useState<DiscoveredOfficialFixture[] | null>(null);
+  const [oddsEdits, setOddsEdits] = useState<
+    Record<string, { o1: string; oN: string; o2: string }>
+  >({});
+  const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; msg: string } | null>(
+    null
+  );
+
+  const loadFixtures = async (slug = leagueSlug, days = daysAhead) => {
+    setLoading(true);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "discoverRealMatches",
+          leagueSlug: slug,
+          daysAhead: days,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        fixtures?: DiscoveredOfficialFixture[];
+      };
+      if (!res.ok) throw new Error(data.error ?? "Impossible de charger le calendrier");
+      const list = data.fixtures ?? [];
+      setFixtures(list);
+      const nextEdits: Record<string, { o1: string; oN: string; o2: string }> = {};
+      for (const f of list) {
+        nextEdits[f.externalId] = {
+          o1: String(f.oddsHome),
+          oN: String(f.oddsDraw),
+          o2: String(f.oddsAway),
+        };
+      }
+      setOddsEdits(nextEdits);
+    } catch (e) {
+      setFeedback({
+        kind: "err",
+        msg: e instanceof Error ? e.message : "Erreur de connexion au calendrier officiel",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const importItems = async (items: DiscoveredOfficialFixture[], key: string) => {
+    if (items.length === 0) return;
+    setImportingKey(key);
+    setFeedback(null);
+    try {
+      const payloadFixtures = items.map((f) => {
+        const ed = oddsEdits[f.externalId];
+        return {
+          ...f,
+          oddsHome: ed ? ed.o1 : f.oddsHome,
+          oddsDraw: ed ? ed.oN : f.oddsDraw,
+          oddsAway: ed ? ed.o2 : f.oddsAway,
+        };
+      });
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "importRealMatches",
+          fixtures: payloadFixtures,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        importedCount?: number;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Échec de l'importation");
+      const importedSet = new Set(items.map((x) => x.externalId));
+      setFixtures((prev) =>
+        prev
+          ? prev.map((f) =>
+              importedSet.has(f.externalId) ? { ...f, alreadyImported: true } : f
+            )
+          : prev
+      );
+      setFeedback({
+        kind: "ok",
+        msg: `${data.importedCount ?? items.length} match(s) officiel(s) importé(s) avec Auto-Sync actif`,
+      });
+      await onReload();
+    } catch (e) {
+      setFeedback({
+        kind: "err",
+        msg: e instanceof Error ? e.message : "Erreur d'importation",
+      });
+    } finally {
+      setImportingKey(null);
+    }
+  };
+
+  const availableToImport = (fixtures ?? []).filter((f) => !f.alreadyImported);
+
+  return (
+    <div className="glass-card overflow-hidden rounded-2xl border-emerald-600/25">
+      <button
+        type="button"
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          if (next && fixtures === null && !loading) {
+            void loadFixtures(leagueSlug, daysAhead);
+          }
+        }}
+        className="flex w-full items-center justify-between px-4 py-3.5 text-left"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <CalendarPlus className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.4} />
+          <div className="min-w-0">
+            <p className="truncate font-display text-[13.5px] font-bold text-ink">
+              Importer du calendrier officiel (1 clic)
+            </p>
+            <p className="truncate text-[10.5px] text-mist">
+              Liaison ID officielle · Scores live, MT, buteurs &amp; stats automatiques
+            </p>
+          </div>
+        </div>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-dim transition-transform", open && "rotate-180")}
+          strokeWidth={2.2}
+        />
+      </button>
+
+      {open && (
+        <div className="border-t border-edge p-3.5 space-y-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+            <select
+              value={leagueSlug}
+              onChange={(e) => {
+                const next = e.target.value;
+                setLeagueSlug(next);
+                void loadFixtures(next, daysAhead);
+              }}
+              className="h-10 w-full rounded-xl border border-edge bg-white px-3 text-[13px] font-semibold text-ink outline-none focus:border-emerald-600"
+            >
+              <option value="all">Toutes les grandes compétitions</option>
+              {OFFICIAL_SOCCER_LEAGUES.map((lg) => (
+                <option key={lg.slug} value={lg.slug}>
+                  {lg.label} ({lg.country})
+                </option>
+              ))}
+            </select>
+
+            <div className="flex items-center gap-1 rounded-xl border border-edge bg-elev p-1">
+              {[
+                { d: 1, label: "24h" },
+                { d: 3, label: "3 j" },
+                { d: 7, label: "7 j" },
+              ].map(({ d, label }) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => {
+                    setDaysAhead(d);
+                    void loadFixtures(leagueSlug, d);
+                  }}
+                  className={cn(
+                    "h-8 rounded-lg px-2.5 font-display text-[11.5px] transition-colors",
+                    daysAhead === d
+                      ? "bg-ink font-bold text-white"
+                      : "font-semibold text-mist"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void loadFixtures(leagueSlug, daysAhead)}
+                className="grid h-8 w-8 place-items-center rounded-lg bg-white text-ink shadow-2xs disabled:opacity-50"
+                title="Actualiser le calendrier"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+              </button>
+            </div>
+          </div>
+
+          {feedback && (
+            <div
+              className={cn(
+                "rounded-xl px-3 py-2 text-[11.5px] font-semibold",
+                feedback.kind === "ok"
+                  ? "bg-emerald-600/12 text-emerald-800"
+                  : "bg-betclic-red/12 text-betclic-red"
+              )}
+            >
+              {feedback.msg}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-[12.5px] text-mist">
+              <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+              Recherche des rencontres officielles…
+            </div>
+          ) : fixtures && fixtures.length === 0 ? (
+            <div className="rounded-xl bg-elev/70 p-4 text-center text-[12px] text-mist">
+              Aucune affiche programmée dans cette fenêtre. Essayez un horizon de 7 jours ou une
+              autre compétition.
+            </div>
+          ) : fixtures ? (
+            <div className="space-y-2">
+              {availableToImport.length > 1 && (
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-600/8 px-3 py-2">
+                  <span className="text-[11.5px] font-semibold text-emerald-900">
+                    {availableToImport.length} affiche(s) disponible(s)
+                  </span>
+                  <button
+                    type="button"
+                    disabled={importingKey !== null}
+                    onClick={() =>
+                      void importItems(availableToImport.slice(0, 15), "bulk")
+                    }
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 font-display text-[11px] font-bold text-white disabled:opacity-50"
+                  >
+                    {importingKey === "bulk"
+                      ? "Importation…"
+                      : `Importer ${Math.min(15, availableToImport.length)} matchs`}
+                  </button>
+                </div>
+              )}
+
+              <div className="max-h-[380px] space-y-2 overflow-y-auto pr-0.5">
+                {fixtures.map((f) => {
+                  const ed = oddsEdits[f.externalId] ?? {
+                    o1: String(f.oddsHome),
+                    oN: String(f.oddsDraw),
+                    o2: String(f.oddsAway),
+                  };
+                  return (
+                    <div
+                      key={f.externalId}
+                      className="rounded-xl border border-edge bg-white p-2.5 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div className="flex shrink-0 -space-x-1.5">
+                            <LogoOrAvatar logo={f.homeLogo} name={f.homeTeam} />
+                            <LogoOrAvatar logo={f.awayLogo} name={f.awayTeam} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-display text-[12.5px] font-bold text-ink">
+                              {f.homeTeam} – {f.awayTeam}
+                            </p>
+                            <p className="truncate text-[10.5px] text-mist">
+                              {f.leagueLabel} ·{" "}
+                              {f.status === "live"
+                                ? `En direct ${f.minute ?? ""} (${f.homeScore ?? 0}-${f.awayScore ?? 0})`
+                                : formatKickoff(new Date(f.startsAt))}
+                            </p>
+                          </div>
+                        </div>
+
+                        {f.alreadyImported ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600/12 px-2.5 py-1 font-display text-[10.5px] font-bold text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Importé
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={importingKey !== null}
+                            onClick={() => void importItems([f], f.externalId)}
+                            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 font-display text-[11px] font-bold text-white active:scale-95 disabled:opacity-50"
+                          >
+                            {importingKey === f.externalId ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Plus className="h-3 w-3" strokeWidth={2.5} />
+                            )}
+                            Importer
+                          </button>
+                        )}
+                      </div>
+
+                      {!f.alreadyImported && (
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(
+                            [
+                              { k: "o1" as const, lbl: "V1" },
+                              { k: "oN" as const, lbl: "X" },
+                              { k: "o2" as const, lbl: "V2" },
+                            ] as const
+                          ).map(({ k, lbl }) => (
+                            <label
+                              key={k}
+                              className="flex h-8 items-center justify-between rounded-lg border border-edge bg-elev/50 px-2 text-[11px]"
+                            >
+                              <span className="font-display font-bold text-dim">{lbl}</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={ed[k]}
+                                onChange={(e) =>
+                                  setOddsEdits((prev) => ({
+                                    ...prev,
+                                    [f.externalId]: {
+                                      ...ed,
+                                      [k]: e.target.value,
+                                    },
+                                  }))
+                                }
+                                className="w-12 bg-transparent text-right font-display text-[12.5px] font-bold tabular-nums text-ink outline-none"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
@@ -1284,6 +1755,8 @@ function AdminMatchCard({
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
   const isManual = m.source === "manual";
+  const hasExternalLink = isManual && Boolean(m.externalId);
+  const autoSyncActive = hasExternalLink && m.autoSync !== false;
   const [editingOdds, setEditingOdds] = useState(false);
   const [o1, setO1] = useState(String(m.oddsHome));
   const [oN, setON] = useState(String(m.oddsDraw ?? 3.2));
@@ -1295,6 +1768,20 @@ function AdminMatchCard({
     nowTs > 0 &&
     new Date(m.startsAt).getTime() <= nowTs;
 
+  const isPendingAdminFt =
+    isManual &&
+    m.status !== "finished" &&
+    (m.feedStatusNote === "PENDING_ADMIN_FT" ||
+      Boolean(m.feedStatusNote?.startsWith("PENDING_FT_CONFIRM:")));
+
+  const isPostponedAlert =
+    isManual &&
+    m.status !== "finished" &&
+    Boolean(m.feedStatusNote?.startsWith("POSTPONED:"));
+
+  const effHtH = m.htHomeScore ?? m.realStats?.htHomeScore ?? null;
+  const effHtA = m.htAwayScore ?? m.realStats?.htAwayScore ?? null;
+
   return (
     <div className={cn("glass-card rounded-2xl p-3.5", m.suspended && "opacity-75")}>
       <div className="flex items-center gap-2.5">
@@ -1303,7 +1790,7 @@ function AdminMatchCard({
           <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <p className="truncate font-display text-[13.5px] font-bold text-ink">
               {m.homeTeam} – {m.awayTeam}
             </p>
@@ -1313,20 +1800,77 @@ function AdminMatchCard({
                 isManual ? "bg-emerald-600 text-white" : "bg-elev text-mist"
               )}
             >
-              {isManual ? "Match réel" : "Virtuel 2-3m"}
+              {isManual ? "Réel" : "Virtuel 2-3m"}
             </span>
+            {isManual && (
+              hasExternalLink ? (
+                <button
+                  type="button"
+                  disabled={busy[`as-${m.id}`]}
+                  onClick={() =>
+                    act(
+                      {
+                        action: "toggleAutoSync",
+                        matchId: m.id,
+                        autoSync: !autoSyncActive,
+                      },
+                      `as-${m.id}`,
+                      !autoSyncActive
+                        ? "Auto-Sync officiel réactivé"
+                        : "Auto-Sync mis en pause (pilotage manuel)"
+                    )
+                  }
+                  className={cn(
+                    "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold",
+                    autoSyncActive
+                      ? "bg-emerald-600/14 text-emerald-700"
+                      : "bg-amber-500/15 text-amber-800"
+                  )}
+                  title="Activer ou mettre en pause la synchronisation automatique"
+                >
+                  {autoSyncActive ? "⚡ Auto-Sync" : "⏸ Sync pause"}
+                </button>
+              ) : (
+                <span className="shrink-0 rounded-md bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-semibold text-dim">
+                  Manuel
+                </span>
+              )
+            )}
           </div>
           <p className="truncate text-[11.5px] text-mist">
             {m.league} ·{" "}
             {m.status === "live"
               ? `Direct ${m.minute ?? ""}`
               : m.status === "finished"
-                ? "Terminé"
+                ? m.feedStatusNote === "VOIDED"
+                  ? "Annulé / Remboursé"
+                  : "Terminé"
                 : formatKickoff(new Date(m.startsAt))}
             {m.homeScore != null && ` · ${m.homeScore}-${m.awayScore}`}
+            {effHtH != null && effHtA != null && ` (MT ${effHtH}-${effHtA})`}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isManual && m.status !== "finished" && (
+            <button
+              type="button"
+              disabled={busy[`sync-${m.id}`]}
+              onClick={() =>
+                act(
+                  { action: "syncRealMatch", matchId: m.id },
+                  `sync-${m.id}`,
+                  "Match synchronisé avec le flux officiel"
+                )
+              }
+              className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-600/12 text-emerald-700 active:scale-95 disabled:opacity-50"
+              title="Synchroniser maintenant avec le flux officiel"
+            >
+              <RefreshCw
+                className={cn("h-4 w-4", busy[`sync-${m.id}`] && "animate-spin")}
+                strokeWidth={2.2}
+              />
+            </button>
+          )}
           <Toggle
             checked={!m.suspended}
             onChange={(v) =>
@@ -1353,7 +1897,90 @@ function AdminMatchCard({
         </div>
       </div>
 
-      {kickoffReached && (
+      {/* Résumé compact des vraies statistiques officielles captées */}
+      {isManual && m.realStats && m.realStats.possessionHome != null && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-emerald-600/6 px-2.5 py-1.5 text-[10.5px] font-medium text-mist">
+          <span>
+            Poss.{" "}
+            <strong className="text-ink">
+              {Math.round(m.realStats.possessionHome)}%-{Math.round(m.realStats.possessionAway ?? 0)}%
+            </strong>
+          </span>
+          {m.realStats.shotsOnTargetHome != null && (
+            <span>
+              Cadrés{" "}
+              <strong className="text-ink">
+                {m.realStats.shotsOnTargetHome}-{m.realStats.shotsOnTargetAway ?? 0}
+              </strong>
+            </span>
+          )}
+          {m.realStats.cornersHome != null && (
+            <span>
+              Corners{" "}
+              <strong className="text-ink">
+                {m.realStats.cornersHome}-{m.realStats.cornersAway ?? 0}
+              </strong>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Confirmation finale 1-clic en cas de fin de match détectée */}
+      {isPendingAdminFt && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-[11px] text-emerald-950">
+          <span>
+            <strong>Fin du match détectée ({m.homeScore ?? 0}–{m.awayScore ?? 0})</strong>
+            {effHtH != null && effHtA != null ? ` · MT ${effHtH}-${effHtA}` : ""} — marchés verrouillés.
+          </span>
+          <button
+            type="button"
+            disabled={busy[`fin-${m.id}`]}
+            onClick={() =>
+              act(
+                {
+                  action: "finishMatch",
+                  matchId: m.id,
+                  homeScore: m.homeScore ?? 0,
+                  awayScore: m.awayScore ?? 0,
+                  ...(effHtH != null && effHtA != null
+                    ? { htHomeScore: effHtH, htAwayScore: effHtA }
+                    : {}),
+                },
+                `fin-${m.id}`,
+                "Résultat officiel confirmé et paris réglés"
+              )
+            }
+            className="rounded-lg bg-emerald-600 px-3 py-1 font-display text-[11px] font-bold text-white disabled:opacity-50"
+          >
+            Confirmer &amp; régler
+          </button>
+        </div>
+      )}
+
+      {/* Alerte match reporté / annulé */}
+      {isPostponedAlert && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/35 bg-amber-500/12 px-3 py-2 text-[11px] text-amber-900">
+          <span>
+            <strong>Match reporté / interrompu détecté</strong> — paris suspendus automatiquement.
+          </span>
+          <button
+            type="button"
+            disabled={busy[`void-${m.id}`]}
+            onClick={() =>
+              act(
+                { action: "voidMatch", matchId: m.id },
+                `void-${m.id}`,
+                "Match annulé — mises simples remboursées et sélections combinées annulées (cote 1.00)"
+              )
+            }
+            className="rounded-lg bg-amber-700 px-2.5 py-1 font-display text-[10.5px] font-bold text-white disabled:opacity-50"
+          >
+            Annuler &amp; rembourser
+          </button>
+        </div>
+      )}
+
+      {kickoffReached && !autoSyncActive && (
         <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800">
           <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
           <span>
@@ -1485,10 +2112,12 @@ function MatchControls({
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
   const isManual = m.source === "manual";
+  const isAutoSynced = isManual && Boolean(m.externalId) && m.autoSync !== false;
   const [homeEdit, setHomeEdit] = useState<{ base: number | null; val: string } | null>(null);
   const [awayEdit, setAwayEdit] = useState<{ base: number | null; val: string } | null>(null);
   const [mp, setMp] = useState("");
   const [directSettleOpen, setDirectSettleOpen] = useState(false);
+  const [confirmVoid, setConfirmVoid] = useState(false);
   const [htHome, setHtHome] = useState("");
   const [htAway, setHtAway] = useState("");
 
@@ -1502,11 +2131,22 @@ function MatchControls({
       <div className="mt-3 border-t border-edge pt-2.5 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] text-dim">
-            {isManual
-              ? "Pilotage opérateur (aucun démarrage simulé)"
-              : "Démarrage séquentiel automatique"}
+            {isAutoSynced
+              ? "Démarrage & stats live automatiques au coup d'envoi"
+              : isManual
+                ? "Pilotage opérateur (aucun démarrage simulé)"
+                : "Démarrage séquentiel automatique"}
           </span>
           <div className="flex items-center gap-1.5">
+            {isManual && (
+              <button
+                type="button"
+                onClick={() => setConfirmVoid((s) => !s)}
+                className="flex h-8 items-center rounded-lg bg-amber-500/12 px-2 font-display text-[10.5px] font-bold text-amber-800"
+              >
+                {confirmVoid ? "Garder" : "Annuler"}
+              </button>
+            )}
             {isManual && (
               <button
                 type="button"
@@ -1543,6 +2183,27 @@ function MatchControls({
             </button>
           </div>
         </div>
+
+        {isManual && confirmVoid && (
+          <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] text-amber-900">
+            <span>Rembourser les paris simples et annuler (1.00) dans les combinés ?</span>
+            <button
+              type="button"
+              disabled={busy[`void-${m.id}`]}
+              onClick={async () => {
+                const ok = await act(
+                  { action: "voidMatch", matchId: m.id },
+                  `void-${m.id}`,
+                  "Match annulé et paris remboursés"
+                );
+                if (ok) setConfirmVoid(false);
+              }}
+              className="shrink-0 rounded-lg bg-amber-700 px-2.5 py-1 font-display text-[10.5px] font-bold text-white disabled:opacity-50"
+            >
+              Confirmer l&apos;annulation
+            </button>
+          </div>
+        )}
 
         {/* Règlement direct d'un match réel sans passer par le live */}
         {isManual && directSettleOpen && (
@@ -1801,24 +2462,68 @@ function MatchControls({
       </div>
 
       {isManual && (
-        <div className="flex items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[10.5px] text-mist">
-          <span>Score MT officiel (optionnel avant « Terminer ») :</span>
-          <div className="flex items-center gap-1">
-            <input
-              inputMode="numeric"
-              value={htHome}
-              onChange={(e) => setHtHome(e.target.value.replace(/[^\d]/g, ""))}
-              placeholder="MT"
-              className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
-            />
-            <span className="text-dim">–</span>
-            <input
-              inputMode="numeric"
-              value={htAway}
-              onChange={(e) => setHtAway(e.target.value.replace(/[^\d]/g, ""))}
-              placeholder="MT"
-              className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
-            />
+        <div className="space-y-1.5 border-t border-edge/60 pt-1.5 text-[10.5px] text-mist">
+          <div className="flex items-center justify-between gap-2">
+            <span>
+              Score MT officiel{" "}
+              {m.htHomeScore != null && m.htAwayScore != null
+                ? `(capté : ${m.htHomeScore}-${m.htAwayScore})`
+                : "(optionnel)"} :
+            </span>
+            <div className="flex items-center gap-1">
+              <input
+                inputMode="numeric"
+                value={htHome}
+                onChange={(e) => setHtHome(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder={m.htHomeScore != null ? String(m.htHomeScore) : "MT"}
+                className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+              />
+              <span className="text-dim">–</span>
+              <input
+                inputMode="numeric"
+                value={htAway}
+                onChange={(e) => setHtAway(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder={m.htAwayScore != null ? String(m.htAwayScore) : "MT"}
+                className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <span>Match interrompu ou annulé ?</span>
+            {confirmVoid ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setConfirmVoid(false)}
+                  className="rounded-md bg-white px-2 py-0.5 font-semibold text-mist ring-1 ring-edge"
+                >
+                  Non
+                </button>
+                <button
+                  type="button"
+                  disabled={busy[`void-${m.id}`]}
+                  onClick={() =>
+                    act(
+                      { action: "voidMatch", matchId: m.id },
+                      `void-${m.id}`,
+                      "Match annulé et paris remboursés"
+                    )
+                  }
+                  className="rounded-md bg-amber-700 px-2 py-0.5 font-display font-bold text-white"
+                >
+                  Confirmer remboursement
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmVoid(true)}
+                className="font-display font-bold text-amber-800 underline underline-offset-2"
+              >
+                Annuler &amp; rembourser
+              </button>
+            )}
           </div>
         </div>
       )}

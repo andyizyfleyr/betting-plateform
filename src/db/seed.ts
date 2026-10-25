@@ -45,6 +45,16 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_locked" boolean DEFAULT false NOT NULL;
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_nonce" integer DEFAULT 0 NOT NULL;
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scripted_events" jsonb;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "external_id" text;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "external_league" text;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "auto_sync" boolean DEFAULT true NOT NULL;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "ht_home_score" integer;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "ht_away_score" integer;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "real_stats" jsonb;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_synced_at" timestamp;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_finished_at" timestamp;
+    ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_status_note" text;
+    CREATE INDEX IF NOT EXISTS "matches_external_id_idx" ON "matches" ("external_id");
   `);
 
   await db.execute(sql`
@@ -63,23 +73,14 @@ async function runSeedInternal(): Promise<void> {
 
   await db.execute(sql`DROP TABLE IF EXISTS "sim_state";`);
 
-  // Nettoie les anciens matchs auto-seedés en mode "manual" sans marchés perso ni paris liés
-  // afin que le nouveau moteur virtuel (2–3 minutes) prenne le relais proprement sans doublons.
-  await db.execute(sql`
-    DELETE FROM "matches" m
-    WHERE m."source" = 'manual'
-      AND m."markets" IS NULL
-      AND m."status" = 'upcoming'
-      AND m."home_score" IS NULL
-      AND m."starts_at" > now() + interval '15 minutes'
-      AND NOT EXISTS (SELECT 1 FROM "bets" b WHERE b."match_id" = m."id");
-  `);
-
-  // Déduplique aussi d'éventuels matchs "upcoming" identiques créés en parallèle sans paris
+  // Déduplique uniquement d'éventuels matchs virtuels "upcoming" identiques créés en parallèle sans paris
+  // (ne touche JAMAIS aux matchs réels ajoutés ou importés par l'administrateur).
   await db.execute(sql`
     DELETE FROM "matches" m1
     USING "matches" m2
     WHERE m1."id" > m2."id"
+      AND m1."source" = 'virtual'
+      AND m2."source" = 'virtual'
       AND m1."status" = 'upcoming'
       AND m2."status" = 'upcoming'
       AND m1."home_team" = m2."home_team"

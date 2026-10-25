@@ -2,7 +2,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
-import { runLiveEngine } from "@/db/engine";
 import {
   appUser,
   bets,
@@ -16,7 +15,9 @@ import {
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
+import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import { requireUserId } from "@/lib/session";
+import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   const auth = await requireUserId(req);
   if (typeof auth !== "number") return auth;
   const uid = auth;
-  await runLiveEngine();
+  await syncLiveMatchesThrottled();
 
   let body: { betId?: number; kind?: "sport" | "prediction" | "combo" };
   try {
@@ -71,9 +72,26 @@ export async function POST(req: NextRequest) {
         : Promise.resolve([] as PredictionQuestionRow[]),
     ]);
 
+    const liveRealComboRows = mRows.filter(
+      (m) => m.status === "live" && m.source === "manual"
+    );
+    const effectiveMatchMap = new Map(mRows.map((m) => [m.id, m]));
+    if (liveRealComboRows.length > 0) {
+      const realGuard = await verifyLiveRealMatchesBeforeBet(liveRealComboRows);
+      if (!realGuard.ok) {
+        return NextResponse.json(
+          { error: realGuard.error },
+          { status: 409 }
+        );
+      }
+      for (const [mid, freshRow] of realGuard.refreshedMap.entries()) {
+        effectiveMatchMap.set(mid, freshRow);
+      }
+    }
+
     const value = computeComboCashOut(
       cb,
-      new Map(mRows.map((m) => [m.id, m])),
+      effectiveMatchMap,
       new Map(qRows.map((q) => [q.id, q]))
     );
     if (value == null) {
@@ -133,28 +151,39 @@ export async function POST(req: NextRequest) {
             { status: 400 }
           );
         }
+        let effectiveMatch = match;
+        if (match.source === "manual") {
+          const realGuard = await verifyLiveRealMatchesBeforeBet([match]);
+          if (!realGuard.ok) {
+            return NextResponse.json(
+              { error: realGuard.error },
+              { status: 409 }
+            );
+          }
+          effectiveMatch = realGuard.refreshedMap.get(match.id) ?? match;
+        }
         const value = computeCashOut({
           stake: bet.stake,
           odds: bet.odds,
           sport: bet.sport,
-          minute: match.minute,
+          minute: effectiveMatch.minute,
           market: bet.market,
           selection: bet.selection,
-          homeTeam: match.homeTeam,
-          awayTeam: match.awayTeam,
-          homeScore: match.homeScore,
-          awayScore: match.awayScore,
-          redHome: match.redHome,
-          redAway: match.redAway,
-          homeForm: match.homeForm,
-          awayForm: match.awayForm,
-          events: match.events ?? null,
-          matchId: match.id,
-          source: match.source ?? "virtual",
-          oddsHome: match.oddsHome,
-          oddsDraw: match.oddsDraw,
-          oddsAway: match.oddsAway,
-          markets: match.markets ?? null,
+          homeTeam: effectiveMatch.homeTeam,
+          awayTeam: effectiveMatch.awayTeam,
+          homeScore: effectiveMatch.homeScore,
+          awayScore: effectiveMatch.awayScore,
+          redHome: effectiveMatch.redHome,
+          redAway: effectiveMatch.redAway,
+          homeForm: effectiveMatch.homeForm,
+          awayForm: effectiveMatch.awayForm,
+          events: effectiveMatch.events ?? null,
+          matchId: effectiveMatch.id,
+          source: effectiveMatch.source ?? "virtual",
+          oddsHome: effectiveMatch.oddsHome,
+          oddsDraw: effectiveMatch.oddsDraw,
+          oddsAway: effectiveMatch.oddsAway,
+          markets: effectiveMatch.markets ?? null,
         });
         if (value == null) {
           return NextResponse.json(

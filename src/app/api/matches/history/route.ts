@@ -25,13 +25,23 @@ function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
   const h = m.homeScore ?? 0;
   const a = m.awayScore ?? 0;
 
-  // Sur un match réel, la mi-temps n'est affichée que si les événements réels couvrent le score
-  // (jamais d'estimation pseudo-aléatoire sur un vrai match).
+  // Sur un match réel, la mi-temps est affichée dès que le score MT officiel (`htHomeScore`/`htAwayScore`)
+  // ou la chronologie complète des buts est connue (jamais d'estimation pseudo-aléatoire).
+  const hasExplicitHt =
+    isReal && m.htHomeScore != null && m.htAwayScore != null;
   const canComputeHt =
-    hasScore && (!isReal || hasVerifiedGoalTimeline(h, a, m.events));
-  const stats = canComputeHt
-    ? extractMatchTimelineStats(h, a, m.events, m.id)
-    : null;
+    hasScore &&
+    (!isReal ||
+      hasExplicitHt ||
+      hasVerifiedGoalTimeline(h, a, m.events, m.htHomeScore, m.htAwayScore));
+
+  const timelineStats =
+    canComputeHt && !hasExplicitHt
+      ? extractMatchTimelineStats(h, a, m.events, m.id)
+      : null;
+
+  const htHome = hasExplicitHt ? m.htHomeScore! : (timelineStats?.htHome ?? null);
+  const htAway = hasExplicitHt ? m.htAwayScore! : (timelineStats?.htAway ?? null);
 
   const winnerCode: "V1" | "X" | "V2" | null = !hasScore
     ? null
@@ -41,15 +51,16 @@ function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
         ? "X"
         : "V2";
 
-  const htWinnerCode: "V1" | "X" | "V2" | null = !stats
-    ? null
-    : stats.htHome > stats.htAway
-      ? "V1"
-      : stats.htHome === stats.htAway
-        ? "X"
-        : "V2";
+  const htWinnerCode: "V1" | "X" | "V2" | null =
+    htHome == null || htAway == null
+      ? null
+      : htHome > htAway
+        ? "V1"
+        : htHome === htAway
+          ? "X"
+          : "V2";
 
-  // La télémétrie simulée (possession/tirs/xG virtuels) est réservée aux matchs virtuels
+  // La télémétrie simulée est réservée aux matchs virtuels ; les matchs réels exposent `realStats`
   const telemetry =
     !isReal && (m.status === "finished" || m.status === "live")
       ? computeMatchTelemetry(m)
@@ -66,8 +77,8 @@ function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
     awayLogo: isReal ? m.awayLogo || teamLogo(m.awayTeam) : teamLogo(m.awayTeam) || m.awayLogo,
     homeScore: m.homeScore,
     awayScore: m.awayScore,
-    htHome: stats ? stats.htHome : null,
-    htAway: stats ? stats.htAway : null,
+    htHome,
+    htAway,
     status: m.status === "live" || m.status === "finished" ? m.status : "upcoming",
     minute: m.minute,
     startsAt: toIso(m.startsAt) ?? new Date().toISOString(),
@@ -79,6 +90,7 @@ function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
     redAway: m.redAway ?? 0,
     events: m.events ?? [],
     telemetry,
+    realStats: isReal ? (m.realStats ?? null) : null,
     winnerCode,
     htWinnerCode,
     totalGoals: hasScore ? h + a : null,

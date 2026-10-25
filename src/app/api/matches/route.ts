@@ -9,9 +9,11 @@ import {
   buildMarkets,
   buildRealMatchMarkets,
   isRealMatchKickoffReached,
+  isRealMatchPostIncidentSuspended,
   minuteNumber,
 } from "@/lib/markets";
 import { ensureMlLoaded } from "@/lib/ml-engine";
+import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
@@ -78,8 +80,12 @@ export async function GET() {
 
     if (isReal) {
       // Moteur dédié aux matchs réels : cotes officielles de l'admin, verrouillage pré-match à l'heure
-      // du coup d'envoi, aucune télémétrie virtuelle simulée.
+      // du coup d'envoi, suspension post-but/carton (18 s), vraies stats officielles (aucune télémétrie virtuelle).
       const kickoffReached = isRealMatchKickoffReached(m, now);
+      const postIncidentSuspended = isRealMatchPostIncidentSuspended(m, now);
+      const feedStale = isRealMatchFeedStale(m, now);
+      const effectiveSuspended =
+        Boolean(m.suspended) || kickoffReached || postIncidentSuspended || feedStale;
       const markets = buildRealMatchMarkets(m, now);
       const resGroup = markets.find((g) => g.key === "result");
       const oddsHome = resGroup?.outcomes.find((o) => o.key === "home")?.odds ?? m.oddsHome;
@@ -88,8 +94,18 @@ export async function GET() {
         : m.oddsDraw;
       const oddsAway = resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
 
+      const {
+        feedSyncedAt: _feedSyncedAt,
+        feedFinishedAt: _feedFinishedAt,
+        feedStatusNote: _feedStatusNote,
+        ...cleanRealMatch
+      } = publicMatch;
+      void _feedSyncedAt;
+      void _feedFinishedAt;
+      void _feedStatusNote;
+
       return {
-        ...publicMatch,
+        ...cleanRealMatch,
         source: "manual" as const,
         homeLogo: m.homeLogo || teamLogo(m.homeTeam),
         awayLogo: m.awayLogo || teamLogo(m.awayTeam),
@@ -97,7 +113,12 @@ export async function GET() {
         oddsDraw,
         oddsAway,
         kickoffReached,
-        suspended: Boolean(m.suspended) || kickoffReached,
+        suspended: effectiveSuspended,
+        realStats: m.realStats ?? null,
+        htHomeScore: m.htHomeScore ?? m.realStats?.htHomeScore ?? null,
+        htAwayScore: m.htAwayScore ?? m.realStats?.htAwayScore ?? null,
+        externalId: m.externalId ?? null,
+        autoSync: Boolean(m.autoSync ?? true),
         markets,
       };
     }
