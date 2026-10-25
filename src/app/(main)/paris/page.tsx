@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Plus, TicketX } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
@@ -31,12 +31,11 @@ function dayLabel(iso: string) {
 }
 
 export default function ParisPage() {
-  const { betsVersion, user, toast, openRecharge } = useApp();
+  const { betsVersion, user, openRecharge } = useApp();
   const [tab, setTab] = useState<Tab>("ongoing");
   const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction" | "combo">("all");
   const [bets, setBets] = useState<ClientBet[] | null>(null);
   const [sharingBet, setSharingBet] = useState<ClientBet | null>(null);
-  const prevStatus = useRef<Map<string, string> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,31 +46,6 @@ export default function ParisPage() {
         try {
           const r = await api.allBets();
           if (cancelled) return;
-          const prev = prevStatus.current;
-          if (prev) {
-            for (const b of r.bets) {
-              if (prev.get(`${b.kind}-${b.id}`) !== "pending" || b.status === "pending") continue;
-              if (b.status === "won") {
-                toast({
-                  kind: "success",
-                  title: "Pari gagné !",
-                  description: `+${eur(b.potentialWin)} crédités sur votre solde`,
-                });
-              } else if (b.status === "lost") {
-                toast({
-                  kind: "info",
-                  title: "Pari terminé",
-                  description:
-                    b.kind === "combo"
-                      ? `Combiné (${b.legs?.length ?? 2} sélections)`
-                      : b.kind === "prediction"
-                        ? `${b.question} · ${b.selectionLabel}`
-                        : `${b.homeTeam} – ${b.awayTeam} · ${b.selectionLabel}`,
-                });
-              }
-            }
-          }
-          prevStatus.current = new Map(r.bets.map((b) => [`${b.kind}-${b.id}`, b.status]));
           setBets(r.bets);
           return;
         } catch {
@@ -96,7 +70,7 @@ export default function ParisPage() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [betsVersion, toast]);
+  }, [betsVersion]);
 
   const filtered = useMemo(() => {
     const all = bets ?? [];

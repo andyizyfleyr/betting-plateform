@@ -28,7 +28,7 @@ import {
   minuteNumber,
 } from "@/lib/markets";
 import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -47,8 +47,10 @@ interface IncomingLeg {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
   await runLiveEngine();
-  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { legs?: IncomingLeg[]; stake?: number };
   try {

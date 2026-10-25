@@ -15,7 +15,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { api, type ClientMatch, type ClientUser } from "@/lib/api";
 import { MAX_COMBO_LEGS } from "@/lib/combo-math";
-import { cn } from "@/lib/format";
+import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import { cn, eur } from "@/lib/format";
 import { BetModal } from "./bet-modal";
 import { ComboFloatingBar, ComboSheet, type ComboSelection } from "./combo-slip";
 import { MarketSheet } from "./market-sheet";
@@ -49,14 +50,19 @@ interface AppContextValue {
   marketMatch: ClientMatch | null;
   openMarkets: (m: ClientMatch) => void;
   closeMarkets: () => void;
+  feedMatches: ClientMatch[] | null;
+  setFeedMatches: (m: ClientMatch[] | null) => void;
   rechargeOpen: boolean;
   openRecharge: () => void;
   closeRecharge: () => void;
   comboLegs: ComboSelection[];
   comboOpen: boolean;
+  comboQuickMode: boolean;
+  setComboQuickMode: (v: boolean) => void;
   openCombo: () => void;
   closeCombo: () => void;
   toggleComboLeg: (sel: ComboSelection) => "added" | "replaced" | "removed" | "full";
+  isInCombo: (uid: string, market: string, selection: string) => boolean;
   removeComboLeg: (uid: string) => void;
   clearCombo: () => void;
   toast: (t: Omit<Toast, "id">) => void;
@@ -84,13 +90,21 @@ export function Providers({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<ClientUser | null>(null);
   const [target, setTarget] = useState<BetTarget | null>(null);
   const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
+  const [feedMatches, setFeedMatches] = useState<ClientMatch[] | null>(null);
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [comboLegs, setComboLegs] = useState<ComboSelection[]>([]);
   const [comboOpen, setComboOpen] = useState(false);
+  const [comboQuickMode, setComboQuickMode] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const prevBetStatuses = useRef<Map<string, string> | null>(null);
+  const userRef = useRef<ClientUser | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -98,7 +112,10 @@ export function Providers({ children }: { children: ReactNode }) {
         const raw = sessionStorage.getItem(COMBO_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw) as ComboSelection[];
-          if (Array.isArray(parsed)) setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+            setComboQuickMode(true);
+          }
         }
       } catch {
         /* silencieux */
@@ -109,11 +126,22 @@ export function Providers({ children }: { children: ReactNode }) {
 
   const persistCombo = useCallback((next: ComboSelection[]) => {
     setComboLegs(next);
+    if (next.length === 0) setComboQuickMode(false);
     try {
       sessionStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next));
     } catch {
       /* silencieux */
     }
+  }, []);
+
+  const toast = useCallback((t: Omit<Toast, "id">) => {
+    const id = ++toastId;
+    setToasts((prev) => [...prev.slice(-1), { ...t, id }]);
+    const timer = setTimeout(
+      () => setToasts((prev) => prev.filter((x) => x.id !== id)),
+      2800
+    );
+    timers.current.set(id, timer);
   }, []);
 
   useEffect(() => {
@@ -132,6 +160,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   const loggedIn = user !== null && !isAuthRoute;
 
+  // Polling global unifié : solde, compteur « En cours » et alertes temps réel sur toutes les pages
   useEffect(() => {
     if (!loggedIn) return;
     let active = true;
@@ -139,14 +168,49 @@ export function Providers({ children }: { children: ReactNode }) {
     const poll = () => {
       if (typeof document !== "undefined" && document.hidden) return;
       api
-        .bets("ongoing")
+        .allBets()
         .then((r) => {
           if (!active) return;
-          setPendingCount(r.bets.length);
+          const ongoing = r.bets.filter((b) => b.status === "pending");
+          setPendingCount(ongoing.length);
+
           const bal = r.balance;
           if (typeof bal === "number") {
             setUser((u) => (u ? { ...u, balance: bal } : u));
           }
+
+          const currentPrefs = userRef.current;
+          const prev = prevBetStatuses.current;
+          if (prev && (currentPrefs?.notifications ?? true)) {
+            for (const b of r.bets) {
+              const key = `${b.kind}-${b.id}`;
+              if (prev.get(key) !== "pending" || b.status === "pending") continue;
+              if (b.status === "won") {
+                playUiSound(currentPrefs?.sound, "win");
+                triggerHaptic(currentPrefs?.haptics, [25, 35, 55]);
+                toast({
+                  kind: "success",
+                  title: "Pari gagné !",
+                  description: `+${eur(b.potentialWin)} crédités sur votre solde`,
+                });
+              } else if (b.status === "lost") {
+                triggerHaptic(currentPrefs?.haptics, 18);
+                toast({
+                  kind: "info",
+                  title: "Pari terminé",
+                  description:
+                    b.kind === "combo"
+                      ? `Combiné (${b.legs?.length ?? 2} sélections)`
+                      : b.kind === "prediction"
+                        ? `${b.question} · ${b.selectionLabel}`
+                        : `${b.homeTeam} – ${b.awayTeam} · ${b.selectionLabel}`,
+                });
+              }
+            }
+          }
+          prevBetStatuses.current = new Map(
+            r.bets.map((b) => [`${b.kind}-${b.id}`, b.status])
+          );
         })
         .catch(() => undefined);
     };
@@ -163,22 +227,14 @@ export function Providers({ children }: { children: ReactNode }) {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [loggedIn, betsVersion]);
+  }, [loggedIn, betsVersion, toast]);
 
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 
-  const toast = useCallback((t: Omit<Toast, "id">) => {
-    const id = ++toastId;
-    setToasts((prev) => [...prev.slice(-1), { ...t, id }]);
-    const timer = setTimeout(
-      () => setToasts((prev) => prev.filter((x) => x.id !== id)),
-      2800
-    );
-    timers.current.set(id, timer);
-  }, []);
-
   const toggleComboLeg = useCallback(
     (sel: ComboSelection): "added" | "replaced" | "removed" | "full" => {
+      triggerHaptic(userRef.current?.haptics, 14);
+      playUiSound(userRef.current?.sound, "tap");
       const existingIdx = comboLegs.findIndex((l) => l.uid === sel.uid);
       if (existingIdx >= 0) {
         const existing = comboLegs[existingIdx];
@@ -194,14 +250,25 @@ export function Providers({ children }: { children: ReactNode }) {
       if (comboLegs.length >= MAX_COMBO_LEGS) {
         return "full";
       }
-      persistCombo([...comboLegs, sel]);
+      const next = [...comboLegs, sel];
+      persistCombo(next);
+      if (comboLegs.length === 0) setComboQuickMode(true);
       return "added";
     },
     [comboLegs, persistCombo]
   );
 
+  const isInCombo = useCallback(
+    (uid: string, market: string, selection: string) =>
+      comboLegs.some(
+        (l) => l.uid === uid && l.market === market && l.selection === selection
+      ),
+    [comboLegs]
+  );
+
   const removeComboLeg = useCallback(
     (uid: string) => {
+      triggerHaptic(userRef.current?.haptics, 10);
       persistCombo(comboLegs.filter((l) => l.uid !== uid));
     },
     [comboLegs, persistCombo]
@@ -219,19 +286,30 @@ export function Providers({ children }: { children: ReactNode }) {
       setBalance: (n) => setUser((u) => (u ? { ...u, balance: n } : u)),
       applyUser: setUser,
       target,
-      openBet: (t) => setTarget(t),
+      openBet: (t) => {
+        triggerHaptic(user?.haptics, 10);
+        setTarget(t);
+      },
       closeBet: () => setTarget(null),
       marketMatch,
-      openMarkets: (m) => setMarketMatch(m),
+      openMarkets: (m) => {
+        triggerHaptic(user?.haptics, 10);
+        setMarketMatch(m);
+      },
       closeMarkets: () => setMarketMatch(null),
+      feedMatches,
+      setFeedMatches,
       rechargeOpen,
       openRecharge: () => setRechargeOpen(true),
       closeRecharge: () => setRechargeOpen(false),
       comboLegs,
       comboOpen,
+      comboQuickMode,
+      setComboQuickMode,
       openCombo: () => setComboOpen(true),
       closeCombo: () => setComboOpen(false),
       toggleComboLeg,
+      isInCombo,
       removeComboLeg,
       clearCombo,
       toast,
@@ -243,10 +321,13 @@ export function Providers({ children }: { children: ReactNode }) {
       user,
       target,
       marketMatch,
+      feedMatches,
       rechargeOpen,
       comboLegs,
       comboOpen,
+      comboQuickMode,
       toggleComboLeg,
+      isInCombo,
       removeComboLeg,
       clearCombo,
       toast,

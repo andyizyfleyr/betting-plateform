@@ -14,12 +14,11 @@ import {
   type PredictionQuestionRow,
 } from "@/db/schema";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
-import { computeComboCashOut, settlePendingCombos } from "@/lib/combo";
+import { computeComboCashOut } from "@/lib/combo";
 import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
-import { settleResolvedQuestions } from "@/lib/predictions";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
-import { getAuthUserId } from "@/lib/session";
-import { settleFinishedBets } from "@/lib/settle";
+import { requireUserId } from "@/lib/session";
+import { syncAllSettlementsThrottled, syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
 
@@ -31,11 +30,12 @@ const LIVE_VALIDATION_MS = 300;
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
-  await runLiveEngine();
-  const uid = (await getAuthUserId(req)) ?? 1;
-  await settleFinishedBets();
-  await settleResolvedQuestions();
-  await settlePendingCombos();
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
+
+  await syncLiveMatchesThrottled();
+  await syncAllSettlementsThrottled();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
 
@@ -246,8 +246,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
   await runLiveEngine();
-  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { matchId?: number; selection?: string; market?: string; stake?: number };
   try {

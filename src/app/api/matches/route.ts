@@ -3,17 +3,15 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
-import { runLiveEngine } from "@/db/engine";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
-import { settleFinishedBets } from "@/lib/settle";
+import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   await ensureSeeded();
-  await runLiveEngine();
-  await settleFinishedBets();
+  await syncLiveMatchesThrottled();
 
   const allRows = await db
     .select()

@@ -15,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
   ShieldCheck,
   Ticket,
   Trash2,
@@ -61,7 +62,10 @@ interface AdminBet {
 
 interface AdminDeposit {
   id: number;
+  userId?: number;
+  userName?: string;
   provider: string;
+  providerRef?: string;
   amount: number;
   currency: string;
   status: string;
@@ -132,6 +136,7 @@ interface AdminWithdrawal {
   destination: string;
   amount: number;
   status: string;
+  adminNote?: string | null;
   note?: string | null;
   createdAt: string;
 }
@@ -144,6 +149,7 @@ interface PanelData {
     predBets: number;
     comboBets?: number;
     deposits: number;
+    pendingDeposits?: number;
     withdrawalsPaid?: number;
     pendingWithdrawals?: number;
     stake: number;
@@ -517,7 +523,10 @@ export default function AdminPage() {
         <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
           {TABS.map(({ key, label, Icon }) => {
             const active = tab === key;
-            const pendingW = key === "deposits" ? (panel?.stats.pendingWithdrawals ?? 0) : 0;
+            const pendingFinance =
+              key === "deposits"
+                ? (panel?.stats.pendingWithdrawals ?? 0) + (panel?.stats.pendingDeposits ?? 0)
+                : 0;
             return (
               <button
                 key={key}
@@ -532,9 +541,9 @@ export default function AdminPage() {
               >
                 <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
                 <span>{label}</span>
-                {pendingW > 0 && (
+                {pendingFinance > 0 && (
                   <span className="ml-0.5 rounded-full bg-betclic-red px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                    {pendingW}
+                    {pendingFinance}
                   </span>
                 )}
               </button>
@@ -1906,10 +1915,37 @@ function UsersTab({
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filteredUsers = q
+    ? users.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          (u.email ?? "").toLowerCase().includes(q) ||
+          String(u.id) === q.replace("#", "")
+      )
+    : users;
+
   return (
     <div className="flex flex-col gap-2.5">
-      <AdminSectionTitle label="Comptes enregistrés" count={users.length} />
-      {users.map((u) => (
+      <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+        <Search className="h-4 w-4 shrink-0 text-dim" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher par nom, e-mail ou #id…"
+          className="w-full bg-transparent text-[13.5px] text-ink outline-none placeholder:text-dim"
+        />
+        {query && (
+          <button type="button" onClick={() => setQuery("")} className="text-dim">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      <AdminSectionTitle label="Comptes enregistrés" count={filteredUsers.length} />
+      {filteredUsers.map((u) => (
         <div key={u.id} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -2017,6 +2053,17 @@ function BetsTab({
     })),
   ].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const filteredRows = q
+    ? rows.filter(
+        (r) =>
+          r.label.toLowerCase().includes(q) ||
+          r.detail.toLowerCase().includes(q) ||
+          r.kind.toLowerCase().includes(q)
+      )
+    : rows;
+
   const riskLabel = (flag: string) =>
     flag === "stale_mark_goal"
       ? "Latence but"
@@ -2026,8 +2073,24 @@ function BetsTab({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <AdminSectionTitle label="Historique global" count={rows.length} />
-      {rows.map((b) => (
+      <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+        <Search className="h-4 w-4 shrink-0 text-dim" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filtrer par match, question, combiné…"
+          className="w-full bg-transparent text-[13.5px] text-ink outline-none placeholder:text-dim"
+        />
+        {query && (
+          <button type="button" onClick={() => setQuery("")} className="text-dim">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      <AdminSectionTitle label="Historique global" count={filteredRows.length} />
+      {filteredRows.map((b) => (
         <div key={`${b.kind}-${b.id}`} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -2081,13 +2144,17 @@ function DepositsTab({
   busy: Record<string, boolean>;
   act: (payload: Record<string, unknown>, key: string, okMsg: string) => Promise<boolean>;
 }) {
+  const [wdNotes, setWdNotes] = useState<Record<number, string>>({});
+
   const totalDeposits = deposits
-    .filter((d) => d.status === "credited")
+    .filter((d) => d.status === "credited" || d.status === "paid")
     .reduce((s, d) => s + d.amount, 0);
   const totalWithdrawals = withdrawals
     .filter((w) => w.status === "approved")
     .reduce((s, w) => s + w.amount, 0);
   const pendingWithdrawals = withdrawals.filter((w) => w.status === "pending");
+  const pendingDeposits = deposits.filter((d) => d.status === "pending_review");
+  const settledDeposits = deposits.filter((d) => d.status !== "pending_review");
 
   return (
     <div className="flex flex-col gap-3">
@@ -2106,9 +2173,73 @@ function DepositsTab({
         </div>
       </div>
 
+      {/* Demandes de dépôt Mobile Money / Virement à valider */}
+      <AdminSectionTitle label="Demandes de dépôt à valider" count={pendingDeposits.length} />
+      {pendingDeposits.length === 0 ? (
+        <p className="rounded-2xl border border-edge bg-white py-4 text-center text-[12px] text-dim">
+          Aucune demande de dépôt en attente.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {pendingDeposits.map((d) => {
+            const appKey = `d-app-${d.id}`;
+            const rejKey = `d-rej-${d.id}`;
+            return (
+              <div key={d.id} className="glass-card rounded-2xl p-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-[14px] font-bold text-ink">
+                      {d.userName ?? `Joueur #${d.userId ?? 1}`} · +{eur(d.amount)}
+                    </p>
+                    <p className="truncate text-[11.5px] font-medium text-mist">
+                      {d.provider === "mobile_money" ? "Mobile Money" : "Virement SEPA"} ·{" "}
+                      {d.providerRef ?? "—"}
+                    </p>
+                    <p className="text-[10.5px] text-dim">{formatPlacedAt(d.createdAt)}</p>
+                  </div>
+                  <StatusBadge status="pending" />
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!!busy[appKey] || !!busy[rejKey]}
+                    onClick={() =>
+                      act(
+                        { action: "approveDeposit", depositId: d.id },
+                        appKey,
+                        `Dépôt de ${eur(d.amount)} crédité sur le compte`
+                      )
+                    }
+                    className="h-9 rounded-xl bg-win font-display text-[12px] font-bold text-white disabled:opacity-50"
+                  >
+                    {busy[appKey] ? "Crédit…" : "Créditer"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!!busy[appKey] || !!busy[rejKey]}
+                    onClick={() =>
+                      act(
+                        { action: "rejectDeposit", depositId: d.id },
+                        rejKey,
+                        "Demande de dépôt refusée"
+                      )
+                    }
+                    className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[12px] font-bold text-betclic-red disabled:opacity-50"
+                  >
+                    {busy[rejKey] ? "Refus…" : "Refuser"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Demandes de retrait */}
       <AdminSectionTitle label="Demandes de retrait en attente" count={pendingWithdrawals.length} />
       {pendingWithdrawals.length === 0 ? (
-        <p className="rounded-2xl border border-edge bg-white py-5 text-center text-[12px] text-dim">
+        <p className="rounded-2xl border border-edge bg-white py-4 text-center text-[12px] text-dim">
           Aucune demande de retrait en attente.
         </p>
       ) : (
@@ -2116,6 +2247,7 @@ function DepositsTab({
           {pendingWithdrawals.map((w) => {
             const approveKey = `w-app-${w.id}`;
             const rejectKey = `w-rej-${w.id}`;
+            const noteVal = wdNotes[w.id] ?? "";
             return (
               <div key={w.id} className="glass-card rounded-2xl p-3.5">
                 <div className="flex items-start justify-between gap-2">
@@ -2133,13 +2265,25 @@ function DepositsTab({
                   <StatusBadge status={w.status} />
                 </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={noteVal}
+                  onChange={(e) => setWdNotes({ ...wdNotes, [w.id]: e.target.value })}
+                  placeholder="Motif ou réf. transfert (optionnel, visible par le joueur)"
+                  className="mt-2.5 h-9 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[12px] text-ink outline-none placeholder:text-dim focus:border-ink focus:bg-white"
+                />
+
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     disabled={!!busy[approveKey] || !!busy[rejectKey]}
                     onClick={() =>
                       act(
-                        { action: "approveWithdrawal", withdrawalId: w.id },
+                        {
+                          action: "approveWithdrawal",
+                          withdrawalId: w.id,
+                          ...(noteVal.trim() ? { note: noteVal.trim() } : {}),
+                        },
                         approveKey,
                         `Retrait de ${eur(w.amount)} approuvé`
                       )
@@ -2153,7 +2297,11 @@ function DepositsTab({
                     disabled={!!busy[approveKey] || !!busy[rejectKey]}
                     onClick={() =>
                       act(
-                        { action: "rejectWithdrawal", withdrawalId: w.id },
+                        {
+                          action: "rejectWithdrawal",
+                          withdrawalId: w.id,
+                          ...(noteVal.trim() ? { note: noteVal.trim() } : {}),
+                        },
                         rejectKey,
                         `Retrait refusé et ${eur(w.amount)} recrédités`
                       )
@@ -2185,7 +2333,9 @@ function DepositsTab({
                       {w.userName} · {eur(w.amount)} ({w.method.toUpperCase()})
                     </p>
                     <p className="truncate text-[11px] text-dim">
-                      {w.destination} · {formatPlacedAt(w.createdAt)}
+                      {w.destination}
+                      {w.adminNote ?? w.note ? ` · ${w.adminNote ?? w.note}` : ""} ·{" "}
+                      {formatPlacedAt(w.createdAt)}
                     </p>
                   </div>
                   <StatusBadge status={w.status} />
@@ -2195,21 +2345,25 @@ function DepositsTab({
         </>
       )}
 
-      <AdminSectionTitle label="Dépôts enregistrés" count={deposits.length} />
-      {deposits.length === 0 ? (
+      <AdminSectionTitle label="Dépôts traités" count={settledDeposits.length} />
+      {settledDeposits.length === 0 ? (
         <p className="py-6 text-center text-[12.5px] text-dim">Aucun dépôt enregistré.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {deposits.map((d) => (
+          {settledDeposits.map((d) => (
             <div key={d.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev text-ink">
                 <CircleDollarSign className="h-4 w-4" strokeWidth={2.1} />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-display text-[13.5px] font-semibold capitalize text-ink">
-                  {d.provider} · {eur(d.amount)}
+                  {d.userName ? `${d.userName} · ` : ""}
+                  {d.provider === "mobile_money" ? "Mobile Money" : d.provider} · {eur(d.amount)}
                 </p>
-                <p className="text-[11.5px] text-dim">{formatPlacedAt(d.createdAt)}</p>
+                <p className="truncate text-[11.5px] text-dim">
+                  {d.providerRef ? `${d.providerRef} · ` : ""}
+                  {formatPlacedAt(d.createdAt)}
+                </p>
               </div>
               <StatusBadge status={d.status} />
             </div>

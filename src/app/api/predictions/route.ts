@@ -7,9 +7,9 @@ import {
   PRED_MAX_STAKE,
   PRED_MIN_STAKE,
   round2,
-  settleResolvedQuestions,
 } from "@/lib/predictions";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
+import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +22,11 @@ const BET_COOLDOWN_MS = 700;
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
-  await settleResolvedQuestions();
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
-  const uid = (await getAuthUserId(req)) ?? 1;
+  await syncAllSettlementsThrottled();
   const page = Math.max(1, Number(req.nextUrl.searchParams.get("page")) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.nextUrl.searchParams.get("limit")) || 50));
   const status = req.nextUrl.searchParams.get("status");
@@ -119,7 +121,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
   let body: { questionId?: number; selection?: string; stake?: number };
   try {

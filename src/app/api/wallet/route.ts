@@ -2,24 +2,25 @@ import { desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import {
-  appUser,
+  acceleratorRounds,
   bets,
   comboBets,
   deposits,
   predictionBets,
+  tapHistory,
+  walletAdjustments,
   withdrawals,
 } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
-import { settlePendingCombos } from "@/lib/combo";
-import { settleResolvedQuestions } from "@/lib/predictions";
-import { getAuthUserId } from "@/lib/session";
-import { settleFinishedBets } from "@/lib/settle";
+import { requireUserId } from "@/lib/session";
+import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
+import { computeWithdrawalEligibility } from "@/lib/wager";
 
 export const dynamic = "force-dynamic";
 
 export interface WalletLedgerEntry {
   id: string;
-  type: "deposit" | "withdrawal" | "win" | "cashout" | "stake";
+  type: "deposit" | "withdrawal" | "win" | "cashout" | "stake" | "adjustment";
   title: string;
   subtitle: string;
   amount: number; // positif = crédit, négatif = débit
@@ -37,67 +38,111 @@ const METHOD_LABELS: Record<string, string> = {
   iban: "Virement SEPA",
   paypal: "PayPal",
   card: "Carte bancaire",
+  mobile_money: "Mobile Money",
+  sepa: "Virement SEPA",
 };
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
-  await Promise.all([
-    settleFinishedBets(),
-    settleResolvedQuestions(),
-    settlePendingCombos(),
-  ]);
+  await syncAllSettlementsThrottled();
 
-  const [[user], depRows, wdRows, sportRows, predRows, comboRows] = await Promise.all([
-    db.select({ balance: appUser.balance }).from(appUser).where(eq(appUser.id, uid)),
+  const [
+    eligibility,
+    depRows,
+    wdRows,
+    sportRows,
+    predRows,
+    comboRows,
+    tapRows,
+    accelRows,
+    adjRows,
+  ] = await Promise.all([
+    computeWithdrawalEligibility(uid),
     db
       .select()
       .from(deposits)
       .where(eq(deposits.userId, uid))
       .orderBy(desc(deposits.createdAt))
-      .limit(30),
+      .limit(35),
     db
       .select()
       .from(withdrawals)
       .where(eq(withdrawals.userId, uid))
       .orderBy(desc(withdrawals.createdAt))
-      .limit(30),
+      .limit(35),
     db
       .select()
       .from(bets)
       .where(eq(bets.userId, uid))
       .orderBy(desc(bets.placedAt))
-      .limit(25),
+      .limit(30),
     db
       .select()
       .from(predictionBets)
       .where(eq(predictionBets.userId, uid))
       .orderBy(desc(predictionBets.placedAt))
-      .limit(25),
+      .limit(30),
     db
       .select()
       .from(comboBets)
       .where(eq(comboBets.userId, uid))
       .orderBy(desc(comboBets.placedAt))
+      .limit(30),
+    db
+      .select()
+      .from(tapHistory)
+      .where(eq(tapHistory.userId, uid))
+      .orderBy(desc(tapHistory.createdAt))
       .limit(25),
+    db
+      .select()
+      .from(acceleratorRounds)
+      .where(eq(acceleratorRounds.userId, uid))
+      .orderBy(desc(acceleratorRounds.createdAt))
+      .limit(25),
+    db
+      .select()
+      .from(walletAdjustments)
+      .where(eq(walletAdjustments.userId, uid))
+      .orderBy(desc(walletAdjustments.createdAt))
+      .limit(20),
   ]);
 
   const entries: WalletLedgerEntry[] = [];
 
+  // 1. Dépôts (Stripe, PayPal, Mobile Money, Virement)
   for (const d of depRows) {
-    if (d.status !== "credited" && d.status !== "paid" && d.status !== "pending") continue;
+    if (d.status === "failed" || d.status === "expired") continue;
+    const providerLabel =
+      d.provider === "paypal"
+        ? "PayPal"
+        : d.provider === "mobile_money"
+          ? "Mobile Money"
+          : d.provider === "sepa"
+            ? "Virement SEPA"
+            : "Carte Stripe";
+    const sub =
+      d.status === "credited" || d.status === "paid"
+        ? "Crédité sur le solde"
+        : d.status === "rejected"
+          ? `Refusé · Réf. ${d.providerRef}`
+          : `En attente de validation · ${d.providerRef}`;
     entries.push({
       id: `dep-${d.id}`,
       type: "deposit",
-      title: `Dépôt ${d.provider === "paypal" ? "PayPal" : "Carte Stripe"}`,
-      subtitle: d.status === "credited" ? "Crédité sur le solde" : "En cours de validation",
-      amount: round2(d.amount),
+      title: `Dépôt ${providerLabel}`,
+      subtitle: sub,
+      amount: d.status === "rejected" ? 0 : round2(d.amount),
       status: d.status,
       createdAt: d.createdAt.toISOString(),
     });
   }
 
+  // 2. Retraits
   for (const w of wdRows) {
     const methodLabel = METHOD_LABELS[w.method] ?? w.method.toUpperCase();
     const statusText =
@@ -121,7 +166,18 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // 3. Paris sportifs : trace à la fois le débit (-Mise à placedAt) ET le crédit (+Gain/+Cash-out à settledAt)
   for (const b of sportRows) {
+    entries.push({
+      id: `sb-st-${b.id}`,
+      type: "stake",
+      title: `Mise · ${b.homeTeam} – ${b.awayTeam}`,
+      subtitle: `${b.selectionLabel} (${b.odds.toFixed(2)})`,
+      amount: -round2(b.stake),
+      status: b.status,
+      createdAt: b.placedAt.toISOString(),
+    });
+    const settledIso = (b.settledAt ?? new Date(b.placedAt.getTime() + 1_000)).toISOString();
     if (b.status === "won") {
       entries.push({
         id: `sb-win-${b.id}`,
@@ -130,7 +186,7 @@ export async function GET(req: NextRequest) {
         subtitle: b.selectionLabel,
         amount: round2(b.potentialWin),
         status: "won",
-        createdAt: b.placedAt.toISOString(),
+        createdAt: settledIso,
       });
     } else if (b.status === "cashed" && b.cashOutAmount) {
       entries.push({
@@ -140,22 +196,23 @@ export async function GET(req: NextRequest) {
         subtitle: b.selectionLabel,
         amount: round2(b.cashOutAmount),
         status: "cashed",
-        createdAt: b.placedAt.toISOString(),
-      });
-    } else {
-      entries.push({
-        id: `sb-st-${b.id}`,
-        type: "stake",
-        title: `Mise · ${b.homeTeam} – ${b.awayTeam}`,
-        subtitle: b.selectionLabel,
-        amount: -round2(b.stake),
-        status: b.status,
-        createdAt: b.placedAt.toISOString(),
+        createdAt: settledIso,
       });
     }
   }
 
+  // 4. Prédictions : débit (-Mise) + crédit éventuel (+Gain / +Cash-out)
   for (const p of predRows) {
+    entries.push({
+      id: `pb-st-${p.id}`,
+      type: "stake",
+      title: "Mise Prédiction",
+      subtitle: `${p.question} · ${p.selectionLabel}`,
+      amount: -round2(p.stake),
+      status: p.status,
+      createdAt: p.placedAt.toISOString(),
+    });
+    const settledIso = (p.settledAt ?? new Date(p.placedAt.getTime() + 1_000)).toISOString();
     if (p.status === "won") {
       entries.push({
         id: `pb-win-${p.id}`,
@@ -164,7 +221,7 @@ export async function GET(req: NextRequest) {
         subtitle: `${p.question} · ${p.selectionLabel}`,
         amount: round2(p.potentialWin),
         status: "won",
-        createdAt: p.placedAt.toISOString(),
+        createdAt: settledIso,
       });
     } else if (p.status === "cashed" && p.cashOutAmount) {
       entries.push({
@@ -174,23 +231,24 @@ export async function GET(req: NextRequest) {
         subtitle: `${p.question} · ${p.selectionLabel}`,
         amount: round2(p.cashOutAmount),
         status: "cashed",
-        createdAt: p.placedAt.toISOString(),
-      });
-    } else {
-      entries.push({
-        id: `pb-st-${p.id}`,
-        type: "stake",
-        title: "Mise Prédiction",
-        subtitle: `${p.question} · ${p.selectionLabel}`,
-        amount: -round2(p.stake),
-        status: p.status,
-        createdAt: p.placedAt.toISOString(),
+        createdAt: settledIso,
       });
     }
   }
 
+  // 5. Combinés : débit (-Mise) + crédit éventuel (+Gain / +Cash-out)
   for (const c of comboRows) {
     const legCount = (c.legs ?? []).length;
+    entries.push({
+      id: `cb-st-${c.id}`,
+      type: "stake",
+      title: `Mise Combiné (${legCount} sél.)`,
+      subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
+      amount: -round2(c.stake),
+      status: c.status,
+      createdAt: c.placedAt.toISOString(),
+    });
+    const settledIso = (c.settledAt ?? new Date(c.placedAt.getTime() + 1_000)).toISOString();
     if (c.status === "won") {
       entries.push({
         id: `cb-win-${c.id}`,
@@ -199,7 +257,7 @@ export async function GET(req: NextRequest) {
         subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
         amount: round2(c.potentialWin),
         status: "won",
-        createdAt: c.placedAt.toISOString(),
+        createdAt: settledIso,
       });
     } else if (c.status === "cashed" && c.cashOutAmount) {
       entries.push({
@@ -209,25 +267,65 @@ export async function GET(req: NextRequest) {
         subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
         amount: round2(c.cashOutAmount),
         status: "cashed",
-        createdAt: c.placedAt.toISOString(),
-      });
-    } else {
-      entries.push({
-        id: `cb-st-${c.id}`,
-        type: "stake",
-        title: `Mise Combiné (${legCount} sél.)`,
-        subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
-        amount: -round2(c.stake),
-        status: c.status,
-        createdAt: c.placedAt.toISOString(),
+        createdAt: settledIso,
       });
     }
+  }
+
+  // 6. Mini-jeu Tap Win (lecture seule depuis tap_history sans toucher à /tap)
+  for (const t of tapRows) {
+    const netWin = t.win ? round2(t.betAmount * t.targetMultiplier - t.betAmount) : -round2(t.betAmount);
+    entries.push({
+      id: `tap-${t.id}`,
+      type: t.win ? "win" : "stake",
+      title: t.win ? "Gain Tap Win" : "Mise Tap Win",
+      subtitle: `Cible ×${t.targetMultiplier.toFixed(2)} (crash ×${t.crashMultiplier.toFixed(2)})`,
+      amount: netWin,
+      status: t.win ? "won" : "lost",
+      createdAt: t.createdAt.toISOString(),
+    });
+  }
+
+  // 7. Mini-jeu Accelerator Pro (manches terminées)
+  for (const a of accelRows) {
+    if (a.status === "active") continue;
+    const won =
+      (a.status === "cashed" || a.status === "autocashed") &&
+      a.cashoutMultiplier != null &&
+      a.cashoutMultiplier > 1;
+    const payout = won ? round2(a.betAmount * (a.cashoutMultiplier ?? 1) - a.betAmount) : -round2(a.betAmount);
+    entries.push({
+      id: `acc-${a.id}`,
+      type: won ? "win" : "stake",
+      title: won ? "Gain Accelerator" : "Mise Accelerator",
+      subtitle: won
+        ? `Encaissé à ×${(a.cashoutMultiplier ?? 1).toFixed(2)}`
+        : `Crash à ×${a.crashPoint.toFixed(2)}`,
+      amount: payout,
+      status: won ? "won" : "lost",
+      createdAt: (a.endedAt ?? a.createdAt).toISOString(),
+    });
+  }
+
+  // 8. Ajustements administrateur
+  for (const adj of adjRows) {
+    entries.push({
+      id: `adj-${adj.id}`,
+      type: "adjustment",
+      title: adj.amount >= 0 ? "Crédit administrateur" : "Ajustement administrateur",
+      subtitle: adj.reason,
+      amount: round2(adj.amount),
+      status: "credited",
+      createdAt: adj.createdAt.toISOString(),
+    });
   }
 
   entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const totalDeposited = round2(
-    depRows.filter((d) => d.status === "credited").reduce((s, d) => s + d.amount, 0)
+    depRows
+      .filter((d) => d.status === "credited" || d.status === "paid")
+      .reduce((s, d) => s + d.amount, 0)
   );
   const totalWithdrawn = round2(
     wdRows.filter((w) => w.status === "approved").reduce((s, w) => s + w.amount, 0)
@@ -235,15 +333,22 @@ export async function GET(req: NextRequest) {
   const pendingWithdrawals = round2(
     wdRows.filter((w) => w.status === "pending").reduce((s, w) => s + w.amount, 0)
   );
+  const pendingDeposits = round2(
+    depRows.filter((d) => d.status === "pending_review").reduce((s, d) => s + d.amount, 0)
+  );
 
   return NextResponse.json({
-    balance: user?.balance ?? 0,
+    balance: eligibility.balance,
     summary: {
       totalDeposited,
       totalWithdrawn,
       pendingWithdrawals,
+      pendingDeposits,
+      withdrawable: eligibility.withdrawable,
+      bonusLocked: eligibility.bonusLocked,
+      qualifiedWagered: eligibility.qualifiedWagered,
+      bonusRemaining: eligibility.bonusRemaining,
     },
-    withdrawals: wdRows,
-    entries: entries.slice(0, 45),
+    entries: entries.slice(0, 60),
   });
 }

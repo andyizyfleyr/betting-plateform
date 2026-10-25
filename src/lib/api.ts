@@ -159,6 +159,7 @@ export interface ClientUser {
   oddsFormat: "decimal" | "fractional";
   language: string;
   liveSim: boolean;
+  bonusLocked?: number;
   email?: string | null;
   createdAt?: string | null;
 }
@@ -184,7 +185,7 @@ export interface ClientWithdrawal {
 
 export interface ClientWalletEntry {
   id: string;
-  type: "deposit" | "withdrawal" | "win" | "cashout" | "stake";
+  type: "deposit" | "withdrawal" | "win" | "cashout" | "stake" | "adjustment";
   title: string;
   subtitle: string;
   amount: number;
@@ -200,8 +201,13 @@ export interface ClientWalletData {
     totalDeposited: number;
     totalWithdrawn: number;
     pendingWithdrawals: number;
+    pendingDeposits?: number;
+    withdrawable?: number;
+    bonusLocked?: number;
+    qualifiedWagered?: number;
+    bonusRemaining?: number;
   };
-  withdrawals: ClientWithdrawal[];
+  withdrawals?: ClientWithdrawal[];
   entries: ClientWalletEntry[];
 }
 
@@ -293,6 +299,16 @@ export const api = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount }),
+      }),
+    manual: (payload: {
+      method: "mobile_money" | "sepa";
+      reference: string;
+      amount: number;
+    }) =>
+      request<{ ok: boolean }>("/api/payments/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       }),
     capturePayPal: (orderId: string) =>
       request<{ user: ClientUser }>("/api/payments/paypal/capture", {

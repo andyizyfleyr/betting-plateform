@@ -26,7 +26,7 @@ import { Toggle } from "@/components/toggle";
 import { WithdrawModal } from "@/components/withdraw-modal";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
-type LedgerFilter = "all" | "deposit" | "withdrawal" | "gains";
+type LedgerFilter = "all" | "deposit" | "withdrawal" | "gains" | "stakes";
 
 export default function ParametresPage() {
   const { user, applyUser, setBalance, toast, openRecharge, betsVersion } = useApp();
@@ -144,8 +144,11 @@ export default function ParametresPage() {
   const filteredLedger = useMemo(() => {
     const entries = wallet?.entries ?? [];
     if (walletFilter === "all") return entries;
-    if (walletFilter === "deposit") return entries.filter((e) => e.type === "deposit");
+    if (walletFilter === "deposit") {
+      return entries.filter((e) => e.type === "deposit" || e.type === "adjustment");
+    }
     if (walletFilter === "withdrawal") return entries.filter((e) => e.type === "withdrawal");
+    if (walletFilter === "stakes") return entries.filter((e) => e.type === "stake");
     return entries.filter((e) => e.type === "win" || e.type === "cashout");
   }, [wallet, walletFilter]);
 
@@ -238,12 +241,35 @@ export default function ParametresPage() {
                 format={eur}
                 className="mt-0.5 block font-display text-[24px] font-bold leading-none tabular-nums text-ink"
               />
+              {wallet &&
+                wallet.summary.withdrawable != null &&
+                wallet.summary.withdrawable < (user?.balance ?? 0) && (
+                  <p className="mt-1 text-[11px] font-medium text-mist">
+                    Retirable :{" "}
+                    <strong className="font-semibold text-win">
+                      {eur(wallet.summary.withdrawable)}
+                    </strong>
+                    {wallet.summary.bonusRemaining != null && wallet.summary.bonusRemaining > 0 && (
+                      <span className="text-dim">
+                        {" "}
+                        · Bonus à rejouer {eur(wallet.summary.bonusRemaining)}
+                      </span>
+                    )}
+                  </p>
+                )}
             </div>
-            {wallet && wallet.summary.pendingWithdrawals > 0 && (
-              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-amber-800">
-                {eur(wallet.summary.pendingWithdrawals)} en retrait
-              </span>
-            )}
+            <div className="flex flex-col items-end gap-1">
+              {wallet && wallet.summary.pendingWithdrawals > 0 && (
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-amber-800">
+                  {eur(wallet.summary.pendingWithdrawals)} en retrait
+                </span>
+              )}
+              {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 && (
+                <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-sky-800">
+                  +{eur(wallet.summary.pendingDeposits ?? 0)} en dépôt
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -320,9 +346,10 @@ export default function ParametresPage() {
           {(
             [
               { k: "all", l: "Tous" },
-              { k: "withdrawal", l: "Retraits" },
-              { k: "deposit", l: "Dépôts" },
               { k: "gains", l: "Gains" },
+              { k: "stakes", l: "Mises" },
+              { k: "deposit", l: "Dépôts" },
+              { k: "withdrawal", l: "Retraits" },
             ] as const
           ).map(({ k, l }) => (
             <button

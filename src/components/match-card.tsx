@@ -252,7 +252,8 @@ function useOddsFlash(odds: number) {
 }
 
 export function ResultOdds({ match }: { match: ClientMatch }) {
-  const { openBet, target } = useApp();
+  const { openBet, target, isInCombo, comboQuickMode, toggleComboLeg, toast } = useApp();
+  const comboUid = `sport-${match.id}`;
 
   // Si en fin de match une issue 1/N/2 est déjà fermée dans markets, on reflète exactement les issues ouvertes
   const resGroup = match.markets?.find((g) => g.key === "result");
@@ -293,6 +294,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
           target?.match.id === match.id &&
           target?.market === "result" &&
           target?.selection === c.key;
+        const inCombo = isInCombo(comboUid, "result", c.key);
         const locked = match.suspended || c.closed;
 
         return (
@@ -303,8 +305,26 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
             isLive={match.status === "live"}
             suspended={locked}
             selected={isSelected}
+            inCombo={inCombo}
             onPick={(e) => {
               e.stopPropagation();
+              if (comboQuickMode) {
+                const res = toggleComboLeg({
+                  uid: comboUid,
+                  kind: "sport",
+                  matchId: match.id,
+                  title: `${match.homeTeam} – ${match.awayTeam}`,
+                  league: match.league,
+                  market: "result",
+                  selection: c.key,
+                  selectionLabel: c.label,
+                  odds: c.odds,
+                });
+                if (res === "full") {
+                  toast({ kind: "error", title: "Combiné complet (8 sélections max)" });
+                }
+                return;
+              }
               openBet({
                 match,
                 selection: c.key,
@@ -327,6 +347,7 @@ function OddsCell({
   isLive,
   suspended,
   selected,
+  inCombo,
   onPick,
 }: {
   tag: string;
@@ -334,10 +355,12 @@ function OddsCell({
   isLive: boolean;
   suspended: boolean;
   selected?: boolean;
+  inCombo?: boolean;
   onPick: (e: React.MouseEvent) => void;
 }) {
   const { oddsFormat } = useApp();
   const flash = useOddsFlash(odds);
+  const active = selected || inCombo;
 
   return (
     <button
@@ -348,16 +371,18 @@ function OddsCell({
         "flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
-          : "border-edge bg-elev/75 hover:border-ink/20 active:border-betclic-red/50 active:bg-betclic-red/8",
+          : inCombo
+            ? "border-ink bg-ink text-white shadow-xs ring-2 ring-betclic-red/35"
+            : "border-edge bg-elev/75 hover:border-ink/20 active:border-betclic-red/50 active:bg-betclic-red/8",
         suspended && "cursor-not-allowed opacity-50",
-        !selected && flash === "up" && "border-win/40 bg-win/8",
-        !selected && flash === "down" && "border-betclic-red/40 bg-betclic-red/8"
+        !active && flash === "up" && "border-win/40 bg-win/8",
+        !active && flash === "down" && "border-betclic-red/40 bg-betclic-red/8"
       )}
     >
       <span
         className={cn(
           "font-display text-[11px] font-bold",
-          selected ? "text-white/85" : "text-dim"
+          active ? "text-white/85" : "text-dim"
         )}
       >
         {tag}
@@ -369,15 +394,15 @@ function OddsCell({
           <span
             className={cn(
               "font-display text-[13.5px] font-bold tabular-nums",
-              selected ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
+              active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
             )}
           >
             {formatOdds(odds, oddsFormat)}
           </span>
-          {!selected && flash === "up" && (
+          {!active && flash === "up" && (
             <ChevronUp className="h-3 w-3 text-win" strokeWidth={2.8} />
           )}
-          {!selected && flash === "down" && (
+          {!active && flash === "down" && (
             <ChevronDown className="h-3 w-3 text-betclic-red" strokeWidth={2.8} />
           )}
         </span>

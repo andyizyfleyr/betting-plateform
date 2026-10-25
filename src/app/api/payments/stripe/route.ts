@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureSeeded } from "@/db/seed";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
 import { createStripeCheckout, findProvider, storePendingDeposit } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Paiement par carte indisponible" }, { status: 503 });
   }
 
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
   let body: { amount?: number } = {};
   try {
     body = await req.json();
