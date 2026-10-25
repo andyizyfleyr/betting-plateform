@@ -2,7 +2,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import type { MatchTimelineEvent } from "@/db/fixtures";
 import { adminSettings, matches, type MatchRow, type RealMatchStats } from "@/db/schema";
-import { isRealMatchPostIncidentSuspended } from "@/lib/markets";
+import { isFirstHalfCompleted, isRealMatchPostIncidentSuspended } from "@/lib/markets";
 import {
   officialLeagueLabel,
   resolveEspnSlugForLeague,
@@ -1455,9 +1455,17 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
         const extLeague =
           feedMatch?.externalLeague ?? m.externalLeague ?? resolveEspnSlugForLeague(m.league);
         const lastSum = extId ? (lastSummaryFetchByExtId.get(extId) ?? 0) : 0;
+        const needsUrgentHtSummary =
+          Boolean(feedMatch) &&
+          feedMatch!.status === "live" &&
+          isFirstHalfCompleted(feedMatch!.minute, feedMatch!.status) &&
+          feedMatch!.htHomeScore == null &&
+          m.htHomeScore == null;
+
         const shouldEnrichSummary =
           Boolean(extId) &&
           (!feedMatch ||
+            needsUrgentHtSummary ||
             ((feedMatch.status === "live" || feedMatch.status === "finished") &&
               (force || nowMs - lastSum >= SUMMARY_FETCH_INTERVAL_MS)));
 

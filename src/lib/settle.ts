@@ -1,9 +1,24 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches, type MatchRow } from "@/db/schema";
 import { settlePendingCombos } from "@/lib/combo";
-import { closingOddsFor, customMarketOdds, isKnownMarket, marketSettle, realMatchSettle } from "@/lib/markets";
+import {
+  closingOddsFor,
+  customMarketOdds,
+  isKnownMarket,
+  marketSettle,
+  minuteNumber,
+  realMatchSettle,
+  tryEarlyLiveSettle,
+} from "@/lib/markets";
 import { recordSettledBetMl } from "@/lib/ml-engine";
+import {
+  getRealMatchSettlementMode,
+  type RealMatchSettlementMode,
+} from "@/lib/real-sports-feed";
+
+/** Délai anti-VAR après un but sur match réel avant un règlement anticipé lié aux buts (90 s). */
+const REAL_LIVE_GOAL_CONFIRM_MS = 90_000;
 
 /**
  * Règlement déterministe d'un pari sportif :
@@ -31,6 +46,56 @@ function resolveBet(
     );
   }
   return marketSettle(bet.market, bet.selection, home, away, match.events ?? null, match.id);
+}
+
+/**
+ * Évalue si un pari sur un match en direct (`status === "live"`) peut être réglé immédiatement :
+ * - marchés 1ère mi-temps dès que la 1re période est terminée (`MT` ou `≥ 46'`) ;
+ * - marchés dont le seuil de buts est déjà irréversiblement franchi (avec garde-fou anti-VAR 90 s sur match réel).
+ */
+export function resolveEarlyLiveMatchBet(
+  bet: { market: string; selection: string },
+  match: MatchRow,
+  realSettlementMode: RealMatchSettlementMode = "auto",
+  nowMs = Date.now()
+): { won: boolean; voided: boolean } | null {
+  if (match.status !== "live") return null;
+  if (match.feedStatusNote === "VOIDED") return { won: false, voided: true };
+  if (match.feedStatusNote?.startsWith("POSTPONED")) return null;
+
+  const isManual = match.source === "manual";
+  if (isManual && realSettlementMode !== "auto") return null;
+
+  const decision = tryEarlyLiveSettle(bet.market, bet.selection, {
+    source: isManual ? "manual" : "virtual",
+    status: match.status,
+    minute: match.minute,
+    homeScore: match.homeScore ?? 0,
+    awayScore: match.awayScore ?? 0,
+    htHomeScore: match.htHomeScore ?? match.realStats?.htHomeScore ?? null,
+    htAwayScore: match.htAwayScore ?? match.realStats?.htAwayScore ?? null,
+    events: match.events ?? null,
+    matchId: match.id,
+  });
+
+  if (!decision) return null;
+
+  // Sur un match réel, si la décision dépend d'un but inscrit :
+  // - en 2e période (`>= 46'`), les marchés purement 1ère MT (`ht_result`, `ht_total_ou`, `ht_ft`)
+  //   sont déjà figés par le coup de sifflet de la pause (insensibles à la VAR de 2e période) ;
+  // - pour tout autre règlement anticipé lié à un but récent, on exige 90 s de stabilité anti-VAR.
+  const isSecondHalfInPlay = minuteNumber(match.minute) >= 46;
+  const isPureFirstHalfMarket =
+    bet.market === "ht_result" || bet.market === "ht_total_ou" || bet.market === "ht_ft";
+
+  if (isManual && decision.dependsOnGoals && !(isSecondHalfInPlay && isPureFirstHalfMarket)) {
+    if (match.suspended) return null;
+    if (match.lastGoalAt && nowMs - match.lastGoalAt.getTime() < REAL_LIVE_GOAL_CONFIRM_MS) {
+      return null;
+    }
+  }
+
+  return { won: decision.won, voided: decision.voided };
 }
 
 /**
@@ -70,11 +135,15 @@ function closingOddsForBet(bet: { market: string; selection: string; odds?: numb
 }
 
 async function settleRows(
-  rows: Array<{ bet: (typeof bets.$inferSelect) & { id: number; userId: number }; match: MatchRow | null }>
+  rows: Array<{
+    bet: (typeof bets.$inferSelect) & { id: number; userId: number };
+    match: MatchRow | null;
+    overrideDecision?: { won: boolean; voided: boolean };
+  }>
 ) {
-  for (const { bet, match } of rows) {
+  for (const { bet, match, overrideDecision } of rows) {
     if (!match) continue;
-    const { won, voided } = resolveBet(bet, match);
+    const { won, voided } = overrideDecision ?? resolveBet(bet, match);
 
     const payoutMultiplier = bet.payoutMultiplier ?? 1;
     const stakeReturned = bet.stakeReturned ?? 0;
@@ -91,7 +160,7 @@ async function settleRows(
     const minSettledMs = bet.placedAt ? bet.placedAt.getTime() + 1_000 : 0;
     const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawFinishedMs)));
 
-    await db
+    const [updated] = await db
       .update(bets)
       .set({
         status: voided ? "void" : won ? "won" : "lost",
@@ -99,7 +168,10 @@ async function settleRows(
         settledAt,
         ...(closingOdds != null ? { closingOdds } : {}),
       })
-      .where(eq(bets.id, bet.id));
+      .where(and(eq(bets.id, bet.id), eq(bets.status, "pending")))
+      .returning({ id: bets.id });
+
+    if (!updated) continue;
 
     if (payout > 0) {
       await db
@@ -126,14 +198,56 @@ async function settleRows(
   }
 }
 
-/** Règle tous les paris « pending » dont le match est terminé. */
+/**
+ * Règle automatiquement :
+ * 1. tous les paris « pending » dont le match est terminé (`finished`) ;
+ * 2. tous les paris « pending » sur un match en direct (`live`) dont l'issue est déjà
+ *    définitivement acquise ou perdue (notamment les marchés 1ère mi-temps dès `MT` / `≥ 46'`).
+ */
 export async function settleFinishedBets() {
   const rows = await db
     .select({ bet: bets, match: matches })
     .from(bets)
     .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(and(eq(bets.status, "pending"), eq(matches.status, "finished")));
-  await settleRows(rows);
+    .where(
+      and(
+        eq(bets.status, "pending"),
+        inArray(matches.status, ["finished", "live"])
+      )
+    );
+
+  if (rows.length > 0) {
+    const hasLiveManual = rows.some(
+      (r) => r.match?.status === "live" && r.match?.source === "manual"
+    );
+    const realMode: RealMatchSettlementMode = hasLiveManual
+      ? await getRealMatchSettlementMode()
+      : "auto";
+    const nowMs = Date.now();
+
+    const toSettle: Array<{
+      bet: (typeof bets.$inferSelect) & { id: number; userId: number };
+      match: MatchRow | null;
+      overrideDecision?: { won: boolean; voided: boolean };
+    }> = [];
+
+    for (const r of rows) {
+      if (!r.match) continue;
+      if (r.match.status === "finished") {
+        toSettle.push(r);
+      } else if (r.match.status === "live") {
+        const early = resolveEarlyLiveMatchBet(r.bet, r.match, realMode, nowMs);
+        if (early) {
+          toSettle.push({ ...r, overrideDecision: early });
+        }
+      }
+    }
+
+    if (toSettle.length > 0) {
+      await settleRows(toSettle);
+    }
+  }
+
   await settlePendingCombos();
 }
 

@@ -713,11 +713,44 @@ export function minuteNumber(minute: string | null | undefined): number {
   if (!minute) return 0;
   const trimmed = minute.trim().toUpperCase();
   if (trimmed === "MT" || trimmed === "HT" || trimmed.includes("MI-TEMPS")) return 45;
-  const plus = /^(\d+)\s*\+\s*\d+/.exec(trimmed);
+  const plus = /^(\d+)\s*'?\s*\+\s*\d+/.exec(trimmed);
   if (plus) return Math.max(0, Math.min(90, parseInt(plus[1], 10)));
   const m = /^\d+/.exec(trimmed);
   const n = m ? parseInt(m[0], 10) : 0;
   return Math.max(0, Math.min(90, n));
+}
+
+/**
+ * Indique si la 1ère mi-temps est officiellement terminée (sifflet de la pause ou 2e période en cours).
+ * Distingue strictement le temps additionnel de 1ère période (`45+2'` → `false`) de la pause (`MT`)
+ * et de la 2e période (`46'`..`90+4'` → `true`).
+ */
+export function isFirstHalfCompleted(
+  minute: string | null | undefined,
+  status?: string | null
+): boolean {
+  if (status === "finished") return true;
+  if (status && status !== "live") return false;
+  if (!minute) return false;
+  const trimmed = minute.trim().toUpperCase();
+  if (
+    trimmed === "MT" ||
+    trimmed === "HT" ||
+    trimmed.includes("MI-TEMPS") ||
+    trimmed === "TERMINÉ" ||
+    trimmed.startsWith("FIN")
+  ) {
+    return true;
+  }
+  const plus = /^(\d+)\s*'?\s*\+\s*\d+/.exec(trimmed);
+  if (plus) {
+    return parseInt(plus[1], 10) >= 46;
+  }
+  const m = /^(\d+)/.exec(trimmed);
+  if (m) {
+    return parseInt(m[1], 10) >= 46;
+  }
+  return false;
 }
 
 function maxReachableAdditionalGoals(minute: number, capMinute = 90): number {
@@ -1634,4 +1667,315 @@ export function realMatchSettle(
   }
 
   return marketSettle(market, outcome, homeScore, awayScore, events, matchId);
+}
+
+/**
+ * Restitue le score officiel de la 1ère mi-temps `(htHome, htAway)` uniquement lorsqu'il est
+ * 100 % certain et vérifié (jamais d'approximation en cours de match).
+ */
+export function resolveConfirmedHalfTimeScore(params: {
+  source: "manual" | "virtual";
+  minute: string | null | undefined;
+  status?: string | null;
+  homeScore: number;
+  awayScore: number;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
+  events?: MatchTimelineEvent[] | null;
+  matchId?: number;
+}): { htHome: number; htAway: number } | null {
+  if (!isFirstHalfCompleted(params.minute, params.status)) return null;
+
+  const h = Math.max(0, params.homeScore);
+  const a = Math.max(0, params.awayScore);
+
+  if (params.source === "virtual") {
+    const tl = extractMatchTimelineStats(h, a, params.events ?? null, params.matchId ?? 0);
+    return { htHome: tl.htHome, htAway: tl.htAway };
+  }
+
+  // Match réel : 1) linescores mi-temps explicites
+  if (
+    params.htHomeScore != null &&
+    params.htAwayScore != null &&
+    Number.isFinite(params.htHomeScore) &&
+    Number.isFinite(params.htAwayScore) &&
+    params.htHomeScore >= 0 &&
+    params.htAwayScore >= 0 &&
+    params.htHomeScore <= h &&
+    params.htAwayScore <= a
+  ) {
+    return { htHome: params.htHomeScore, htAway: params.htAwayScore };
+  }
+
+  // 2) Score actuel 0 - 0 après la fin de la 1ère période => score MT nécessairement 0 - 0
+  if (h === 0 && a === 0) {
+    return { htHome: 0, htAway: 0 };
+  }
+
+  // 3) Tous les buts du match sont couverts avec leur minute officielle dans `events`
+  if (hasVerifiedGoalTimeline(h, a, params.events ?? null)) {
+    const tl = extractMatchTimelineStats(h, a, params.events ?? null, params.matchId ?? 0);
+    return { htHome: tl.htHome, htAway: tl.htAway };
+  }
+
+  return null;
+}
+
+export interface EarlyLiveSettleDecision {
+  won: boolean;
+  voided: boolean;
+  /** `true` si la décision repose sur ≥ 1 but inscrit (soumis au délai anti-VAR sur match réel). */
+  dependsOnGoals: boolean;
+}
+
+/**
+ * Évalue si un pari sur un match encore en direct (`status === "live"`) est DÉJÀ
+ * mathématiquement et irréversiblement tranché (sans aucun plafond heuristique de buts futurs) :
+ * - Marchés 1ère mi-temps (`ht_result`, `ht_total_ou`) dès que la 1ère période est terminée (`MT` ou `≥ 46'`),
+ *   ou dès qu'un seuil `Plus de / Moins de` est franchi en 1ère mi-temps ;
+ * - `MT-Fin` (`ht_ft`) perdant dès la mi-temps si l'issue de la 1ère période ne correspond pas ;
+ * - Seuils monotones irréversibles en temps réglementaire (`total_ou`, `home_total`, `away_total`,
+ *   `btts`, `first_team_to_score`, `clean_sheet`, `to_nil`, `score_exact`, `total_exact`, `goal_range`,
+ *   `result_total` under, `result_btts` sans les 2 qui marquent, `highest_scoring_half`).
+ */
+export function tryEarlyLiveSettle(
+  market: string,
+  outcome: string,
+  params: {
+    source: "manual" | "virtual";
+    status?: string | null;
+    minute: string | null | undefined;
+    homeScore: number;
+    awayScore: number;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
+    events?: MatchTimelineEvent[] | null;
+    matchId?: number;
+  }
+): EarlyLiveSettleDecision | null {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return null;
+  if (!def.outcomes("Domicile", "Extérieur").some((o) => o.key === outcome)) return null;
+
+  const h = Math.max(0, params.homeScore);
+  const a = Math.max(0, params.awayScore);
+  const tot = h + a;
+  const fhDone = isFirstHalfCompleted(params.minute, params.status);
+  const htConfirmed = fhDone ? resolveConfirmedHalfTimeScore(params) : null;
+
+  // 1. 1x2 · 1ère mi-temps : intégralement tranché dès la fin de la 1ère période
+  if (market === "ht_result") {
+    if (!htConfirmed) return null;
+    const won =
+      outcome === "home"
+        ? htConfirmed.htHome > htConfirmed.htAway
+        : outcome === "away"
+          ? htConfirmed.htAway > htConfirmed.htHome
+          : htConfirmed.htHome === htConfirmed.htAway;
+    return {
+      won,
+      voided: false,
+      dependsOnGoals: htConfirmed.htHome + htConfirmed.htAway > 0,
+    };
+  }
+
+  // 2. Total · 1ère mi-temps : tranché dès franchissement du seuil en 1re MT OU dès la fin de la 1re MT
+  if (market === "ht_total_ou") {
+    const m = /^ht_ou_(\d+)_(\d+)_(over|under)$/.exec(outcome);
+    if (!m) return null;
+    const line = Number(`${m[1]}.${m[2]}`);
+    const isOver = m[3] === "over";
+
+    if (htConfirmed) {
+      const htTot = htConfirmed.htHome + htConfirmed.htAway;
+      return {
+        won: isOver ? htTot > line : htTot <= line,
+        voided: false,
+        dependsOnGoals: htTot > 0,
+      };
+    }
+
+    // Toujours en 1ère mi-temps (`!fhDone`) : tous les buts actuels appartiennent à la 1ère MT
+    if (!fhDone && tot > line) {
+      return {
+        won: isOver,
+        voided: false,
+        dependsOnGoals: true,
+      };
+    }
+    return null;
+  }
+
+  // 3. MT-Fin : perdant dès la pause si le symbole de la 1ère mi-temps est déjà faux
+  if (market === "ht_ft") {
+    if (!htConfirmed) return null;
+    const [expectedHt] = outcome.split("_");
+    const actualHt = htSymbol(htConfirmed.htHome, htConfirmed.htAway);
+    if (expectedHt && actualHt !== expectedHt) {
+      return {
+        won: false,
+        voided: false,
+        dependsOnGoals: htConfirmed.htHome + htConfirmed.htAway > 0,
+      };
+    }
+    return null;
+  }
+
+  // 4. Mi-temps avec le plus de buts : tranché si la 2e MT a déjà dépassé (ou égalé pour `h1`) la 1re MT
+  if (market === "highest_scoring_half") {
+    if (!htConfirmed) return null;
+    const g1 = htConfirmed.htHome + htConfirmed.htAway;
+    const curG2 = Math.max(0, h - htConfirmed.htHome) + Math.max(0, a - htConfirmed.htAway);
+    if (curG2 > g1) {
+      return {
+        won: outcome === "h2",
+        voided: false,
+        dependsOnGoals: true,
+      };
+    }
+    if (curG2 === g1 && outcome === "h1") {
+      return {
+        won: false,
+        voided: false,
+        dependsOnGoals: tot > 0,
+      };
+    }
+    return null;
+  }
+
+  // 5. 1er but inscrit
+  if (market === "first_team_to_score") {
+    if (tot === 0) return null;
+    if (outcome === "none") {
+      return { won: false, voided: false, dependsOnGoals: true };
+    }
+    if (h > 0 && a === 0) {
+      return { won: outcome === "home", voided: false, dependsOnGoals: true };
+    }
+    if (a > 0 && h === 0) {
+      return { won: outcome === "away", voided: false, dependsOnGoals: true };
+    }
+    if (params.source === "virtual" || hasVerifiedGoalTimeline(h, a, params.events ?? null)) {
+      const tl = extractMatchTimelineStats(h, a, params.events ?? null, params.matchId ?? 0);
+      if (tl.firstScorer !== "none") {
+        return { won: outcome === tl.firstScorer, voided: false, dependsOnGoals: true };
+      }
+    }
+    if (htConfirmed) {
+      if (htConfirmed.htHome > 0 && htConfirmed.htAway === 0) {
+        return { won: outcome === "home", voided: false, dependsOnGoals: true };
+      }
+      if (htConfirmed.htAway > 0 && htConfirmed.htHome === 0) {
+        return { won: outcome === "away", voided: false, dependsOnGoals: true };
+      }
+    }
+    return null;
+  }
+
+  // 6. Total buts temps réglementaire
+  if (market === "total_ou") {
+    const m = /^ou_(\d+)_(\d+)_(over|under)$/.exec(outcome);
+    if (!m) return null;
+    const line = Number(`${m[1]}.${m[2]}`);
+    if (tot > line) {
+      return { won: m[3] === "over", voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+
+  // 7. Total individuel Équipe 1 / Équipe 2
+  if (market === "home_total" || market === "away_total") {
+    const m = /^(h|a)_(\d+)_(\d+)_(over|under)$/.exec(outcome);
+    if (!m) return null;
+    const line = Number(`${m[2]}.${m[3]}`);
+    const teamGoals = m[1] === "h" ? h : a;
+    if (teamGoals > line) {
+      return { won: m[4] === "over", voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+
+  // 8. Les deux équipes vont marquer
+  if (market === "btts") {
+    if (h > 0 && a > 0) {
+      return { won: outcome === "oui", voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+
+  // 9. Clean sheet & Victoire sans encaisser
+  if (market === "home_clean_sheet" || market === "home_to_nil") {
+    if (a > 0) {
+      return { won: outcome === "non", voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+  if (market === "away_clean_sheet" || market === "away_to_nil") {
+    if (h > 0) {
+      return { won: outcome === "non", voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+
+  // 10. Combinaisons Résultat + Total / Résultat + BTTS (issues devenues impossibles)
+  if (market === "result_total") {
+    if (outcome === "under" && tot >= 3) {
+      return { won: false, voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+  if (market === "result_btts") {
+    if (outcome === "draw_no" && tot > 0) {
+      return { won: false, voided: false, dependsOnGoals: true };
+    }
+    if ((outcome === "home_no" || outcome === "away_no") && h > 0 && a > 0) {
+      return { won: false, voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+
+  // 11. Intervalle de buts, Nombre exact de buts, Score exact
+  if (market === "goal_range") {
+    if (tot >= 6) {
+      return { won: outcome === "6p", voided: false, dependsOnGoals: true };
+    }
+    if (outcome === "0_1" && tot >= 2) {
+      return { won: false, voided: false, dependsOnGoals: true };
+    }
+    if (outcome === "2_3" && tot >= 4) {
+      return { won: false, voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+
+  if (market === "total_exact") {
+    if (outcome === "5+" && tot >= 5) {
+      return { won: true, voided: false, dependsOnGoals: true };
+    }
+    if (outcome !== "5+" && tot > Number(outcome)) {
+      return { won: false, voided: false, dependsOnGoals: true };
+    }
+    return null;
+  }
+
+  if (market === "score_exact") {
+    if (outcome === "other") {
+      if (h >= 4 || a >= 4) {
+        return { won: true, voided: false, dependsOnGoals: true };
+      }
+      return null;
+    }
+    const parts = /^(\d+)_(\d+)$/.exec(outcome);
+    if (parts) {
+      const targetH = Number(parts[1]);
+      const targetA = Number(parts[2]);
+      if (h > targetH || a > targetA) {
+        return { won: false, voided: false, dependsOnGoals: true };
+      }
+    }
+    return null;
+  }
+
+  return null;
 }
