@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, ChevronUp, Lock } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
+import { LiveMatchTracker } from "./live-match-tracker";
 import { cn, formatOdds } from "@/lib/format";
 
 export function LiveStatusBadge({
@@ -69,6 +70,7 @@ export function MatchCard({
   nextUp?: boolean;
 }) {
   const { openMarkets } = useApp();
+  const [showTracker, setShowTracker] = useState(false);
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
   const marketCount = match.markets?.length ?? 0;
@@ -77,10 +79,9 @@ export function MatchCard({
 
   return (
     <article
-      onClick={() => !isFinished && openMarkets(match)}
+      onClick={() => openMarkets(match)}
       className={cn(
-        "glass-card relative overflow-hidden rounded-2xl p-3.5 transition-colors",
-        !isFinished && "cursor-pointer active:bg-elev/45"
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45"
       )}
     >
       {isLive && (
@@ -99,10 +100,26 @@ export function MatchCard({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {isLive ? (
-            <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTracker((s) => !s);
+                }}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors",
+                  showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
+                )}
+              >
+                <Radio className="h-2.5 w-2.5" strokeWidth={2.4} />
+                2D
+              </button>
+              <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
+            </>
           ) : isFinished ? (
             <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold text-dim">
-              Terminé
+              Terminé · Stats
             </span>
           ) : (
             <>
@@ -154,6 +171,9 @@ export function MatchCard({
           )}
         </div>
       )}
+
+      {/* Tracker 2D dépliable sur carte live (recherche / filtre ligue) */}
+      {isLive && showTracker && <LiveMatchTracker match={match} className="mt-2.5" />}
 
       {/* Cotes 1 / N / 2 + accès aux marchés */}
       {!isFinished && (

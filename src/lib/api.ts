@@ -1,3 +1,5 @@
+import type { LiveMatchTelemetry } from "@/lib/live-telemetry";
+
 export type MatchStatus = "live" | "upcoming" | "finished";
 export type BetStatus = "pending" | "won" | "lost" | "cashed";
 export type Selection = "home" | "draw" | "away";
@@ -69,6 +71,7 @@ export interface ClientMatch {
   redHome?: number;
   redAway?: number;
   events?: ClientMatchEvent[];
+  telemetry?: LiveMatchTelemetry;
   markets: MarketGroup[];
 }
 
