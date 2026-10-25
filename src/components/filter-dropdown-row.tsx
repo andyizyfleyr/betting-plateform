@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/format";
 
 export interface FilterDropdownOption<T extends string = string> {
@@ -139,7 +139,7 @@ export function FilterDropdownRow({
           className
         )}
       >
-        <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
+        <div className="no-scrollbar flex w-full items-center gap-2 overflow-x-auto">
           {filters.map((filter) => {
             const isActive = filter.value !== filter.defaultValue;
             const isOpen = openId === filter.id;
@@ -159,23 +159,22 @@ export function FilterDropdownRow({
                 aria-expanded={isOpen}
                 onClick={() => toggleMenu(filter.id)}
                 className={cn(
-                  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border-0 px-3.5 text-[14px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
+                  "inline-flex h-10 grow shrink-0 items-center justify-center gap-1.5 rounded-full border-0 px-3.5 text-[14px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
                   isActive
                     ? "bg-betclic-red text-white shadow-[0_2px_8px_rgba(225,0,20,0.22)]"
                     : "bg-[#e7e9ed] text-[#374151] hover:bg-[#dde0e6]"
                 )}
               >
                 <span>{displayLabel}</span>
-                <span
+                <ChevronDown
                   aria-hidden="true"
+                  strokeWidth={2.25}
                   className={cn(
-                    "inline-block text-[12px] leading-none transition-transform duration-150",
+                    "h-4 w-4 shrink-0 transition-transform duration-150",
                     isOpen && "rotate-180",
-                    isActive ? "text-white/90" : "text-[#374151]/80"
+                    isActive ? "text-white/95" : "text-[#374151]/80"
                   )}
-                >
-                  ▾
-                </span>
+                />
               </button>
             );
           })}

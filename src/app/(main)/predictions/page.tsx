@@ -418,15 +418,9 @@ function MultiChoiceQuestionCard({
     [options]
   );
 
-  const hasBetBeyondFold = useMemo(() => {
-    if (!q.myBet || sortedOptions.length <= 4) return false;
-    const idx = sortedOptions.findIndex((o) => o.key === q.myBet?.selection);
-    return idx >= 4;
-  }, [q.myBet, sortedOptions]);
-
   const [expanded, setExpanded] = useState(false);
-  const showAll = expanded || hasBetBeyondFold || sortedOptions.length <= 4;
-  const displayed = showAll ? sortedOptions : sortedOptions.slice(0, 4);
+  const hasMoreOptions = sortedOptions.length > 2;
+  const displayed = expanded || !hasMoreOptions ? sortedOptions : sortedOptions.slice(0, 2);
 
   const probs = useMemo(() => {
     const weights = sortedOptions.map((o) => (o.odds > 0 ? 1 / o.odds : 0));
@@ -545,19 +539,19 @@ function MultiChoiceQuestionCard({
         })}
       </div>
 
-      {sortedOptions.length > 4 && !hasBetBeyondFold && (
+      {hasMoreOptions && (
         <button
           type="button"
           onClick={() => setExpanded((s) => !s)}
-          className="mt-2 flex h-8 w-full items-center justify-center gap-1 rounded-xl bg-elev/70 font-display text-[11.5px] font-semibold text-mist active:bg-elev"
+          className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[12.5px] font-semibold text-ink transition-colors hover:bg-elev active:scale-[0.99]"
         >
           <span>
             {expanded
-              ? "Masquer les autres choix"
-              : `Voir les ${sortedOptions.length} choix (+${sortedOptions.length - 4})`}
+              ? "Voir moins"
+              : `Voir tout (${sortedOptions.length} choix)`}
           </span>
           <ChevronDown
-            className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")}
+            className={cn("h-4 w-4 text-mist transition-transform duration-150", expanded && "rotate-180")}
             strokeWidth={2.3}
           />
         </button>
