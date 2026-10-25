@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ArrowLeft, Eye, EyeOff, HandCoins, Play } from "lucide-react";
+import { Eye, EyeOff, HandCoins, Play, Trophy } from "lucide-react";
 import { cn } from "@/lib/format";
 import s from "./tap-game.module.css";
 
@@ -11,7 +11,6 @@ const SYM = "$";
 const DEC = 2;
 const MIN_BET = 1;
 const MAX_BET = 100;
-const QUICK_BETS = [1, 5, 10, 25];
 
 interface Game {
   active: boolean;
@@ -24,9 +23,24 @@ interface ModalState {
   show: boolean;
   type: "win" | "lose";
   title: string;
+  msg: string;
   amount: string;
   bet: number;
   mult: number;
+}
+
+interface Pop {
+  id: number;
+  x: number;
+  y: number;
+  rot: number;
+}
+
+interface ConfettiPiece {
+  id: number;
+  left: string;
+  dur: string;
+  col: string;
 }
 
 function fmt(n: number): string {
@@ -63,15 +77,20 @@ export default function TapPage() {
   const [loading, setLoading] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [stake, setStake] = useState("1.00");
+  const [sliderPct, setSliderPct] = useState(0);
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ModalState>({
     show: false,
     type: "win",
     title: "",
+    msg: "",
     amount: "",
     bet: 0,
     mult: 1.0,
   });
+  const [pops, setPops] = useState<Pop[]>([]);
+  const [confetti, setConfetti] = useState<ConfettiPiece[]>([]);
+  const [confVisible, setConfVisible] = useState(false);
 
   const gameRef = useRef(game);
   const activeRef = useRef(game.active);
@@ -80,13 +99,11 @@ export default function TapPage() {
   const pendingRef = useRef(0);
   const isSyncingRef = useRef(false);
   const lockRef = useRef(false);
+  const lastPopRef = useRef(0);
+  const popIdRef = useRef(0);
+  const confIdRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const endRef = useRef<
-    (
-      d: { multiplier?: string | number; new_balance?: string | number; win_amount?: string | number },
-      win: boolean
-    ) => void
-  >(() => {});
+  const endRef = useRef<(d: { multiplier?: string | number; new_balance?: string | number; win_amount?: string | number }, win: boolean) => void>(() => {});
 
   const upGame = useCallback((patch: Partial<Game>) => {
     setGame((prev) => {
@@ -157,6 +174,40 @@ export default function TapPage() {
     }
   };
 
+  const showModal = (type: "win" | "lose", title: string, amount: string) => {
+    setModal({
+      show: true,
+      type,
+      title,
+      msg: type === "win" ? "Félicitations" : "Dommage",
+      amount,
+      bet: gameRef.current.bet,
+      mult: gameRef.current.mult,
+    });
+  };
+
+  const closeModal = () => setModal((m) => ({ ...m, show: false }));
+
+  const fireConfetti = () => {
+    const cols = ["#f9a602", "#ffd700", "#e74c3c", "#2ecc71", "#3498db"];
+    setConfetti(
+      Array.from({ length: 30 }, () => ({
+        id: ++confIdRef.current,
+        left: Math.random() * 100 + "%",
+        dur: Math.random() * 2 + 2 + "s",
+        col: cols[Math.floor(Math.random() * cols.length)],
+      }))
+    );
+    setConfVisible(true);
+    setTimeout(() => setConfVisible(false), 4000);
+  };
+
+  const addPop = (x: number, y: number) => {
+    const id = ++popIdRef.current;
+    setPops((p) => [...p.slice(-14), { id, x, y, rot: (Math.random() - 0.5) * 40 }]);
+    setTimeout(() => setPops((p) => p.filter((q) => q.id !== id)), 500);
+  };
+
   const end = useCallback(
     (
       d: { multiplier?: string | number; new_balance?: string | number; win_amount?: string | number },
@@ -170,32 +221,23 @@ export default function TapPage() {
       if (d.new_balance !== undefined) setBal(parseFloat(String(d.new_balance)));
 
       if (win) {
-        setModal({
-          show: true,
-          type: "win",
-          title: "Encaissé !",
-          amount: "+" + fmt(Number(d.win_amount)),
-          bet: gameRef.current.bet,
-          mult: gameRef.current.mult,
-        });
+        fireConfetti();
+        showModal("win", "Encaissé !", "Gain : " + fmt(Number(d.win_amount)));
       } else {
         playLose();
         setCrashed(true);
-        setModal({
-          show: true,
-          type: "lose",
-          title: "Perdu",
-          amount: "−" + fmt(gameRef.current.bet),
-          bet: gameRef.current.bet,
-          mult: gameRef.current.mult,
-        });
+        showModal(
+          "lose",
+          gameRef.current.bet > 10 ? "Aïe, ça pique..." : "Crashed !",
+          "Perte : " + fmt(gameRef.current.bet)
+        );
       }
       setTimeout(() => {
         setCrashed(false);
         setLoading(false);
         setPlaying(false);
-        upGame({ mult: 1.0, bet: 0, clicks: 0 });
-      }, 1200);
+        upGame({ mult: 1.0, bet: 0 });
+      }, 1500);
     },
     [upGame]
   );
@@ -208,31 +250,64 @@ export default function TapPage() {
     endRef.current = end;
   }, [bal, end, game]);
 
-  const setQuickStake = (val: number) => {
-    const effectiveMax = Math.max(MIN_BET, Math.min(balRef.current || MAX_BET, MAX_BET));
-    const clamped = Math.max(MIN_BET, Math.min(effectiveMax, val));
-    setStake(clamped.toFixed(DEC));
-    setError("");
+  const getBounds = () => {
+    const effectiveMax = Math.max(MIN_BET, Math.min(balRef.current, MAX_BET));
+    return { min: MIN_BET, max: effectiveMax };
+  };
+
+  const clampPct = (n: number) => Math.max(0, Math.min(100, n));
+
+  const onSliderChange = (percent: number) => {
+    const b = getBounds();
+    let amount = b.min + ((b.max - b.min) * percent) / 100;
+    if (percent === 100) amount = b.max;
+    if (percent === 0) amount = b.min;
+    setStake(amount.toFixed(DEC));
+    setSliderPct(clampPct(percent));
+  };
+
+  const onStakeChange = (val: string) => {
+    setStake(val);
+    if (val === "") {
+      setSliderPct(0);
+      return;
+    }
+    const num = parseFloat(val);
+    const b = getBounds();
+    if (!isNaN(num) && num > b.max) {
+      setStake(b.max.toFixed(DEC));
+      setSliderPct(100);
+      return;
+    }
+    let pct: number;
+    if (isNaN(num)) pct = 0;
+    else {
+      const range = b.max - b.min;
+      pct = range <= 0 ? (num >= b.max ? 100 : 0) : ((num - b.min) / range) * 100;
+    }
+    setSliderPct(clampPct(pct));
   };
 
   const onStakeBlur = () => {
-    const effectiveMax = Math.max(MIN_BET, Math.min(balRef.current || MAX_BET, MAX_BET));
-    let num = parseFloat(stake.replace(",", "."));
-    if (Number.isNaN(num) || num < MIN_BET) num = MIN_BET;
-    if (num > effectiveMax) num = effectiveMax;
-    setStake(num.toFixed(DEC));
+    const num = parseFloat(stake);
+    const b = getBounds();
+    if (isNaN(num) || num < b.min) {
+      setStake(b.min.toFixed(DEC));
+      setSliderPct(0);
+    }
   };
 
   const start = async () => {
     if (isSyncingRef.current) return;
-    const amt = parseFloat(stake.replace(",", "."));
-    if (Number.isNaN(amt) || amt <= 0) {
+    const amt = parseFloat(stake);
+    if (isNaN(amt) || amt <= 0) {
       setError("Mise invalide");
       return;
     }
     if (amt < MIN_BET) {
       setError(`Mise minimale : ${MIN_BET} ${SYM}`);
       setStake(MIN_BET.toFixed(DEC));
+      setSliderPct(0);
       return;
     }
     isSyncingRef.current = true;
@@ -278,17 +353,31 @@ export default function TapPage() {
       });
       const d = await res.json();
       if (d.status === "success") endRef.current(d, true);
-      else if (d.message === "Jeu inactif") endRef.current({ multiplier: multRef.current }, false);
-      else setError(d.message);
+      else {
+        if (d.message === "Jeu inactif") endRef.current({ multiplier: multRef.current }, false);
+        else setError(d.message);
+      }
     } catch {
       /* silencieux */
     }
     isSyncingRef.current = false;
   };
 
-  const handleTap = () => {
-    if (!activeRef.current || lockRef.current) return;
+  const action = () => {
+    if (activeRef.current) cashout();
+    else start();
+  };
+
+  const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!activeRef.current) return;
+    if (lockRef.current) return;
+
     playTap();
+    const now = Date.now();
+    if (now - lastPopRef.current > 80) {
+      lastPopRef.current = now;
+      addPop(e.clientX, e.clientY);
+    }
     setClickAnim(false);
     requestAnimationFrame(() => setClickAnim(true));
 
@@ -307,18 +396,20 @@ export default function TapPage() {
     }, 1000);
   };
 
+  // Chargement initial + préférence visibilité du solde
   useEffect(() => {
     fetch("/api/tap")
       .then((r) => r.json())
       .then((d) => {
         if (d.status === "success") {
           setBal(d.balance);
-          setStake(Math.max(MIN_BET, Math.min(MIN_BET, d.balance)).toFixed(DEC));
+          setStake(Math.min(MIN_BET, d.balance).toFixed(DEC));
         }
       })
       .catch(() => undefined);
   }, []);
 
+  // Synchronisation des clics avec le serveur (batch toutes les 300 ms)
   useEffect(() => {
     const id = setInterval(async () => {
       if (!activeRef.current || pendingRef.current === 0 || isSyncingRef.current) return;
@@ -346,9 +437,10 @@ export default function TapPage() {
     return () => clearInterval(id);
   }, [upGame]);
 
+  // Rafraîchissement du solde hors partie (5 s)
   useEffect(() => {
     const id = setInterval(async () => {
-      if (activeRef.current || (typeof document !== "undefined" && document.hidden)) return;
+      if (activeRef.current) return;
       try {
         const res = await fetch("/api/tap");
         const d = await res.json();
@@ -371,164 +463,221 @@ export default function TapPage() {
     });
   };
 
-  const balText = balanceHidden ? "••••" : fmt(bal);
+  const balText = balanceHidden ? "******" : fmt(bal).replace(SYM, "").trim();
+  const btnText = playing ? " ENCAISSER" : " JOUER";
 
   if (!mount) return null;
 
   return createPortal(
     <div className={s.tap}>
-      <div className={s.shell}>
-        <header className={s.header}>
-          <div className={s.headerLeft}>
-            <Link href="/predictions" className={s.btnIcon} aria-label="Retour">
-              <ArrowLeft className="h-4 w-4" strokeWidth={2.3} />
-            </Link>
-            <div className={s.logo}>
-              Tap <span>Win</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleBalance}
-            className={s.balancePill}
-            aria-label="Afficher ou masquer le solde"
-          >
-            <span className={s.amountHl} style={{ color: balFlash ? "#4ade80" : undefined }}>
+      <header className={s.header}>
+        <div className={s.logo}>
+          Tap <span>Win</span>
+        </div>
+        <div className={s.headerRight}>
+          <div className={s.balancePill}>
+            <span className={s.amountHl} style={{ color: balFlash ? "#22C55E" : undefined }}>
               {balText}
             </span>
-            {balanceHidden ? (
-              <EyeOff className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-            ) : (
-              <Eye className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
-            )}
-          </button>
-        </header>
-
-        <main className={s.stage}>
-          <button
-            type="button"
-            onPointerDown={handleTap}
-            onAnimationEnd={() => setClickAnim(false)}
-            disabled={!playing || locked}
-            className={cn(
-              s.circle,
-              playing && s.circleActive,
-              crashed && s.crashed,
-              locked && s.locked,
-              clickAnim && s.clickAnim
-            )}
-          >
-            <span className={s.multiplierDisplay}>×{game.mult.toFixed(2)}</span>
-            <span className={s.gainLabel}>{playing ? "Gain actuel" : "En attente"}</span>
-            <span className={s.gainValue}>{playing ? fmt(game.bet * game.mult) : "—"}</span>
-          </button>
-
-          <p className={s.hint}>
-            {playing
-              ? locked
-                ? "Patientez 1 seconde avant le prochain tap…"
-                : "Touchez le cercle pour grimper ou encaissez vos gains"
-              : "Définissez votre mise (1 $ à 100 $) puis lancez la partie"}
-          </p>
-        </main>
-
-        <section className={s.controls}>
-          <div className={s.inputGroup}>
-            <input
-              type="text"
-              inputMode="decimal"
-              className={s.stakeIn}
-              placeholder="Mise"
-              value={stake}
-              onChange={(e) => setStake(e.target.value.replace(/[^0-9.,]/g, ""))}
-              onBlur={onStakeBlur}
-              disabled={playing}
-              aria-label="Montant de la mise"
-            />
-            <span className={s.currencyBadge}>{SYM}</span>
-          </div>
-
-          <div className={s.quickGrid}>
-            {QUICK_BETS.map((q) => (
-              <button
-                key={q}
-                type="button"
-                disabled={playing}
-                onClick={() => setQuickStake(q)}
-                className={s.quickBtn}
-              >
-                {q} {SYM}
-              </button>
-            ))}
-            <button
-              type="button"
-              disabled={playing}
-              onClick={() => setQuickStake(MAX_BET)}
-              className={cn(s.quickBtn, s.quickMax)}
-            >
-              MAX
+            <span>{SYM}</span>
+            <button className={s.balanceToggle} onClick={toggleBalance} aria-label="Masquer le solde">
+              {balanceHidden ? (
+                <EyeOff className="h-4 w-4" strokeWidth={2} />
+              ) : (
+                <Eye className="h-4 w-4" strokeWidth={2} />
+              )}
             </button>
           </div>
+          <Link href="/predictions" className={s.btnIcon} title="Retour à l'accueil">
+            <Trophy className="h-4 w-4" strokeWidth={2} />
+          </Link>
+        </div>
+      </header>
 
-          <button
-            type="button"
-            className={cn(s.btnPlace, playing && s.btnCashout)}
-            onClick={() => (playing ? cashout() : start())}
-            disabled={loading && !playing}
-          >
-            {playing ? (
-              <>
-                <HandCoins className="h-5 w-5" strokeWidth={2.2} />
-                ENCAISSER · {fmt(game.bet * game.mult)}
-              </>
-            ) : (
-              <>
-                <Play className="h-5 w-5" strokeWidth={2.2} />
-                JOUER
-              </>
-            )}
-          </button>
-
-          {error && <div className={s.errorMsg}>{error}</div>}
-        </section>
-
-        {/* Modale résultat */}
-        <div
-          className={cn(s.modalOverlay, modal.show && s.show)}
-          onClick={() => setModal((m) => ({ ...m, show: false }))}
-        >
-          <div
-            className={cn(
-              s.modal,
-              modal.type === "win" && s.modalWin,
-              modal.type === "lose" && s.modalLose
-            )}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={s.modalTitle}>{modal.title}</div>
-            <div className={s.modalAmount}>{modal.amount}</div>
-            <div className={s.modalDetails}>
-              <div className={s.detailRow}>
-                <span>Mise</span>
-                <strong>{fmt(modal.bet)}</strong>
-              </div>
-              <div className={s.detailRow}>
-                <span>Multiplicateur</span>
-                <strong className={s.detailMult}>×{modal.mult.toFixed(2)}</strong>
+      <div className={s.layout}>
+        <div className={s.colCenter}>
+          <div className={s.pageGame}>
+            <div className={s.matchBox}>
+              <div className={s.gameCircleContainer}>
+                <div className={s.outerRing} />
+                <div
+                  className={cn(s.circle, crashed && s.crashed, locked && s.locked, clickAnim && s.clickAnim)}
+                  onClick={handleTap}
+                  onAnimationEnd={() => setClickAnim(false)}
+                >
+                  <div className={s.multiplierDisplay}>x{game.mult.toFixed(2)}</div>
+                  <div className={s.gainLabel}>Gain actuel</div>
+                  <div className={s.gainValue}>{fmt(game.bet * game.mult)}</div>
+                </div>
               </div>
             </div>
+
+            <div className={s.mobileControlsPanel}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <StakeControl
+                  s={s}
+                  stake={stake}
+                  sliderPct={sliderPct}
+                  onStake={onStakeChange}
+                  onBlur={onStakeBlur}
+                  onSlider={onSliderChange}
+                  disabled={playing}
+                />
+                <button
+                  className={cn(s.btnPlace, playing && s.btnCashout)}
+                  onClick={action}
+                  disabled={loading && !playing}
+                >
+                  {playing ? <HandCoins className="h-5 w-5" strokeWidth={2.2} /> : <Play className="h-5 w-5" strokeWidth={2.2} />}
+                  {btnText}
+                </button>
+                <div className={s.errorMsg}>{error}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={s.colRight}>
+          <div className={s.slipHead}>
+            <span>CONTRÔLES</span>
+          </div>
+          <div className={s.slipBody}>
+            <StakeControl
+              s={s}
+              stake={stake}
+              sliderPct={sliderPct}
+              onStake={onStakeChange}
+              onBlur={onStakeBlur}
+              onSlider={onSliderChange}
+              disabled={playing}
+            />
+          </div>
+          <div className={s.slipFoot}>
             <button
-              type="button"
-              className={s.btnCloseModal}
-              onClick={() => setModal((m) => ({ ...m, show: false }))}
+              className={cn(s.btnPlace, playing && s.btnCashout)}
+              onClick={action}
+              disabled={loading && !playing}
             >
-              Continuer
+              {playing ? <HandCoins className="h-5 w-5" strokeWidth={2.2} /> : <Play className="h-5 w-5" strokeWidth={2.2} />}
+              {btnText}
             </button>
+            <div className={s.errorMsg}>{error}</div>
           </div>
         </div>
       </div>
+
+      <div className={cn(s.modalOverlay, modal.show && s.show)}>
+        <div className={cn(s.modal, modal.type === "win" && s.modalWin, modal.type === "lose" && s.modalLose)}>
+          <div className={s.modalTitle}>{modal.title}</div>
+          <div className={s.modalMsg}>{modal.msg}</div>
+          <div className={s.modalDetails}>
+            <div className={s.detailRow}>
+              <span className={s.detailLabel}>Mise :</span>
+              <span className={s.detailValue}>{fmt(modal.bet)}</span>
+            </div>
+            <div className={s.detailRow}>
+              <span className={s.detailLabel}>Multiplicateur :</span>
+              <span className={cn(s.detailValue, s.detailMult)}>x{modal.mult.toFixed(2)}</span>
+            </div>
+          </div>
+          <div className={s.modalAmount}>{modal.amount}</div>
+          <button className={s.btnCloseModal} onClick={closeModal}>
+            Fermer
+          </button>
+        </div>
+      </div>
+
+      <div className={cn(s.confettiContainer, confVisible && s.confettiVisible)}>
+        {confetti.map((p) => (
+          <div
+            key={p.id}
+            className={s.confetti}
+            style={{ left: p.left, top: "-10%", backgroundColor: p.col, animationDuration: p.dur }}
+          />
+        ))}
+      </div>
+
+      {pops.map((p) => (
+        <div
+          key={p.id}
+          className={s.tapPop}
+          style={{ left: p.x, top: p.y, transform: `translate(-50%,-50%) rotate(${p.rot}deg)` }}
+        >
+          +1
+        </div>
+      ))}
     </div>,
     document.body
+  );
+}
+
+function StakeControl({
+  s,
+  stake,
+  sliderPct,
+  onStake,
+  onBlur,
+  onSlider,
+  disabled,
+}: {
+  s: Record<string, string>;
+  stake: string;
+  sliderPct: number;
+  onStake: (val: string) => void;
+  onBlur: () => void;
+  onSlider: (pct: number) => void;
+  disabled: boolean;
+}) {
+  return (
+    <>
+      <div className={s.inputGroup}>
+        <input
+          type="number"
+          className={s.stakeIn}
+          placeholder="Mise"
+          min={MIN_BET}
+          max={MAX_BET}
+          step="0.01"
+          value={stake}
+          onChange={(e) => onStake(e.target.value)}
+          onBlur={onBlur}
+          disabled={disabled}
+          inputMode="numeric"
+          pattern="[0-9]*"
+        />
+        <span className={s.currencyBadge}>{SYM}</span>
+      </div>
+
+      <div className={s.limitInfo}>
+        <span>
+          Min: {MIN_BET} {SYM}
+        </span>
+        <span>
+          Max: {MAX_BET} {SYM}
+        </span>
+      </div>
+
+      <div className={s.rangeWrapper}>
+        <span className={s.rangeVal}>{Math.floor(sliderPct)}%</span>
+        <input
+          type="range"
+          className={s.betRange}
+          min={0}
+          max={100}
+          value={sliderPct}
+          step={1}
+          onChange={(e) => onSlider(parseFloat(e.target.value))}
+          disabled={disabled}
+          style={{ backgroundSize: `${sliderPct}% 100%` }}
+        />
+        <div className={s.rangeTicks}>
+          <div className={s.tick} data-val="0" />
+          <div className={s.tick} />
+          <div className={s.tick} data-val="50" />
+          <div className={s.tick} />
+          <div className={s.tick} data-val="MAX" />
+        </div>
+      </div>
+    </>
   );
 }
