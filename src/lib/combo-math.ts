@@ -1,28 +1,28 @@
 export const MIN_COMBO_LEGS = 2;
 export const MAX_COMBO_LEGS = 8;
-export const MIN_ELIGIBLE_BOOST_ODDS = 1.25;
+export const MIN_ELIGIBLE_BOOST_ODDS = 1.35;
 export const MAX_COMBO_ODDS = 500;
 export const MAX_COMBO_PAYOUT = 10_000;
 
 export const COMBO_BOOST_TIERS: ReadonlyArray<{ legs: number; pct: number }> = [
   { legs: 3, pct: 3 },
   { legs: 4, pct: 5 },
-  { legs: 5, pct: 10 },
-  { legs: 6, pct: 15 },
-  { legs: 7, pct: 20 },
-  { legs: 8, pct: 25 },
+  { legs: 5, pct: 8 },
+  { legs: 6, pct: 12 },
+  { legs: 7, pct: 16 },
+  { legs: 8, pct: 20 },
 ];
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** Retourne le pourcentage de Bonus Combiné applicable au nombre de sélections éligibles (cote ≥ 1,25). */
+/** Retourne le pourcentage de Bonus Combiné applicable au nombre de sélections éligibles (cote ≥ 1,35). */
 export function comboBoostPct(eligibleLegsCount: number): number {
-  if (eligibleLegsCount >= 8) return 25;
-  if (eligibleLegsCount === 7) return 20;
-  if (eligibleLegsCount === 6) return 15;
-  if (eligibleLegsCount === 5) return 10;
+  if (eligibleLegsCount >= 8) return 20;
+  if (eligibleLegsCount === 7) return 16;
+  if (eligibleLegsCount === 6) return 12;
+  if (eligibleLegsCount === 5) return 8;
   if (eligibleLegsCount === 4) return 5;
   if (eligibleLegsCount === 3) return 3;
   return 0;

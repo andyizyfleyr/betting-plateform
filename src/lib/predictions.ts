@@ -2,12 +2,14 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   appUser,
+  comboBets,
   predictionBets,
   predictionQuestions,
   type PredictionOption,
 } from "@/db/schema";
 import { settlePendingCombos } from "./combo";
 import { getGlobalHouseHealth, invalidateHouseHealthCache } from "./house-brain";
+import { createServerRng } from "./server-rng";
 
 export const PRED_MIN_STAKE = 0.5;
 export const PRED_MAX_STAKE = 500;
@@ -27,18 +29,6 @@ export function slugifyOptionKey(label: string, idx: number): string {
     .replace(/^_+|_+$/g, "")
     .slice(0, 32);
   return base ? `${base}` : `opt_${idx + 1}`;
-}
-
-/** PRNG déterministe (mulberry32) : résolution stable, non déductible depuis l'UI. */
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 /** Probabilité implicite de « Oui » (normalisée à partir des cotes fixes). */
@@ -91,19 +81,21 @@ export function resolveQuestion(
     payoutByKey.set(b.selection, (payoutByKey.get(b.selection) ?? 0) + b.stake * b.odds);
   }
 
-  // Pondération douce anti-baleine : pénalise exponentiellement une perte sèche disproportionnée
-  // tout en conservant un plancher de 32 % de la probabilité initiale pour garder le jeu vivant.
-  const bankRef = Math.max(85, 130 * houseTightness);
+  // Pondération anti-baleine : pénalise exponentiellement une perte sèche disproportionnée
+  // tout en conservant un plancher de 28 % de la probabilité initiale pour garder le jeu vivant.
+  const bankRef = Math.max(70, 115 * houseTightness);
   const adjusted = candidates.map((c) => {
     const liability = (payoutByKey.get(c.key) ?? 0) - totalStaked;
-    if (liability <= 8) return c.baseProb;
-    const shield = Math.max(0.32, Math.exp(-liability / bankRef));
+    if (liability <= 6) return c.baseProb;
+    const shield = Math.max(0.28, Math.exp(-liability / bankRef));
     return c.baseProb * shield;
   });
 
   const sumW = adjusted.reduce((a, b) => a + b, 0) || 1;
-  const stakeSalt = Math.round(totalStaked * 100) * 2654435761;
-  const u = mulberry32((q.seedValue ^ stakeSalt) >>> 0)();
+  // Graine HMAC-SHA256 secrète côté serveur : impossible à rétro-concevoir depuis l'extérieur
+  const u = createServerRng(
+    `pred-resolve-v4|${q.seedValue}|${Math.round(totalStaked * 100)}`
+  )();
 
   let cumul = 0;
   for (let i = 0; i < candidates.length; i++) {
@@ -248,7 +240,8 @@ export async function settleResolvedQuestions() {
   if (due.length === 0) return;
 
   const dueIds = due.map((q) => q.id);
-  const [allPending, health] = await Promise.all([
+  const dueSet = new Set(dueIds);
+  const [allPending, pendingCombos, health] = await Promise.all([
     db
       .select({
         questionId: predictionBets.questionId,
@@ -263,6 +256,14 @@ export async function settleResolvedQuestions() {
           eq(predictionBets.status, "pending")
         )
       ),
+    db
+      .select({
+        stake: comboBets.stake,
+        baseOdds: comboBets.baseOdds,
+        legs: comboBets.legs,
+      })
+      .from(comboBets)
+      .where(eq(comboBets.status, "pending")),
     getGlobalHouseHealth(),
   ]);
 
@@ -271,6 +272,16 @@ export async function settleResolvedQuestions() {
     const list = byQ.get(b.questionId) ?? [];
     list.push(b);
     byQ.set(b.questionId, list);
+  }
+  for (const cb of pendingCombos) {
+    for (const leg of cb.legs ?? []) {
+      if (leg.kind !== "prediction" || !leg.questionId || leg.status !== "pending") continue;
+      if (!dueSet.has(leg.questionId)) continue;
+      const list = byQ.get(leg.questionId) ?? [];
+      const effOdds = Math.min(20, leg.odds * Math.pow(Math.max(1, cb.baseOdds / Math.max(1.01, leg.odds)), 0.3));
+      list.push({ selection: leg.selection, stake: cb.stake, odds: effOdds });
+      byQ.set(leg.questionId, list);
+    }
   }
 
   for (const q of due) {

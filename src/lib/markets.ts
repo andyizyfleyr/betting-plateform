@@ -77,7 +77,7 @@ function round2(n: number) {
 }
 
 /** Marge effective d'un marché = marge de base (avant-match ou live) × ratio de liquidité du marché. */
-function effectiveMargin(market: string, baseMargin = 1.045): number {
+function effectiveMargin(market: string, baseMargin = marginOverround("result")): number {
   return Math.round(baseMargin * (marginOverround(market) / marginOverround("result")) * 10000) / 10000;
 }
 

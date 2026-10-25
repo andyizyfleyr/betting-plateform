@@ -17,28 +17,28 @@ const EXPOSURE_STEEPNESS = 3.2;
 /** % du bankroll au-delà duquel on commence à resserrer la cote. */
 export const EXPOSURE_TRIGGER = 0.12;
 
-/** Marge par type de marché (%, ex. 0.045 = 4,5%). */
+/** Marge par type de marché (%, ex. 0.064 = 6,4%). */
 export const MARKET_MARGIN: Record<string, number> = {
-  // Marché le plus liquide / fiable → marge la plus basse.
-  result: 0.045,
-  double_chance: 0.05,
-  // Liquidité moyenne, modèle raisonnable.
-  btts: 0.07,
-  odd_even: 0.07,
-  total_ou: 0.07,
-  home_total: 0.07,
-  away_total: 0.07,
-  result_total: 0.08,
-  // Marchés à faible liquidité / modèle moins fiable → marge haute.
-  total_exact: 0.13,
-  score_exact: 0.18,
-  home_to_nil: 0.12,
-  away_to_nil: 0.12,
-  home_clean_sheet: 0.12,
-  away_clean_sheet: 0.12,
+  // Marché principal 1N2 & Double chance.
+  result: 0.072,
+  double_chance: 0.074,
+  // Liquidité moyenne.
+  btts: 0.078,
+  odd_even: 0.078,
+  total_ou: 0.078,
+  home_total: 0.082,
+  away_total: 0.082,
+  result_total: 0.092,
+  // Marchés à forte variance / score exact → marge haute.
+  total_exact: 0.14,
+  score_exact: 0.19,
+  home_to_nil: 0.13,
+  away_to_nil: 0.13,
+  home_clean_sheet: 0.13,
+  away_clean_sheet: 0.13,
 };
 /** Marge par défaut quand le marché n'est pas dans la table. */
-const DEFAULT_MARGIN = 0.07;
+const DEFAULT_MARGIN = 0.075;
 
 /**
  * Marge en format multiplicateur d'overround (1/(p·m) convention de markets.ts).

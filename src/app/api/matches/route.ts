@@ -75,8 +75,14 @@ export async function GET() {
         ? computeMatchTelemetry(m)
         : undefined;
 
+    // On masque strictement les variables internes du simulateur (`regime`, `homeForm`, `awayForm`)
+    const { regime: _regime, homeForm: _homeForm, awayForm: _awayForm, ...publicMatch } = m;
+    void _regime;
+    void _homeForm;
+    void _awayForm;
+
     return {
-      ...m,
+      ...publicMatch,
       homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
       awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
       oddsHome,

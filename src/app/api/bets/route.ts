@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -353,6 +353,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ce match est terminé" }, { status: 400 });
   }
 
+  // Anti-fractionnement : plafonne l'exposition cumulée d'un même joueur sur un même match
+  const [existingMatchStake] = await db
+    .select({
+      staked: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
+    })
+    .from(bets)
+    .where(and(eq(bets.userId, uid), eq(bets.matchId, matchId), eq(bets.status, "pending")));
+  const maxMatchCumulative = Math.min(600, Math.round(maxStake * 1.5));
+  if ((existingMatchStake?.staked ?? 0) + stake > maxMatchCumulative) {
+    return NextResponse.json(
+      {
+        error: `Exposition maximale atteinte sur ce match (${maxMatchCumulative} € cumulés)`,
+      },
+      { status: 400 }
+    );
+  }
+
   // Capture de l'état sportif initial pour détecter un événement réel pendant la validation
   const initialHomeScore = match.homeScore ?? 0;
   const initialAwayScore = match.awayScore ?? 0;
@@ -363,15 +380,21 @@ export async function POST(req: NextRequest) {
   // événement réel (but, carton rouge, suspension ou fin de match) survient pendant l'attente.
   let pricedMatch = match;
   if (match.status === "live") {
-    if (match.suspended) {
+    if (match.suspended || (match.source === "virtual" && minuteNumber(match.minute) >= 85)) {
       return NextResponse.json(
-        { error: "Marché temporairement suspendu suite à une action de jeu" },
+        { error: "Marché verrouillé (fin de match ou action en cours)" },
         { status: 400 }
       );
     }
     await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
+    await runLiveEngine();
     const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
-    if (!freshMatch || freshMatch.status === "finished" || freshMatch.suspended) {
+    if (
+      !freshMatch ||
+      freshMatch.status === "finished" ||
+      freshMatch.suspended ||
+      (freshMatch.source === "virtual" && minuteNumber(freshMatch.minute) >= 85)
+    ) {
       return NextResponse.json(
         { error: "Pari rejeté : marché suspendu ou match terminé pendant la validation" },
         { status: 400 }
@@ -463,6 +486,18 @@ export async function POST(req: NextRequest) {
           }
         )
       : null;
+  // Bloque en direct les issues quasi certaines (scalping à 1,01–1,03 en fin de match)
+  if (
+    pricedMatch.status === "live" &&
+    pricedMatch.source === "virtual" &&
+    (odds <= 1.03 || (liveProb != null && liveProb >= 0.945))
+  ) {
+    return NextResponse.json(
+      { error: "Marché verrouillé — issue quasi acquise" },
+      { status: 400 }
+    );
+  }
+
   const riskFlag =
     pricedMatch.status === "live" &&
     isNearDecided(market, selection, homeScore, awayScore, minuteNumber(pricedMatch.minute), liveProb)

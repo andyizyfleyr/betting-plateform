@@ -5,15 +5,21 @@ import { settleMatchBets } from "@/lib/settle";
 import { appUser, bets, comboBets, matches, type MatchRow } from "@/db/schema";
 import {
   expectedGoals,
+  goalTimeCDF,
   hashString,
   liveOddsFor,
   minuteGoalShare,
-  mulberry32,
   oddsFor,
   pickScorerName,
+   poissonPmf,
+  teamStrength,
 } from "@/db/fixtures";
-import { getGlobalHouseHealth } from "@/lib/house-brain";
-import { minuteNumber } from "@/lib/markets";
+import {
+  computeUserPatternRiskWeights,
+  getGlobalHouseHealth,
+} from "@/lib/house-brain";
+import { isKnownMarket, marketWin, minuteNumber } from "@/lib/markets";
+import { createServerRng, hmacUint32 } from "@/lib/server-rng";
 import { teamLogo } from "@/lib/team-logos";
 
 /** Suspension brève du marché après un but (~2,2 s). */
@@ -43,6 +49,7 @@ const MATCH_REGIMES = [
   "tactical_lock",
   "high_tempo",
   "underdog_ambush",
+  "favorite_surge",
   "late_drama",
 ] as const;
 
@@ -52,32 +59,86 @@ interface FixtureTemplate {
   away: string;
 }
 
+/**
+ * Pool élargi de 36 affiches européennes variées (chocs équilibrés, derbies,
+ * déplacements périlleux de cadors chez des outsiders accrocheurs).
+ * L'orientation Domicile / Extérieur est en plus tirée cryptographiquement à 50/50
+ * à chaque cycle avec équilibrage strict de la file pour éliminer tout biais domicile.
+ */
 const FIXTURE_POOL: FixtureTemplate[] = [
-  { league: "Ligue 1", home: "Paris SG", away: "Marseille" },
-  { league: "Premier League", home: "Arsenal", away: "Chelsea" },
-  { league: "Ligue des Champions", home: "Real Madrid", away: "Bayern Munich" },
+  { league: "Ligue 1", home: "Marseille", away: "Paris SG" },
+  { league: "Premier League", home: "Chelsea", away: "Arsenal" },
+  { league: "Ligue des Champions", home: "Bayern Munich", away: "Real Madrid" },
   { league: "Premier League", home: "Liverpool", away: "Manchester City" },
-  { league: "Liga", home: "FC Barcelone", away: "Atlético Madrid" },
-  { league: "Serie A", home: "Inter Milan", away: "Juventus" },
-  { league: "Bundesliga", home: "Leverkusen", away: "Dortmund" },
-  { league: "Ligue 1", home: "Monaco", away: "Lyon" },
+  { league: "Liga", home: "Atlético Madrid", away: "FC Barcelone" },
+  { league: "Serie A", home: "Juventus", away: "Inter Milan" },
+  { league: "Bundesliga", home: "Dortmund", away: "Leverkusen" },
+  { league: "Ligue 1", home: "Lyon", away: "Monaco" },
   { league: "Serie A", home: "AC Milan", away: "Naples" },
   { league: "Liga", home: "Real Betis", away: "Villarreal" },
   { league: "Premier League", home: "Newcastle", away: "Aston Villa" },
-  { league: "Ligue 1", home: "Lille", away: "Nice" },
-  { league: "Ligue des Champions", home: "Paris SG", away: "Inter Milan" },
-  { league: "Premier League", home: "Tottenham", away: "Manchester United" },
-  { league: "Bundesliga", home: "Bayern Munich", away: "RB Leipzig" },
-  { league: "Serie A", home: "Atalanta", away: "AS Rome" },
-  { league: "Liga", home: "Athletic Bilbao", away: "Real Sociedad" },
-  { league: "Ligue 1", home: "Lens", away: "Rennes" },
+  { league: "Ligue 1", home: "Nice", away: "Lille" },
+  { league: "Ligue des Champions", home: "Inter Milan", away: "Paris SG" },
+  { league: "Premier League", home: "Manchester United", away: "Tottenham" },
+  { league: "Bundesliga", home: "RB Leipzig", away: "Bayern Munich" },
+  { league: "Serie A", home: "AS Rome", away: "Atalanta" },
+  { league: "Liga", home: "Real Sociedad", away: "Athletic Bilbao" },
+  { league: "Ligue 1", home: "Rennes", away: "Lens" },
   { league: "Ligue des Champions", home: "FC Barcelone", away: "Liverpool" },
-  { league: "Premier League", home: "Brighton", away: "Bournemouth" },
+  { league: "Premier League", home: "Bournemouth", away: "Brighton" },
   { league: "Bundesliga", home: "Stuttgart", away: "Eintracht Francfort" },
-  { league: "Serie A", home: "Latium", away: "Fiorentina" },
-  { league: "Ligue 1", home: "Strasbourg", away: "Toulouse" },
-  { league: "Liga", home: "FC Séville", away: "Valence" },
+  { league: "Serie A", home: "Fiorentina", away: "Latium" },
+  { league: "Ligue 1", home: "Toulouse", away: "Strasbourg" },
+  { league: "Liga", home: "Valence", away: "FC Séville" },
+  { league: "Ligue 1", home: "Brest", away: "Paris SG" },
+  { league: "Premier League", home: "Everton", away: "Liverpool" },
+  { league: "Liga", home: "Getafe", away: "Real Madrid" },
+  { league: "Bundesliga", home: "Augsbourg", away: "Bayern Munich" },
+  { league: "Serie A", home: "Bologne", away: "AC Milan" },
+  { league: "Premier League", home: "Crystal Palace", away: "Chelsea" },
+  { league: "Ligue des Champions", home: "Sporting CP", away: "Arsenal" },
+  { league: "Liga", home: "Gérone", away: "Atlético Madrid" },
+  { league: "Serie A", home: "Turin", away: "Naples" },
+  { league: "Bundesliga", home: "Fribourg", away: "Dortmund" },
+  { league: "Ligue 1", home: "Reims", away: "Marseille" },
+  { league: "Ligue des Champions", home: "PSV Eindhoven", away: "Manchester City" },
 ];
+
+/**
+ * Oriente une affiche Domicile / Extérieur sans aucun biais exploitable :
+ * alterne dynamiquement les favoris à domicile et les favoris en déplacement
+ * pour maintenir une parité ~50/50 dans la file active.
+ */
+export function orientFixtureBalanced(
+  fx: FixtureTemplate,
+  seedTag: string,
+  currentNetHomeStronger: number
+): FixtureTemplate {
+  const sA = teamStrength(fx.home);
+  const sB = teamStrength(fx.away);
+  const rng = createServerRng(`orient|${seedTag}|${fx.home}|${fx.away}`);
+
+  if (Math.abs(sA - sB) <= 1) {
+    return rng() < 0.5 ? fx : { league: fx.league, home: fx.away, away: fx.home };
+  }
+
+  const stronger = sA > sB ? fx.home : fx.away;
+  const weaker = sA > sB ? fx.away : fx.home;
+
+  // Si la file a déjà plus de favoris à domicile, place le club le plus fort à l'extérieur (et inversement)
+  let putStrongerAway: boolean;
+  if (currentNetHomeStronger >= 1) {
+    putStrongerAway = rng() < 0.82;
+  } else if (currentNetHomeStronger <= -1) {
+    putStrongerAway = rng() < 0.18;
+  } else {
+    putStrongerAway = rng() < 0.54;
+  }
+
+  return putStrongerAway
+    ? { league: fx.league, home: weaker, away: stronger }
+    : { league: fx.league, home: stronger, away: weaker };
+}
 
 let lastTick = 0;
 let inFlight: Promise<void> | null = null;
@@ -240,73 +301,113 @@ export async function runLiveEngine(): Promise<void> {
   await inFlight;
 }
 
-interface MatchBookPressure {
-  homeTilt: number; // < 1 freine légèrement domicile si forte exposition dessus
-  awayTilt: number; // < 1 freine légèrement extérieur si forte exposition dessus
-  tempoTilt: number; // < 1 resserre les buts si sur-exposition sur Over / BTTS Oui
+export interface PendingMatchTicket {
+  market: string;
+  selection: string;
+  stake: number;
+  odds: number;
+  riskWeight: number;
 }
 
-function computeBookPressure(
-  pendingOnMatch: Array<{ market: string; selection: string; stake: number; odds: number }>,
-  houseTightness: number
-): MatchBookPressure {
-  if (pendingOnMatch.length === 0) {
-    return { homeTilt: 1, awayTilt: 1, tempoTilt: 1 };
+interface MatchBookPressure {
+  tickets: PendingMatchTicket[];
+  houseTightness: number;
+}
+
+/**
+ * Contrôle stochastique optimal sur la grille exacte des scores finaux :
+ * Évalue en continu l'espérance de gain versé par la banque `V(h, a)` sur TOUS les
+ * marchés ouverts (1N2, Double chance, Over/Under, BTTS, Résultat+Total, Buts par équipe,
+ * Clean sheet, Victoire sans encaisser, Score exact, Pair/Impair, Combinés) et module
+ * finement l'intensité instantanée `(hTilt, aTilt)` selon le coût marginal exact
+ * d'un but domicile `V(h+1, a) - V(h, a)` vs un but extérieur `V(h, a+1) - V(h, a)`.
+ */
+export function computeDynamicStepTilts(
+  pressure: MatchBookPressure,
+  home: number,
+  away: number,
+  minute: number,
+  baseLambdaH: number,
+  baseLambdaA: number
+): { hTilt: number; aTilt: number } {
+  const { tickets, houseTightness } = pressure;
+  if (tickets.length === 0) {
+    return { hTilt: 1, aTilt: 1 };
   }
 
-  let liabHome = 0;
-  let liabDraw = 0;
-  let liabAway = 0;
-  let liabHighGoals = 0;
-  let liabLowGoals = 0;
+  const remShare = Math.max(0.02, 1 - goalTimeCDF(minute));
+  const remH = Math.max(0.02, baseLambdaH * remShare);
+  const remA = Math.max(0.02, baseLambdaA * remShare);
 
-  for (const b of pendingOnMatch) {
-    const netProfit = b.stake * Math.max(0.1, b.odds - 1);
-    if (b.market === "result") {
-      if (b.selection === "home") liabHome += netProfit;
-      else if (b.selection === "draw") liabDraw += netProfit;
-      else if (b.selection === "away") liabAway += netProfit;
-    } else if (b.market === "double_chance") {
-      if (b.selection === "1X") {
-        liabHome += netProfit * 0.6;
-        liabDraw += netProfit * 0.4;
-      } else if (b.selection === "X2") {
-        liabAway += netProfit * 0.6;
-        liabDraw += netProfit * 0.4;
-      } else if (b.selection === "12") {
-        liabHome += netProfit * 0.5;
-        liabAway += netProfit * 0.5;
+  const MAX_ADD = 4;
+  const pH: number[] = [];
+  const pA: number[] = [];
+  let sumPH = 0;
+  let sumPA = 0;
+  for (let k = 0; k <= MAX_ADD; k++) {
+    const vh = poissonPmf(k, remH);
+    const va = poissonPmf(k, remA);
+    pH.push(vh);
+    pA.push(va);
+    sumPH += vh;
+    sumPA += va;
+  }
+  for (let k = 0; k <= MAX_ADD; k++) {
+    pH[k] /= sumPH || 1;
+    pA[k] /= sumPA || 1;
+  }
+
+  // Table des paiements pondérés pour les scores finaux atteignables [home..home+5][away..away+5]
+  const span = MAX_ADD + 2;
+  const payGrid: number[][] = Array.from({ length: span }, () => new Array<number>(span).fill(0));
+  for (let dh = 0; dh < span; dh++) {
+    for (let da = 0; da < span; da++) {
+      const fh = home + dh;
+      const fa = away + da;
+      let payout = 0;
+      for (const t of tickets) {
+        let won = false;
+        if (isKnownMarket(t.market)) {
+          won = marketWin(t.market, t.selection, fh, fa);
+        } else if (t.market === "result") {
+          won = t.selection === "home" ? fh > fa : t.selection === "away" ? fa > fh : fh === fa;
+        }
+        if (won) {
+          payout += t.stake * t.odds * t.riskWeight;
+        }
       }
-    } else if (b.market === "total_ou" || b.market === "home_total" || b.market === "away_total") {
-      if (b.selection.endsWith("_over")) liabHighGoals += netProfit;
-      else if (b.selection.endsWith("_under")) liabLowGoals += netProfit;
-    } else if (b.market === "btts") {
-      if (b.selection === "oui") liabHighGoals += netProfit * 0.85;
-      else liabLowGoals += netProfit * 0.85;
+      payGrid[dh][da] = payout;
     }
   }
 
-  const refBank = 120 * Math.max(0.75, houseTightness);
+  const expectedValueAtOffset = (offH: number, offA: number): number => {
+    let ev = 0;
+    for (let dh = 0; dh <= MAX_ADD; dh++) {
+      const wh = pH[dh];
+      for (let da = 0; da <= MAX_ADD; da++) {
+        ev += wh * pA[da] * payGrid[offH + dh][offA + da];
+      }
+    }
+    return ev;
+  };
+
+  const vStay = expectedValueAtOffset(0, 0);
+  const vHomeGoal = expectedValueAtOffset(1, 0);
+  const vAwayGoal = expectedValueAtOffset(0, 1);
+
+  const deltaHome = vHomeGoal - vStay;
+  const deltaAway = vAwayGoal - vStay;
+
+  const refBank = Math.max(80, 160 * houseTightness);
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-  // Asymétrie domicile vs extérieur : bornée entre 0.75 et 1.22 pour rester 100 % réaliste
-  const netSide = (liabHome - liabAway) / refBank;
-  let homeTilt = clamp(1 - 0.18 * Math.tanh(netSide), 0.75, 1.22);
-  let awayTilt = clamp(1 + 0.18 * Math.tanh(netSide), 0.75, 1.22);
+  const hTilt = clamp(Math.exp(-0.34 * Math.tanh(deltaHome / refBank)), 0.76, 1.26);
+  const aTilt = clamp(Math.exp(-0.34 * Math.tanh(deltaAway / refBank)), 0.76, 1.26);
 
-  // Si forte exposition sur 1 ET 2 mais peu sur Nul, léger resserrement vers un match disputé
-  if (liabHome + liabAway > liabDraw * 2.5 + 40) {
-    homeTilt *= 0.94;
-    awayTilt *= 0.94;
-  }
-
-  const netGoals = (liabHighGoals - liabLowGoals) / refBank;
-  const tempoTilt = clamp(1 - 0.2 * Math.tanh(netGoals), 0.74, 1.22);
-
-  return { homeTilt, awayTilt, tempoTilt };
+  return { hTilt, aTilt };
 }
 
-function regimeFactors(
+export function regimeFactors(
   regime: string | null | undefined,
   minute: number,
   lambdaHome: number,
@@ -315,13 +416,15 @@ function regimeFactors(
   const homeIsFav = lambdaHome >= lambdaAway;
   switch (regime) {
     case "tactical_lock":
-      return { hMult: 0.82, aMult: 0.82 };
+      return { hMult: 0.85, aMult: 0.85 };
     case "high_tempo":
-      return { hMult: 1.16, aMult: 1.18 };
+      return { hMult: 1.15, aMult: 1.15 };
     case "underdog_ambush":
-      return homeIsFav ? { hMult: 0.86, aMult: 1.26 } : { hMult: 1.26, aMult: 0.86 };
+      return homeIsFav ? { hMult: 0.89, aMult: 1.11 } : { hMult: 1.11, aMult: 0.89 };
+    case "favorite_surge":
+      return homeIsFav ? { hMult: 1.12, aMult: 0.88 } : { hMult: 0.88, aMult: 1.12 };
     case "late_drama":
-      return minute >= 68 ? { hMult: 1.34, aMult: 1.38 } : { hMult: 0.86, aMult: 0.86 };
+      return minute >= 61 ? { hMult: 1.21, aMult: 1.21 } : { hMult: 0.87, aMult: 0.87 };
     default:
       return { hMult: 1, aMult: 1 };
   }
@@ -348,6 +451,7 @@ async function executeTick(now: number): Promise<void> {
   const [pendingBets, pendingCombos, houseHealth] = await Promise.all([
     db
       .select({
+        userId: bets.userId,
         matchId: bets.matchId,
         market: bets.market,
         selection: bets.selection,
@@ -358,6 +462,7 @@ async function executeTick(now: number): Promise<void> {
       .where(and(inArray(bets.matchId, openIds), eq(bets.status, "pending"))),
     db
       .select({
+        userId: comboBets.userId,
         stake: comboBets.stake,
         baseOdds: comboBets.baseOdds,
         legs: comboBets.legs,
@@ -367,31 +472,41 @@ async function executeTick(now: number): Promise<void> {
     getGlobalHouseHealth(),
   ]);
 
-  const betsByMatch = new Map<
-    number,
-    Array<{ market: string; selection: string; stake: number; odds: number }>
-  >();
+  const activeUserIds: number[] = [];
+  for (const b of pendingBets) activeUserIds.push(b.userId);
+  for (const cb of pendingCombos) activeUserIds.push(cb.userId);
+  const userRiskMap = await computeUserPatternRiskWeights(activeUserIds);
+
+  const betsByMatch = new Map<number, PendingMatchTicket[]>();
   for (const b of pendingBets) {
     if (b.matchId == null) continue;
     const arr = betsByMatch.get(b.matchId) ?? [];
-    arr.push(b);
+    arr.push({
+      market: b.market,
+      selection: b.selection,
+      stake: b.stake,
+      odds: b.odds,
+      riskWeight: userRiskMap.get(b.userId) ?? 1.0,
+    });
     betsByMatch.set(b.matchId, arr);
   }
   // Intègre aussi l'exposition des combinés en cours sur chaque match ouvert
   for (const cb of pendingCombos) {
+    const uWeight = userRiskMap.get(cb.userId) ?? 1.0;
     for (const leg of cb.legs ?? []) {
       if (leg.kind !== "sport" || !leg.matchId || leg.status !== "pending") continue;
       if (!openIdSet.has(leg.matchId)) continue;
       const arr = betsByMatch.get(leg.matchId) ?? [];
       const effectiveOdds = Math.min(
         25,
-        leg.odds * Math.pow(Math.max(1, cb.baseOdds / Math.max(1.01, leg.odds)), 0.3)
+        leg.odds * Math.pow(Math.max(1, cb.baseOdds / Math.max(1.01, leg.odds)), 0.35)
       );
       arr.push({
         market: leg.market,
         selection: leg.selection,
         stake: cb.stake,
         odds: effectiveOdds,
+        riskWeight: uWeight,
       });
       betsByMatch.set(leg.matchId, arr);
     }
@@ -399,8 +514,11 @@ async function executeTick(now: number): Promise<void> {
 
   const pressureFor = (m: MatchRow): MatchBookPressure =>
     m.source === "virtual"
-      ? computeBookPressure(betsByMatch.get(m.id) ?? [], houseHealth.tightness)
-      : { homeTilt: 1, awayTilt: 1, tempoTilt: 1 };
+      ? {
+          tickets: betsByMatch.get(m.id) ?? [],
+          houseTightness: houseHealth.tightness,
+        }
+      : { tickets: [], houseTightness: 1 };
 
   const liveMatches = openMatches.filter((m) => m.status === "live");
   const upcomingMatches = openMatches.filter((m) => m.status === "upcoming");
@@ -541,20 +659,32 @@ async function executeTick(now: number): Promise<void> {
       .select()
       .from(matches)
       .where(eq(matches.status, "upcoming"));
-    await syncUpcomingQueue(refreshedUpcoming, activeLive, now);
+    await syncUpcomingQueue(refreshedUpcoming, activeLive, now, betsByMatch);
   } else {
-    await syncUpcomingQueue(upcomingMatches, activeLive, now);
+    await syncUpcomingQueue(upcomingMatches, activeLive, now, betsByMatch);
   }
 }
 
 async function syncUpcomingQueue(
   upcomingMatches: MatchRow[],
   activeLive: MatchRow | null,
-  now: number
+  now: number,
+  betsByMatch: Map<number, PendingMatchTicket[]>
 ): Promise<void> {
   const virtualQueue = upcomingMatches
     .filter((m) => m.source === "virtual")
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
+
+  // Rééquilibrage automatique sans couture : si plus de la moitié des matchs à venir
+  // ont le club le plus fort à domicile (ex. ancienne file pré-mise à jour), inverse
+  // Domicile / Extérieur sur les matchs sans pari en cours pour garantir une parité 50/50.
+  let homeStrongCount = 0;
+  let awayStrongCount = 0;
+  for (const m of virtualQueue) {
+    const diff = teamStrength(m.homeTeam) - teamStrength(m.awayTeam);
+    if (diff >= 1) homeStrongCount++;
+    else if (diff <= -1) awayStrongCount++;
+  }
 
   let cursorMs = activeLive
     ? expectedMatchEndMs(activeLive, now) + INTER_MATCH_GAP_MS
@@ -564,25 +694,54 @@ async function syncUpcomingQueue(
     const desiredStartsAt = cursorMs;
     cursorMs += matchDurationMs(m.id, "virtual") + INTER_MATCH_GAP_MS;
 
-    const freshOdds = oddsFor(m.homeTeam, m.awayTeam, {
-      homeForm: m.homeForm ?? 1,
-      awayForm: m.awayForm ?? 1,
+    let homeTeam = m.homeTeam;
+    let awayTeam = m.awayTeam;
+    let homeForm = m.homeForm ?? 1;
+    let awayForm = m.awayForm ?? 1;
+
+    const hasPendingBets = (betsByMatch.get(m.id)?.length ?? 0) > 0;
+    const strengthDiff = teamStrength(homeTeam) - teamStrength(awayTeam);
+
+    if (!hasPendingBets && homeStrongCount - awayStrongCount >= 2 && strengthDiff >= 1) {
+      homeTeam = m.awayTeam;
+      awayTeam = m.homeTeam;
+      homeForm = m.awayForm ?? 1;
+      awayForm = m.homeForm ?? 1;
+      homeStrongCount--;
+      awayStrongCount++;
+    } else if (!hasPendingBets && awayStrongCount - homeStrongCount >= 3 && strengthDiff <= -1) {
+      homeTeam = m.awayTeam;
+      awayTeam = m.homeTeam;
+      homeForm = m.awayForm ?? 1;
+      awayForm = m.homeForm ?? 1;
+      awayStrongCount--;
+      homeStrongCount++;
+    }
+
+    const freshOdds = oddsFor(homeTeam, awayTeam, {
+      homeForm,
+      awayForm,
       redHome: m.redHome ?? 0,
       redAway: m.redAway ?? 0,
     });
-    const homeLogo = teamLogo(m.homeTeam) || m.homeLogo;
-    const awayLogo = teamLogo(m.awayTeam) || m.awayLogo;
+    const homeLogo = teamLogo(homeTeam) || m.homeLogo;
+    const awayLogo = teamLogo(awayTeam) || m.awayLogo;
 
+    const swapped = homeTeam !== m.homeTeam;
     const driftMs = Math.abs(m.startsAt.getTime() - desiredStartsAt);
     const oddsChanged =
       Math.abs(m.oddsHome - freshOdds.oddsHome) > 0.02 ||
       Math.abs((m.oddsDraw ?? 0) - freshOdds.oddsDraw) > 0.02 ||
       Math.abs(m.oddsAway - freshOdds.oddsAway) > 0.02;
 
-    if (driftMs > 6_000 || oddsChanged || homeLogo !== m.homeLogo || awayLogo !== m.awayLogo) {
+    if (swapped || driftMs > 6_000 || oddsChanged || homeLogo !== m.homeLogo || awayLogo !== m.awayLogo) {
       await db
         .update(matches)
         .set({
+          homeTeam,
+          awayTeam,
+          homeForm,
+          awayForm,
           startsAt: new Date(desiredStartsAt),
           oddsHome: freshOdds.oddsHome,
           oddsDraw: freshOdds.oddsDraw,
@@ -636,10 +795,16 @@ async function ensureActiveSchedule(now: number): Promise<void> {
 
   const busyTeams = new Set<string>();
   let tailEndMs = now;
+  let netHomeStronger = 0;
 
   for (const m of openAll) {
     busyTeams.add(m.homeTeam);
     busyTeams.add(m.awayTeam);
+    if (m.source === "virtual") {
+      const diff = teamStrength(m.homeTeam) - teamStrength(m.awayTeam);
+      if (diff >= 1) netHomeStronger++;
+      else if (diff <= -1) netHomeStronger--;
+    }
     const estEnd =
       m.status === "live"
         ? expectedMatchEndMs(m, now)
@@ -649,16 +814,22 @@ async function ensureActiveSchedule(now: number): Promise<void> {
     }
   }
 
-  const waveOffset = Math.floor(now / 180_000) % FIXTURE_POOL.length;
+  const waveSlot = Math.floor(now / 150_000);
+  const waveOffset = hmacUint32(`wave-offset|${waveSlot}`) % FIXTURE_POOL.length;
+  const stepStride = 7; // premier avec 36 (PGCD(7, 36) = 1) → parcourt tout le pool sans cycle court
   const needed = TARGET_ACTIVE_VIRTUAL - activeVirtual.length;
   const chosen: FixtureTemplate[] = [];
 
   for (let i = 0; i < FIXTURE_POOL.length && chosen.length < needed; i++) {
-    const candidate = FIXTURE_POOL[(waveOffset + i * 5) % FIXTURE_POOL.length];
-    if (busyTeams.has(candidate.home) || busyTeams.has(candidate.away)) continue;
-    busyTeams.add(candidate.home);
-    busyTeams.add(candidate.away);
-    chosen.push(candidate);
+    const raw = FIXTURE_POOL[(waveOffset + i * stepStride) % FIXTURE_POOL.length];
+    if (busyTeams.has(raw.home) || busyTeams.has(raw.away)) continue;
+    busyTeams.add(raw.home);
+    busyTeams.add(raw.away);
+    const oriented = orientFixtureBalanced(raw, `${waveSlot}|${i}`, netHomeStronger);
+    const diff = teamStrength(oriented.home) - teamStrength(oriented.away);
+    if (diff >= 1) netHomeStronger++;
+    else if (diff <= -1) netHomeStronger--;
+    chosen.push(oriented);
   }
 
   const hasAnyOpen = openAll.length > 0;
@@ -666,13 +837,12 @@ async function ensureActiveSchedule(now: number): Promise<void> {
   const rows: Array<typeof matches.$inferInsert> = [];
 
   chosen.forEach((fx, idx) => {
-    const rng = mulberry32(hashString(`sched|${Math.floor(now / 60_000)}|${fx.home}|${fx.away}|${idx}`));
+    const rng = createServerRng(`sched-v4|${waveSlot}|${fx.home}|${fx.away}|${idx}`);
     const regime = MATCH_REGIMES[Math.floor(rng() * MATCH_REGIMES.length)];
-    const homeForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
-    const awayForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+    // Forme du jour symétrique centrée sur 1.00 (aucun biais directionnel)
+    const homeForm = Math.round((0.91 + rng() * 0.18) * 100) / 100;
+    const awayForm = Math.round((0.91 + rng() * 0.18) * 100) / 100;
 
-    // Tous les nouveaux matchs sont insérés en "upcoming" l'un derrière l'autre ;
-    // `executeTick` démarre immédiatement et uniquement le premier si aucun match n'est en live.
     const startsAt = new Date(upcomingCursor);
     upcomingCursor += matchDurationMs(idx + 1, "virtual") + INTER_MATCH_GAP_MS;
 
@@ -764,23 +934,31 @@ async function bridgeIdleGapAndStartLive(
   }
 
   const slot = Math.floor(now / 150_000);
+  const offset = hmacUint32(`bridge-offset|${slot}`) % FIXTURE_POOL.length;
   const picked: FixtureTemplate[] = [];
+  let bridgeNetHome = 0;
   for (let i = 0; i < FIXTURE_POOL.length && picked.length < 3; i++) {
-    const fx = FIXTURE_POOL[(slot + i * 7) % FIXTURE_POOL.length];
-    if (busy.has(fx.home) || busy.has(fx.away)) continue;
-    busy.add(fx.home);
-    busy.add(fx.away);
-    picked.push(fx);
+    const raw = FIXTURE_POOL[(offset + i * 7) % FIXTURE_POOL.length];
+    if (busy.has(raw.home) || busy.has(raw.away)) continue;
+    busy.add(raw.home);
+    busy.add(raw.away);
+    const oriented = orientFixtureBalanced(raw, `bridge|${slot}|${i}`, bridgeNetHome);
+    const d = teamStrength(oriented.home) - teamStrength(oriented.away);
+    if (d >= 1) bridgeNetHome++;
+    else if (d <= -1) bridgeNetHome--;
+    picked.push(oriented);
   }
   if (picked.length === 0) return null;
 
   const avgDur = 160_000;
   // Détermine une minute de jeu naturelle (entre ~16' et ~72') pour le match actuellement en direct
-  const liveFrac = 0.18 + ((hashString(`idle-live-frac|${slot}`) % 55) / 100);
+  const liveFrac = 0.18 + ((hmacUint32(`idle-live-frac|${slot}`) % 55) / 100);
   const targetLiveStart =
     now - latestEnd > 6 * 60_000
       ? now - Math.round(avgDur * liveFrac)
       : Math.min(now, Math.max(now - 20_000, latestEnd + INTER_MATCH_GAP_MS));
+
+  const neutralPressure: MatchBookPressure = { tickets: [], houseTightness: 1 };
 
   // Si un long silence (> 6 min) s'est écoulé, génère 2 matchs récemment terminés juste avant le live
   if (now - latestEnd > 6 * 60_000 && picked.length >= 3) {
@@ -788,10 +966,10 @@ async function bridgeIdleGapAndStartLive(
     const pastFixtures = [picked[0], picked[1]];
     for (let i = pastFixtures.length - 1; i >= 0; i--) {
       const fx = pastFixtures[i];
-      const rng = mulberry32(hashString(`bridge-past|${slot}|${i}`));
+      const rng = createServerRng(`bridge-past-v4|${slot}|${i}`);
       const regime = MATCH_REGIMES[Math.floor(rng() * MATCH_REGIMES.length)];
-      const homeForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
-      const awayForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+      const homeForm = Math.round((0.91 + rng() * 0.18) * 100) / 100;
+      const awayForm = Math.round((0.91 + rng() * 0.18) * 100) / 100;
       const preOdds = oddsFor(fx.home, fx.away, { homeForm, awayForm });
       const approxStart = backCursor - avgDur;
 
@@ -828,22 +1006,17 @@ async function bridgeIdleGapAndStartLive(
       if (inserted) {
         const exactDur = matchDurationMs(inserted.id, "virtual");
         const exactStart = backCursor - exactDur;
-        await kickOffAtSchedule(
-          inserted,
-          exactStart,
-          now,
-          { homeTilt: 1, awayTilt: 1, tempoTilt: 1 }
-        );
+        await kickOffAtSchedule(inserted, exactStart, now, neutralPressure);
         backCursor = exactStart - INTER_MATCH_GAP_MS;
       }
     }
   }
 
   const liveFx = picked[picked.length - 1];
-  const rng = mulberry32(hashString(`bridge-live|${slot}|${liveFx.home}`));
+  const rng = createServerRng(`bridge-live-v4|${slot}|${liveFx.home}|${liveFx.away}`);
   const regime = MATCH_REGIMES[Math.floor(rng() * MATCH_REGIMES.length)];
-  const homeForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
-  const awayForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+  const homeForm = Math.round((0.91 + rng() * 0.18) * 100) / 100;
+  const awayForm = Math.round((0.91 + rng() * 0.18) * 100) / 100;
   const preOdds = oddsFor(liveFx.home, liveFx.away, { homeForm, awayForm });
 
   const [liveInserted] = await db
@@ -881,12 +1054,7 @@ async function bridgeIdleGapAndStartLive(
   // Garantit que targetLiveStart reste bien dans la fenêtre active du match inséré
   const exactDur = matchDurationMs(liveInserted.id, "virtual");
   const safeLiveStart = Math.max(now - Math.round(exactDur * 0.82), targetLiveStart);
-  return kickOffAtSchedule(
-    liveInserted,
-    safeLiveStart,
-    now,
-    { homeTilt: 1, awayTilt: 1, tempoTilt: 1 }
-  );
+  return kickOffAtSchedule(liveInserted, safeLiveStart, now, neutralPressure);
 }
 
 /**
@@ -925,36 +1093,58 @@ async function tickLiveMatch(
   const simulateEvents = m.source === "virtual";
 
   if (simulateEvents && targetSimMin > prevSimMin) {
+    const baseEffH = lambdaHome * (m.homeForm ?? 1);
+    const baseEffA = lambdaAway * (m.awayForm ?? 1);
+
     for (let min = prevSimMin + 1; min <= targetSimMin; min++) {
       const share = minuteGoalShare(min);
-      const reg = regimeFactors(m.regime, min, lambdaHome, lambdaAway);
+      const reg = regimeFactors(m.regime, min, baseEffH, baseEffA);
 
+      // Couplage tactique calibré sans dérive directionnelle (aligné sur Dixon-Coles) :
+      // - Prudence mutuelle légère à 0-0 et sur parité (1-1, 2-2) en fin de match (~27 % de nuls)
+      // - Réaction naturelle de l'équipe menée d'un but sans biais Domicile / Extérieur ni Favori / Outsider
       const scoreDiff = home - away;
-      const chaseH = min >= 62 && scoreDiff === -1 ? 1.15 : scoreDiff >= 2 ? 0.86 : 1;
-      const chaseA = min >= 62 && scoreDiff === 1 ? 1.15 : scoreDiff <= -2 ? 0.86 : 1;
+      let tacH = 1.0;
+      let tacA = 1.0;
+
+      if (home === 0 && away === 0) {
+        tacH = 0.97;
+        tacA = 0.97;
+      } else if (home === 1 && away === 0) {
+        tacH = 0.98;
+        tacA = 1.07;
+      } else if (home === 0 && away === 1) {
+        tacH = 1.07;
+        tacA = 0.98;
+      } else if (scoreDiff === 0 && home >= 1 && min >= 66) {
+        tacH = 0.91;
+        tacA = 0.91;
+      } else if (Math.abs(scoreDiff) >= 2 && min >= 70) {
+        tacH = 0.94;
+        tacA = 0.94;
+      }
+
+      // Bouclier dynamique exact sur la grille des scores (tous marchés & combinés)
+      const shield = computeDynamicStepTilts(pressure, home, away, min, baseEffH, baseEffA);
 
       const rateH =
-        lambdaHome *
-        (m.homeForm ?? 1) *
+        baseEffH *
         reg.hMult *
-        chaseH *
-        pressure.homeTilt *
-        pressure.tempoTilt *
+        tacH *
+        shield.hTilt *
         share *
         Math.pow(0.68, redHome) *
         (1 + 0.18 * redAway);
       const rateA =
-        lambdaAway *
-        (m.awayForm ?? 1) *
+        baseEffA *
         reg.aMult *
-        chaseA *
-        pressure.awayTilt *
-        pressure.tempoTilt *
+        tacA *
+        shield.aTilt *
         share *
         Math.pow(0.68, redAway) *
         (1 + 0.18 * redHome);
 
-      const rng = mulberry32(hashString(`live-sim-v3|${m.id}|${m.startsAt.getTime()}|${min}`));
+      const rng = createServerRng(`live-sim-v4|${m.id}|${m.startsAt.getTime()}|${min}`);
       const uHome = rng();
       const uAway = rng();
       const scorerSeed = Math.floor(rng() * 100_000);
@@ -990,7 +1180,7 @@ async function tickLiveMatch(
       }
 
       if (min >= 18 && redHome + redAway < 2 && uRed < 0.0019) {
-        const side = uRedSide < 0.48 ? "home" : "away";
+        const side = uRedSide < 0.5 ? "home" : "away";
         if (side === "home") redHome += 1;
         else redAway += 1;
         events.push({ type: "red_card", team: side, minute: min });
@@ -1045,12 +1235,12 @@ async function tickLiveMatch(
 
   const lastGoalDate = justScoredNow ? new Date(now) : m.lastGoalAt;
   const recentGoal = lastGoalDate != null && now - lastGoalDate.getTime() < GOAL_SUSPEND_MS;
-  const isFinalStoppage = clock.phase === "2H_STOPPAGE";
+  const isLateLock = clock.gameMinute >= 85 || clock.phase === "2H_STOPPAGE";
   const suspended = isOver
     ? false
     : m.source === "manual"
       ? Boolean(m.suspended) || recentGoal
-      : recentGoal || isFinalStoppage;
+      : recentGoal || isLateLock;
 
   let customMarkets = m.markets;
   if (customMarkets && customMarkets.length > 0) {

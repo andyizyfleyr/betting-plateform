@@ -176,9 +176,9 @@ export async function POST(req: NextRequest) {
   >();
   for (const m of matchRows) {
     if (m.status === "live") {
-      if (m.suspended) {
+      if (m.suspended || (m.source === "virtual" && minuteNumber(m.minute) >= 85)) {
         return NextResponse.json(
-          { error: `Marché suspendu sur ${m.homeTeam} – ${m.awayTeam}` },
+          { error: `Marché verrouillé sur ${m.homeTeam} – ${m.awayTeam}` },
           { status: 400 }
         );
       }
@@ -193,6 +193,7 @@ export async function POST(req: NextRequest) {
 
   if (liveInitial.size > 0) {
     await new Promise((r) => setTimeout(r, LIVE_VALIDATION_MS));
+    await runLiveEngine();
     const freshMatches = await db
       .select()
       .from(matches)
@@ -201,7 +202,12 @@ export async function POST(req: NextRequest) {
 
     for (const [mid, init] of liveInitial.entries()) {
       const fm = matchMap.get(mid);
-      if (!fm || fm.status === "finished" || fm.suspended) {
+      if (
+        !fm ||
+        fm.status === "finished" ||
+        fm.suspended ||
+        (fm.source === "virtual" && minuteNumber(fm.minute) >= 85)
+      ) {
         return NextResponse.json(
           { error: "Un match en direct a été suspendu ou terminé pendant la validation" },
           { status: 400 }
@@ -272,6 +278,12 @@ export async function POST(req: NextRequest) {
       if (odds == null || selectionLabel == null) {
         return NextResponse.json(
           { error: `Sélection fermée sur ${m.homeTeam} – ${m.awayTeam}` },
+          { status: 400 }
+        );
+      }
+      if (m.status === "live" && m.source === "virtual" && odds <= 1.04) {
+        return NextResponse.json(
+          { error: `Cote verrouillée sur ${m.homeTeam} – ${m.awayTeam}` },
           { status: 400 }
         );
       }
