@@ -4,10 +4,12 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
 import { publicUser, verifyPassword } from "@/lib/auth";
+import { formatServerErrorResponse } from "@/lib/db-error";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { setAuthCookie, signSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -18,8 +20,6 @@ export async function POST(req: NextRequest) {
       { status: 429 }
     );
   }
-
-  await ensureSeeded();
 
   let body: { email?: string; password?: string };
   try {
@@ -38,27 +38,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [user] = await db
-    .select()
-    .from(appUser)
-    .where(eq(appUser.email, email))
-    .limit(1);
+  try {
+    await ensureSeeded();
 
-  if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
-    return NextResponse.json(
-      { error: "E-mail ou mot de passe incorrect" },
-      { status: 401 }
+    const [user] = await db
+      .select()
+      .from(appUser)
+      .where(eq(appUser.email, email))
+      .limit(1);
+
+    if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
+      return NextResponse.json(
+        { error: "E-mail ou mot de passe incorrect" },
+        { status: 401 }
+      );
+    }
+
+    const res = NextResponse.json({ user: publicUser(user) });
+    setAuthCookie(
+      res,
+      await signSession({
+        sub: user.id,
+        role: user.role ?? "user",
+        tv: user.tokenVersion ?? 0,
+      })
     );
+    return res;
+  } catch (err) {
+    return formatServerErrorResponse(err, "POST /api/auth/login");
   }
-
-  const res = NextResponse.json({ user: publicUser(user) });
-  setAuthCookie(
-    res,
-    await signSession({
-      sub: user.id,
-      role: user.role ?? "user",
-      tv: user.tokenVersion ?? 0,
-    })
-  );
-  return res;
 }

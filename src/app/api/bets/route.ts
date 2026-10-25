@@ -34,10 +34,12 @@ import {
 } from "@/lib/real-sports-feed";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { requireUserId } from "@/lib/session";
-import { syncAllSettlementsThrottled, syncLiveMatchesThrottled } from "@/lib/sync-throttle";
+import { formatServerErrorResponse } from "@/lib/db-error";
+import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /** Anti-triche : limites de mise (€) et intervalle minimal entre deux paris. */
 const MIN_STAKE = 0.5;
@@ -46,13 +48,13 @@ const BET_COOLDOWN_MS = 700;
 const LIVE_VALIDATION_MS = 300;
 
 export async function GET(req: NextRequest) {
-  await ensureSeeded();
-  const auth = await requireUserId(req);
-  if (typeof auth !== "number") return auth;
-  const uid = auth;
+  try {
+    await ensureSeeded();
+    const auth = await requireUserId(req);
+    if (typeof auth !== "number") return auth;
+    const uid = auth;
 
-  await syncLiveMatchesThrottled();
-  await syncAllSettlementsThrottled();
+    await syncLiveMatchesThrottled();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
 
@@ -328,6 +330,9 @@ export async function GET(req: NextRequest) {
         : combined;
 
   return NextResponse.json({ bets: filtered, balance: user?.balance ?? null });
+  } catch (err) {
+    return formatServerErrorResponse(err, "GET /api/bets");
+  }
 }
 
 export async function POST(req: NextRequest) {

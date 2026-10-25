@@ -1166,14 +1166,17 @@ async function fetchMatchSummary(
 ): Promise<ParsedFeedMatch | null> {
   const slug = leagueSlug && leagueSlug.trim() ? leagueSlug.trim() : "all";
   const url = `${ESPN_SOCCER_BASE}/${encodeURIComponent(slug)}/summary?event=${encodeURIComponent(externalId)}`;
-  const json = await fetchJsonSafe(url, 6_000);
+  const t0 = Date.now();
+  const json = await fetchJsonSafe(url, 3_800);
   if (json) {
     const parsed = parseEspnSummaryPayload(json, slug);
     if (parsed) return parsed;
   }
-  if (slug !== "all") {
+  // N'essaie le repli `/all/summary` que si le 1er appel a répondu rapidement (ex. slug 404),
+  // jamais après un timeout réseau pour ne pas cumuler 2 attentes de 4–6 s.
+  if (slug !== "all" && Date.now() - t0 < 2_200) {
     const fallbackUrl = `${ESPN_SOCCER_BASE}/all/summary?event=${encodeURIComponent(externalId)}`;
-    const fallbackJson = await fetchJsonSafe(fallbackUrl, 6_000);
+    const fallbackJson = await fetchJsonSafe(fallbackUrl, 3_200);
     if (fallbackJson) return parseEspnSummaryPayload(fallbackJson, slug);
   }
   return null;
@@ -1253,20 +1256,35 @@ export async function applyFeedUpdateToRealMatch(
     return "postponed";
   }
 
-  // Match toujours à venir : met à jour l'heure exacte du coup d'envoi et les logos si absents
+  // Match toujours à venir : met à jour uniquement si une donnée (ID, horaire > 60s, logo) a changé
+  // ou si l'empreinte de synchro date de plus de 30 min (évite 80+ UPDATE inutiles par cycle).
   if (feed.status === "upcoming") {
-    await db
-      .update(matches)
-      .set({
-        externalId: m.externalId ?? feed.externalId,
-        externalLeague: m.externalLeague ?? feed.externalLeague,
-        startsAt: feed.startsAt,
-        homeLogo: m.homeLogo || feed.homeLogo,
-        awayLogo: m.awayLogo || feed.awayLogo,
-        feedSyncedAt: now,
-        feedStatusNote: "Relié au flux officiel · En attente du coup d'envoi",
-      })
-      .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
+    const nextExtId = m.externalId ?? feed.externalId;
+    const nextExtLeague = m.externalLeague ?? feed.externalLeague;
+    const nextHomeLogo = m.homeLogo || feed.homeLogo;
+    const nextAwayLogo = m.awayLogo || feed.awayLogo;
+    const kickoffChanged = Math.abs(m.startsAt.getTime() - feed.startsAt.getTime()) > 60_000;
+    const metaChanged =
+      m.externalId !== nextExtId ||
+      m.externalLeague !== nextExtLeague ||
+      m.homeLogo !== nextHomeLogo ||
+      m.awayLogo !== nextAwayLogo;
+    const staleStamp = !m.feedSyncedAt || nowMs - m.feedSyncedAt.getTime() >= 30 * 60_000;
+
+    if (kickoffChanged || metaChanged || staleStamp) {
+      await db
+        .update(matches)
+        .set({
+          externalId: nextExtId,
+          externalLeague: nextExtLeague,
+          startsAt: feed.startsAt,
+          homeLogo: nextHomeLogo,
+          awayLogo: nextAwayLogo,
+          feedSyncedAt: now,
+          feedStatusNote: "Relié au flux officiel · En attente du coup d'envoi",
+        })
+        .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
+    }
     return "upcoming";
   }
 
@@ -1487,13 +1505,32 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
         return { ...EMPTY_SYNC_SUMMARY, activeCount: openManual.length };
       }
 
+      // Cible uniquement les matchs actifs, déjà débutés, imminents (< 3h), non reliés
+      // ou non rafraîchis depuis >= 30 min : évite de requêter 14 jours de calendriers
+      // sur 100+ matchs à venir à chaque cycle de 15 s sur Vercel Serverless.
+      const candidatesToSync = openManual.filter(
+        (m) =>
+          force ||
+          m.status === "live" ||
+          m.feedFinishedAt != null ||
+          !m.externalId ||
+          !m.feedSyncedAt ||
+          m.startsAt.getTime() <= nowMs + 3 * 3600_000 ||
+          nowMs - m.feedSyncedAt.getTime() >= 30 * 60_000
+      );
+
+      if (candidatesToSync.length === 0) {
+        lastRealSyncAt = Date.now();
+        return { ...EMPTY_SYNC_SUMMARY, activeCount: openManual.length };
+      }
+
       const settlementMode = await getRealMatchSettlementMode();
 
       // Regroupe uniquement les dates UTC exactes nécessaires par compétition (zéro requête inutile)
       const daysBySlug = new Map<string, Set<string>>();
       const todayYmd = formatYmd(new Date(nowMs));
 
-      for (const m of openManual) {
+      for (const m of candidatesToSync) {
         const slug = m.externalLeague || resolveEspnSlugForLeague(m.league);
         if (!slug) continue;
         let bucket = daysBySlug.get(slug);
@@ -1509,11 +1546,13 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
         }
       }
 
-      const scoreboards = await Promise.all(
-        [...daysBySlug.entries()].map(async ([slug, daySet]) => ({
+      const scoreboards = await mapWithConcurrency(
+        [...daysBySlug.entries()],
+        6,
+        async ([slug, daySet]) => ({
           slug,
           items: await fetchLeagueScoreboardForDays(slug, [...daySet]),
-        }))
+        })
       );
 
       const byExternalId = new Map<string, ParsedFeedMatch>();
@@ -1534,7 +1573,16 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
         pendingConfirmCount: 0,
       };
 
-      for (const m of openManual) {
+      interface ResolvedSyncEntry {
+        m: MatchRow;
+        wasUnlinked: boolean;
+        feedMatch: ParsedFeedMatch | null;
+        extId: string | null;
+        extLeague: string | null;
+        summaryPriority: number; // > 0 si un appel `/summary` enrichit utilement ce match
+      }
+
+      const resolvedEntries: ResolvedSyncEntry[] = candidatesToSync.map((m) => {
         const wasUnlinked = !m.externalId;
         let feedMatch: ParsedFeedMatch | null = m.externalId
           ? (byExternalId.get(m.externalId) ?? null)
@@ -1543,7 +1591,9 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
         // Auto-liaison prudente si le match a été créé manuellement sans `externalId`
         if (!feedMatch && !m.externalId) {
           const slug = m.externalLeague || resolveEspnSlugForLeague(m.league);
-          const candidates = slug ? (bySlugItems.get(slug) ?? [...byExternalId.values()]) : [...byExternalId.values()];
+          const candidates = slug
+            ? (bySlugItems.get(slug) ?? [...byExternalId.values()])
+            : [...byExternalId.values()];
           const hit = candidates.find(
             (cand) =>
               Math.abs(cand.startsAt.getTime() - m.startsAt.getTime()) <= 48 * 3600_000 &&
@@ -1553,9 +1603,7 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
           if (hit) feedMatch = hit;
         }
 
-        // Enrichit via `summary?event=<id>` si le match est absent du scoreboard du jour
-        // ou s'il est en direct / terminé (pour récupérer le boxscore complet)
-        const extId = feedMatch?.externalId ?? m.externalId;
+        const extId = feedMatch?.externalId ?? m.externalId ?? null;
         const extLeague =
           feedMatch?.externalLeague ?? m.externalLeague ?? resolveEspnSlugForLeague(m.league);
         const lastSum = extId ? (lastSummaryFetchByExtId.get(extId) ?? 0) : 0;
@@ -1566,30 +1614,64 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
           feedMatch!.htHomeScore == null &&
           m.htHomeScore == null;
 
-        const shouldEnrichSummary =
-          Boolean(extId) &&
-          (!feedMatch ||
-            needsUrgentHtSummary ||
-            ((feedMatch.status === "live" || feedMatch.status === "finished") &&
-              (force || nowMs - lastSum >= SUMMARY_FETCH_INTERVAL_MS)));
-
-        if (extId && shouldEnrichSummary) {
-          lastSummaryFetchByExtId.set(extId, nowMs);
-          const rich = await fetchMatchSummary(extId, extLeague);
-          if (rich) {
-            feedMatch = rich;
+        let summaryPriority = 0;
+        if (extId) {
+          if (needsUrgentHtSummary) {
+            summaryPriority = 4;
+          } else if (
+            feedMatch?.status === "live" &&
+            (force || nowMs - lastSum >= SUMMARY_FETCH_INTERVAL_MS)
+          ) {
+            summaryPriority = 3;
+          } else if (!feedMatch && m.startsAt.getTime() <= nowMs + 2 * 3600_000) {
+            summaryPriority = 2;
+          } else if (
+            feedMatch?.status === "finished" &&
+            (m.realStats == null || m.htHomeScore == null) &&
+            (force || nowMs - lastSum >= SUMMARY_FETCH_INTERVAL_MS)
+          ) {
+            summaryPriority = 1;
           }
         }
 
-        if (feedMatch) {
-          const outcome = await applyFeedUpdateToRealMatch(m, feedMatch, settlementMode, Date.now());
-          if (outcome !== "ignored") {
-            summary.syncedCount += 1;
-            if (wasUnlinked) summary.linkedCount += 1;
-            if (outcome === "live") summary.liveCount += 1;
-            if (outcome === "settled") summary.settledCount += 1;
-            if (outcome === "pending_confirm") summary.pendingConfirmCount += 1;
-          }
+        return { m, wasUnlinked, feedMatch, extId, extLeague, summaryPriority };
+      });
+
+      // Enrichissement `/summary` en parallèle borné (max 10 par cycle) au lieu d'une boucle
+      // séquentielle bloquante lorsque 20–30 matchs du dimanche soir se terminent ensemble.
+      const MAX_SUMMARY_ENRICH_PER_SYNC = 10;
+      const toEnrich = resolvedEntries
+        .filter((e) => e.summaryPriority > 0 && e.extId)
+        .sort((a, b) => b.summaryPriority - a.summaryPriority)
+        .slice(0, MAX_SUMMARY_ENRICH_PER_SYNC);
+
+      await mapWithConcurrency(toEnrich, 6, async (entry) => {
+        if (!entry.extId) return;
+        lastSummaryFetchByExtId.set(entry.extId, nowMs);
+        const rich = await fetchMatchSummary(entry.extId, entry.extLeague);
+        if (rich) {
+          entry.feedMatch = rich;
+        }
+      });
+
+      const entriesWithFeed = resolvedEntries.filter((e) => e.feedMatch !== null);
+      const outcomes = await mapWithConcurrency(entriesWithFeed, 6, async (entry) => {
+        const outcome = await applyFeedUpdateToRealMatch(
+          entry.m,
+          entry.feedMatch!,
+          settlementMode,
+          Date.now()
+        );
+        return { outcome, wasUnlinked: entry.wasUnlinked };
+      });
+
+      for (const { outcome, wasUnlinked } of outcomes) {
+        if (outcome !== "ignored") {
+          summary.syncedCount += 1;
+          if (wasUnlinked) summary.linkedCount += 1;
+          if (outcome === "live") summary.liveCount += 1;
+          if (outcome === "settled") summary.settledCount += 1;
+          if (outcome === "pending_confirm") summary.pendingConfirmCount += 1;
         }
       }
 

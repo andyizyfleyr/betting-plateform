@@ -257,15 +257,22 @@ export async function settleFinishedBets() {
   await settlePendingCombos();
 }
 
-/** Règle les paris « pending » d'un match précis (après clôture manuelle par l'admin). */
-export async function settleMatchBets(matchId: number) {
+/** Règle les paris « pending » d'un match précis (après clôture manuelle par l'admin ou fin live). */
+export async function settleMatchBets(
+  matchId: number,
+  opts?: { skipCombos?: boolean }
+) {
   const rows = await db
     .select({ bet: bets, match: matches })
     .from(bets)
     .leftJoin(matches, eq(bets.matchId, matches.id))
     .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
-  await settleRows(rows);
-  await settlePendingCombos();
+  if (rows.length > 0) {
+    await settleRows(rows);
+  }
+  if (!opts?.skipCombos) {
+    await settlePendingCombos();
+  }
 }
 
 /** Rembourse intégralement (void) tous les paris simples et sélections combinées d'un match annulé/reporté. */

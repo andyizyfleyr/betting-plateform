@@ -7,6 +7,7 @@ import { retrainAllMlModels } from "@/lib/ml-engine";
 import { syncPlatformStateThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * Point d'entrée autonome pour Vercel Cron ou tout moniteur externe (UptimeRobot, etc.).

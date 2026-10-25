@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, Clock, ListChecks, Search, TrendingUp, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, ListChecks, RefreshCw, Search, TrendingUp, X } from "lucide-react";
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
@@ -39,6 +39,8 @@ function formatResolves(iso: string, nowMs: number) {
 export default function PredictionsPage() {
   const { comboQuickMode, toggleComboLeg, toast } = useApp();
   const [questions, setQuestions] = useState<ClientPrediction[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [statusTab, setStatusTab] = useState<StatusTab>("open");
   const [category, setCategory] = useState<Category>("Tous");
@@ -59,15 +61,23 @@ export default function PredictionsPage() {
           const r = await api.predictions();
           if (cancelled) return;
           setQuestions(r.questions);
+          setLoadError(null);
           setNowMs(Date.now());
           return;
-        } catch {
+        } catch (err) {
           if (cancelled) return;
           if (attempt < MAX_RETRIES) {
             await new Promise((r) => setTimeout(r, RETRY_DELAY * (attempt + 1)));
             continue;
           }
-          if (!isBackground && !cancelled) setQuestions([]);
+          if (!isBackground && !cancelled) {
+            setLoadError(
+              err instanceof Error
+                ? err.message
+                : "Impossible de charger les prédictions pour le moment."
+            );
+            setQuestions((prev) => prev ?? []);
+          }
         }
       }
     }
@@ -83,7 +93,7 @@ export default function PredictionsPage() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, []);
+  }, [reloadNonce]);
 
   const searchedQuestions = useMemo(() => {
     const all = questions ?? [];
@@ -303,6 +313,30 @@ export default function PredictionsPage() {
           {[0, 1, 2].map((i) => (
             <div key={i} className="shimmer h-[168px] rounded-2xl" />
           ))}
+        </div>
+      ) : loadError && (questions?.length ?? 0) === 0 ? (
+        <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
+          <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
+            <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
+          </div>
+          <p className="mt-3 font-display text-[15px] font-bold text-ink">
+            Connexion au serveur interrompue
+          </p>
+          <p className="mt-1 max-w-[330px] text-[12.5px] leading-relaxed text-mist">
+            {loadError}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setQuestions(null);
+              setLoadError(null);
+              setReloadNonce((n) => n + 1);
+            }}
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
+          >
+            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
+            Réessayer
+          </button>
         </div>
       ) : visibleQuestions.length === 0 ? (
         <div className="mt-12 flex flex-col items-center text-center">

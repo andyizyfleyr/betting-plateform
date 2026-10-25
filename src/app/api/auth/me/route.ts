@@ -4,24 +4,34 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
-import { getAuthUserId } from "@/lib/session";
+import { formatServerErrorResponse } from "@/lib/db-error";
+import { clearAuthCookie, getAuthUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  await ensureSeeded();
-  await syncAllSettlementsThrottled();
+  try {
+    await ensureSeeded();
+    await syncAllSettlementsThrottled();
 
-  const uid = await getAuthUserId(req);
-  if (!uid) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    const uid = await getAuthUserId(req);
+    if (!uid) {
+      const res = NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+      clearAuthCookie(res);
+      return res;
+    }
+
+    const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
+    if (!user) {
+      const res = NextResponse.json({ error: "Compte introuvable" }, { status: 401 });
+      clearAuthCookie(res);
+      return res;
+    }
+
+    return NextResponse.json({ user: publicUser(user) });
+  } catch (err) {
+    return formatServerErrorResponse(err, "GET /api/auth/me");
   }
-
-  const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
-  if (!user) {
-    return NextResponse.json({ error: "Compte introuvable" }, { status: 401 });
-  }
-
-  return NextResponse.json({ user: publicUser(user) });
 }
