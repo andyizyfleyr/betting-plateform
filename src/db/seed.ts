@@ -34,6 +34,8 @@ export async function ensureSeeded(): Promise<void> {
 async function runSeedInternal(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
   `);
 
   await db.execute(sql`
@@ -45,6 +47,7 @@ async function runSeedInternal(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "closing_odds" double precision;
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "risk_flag" text;
+    ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
   `);
 
   await db.execute(sql`DROP TABLE IF EXISTS "sim_state";`);
@@ -133,6 +136,7 @@ async function runSeedInternal(): Promise<void> {
 
   await db.execute(sql`
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
+    ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
   `);
 
   await db.execute(sql`
@@ -147,8 +151,10 @@ async function runSeedInternal(): Promise<void> {
       "potential_win" double precision NOT NULL,
       "status" text DEFAULT 'pending' NOT NULL,
       "cash_out_amount" double precision,
-      "placed_at" timestamp DEFAULT now() NOT NULL
+      "placed_at" timestamp DEFAULT now() NOT NULL,
+      "settled_at" timestamp
     );
+    ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
   `);
 
   await db.execute(sql`
@@ -162,6 +168,16 @@ async function runSeedInternal(): Promise<void> {
       "admin_note" text,
       "created_at" timestamp DEFAULT now() NOT NULL,
       "processed_at" timestamp
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "wallet_adjustments" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer NOT NULL,
+      "amount" double precision NOT NULL,
+      "reason" text NOT NULL,
+      "created_at" timestamp DEFAULT now() NOT NULL
     );
   `);
 

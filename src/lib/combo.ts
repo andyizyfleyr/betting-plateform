@@ -114,7 +114,7 @@ export async function settlePendingCombos(): Promise<void> {
       settledAny = true;
       await db
         .update(comboBets)
-        .set({ legs: nextLegs, status: "lost" })
+        .set({ legs: nextLegs, status: "lost", settledAt: new Date() })
         .where(eq(comboBets.id, cb.id));
       continue;
     }
@@ -138,6 +138,7 @@ export async function settlePendingCombos(): Promise<void> {
             legs: nextLegs,
             status: "won",
             potentialWin: payout,
+            settledAt: new Date(),
           })
           .where(sql`${comboBets.id} = ${cb.id} AND ${comboBets.status} = 'pending'`)
           .returning({ id: comboBets.id });

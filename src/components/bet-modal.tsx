@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Layers, Loader2, Lock, Plus, Ticket, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { useApp, type BetTarget } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { AnimatedNumber } from "./animated-number";
@@ -53,6 +54,7 @@ function BetModalSheet({
     openRecharge,
     comboLegs,
     toggleComboLeg,
+    user,
   } = useApp();
   const dragControls = useDragControls();
 
@@ -208,6 +210,8 @@ function BetModalSheet({
       });
       setBalance(res.balance);
       bumpBets();
+      playUiSound(user?.sound, "bet");
+      triggerHaptic(user?.haptics, [18, 28]);
       setPlaced({
         id: res.bet.id,
         potentialWin: res.bet.potentialWin,

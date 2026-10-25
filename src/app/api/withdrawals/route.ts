@@ -3,14 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { appUser, withdrawals } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
+import { computeWithdrawalEligibility } from "@/lib/wager";
 
 export const dynamic = "force-dynamic";
 
 const MIN_WITHDRAWAL = 10;
 const MAX_WITHDRAWAL = 5_000;
 const MAX_PENDING_WITHDRAWALS = 3;
-const ALLOWED_METHODS = new Set(["iban", "paypal", "card"]);
+const ALLOWED_METHODS = new Set(["iban", "paypal", "card", "mobile_money"]);
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -18,21 +19,28 @@ function round2(n: number): number {
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
-  const rows = await db
-    .select()
-    .from(withdrawals)
-    .where(eq(withdrawals.userId, uid))
-    .orderBy(desc(withdrawals.createdAt))
-    .limit(50);
+  const [rows, eligibility] = await Promise.all([
+    db
+      .select()
+      .from(withdrawals)
+      .where(eq(withdrawals.userId, uid))
+      .orderBy(desc(withdrawals.createdAt))
+      .limit(50),
+    computeWithdrawalEligibility(uid),
+  ]);
 
-  return NextResponse.json({ withdrawals: rows });
+  return NextResponse.json({ withdrawals: rows, eligibility });
 }
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
   let body: { method?: string; destination?: string; amount?: number };
   try {
@@ -57,6 +65,20 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(amount) || amount < MIN_WITHDRAWAL || amount > MAX_WITHDRAWAL) {
     return NextResponse.json(
       { error: `Montant de retrait compris entre ${MIN_WITHDRAWAL} € et ${MAX_WITHDRAWAL} €` },
+      { status: 400 }
+    );
+  }
+
+  // Vérification anti-abus sur le bonus d'inscription (exigence de mise 1× à cote ≥ 1,30)
+  const eligibility = await computeWithdrawalEligibility(uid);
+  if (amount > eligibility.balance) {
+    return NextResponse.json({ error: "Solde disponible insuffisant" }, { status: 400 });
+  }
+  if (amount > eligibility.withdrawable) {
+    return NextResponse.json(
+      {
+        error: `Bonus d'inscription soumis à mise 1× (cote ≥ 1,30). Il vous reste ${eligibility.bonusRemaining.toFixed(2)} € à miser. Solde retirable immédiatement : ${eligibility.withdrawable.toFixed(2)} €`,
+      },
       { status: 400 }
     );
   }
@@ -93,7 +115,7 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
-    return { withdrawal: created, balance: debited.balance };
+    return { balance: debited.balance, withdrawal: created };
   });
 
   if (!txResult) {
@@ -103,10 +125,12 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(txResult);
 }
 
-/** Annulation par le joueur d'une demande de retrait encore en attente → remboursement immédiat. */
+/** Annulation par le joueur d'un retrait encore « pending » : recrédit immédiat et atomique. */
 export async function PATCH(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
   let body: { withdrawalId?: number };
   try {
@@ -117,11 +141,11 @@ export async function PATCH(req: NextRequest) {
 
   const wid = Number(body.withdrawalId);
   if (!wid) {
-    return NextResponse.json({ error: "Retrait introuvable" }, { status: 400 });
+    return NextResponse.json({ error: "Identifiant de retrait manquant" }, { status: 400 });
   }
 
-  const txResult = await db.transaction(async (tx) => {
-    const [cancelled] = await tx
+  const result = await db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(withdrawals)
       .set({ status: "cancelled", processedAt: new Date() })
       .where(
@@ -133,25 +157,25 @@ export async function PATCH(req: NextRequest) {
       )
       .returning();
 
-    if (!cancelled) return null;
+    if (!updated) return null;
 
-    const [refundedUser] = await tx
+    const [user] = await tx
       .update(appUser)
       .set({
-        balance: sql`ROUND((${appUser.balance} + ${round2(cancelled.amount)})::numeric, 2)::float8`,
+        balance: sql`ROUND((${appUser.balance} + ${round2(updated.amount)})::numeric, 2)::float8`,
       })
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });
 
-    return { withdrawal: cancelled, balance: refundedUser.balance };
+    return { balance: user.balance, withdrawal: updated };
   });
 
-  if (!txResult) {
+  if (!result) {
     return NextResponse.json(
-      { error: "Ce retrait a déjà été traité ou annulé" },
+      { error: "Ce retrait ne peut plus être annulé (déjà traité)" },
       { status: 400 }
     );
   }
 
-  return NextResponse.json(txResult);
+  return NextResponse.json(result);
 }

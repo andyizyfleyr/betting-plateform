@@ -63,6 +63,7 @@ async function settleRows(
       .update(bets)
       .set({
         status: voided ? "won" : won ? "won" : "lost",
+        settledAt: new Date(),
         ...(closingOdds != null ? { closingOdds } : {}),
       })
       .where(eq(bets.id, bet.id));

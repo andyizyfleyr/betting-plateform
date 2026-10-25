@@ -1,15 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUpRight, Building2, CreditCard, Loader2, Wallet, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  Building2,
+  CreditCard,
+  Loader2,
+  Lock,
+  Smartphone,
+  Wallet,
+  X,
+} from "lucide-react";
 import { api } from "@/lib/api";
+import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { useApp } from "./providers";
 import { cn, eur } from "@/lib/format";
 
 const QUICK_AMOUNTS = [20, 50, 100];
 
 const METHODS = [
+  {
+    id: "mobile_money",
+    label: "Mobile Money",
+    placeholder: "MTN / Moov / Orange · +229 01 …",
+    hint: "Opérateur + numéro Mobile Money",
+    Icon: Smartphone,
+  },
   {
     id: "iban",
     label: "Virement SEPA",
@@ -26,7 +43,7 @@ const METHODS = [
   },
   {
     id: "card",
-    label: "Carte bancaire",
+    label: "Carte",
     placeholder: "Visa / Mastercard •••• 4242",
     hint: "4 derniers chiffres ou réf. carte",
     Icon: CreditCard,
@@ -42,25 +59,58 @@ export function WithdrawModal({
   onClose: () => void;
   onSuccess?: () => void;
 }) {
-  const { balance, setBalance, toast } = useApp();
-  const [method, setMethod] = useState<(typeof METHODS)[number]["id"]>("iban");
+  const { balance, setBalance, toast, user } = useApp();
+  const [method, setMethod] = useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
   const [amountText, setAmountText] = useState("20");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [eligibility, setEligibility] = useState<{
+    withdrawable: number;
+    bonusLocked: number;
+    qualifiedWagered: number;
+    bonusRemaining: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    api
+      .wallet()
+      .then((w) => {
+        if (!active) return;
+        setEligibility({
+          withdrawable: w.summary.withdrawable ?? w.balance,
+          bonusLocked: w.summary.bonusLocked ?? 0,
+          qualifiedWagered: w.summary.qualifiedWagered ?? 0,
+          bonusRemaining: w.summary.bonusRemaining ?? 0,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [open]);
 
   if (!open) return null;
+
+  const withdrawable = eligibility ? eligibility.withdrawable : balance;
+  const bonusRemaining = eligibility?.bonusRemaining ?? 0;
+  const bonusLocked = eligibility?.bonusLocked ?? 0;
+  const qualifiedWagered = eligibility?.qualifiedWagered ?? 0;
+  const progressPct =
+    bonusLocked > 0 ? Math.min(100, Math.round((qualifiedWagered / bonusLocked) * 100)) : 100;
 
   const currentMethod = METHODS.find((m) => m.id === method) ?? METHODS[0];
   const parsed = Number(amountText.replace(",", "."));
   const amount = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = amount > balance;
+  const overWithdrawable = amount > withdrawable;
   const belowMin = amount > 0 && amount < 10;
 
   const canSubmit =
     !loading &&
     amount >= 10 &&
-    !overBalance &&
+    !overWithdrawable &&
     destination.trim().length >= 4;
 
   const submit = async (e: React.FormEvent) => {
@@ -75,6 +125,8 @@ export function WithdrawModal({
         amount,
       });
       setBalance(res.balance);
+      playUiSound(user?.sound, "bet");
+      triggerHaptic(user?.haptics, [18, 28]);
       toast({
         kind: "success",
         title: "Demande de retrait enregistrée",
@@ -112,7 +164,10 @@ export function WithdrawModal({
             <div>
               <h2 className="font-display text-[17px] font-bold text-ink">Retirer mes gains</h2>
               <p className="text-[11.5px] text-dim">
-                Solde disponible : <strong className="text-ink">{eur(balance)}</strong>
+                Solde retirable : <strong className="text-win">{eur(withdrawable)}</strong>
+                {withdrawable < balance && (
+                  <span className="text-dim"> (total {eur(balance)})</span>
+                )}
               </p>
             </div>
             <button
@@ -126,8 +181,32 @@ export function WithdrawModal({
           </div>
 
           <form onSubmit={submit} className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3.5">
+            {bonusRemaining > 0 && (
+              <div className="mb-3.5 rounded-2xl border border-amber-500/25 bg-amber-500/8 p-3">
+                <div className="flex items-center justify-between gap-2 text-[11.5px]">
+                  <span className="inline-flex items-center gap-1 font-display font-bold text-amber-900">
+                    <Lock className="h-3.5 w-3.5 text-amber-700" strokeWidth={2.3} />
+                    Déblocage du bonus de bienvenue
+                  </span>
+                  <span className="font-display font-bold tabular-nums text-amber-900">
+                    {progressPct}%
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-amber-950/10">
+                  <div
+                    className="h-full rounded-full bg-amber-600 transition-all"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-amber-900/85">
+                  Misez encore <strong>{eur(bonusRemaining)}</strong> sur des paris réglés à cote{" "}
+                  <strong>≥ 1,30</strong> pour rendre l&apos;intégralité du bonus retirable.
+                </p>
+              </div>
+            )}
+
             <label className="text-[11.5px] font-semibold text-mist">Mode de réception</label>
-            <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
               {METHODS.map((m) => {
                 const active = method === m.id;
                 const Icon = m.Icon;
@@ -140,14 +219,14 @@ export function WithdrawModal({
                       setError(null);
                     }}
                     className={cn(
-                      "flex flex-col items-center gap-1 rounded-2xl border p-2.5 text-center transition-colors",
+                      "flex items-center gap-2 rounded-2xl border p-2.5 text-left transition-colors",
                       active
                         ? "border-betclic-red bg-betclic-red/8 text-betclic-red"
                         : "border-edge bg-white text-mist"
                     )}
                   >
-                    <Icon className="h-4 w-4" strokeWidth={2.1} />
-                    <span className="font-display text-[11px] font-bold leading-tight">
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2.1} />
+                    <span className="truncate font-display text-[11.5px] font-bold leading-tight">
                       {m.label}
                     </span>
                   </button>
@@ -170,13 +249,15 @@ export function WithdrawModal({
             </div>
 
             <div className="mt-3.5">
-              <div className="flex items-center justify-between text-[11.5px]">
-                <label className="font-semibold text-mist">Montant à retirer (min. 10 €)</label>
-              </div>
+              <label className="text-[11.5px] font-semibold text-mist">
+                Montant à retirer (min. 10 €)
+              </label>
               <div
                 className={cn(
                   "mt-1.5 flex h-12 items-center rounded-2xl border bg-white px-3.5",
-                  overBalance || belowMin ? "border-betclic-red" : "border-edge focus-within:border-ink"
+                  overWithdrawable || belowMin
+                    ? "border-betclic-red"
+                    : "border-edge focus-within:border-ink"
                 )}
               >
                 <input
@@ -215,12 +296,12 @@ export function WithdrawModal({
                 <button
                   type="button"
                   onClick={() => {
-                    setAmountText(String(Math.max(0, Math.floor(balance * 100) / 100)));
+                    setAmountText(String(Math.max(0, Math.floor(withdrawable * 100) / 100)));
                     setError(null);
                   }}
                   className="h-8 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
                 >
-                  TOUT
+                  MAX
                 </button>
               </div>
             </div>
@@ -230,9 +311,11 @@ export function WithdrawModal({
                 Montant minimum de retrait : 10,00 €
               </p>
             )}
-            {overBalance && (
+            {overWithdrawable && (
               <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
-                Ce montant dépasse votre solde disponible.
+                {amount <= balance
+                  ? `Montant supérieur à votre solde retirable (${eur(withdrawable)}).`
+                  : "Ce montant dépasse votre solde disponible."}
               </p>
             )}
             {error && (
@@ -241,16 +324,11 @@ export function WithdrawModal({
               </p>
             )}
 
-            <p className="mt-3 rounded-xl bg-elev px-3 py-2 text-[11px] leading-relaxed text-mist">
-              Le montant est immédiatement réservé sur votre compte. Vous pouvez annuler votre
-              demande en un clic tant qu&apos;elle est en attente de validation.
-            </p>
-
             <button
               type="submit"
               disabled={!canSubmit}
               className={cn(
-                "mt-3.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14px] font-bold transition-all",
+                "mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14px] font-bold transition-all",
                 canSubmit ? "bg-betclic-red text-white shadow-sm" : "bg-elev text-dim"
               )}
             >

@@ -16,15 +16,17 @@ import {
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 /** Encaisse un pari en cours (sportif, prédiction ou combiné). */
 export async function POST(req: NextRequest) {
   await ensureSeeded();
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
   await runLiveEngine();
-  const uid = (await getAuthUserId(req)) ?? 1;
 
   let body: { betId?: number; kind?: "sport" | "prediction" | "combo" };
   try {
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
     const balance = await db.transaction(async (tx) => {
       const [u] = await tx
         .update(comboBets)
-        .set({ status: "cashed", cashOutAmount: value })
+        .set({ status: "cashed", cashOutAmount: value, settledAt: new Date() })
         .where(and(eq(comboBets.id, cb.id), eq(comboBets.status, "pending")))
         .returning({ id: comboBets.id });
       if (!u) return null;
@@ -157,7 +159,7 @@ export async function POST(req: NextRequest) {
         const balance = await db.transaction(async (tx) => {
           const [u] = await tx
             .update(bets)
-            .set({ status: "cashed", cashOutAmount: value })
+            .set({ status: "cashed", cashOutAmount: value, settledAt: new Date() })
             .where(and(eq(bets.id, bet.id), eq(bets.status, "pending")))
             .returning({ id: bets.id });
           if (!u) return null;
@@ -215,7 +217,7 @@ export async function POST(req: NextRequest) {
     const balance = await db.transaction(async (tx) => {
       const [u] = await tx
         .update(predictionBets)
-        .set({ status: "cashed", cashOutAmount: value })
+        .set({ status: "cashed", cashOutAmount: value, settledAt: new Date() })
         .where(and(eq(predictionBets.id, bet.id), eq(predictionBets.status, "pending")))
         .returning({ id: predictionBets.id });
       if (!u) return null;

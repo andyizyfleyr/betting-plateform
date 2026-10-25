@@ -141,7 +141,7 @@ export async function settleQuestion(questionId: number, resolution: string) {
         const payout = round2(b.stake * b.odds);
         await tx
           .update(predictionBets)
-          .set({ status: "won", potentialWin: payout })
+          .set({ status: "won", potentialWin: payout, settledAt: new Date() })
           .where(eq(predictionBets.id, b.id));
         await tx
           .update(appUser)
@@ -150,7 +150,7 @@ export async function settleQuestion(questionId: number, resolution: string) {
       } else {
         await tx
           .update(predictionBets)
-          .set({ status: "lost" })
+          .set({ status: "lost", settledAt: new Date() })
           .where(eq(predictionBets.id, b.id));
       }
     }

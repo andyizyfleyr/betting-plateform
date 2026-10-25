@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
 import { hashPassword, publicUser } from "@/lib/auth";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { setAuthCookie, signSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,15 @@ export const dynamic = "force-dynamic";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(`register:${ip}`, 4, 15 * 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: `Trop de créations de compte récentes. Réessayez dans ${rl.retryAfterSec}s.` },
+      { status: 429 }
+    );
+  }
+
   await ensureSeeded();
 
   let body: { name?: string; email?: string; password?: string };
@@ -49,6 +59,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Le bonus d'inscription de 250 € est crédité immédiatement pour jouer,
+  // mais verrouillé au retrait tant qu'il n'a pas été misé 1× à cote ≥ 1,30.
   const [user] = await db
     .insert(appUser)
     .values({
@@ -56,10 +68,19 @@ export async function POST(req: NextRequest) {
       email,
       passwordHash: hashPassword(password),
       balance: 250,
+      bonusLocked: 250,
+      tokenVersion: 0,
     })
     .returning();
 
   const res = NextResponse.json({ user: publicUser(user) });
-  setAuthCookie(res, await signSession({ sub: user.id, role: user.role ?? "user" }));
+  setAuthCookie(
+    res,
+    await signSession({
+      sub: user.id,
+      role: user.role ?? "user",
+      tv: user.tokenVersion ?? 0,
+    })
+  );
   return res;
 }

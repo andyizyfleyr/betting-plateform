@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ChevronDown, Lock, Radio, X } from "lucide-react";
+import { ChevronDown, Layers, Lock, Radio, X } from "lucide-react";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
@@ -45,7 +45,21 @@ function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
 }
 
 export function MarketSheet() {
-  const { marketMatch, closeMarkets, openBet, oddsFormat, target } = useApp();
+  const {
+    marketMatch,
+    closeMarkets,
+    openBet,
+    oddsFormat,
+    target,
+    feedMatches,
+    comboLegs,
+    comboQuickMode,
+    setComboQuickMode,
+    toggleComboLeg,
+    isInCombo,
+    openCombo,
+    toast,
+  } = useApp();
   const dragControls = useDragControls();
   const [category, setCategory] = useState<SheetCategory>("all");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
@@ -53,11 +67,18 @@ export function MarketSheet() {
   const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
   const [showTracker, setShowTracker] = useState(false);
 
-  const match =
-    liveMatch && marketMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
+  const sharedFromFeed = useMemo(
+    () => (marketMatch && feedMatches ? feedMatches.find((m) => m.id === marketMatch.id) ?? null : null),
+    [marketMatch, feedMatches]
+  );
 
+  const match =
+    sharedFromFeed ??
+    (liveMatch && marketMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch);
+
+  // Ne lance un polling autonome que si MarketSheet est ouvert hors de la page /matchs
   useEffect(() => {
-    if (!marketMatch) return;
+    if (!marketMatch || sharedFromFeed) return;
     let active = true;
     const poll = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -76,7 +97,7 @@ export function MarketSheet() {
       active = false;
       clearInterval(id);
     };
-  }, [marketMatch]);
+  }, [marketMatch, sharedFromFeed]);
 
   if (match && match.id !== prevMatchId) {
     setPrevMatchId(match.id);
@@ -160,6 +181,31 @@ export function MarketSheet() {
                     <span className="truncate font-semibold">{match.league}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => setComboQuickMode(!comboQuickMode)}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-bold transition-colors",
+                        comboQuickMode ? "bg-ink text-white" : "bg-elev text-mist"
+                      )}
+                    >
+                      <Layers className="h-3 w-3 text-betclic-red" strokeWidth={2.4} />
+                      Combiné{comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}
+                    </button>
+                    {comboLegs.length >= 2 && (
+                      <button
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => {
+                          closeMarkets();
+                          openCombo();
+                        }}
+                        className="h-7 rounded-full bg-betclic-red px-2.5 font-display text-[10.5px] font-bold text-white"
+                      >
+                        Valider
+                      </button>
+                    )}
                     {isLive && (
                       <button
                         type="button"
@@ -171,7 +217,7 @@ export function MarketSheet() {
                         )}
                       >
                         <Radio className="h-3 w-3" strokeWidth={2.4} />
-                        Terrain 2D
+                        2D
                       </button>
                     )}
                     <button
@@ -306,6 +352,10 @@ export function MarketSheet() {
                   {filteredGroups.map((g) => {
                     const isOpen =
                       category !== "all" ? (openMap[g.key] ?? true) : Boolean(openMap[g.key]);
+                    const comboSelectedKey =
+                      comboLegs.find(
+                        (l) => l.uid === `sport-${match.id}` && l.market === g.key
+                      )?.selection ?? null;
                     return (
                       <AccordionItem
                         key={g.key}
@@ -319,6 +369,7 @@ export function MarketSheet() {
                             ? target.selection
                             : null
                         }
+                        comboSelectedKey={comboSelectedKey}
                         onToggle={() =>
                           setOpenMap((prev) => ({
                             ...prev,
@@ -327,7 +378,27 @@ export function MarketSheet() {
                               : Boolean(prev[g.key])),
                           }))
                         }
-                        onPick={(outcome) =>
+                        onPick={(outcome) => {
+                          if (comboQuickMode) {
+                            const res = toggleComboLeg({
+                              uid: `sport-${match.id}`,
+                              kind: "sport",
+                              matchId: match.id,
+                              title: `${match.homeTeam} – ${match.awayTeam}`,
+                              league: match.league,
+                              market: g.key,
+                              selection: outcome.key,
+                              selectionLabel: outcome.label,
+                              odds: outcome.odds,
+                            });
+                            if (res === "full") {
+                              toast({
+                                kind: "error",
+                                title: "Combiné complet (8 sélections max)",
+                              });
+                            }
+                            return;
+                          }
                           openBet({
                             match,
                             selection: outcome.key,
@@ -335,8 +406,8 @@ export function MarketSheet() {
                             label: outcome.label,
                             market: g.key,
                             marketLabel: g.label,
-                          })
-                        }
+                          });
+                        }}
                       />
                     );
                   })}
@@ -357,6 +428,7 @@ function AccordionItem({
   open,
   oddsFormat,
   selectedKey,
+  comboSelectedKey,
   onToggle,
   onPick,
 }: {
@@ -366,6 +438,7 @@ function AccordionItem({
   open: boolean;
   oddsFormat: "decimal" | "fractional";
   selectedKey: string | null;
+  comboSelectedKey: string | null;
   onToggle: () => void;
   onPick: (o: MarketOutcome) => void;
 }) {
@@ -419,6 +492,7 @@ function AccordionItem({
                       isLive={isLive}
                       suspended={suspended}
                       selected={selectedKey === o.key}
+                      inCombo={comboSelectedKey === o.key}
                       oddsFormat={oddsFormat}
                       onPick={() => onPick(o)}
                     />
@@ -435,6 +509,7 @@ function AccordionItem({
                   isLive={isLive}
                   suspended={suspended}
                   selected={selectedKey === o.key}
+                  inCombo={comboSelectedKey === o.key}
                   oddsFormat={oddsFormat}
                   className={o.key === "other" ? "col-span-3" : undefined}
                   onPick={() => onPick(o)}
@@ -457,6 +532,7 @@ function AccordionItem({
                     isLive={isLive}
                     suspended={suspended}
                     selected={selectedKey === o.key}
+                    inCombo={comboSelectedKey === o.key}
                     oddsFormat={oddsFormat}
                     className={spanFull ? "col-span-2" : undefined}
                     onPick={() => onPick(o)}
@@ -476,6 +552,7 @@ function OutcomeCell({
   isLive,
   suspended,
   selected,
+  inCombo,
   oddsFormat,
   className,
   onPick,
@@ -484,10 +561,12 @@ function OutcomeCell({
   isLive: boolean;
   suspended: boolean;
   selected?: boolean;
+  inCombo?: boolean;
   oddsFormat: "decimal" | "fractional";
   className?: string;
   onPick: () => void;
 }) {
+  const active = selected || inCombo;
   return (
     <button
       type="button"
@@ -497,7 +576,9 @@ function OutcomeCell({
         "flex h-11 items-center justify-between gap-2 rounded-xl border px-3 transition-all active:scale-[0.98]",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
-          : "border-edge bg-elev/65 active:border-betclic-red/50 active:bg-betclic-red/8",
+          : inCombo
+            ? "border-ink bg-ink text-white shadow-xs ring-2 ring-betclic-red/35"
+            : "border-edge bg-elev/65 active:border-betclic-red/50 active:bg-betclic-red/8",
         suspended && "cursor-not-allowed opacity-50",
         className
       )}
@@ -505,7 +586,7 @@ function OutcomeCell({
       <span
         className={cn(
           "truncate text-[12px] font-semibold",
-          selected ? "text-white/90" : "text-mist"
+          active ? "text-white/90" : "text-mist"
         )}
       >
         {o.short}
@@ -516,7 +597,7 @@ function OutcomeCell({
         <span
           className={cn(
             "shrink-0 font-display text-[13.5px] font-bold tabular-nums",
-            selected ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
+            active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
           )}
         >
           {formatOdds(o.odds, oddsFormat)}

@@ -4,21 +4,23 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
-  const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const [user] = await db.select().from(appUser).where(eq(appUser.id, auth));
   if (!user) return NextResponse.json({ user: null }, { status: 404 });
   return NextResponse.json({ user: publicUser(user) });
 }
 
 export async function PATCH(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
 
   let body: Record<string, unknown>;
   try {
@@ -44,7 +46,7 @@ export async function PATCH(req: NextRequest) {
   const [user] = await db
     .update(appUser)
     .set(patch)
-    .where(eq(appUser.id, uid))
+    .where(eq(appUser.id, auth))
     .returning();
 
   return NextResponse.json({ user: publicUser(user) });

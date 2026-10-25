@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trophy } from "lucide-react";
+import { Search, Trophy, X } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
+import { useApp } from "@/components/providers";
 import { cn, todayLabel } from "@/lib/format";
 
 type Filter = "all" | "live" | "upcoming" | "finished";
@@ -14,8 +15,11 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 
 export default function MatchsPage() {
+  const { setFeedMatches } = useApp();
   const [filter, setFilter] = useState<Filter>("all");
   const [leagueFilter, setLeagueFilter] = useState<string>("all");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<ClientMatch[] | null>(null);
 
   useEffect(() => {
@@ -28,6 +32,7 @@ export default function MatchsPage() {
           const r = await api.matches();
           if (cancelled) return;
           setMatches(r.matches);
+          setFeedMatches(r.matches);
           return;
         } catch {
           if (cancelled) return;
@@ -50,8 +55,9 @@ export default function MatchsPage() {
       cancelled = true;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
+      setFeedMatches(null);
     };
-  }, []);
+  }, [setFeedMatches]);
 
   const allMatches = useMemo(() => matches ?? [], [matches]);
 
@@ -92,13 +98,24 @@ export default function MatchsPage() {
     leagueFilter === "all" || leagues.includes(leagueFilter) ? leagueFilter : "all";
 
   const visible = useMemo(() => {
-    if (effectiveLeague === "all") return baseForTab;
-    return baseForTab.filter((m) => m.league === effectiveLeague);
-  }, [baseForTab, effectiveLeague]);
+    const byLeague =
+      effectiveLeague === "all"
+        ? baseForTab
+        : baseForTab.filter((m) => m.league === effectiveLeague);
+    const q = query.trim().toLowerCase();
+    if (!q) return byLeague;
+    return byLeague.filter(
+      (m) =>
+        m.homeTeam.toLowerCase().includes(q) ||
+        m.awayTeam.toLowerCase().includes(q) ||
+        m.league.toLowerCase().includes(q)
+    );
+  }, [baseForTab, effectiveLeague, query]);
 
   const showFeatured =
-    (filter === "all" && effectiveLeague === "all" && visible.length >= 1) ||
-    (filter === "live" && visible.length >= 1);
+    !query.trim() &&
+    ((filter === "all" && effectiveLeague === "all" && visible.length >= 1) ||
+      (filter === "live" && visible.length >= 1));
 
   const featured = showFeatured
     ? (visible.find((m) => m.status === "live") ?? visible[0] ?? null)
@@ -131,17 +148,56 @@ export default function MatchsPage() {
           <p className="capitalize text-[12px] text-mist">{todayLabel()}</p>
         </div>
 
-        {liveCount > 0 && (
+        <div className="flex items-center gap-1.5">
+          {liveCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter(filter === "live" ? "all" : "live")}
+              className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[11.5px] font-bold text-betclic-red active:scale-95"
+            >
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+              {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => setFilter(filter === "live" ? "all" : "live")}
-            className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[11.5px] font-bold text-betclic-red active:scale-95"
+            onClick={() => {
+              setSearchOpen((s) => {
+                if (s) setQuery("");
+                return !s;
+              });
+            }}
+            aria-label="Rechercher un match"
+            className={cn(
+              "grid h-8 w-8 place-items-center rounded-full border transition-colors active:scale-95",
+              searchOpen
+                ? "border-ink bg-ink text-white"
+                : "border-edge bg-white text-mist"
+            )}
           >
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-            {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
+            {searchOpen ? <X className="h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />}
           </button>
-        )}
+        </div>
       </div>
+
+      {searchOpen && (
+        <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un club ou une ligue…"
+            autoFocus
+            className="w-full bg-transparent text-[13.5px] text-ink outline-none placeholder:text-dim"
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery("")} className="text-dim">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Barre de filtres collante optimisée petits écrans */}
       <div className="sticky top-[52px] z-30 -mx-4 mt-3 border-b border-edge/70 bg-deep/95 px-4 py-2 backdrop-blur-md">

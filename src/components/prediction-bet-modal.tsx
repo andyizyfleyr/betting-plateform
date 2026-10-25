@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Layers, Loader2, Plus, Ticket, X } from "lucide-react";
 import { api, type ClientPrediction } from "@/lib/api";
+import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
@@ -72,6 +73,7 @@ function PredictionBetSheet({
     openRecharge,
     comboLegs,
     toggleComboLeg,
+    user,
   } = useApp();
   const dragControls = useDragControls();
 
@@ -178,6 +180,8 @@ function PredictionBetSheet({
       });
       setBalance(res.balance);
       bumpBets();
+      playUiSound(user?.sound, "bet");
+      triggerHaptic(user?.haptics, [18, 28]);
       setPlaced({
         id: res.bet.id,
         potentialWin: res.bet.potentialWin,

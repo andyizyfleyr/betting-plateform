@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureSeeded } from "@/db/seed";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
 import { getLatestRound, getUserBalance } from "@/lib/accelerator-engine";
 import {
   ACCEL_CONFIG,
@@ -43,7 +43,9 @@ async function lastRoundState(uid: number) {
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
   return json({
     status: "success",
     balance: await getUserBalance(uid),
@@ -56,7 +58,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
   let body: { action?: string; bet?: number; client_multiplier?: number };
   try {

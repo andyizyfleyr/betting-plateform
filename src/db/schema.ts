@@ -99,6 +99,7 @@ export const bets = pgTable("bets", {
   /** Flag risque (latence admin-clic, marché quasi décidé…) pour revue manuelle. */
   riskFlag: text("risk_flag"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
+  settledAt: timestamp("settled_at", { mode: "date" }),
 });
 
 export interface PredictionOption {
@@ -153,6 +154,7 @@ export const predictionBets = pgTable("prediction_bets", {
   status: text("status").notNull().default("pending"),
   cashOutAmount: doublePrecision("cash_out_amount"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
+  settledAt: timestamp("settled_at", { mode: "date" }),
 });
 
 /**
@@ -170,6 +172,10 @@ export const appUser = pgTable("app_user", {
   liveSim: boolean("live_sim").notNull().default(true), // moteur de matchs en direct
   /** Rôle du compte : "user" (joueur) ou "admin" (espace d'administration). */
   role: text("role").notNull().default("user"),
+  /** Montant de bonus initial soumis à exigence de mise (wager 1× à cote ≥ 1,30) avant retrait. */
+  bonusLocked: doublePrecision("bonus_locked").notNull().default(0),
+  /** Version du jeton JWT : incrémentée à la déconnexion pour invalider les anciens cookies partout. */
+  tokenVersion: integer("token_version").notNull().default(0),
   /** Authentification JWT. `email` est unique ; `passwordHash` = scrypt. */
   email: text("email").unique(),
   passwordHash: text("password_hash"),
@@ -264,6 +270,7 @@ export const comboBets = pgTable("combo_bets", {
   status: text("status").notNull().default("pending"),
   cashOutAmount: doublePrecision("cash_out_amount"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
+  settledAt: timestamp("settled_at", { mode: "date" }),
 });
 
 /**
@@ -282,12 +289,24 @@ export const withdrawals = pgTable("withdrawals", {
   processedAt: timestamp("processed_at", { mode: "date" }),
 });
 
+/**
+ * Journal des ajustements manuels de solde par l'administration (traçabilité portefeuille).
+ */
+export const walletAdjustments = pgTable("wallet_adjustments", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  amount: doublePrecision("amount").notNull(), // positif = crédit, négatif = débit
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type PredictionQuestionRow = typeof predictionQuestions.$inferSelect;
 export type PredictionBetRow = typeof predictionBets.$inferSelect;
 export type ComboBetRow = typeof comboBets.$inferSelect;
 export type WithdrawalRow = typeof withdrawals.$inferSelect;
+export type WalletAdjustmentRow = typeof walletAdjustments.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
 export type DepositRow = typeof deposits.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;

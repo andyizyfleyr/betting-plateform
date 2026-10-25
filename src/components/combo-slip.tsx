@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ArrowRight, Check, Flame, Layers, Loader2, Plus, Trash2, X } from "lucide-react";
+import { ArrowRight, Check, Flame, Layers, Loader2, Plus, Trash2, X, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   computeComboQuote,
@@ -11,6 +11,7 @@ import {
   MIN_COMBO_LEGS,
   nextComboBoostTier,
 } from "@/lib/combo-math";
+import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { AnimatedNumber } from "./animated-number";
 import { useApp } from "./providers";
 import { cn, eur, formatOdds } from "@/lib/format";
@@ -35,6 +36,8 @@ export function ComboFloatingBar() {
   const {
     comboLegs,
     comboOpen,
+    comboQuickMode,
+    setComboQuickMode,
     openCombo,
     clearCombo,
     target,
@@ -101,6 +104,20 @@ export function ComboFloatingBar() {
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
+            onClick={() => setComboQuickMode(!comboQuickMode)}
+            title="Mode ajout 1-clic sur les cotes"
+            className={cn(
+              "inline-flex h-8 items-center gap-1 rounded-xl px-2.5 font-display text-[10.5px] font-bold transition-colors active:scale-95",
+              comboQuickMode
+                ? "bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-400/40"
+                : "bg-white/10 text-white/75"
+            )}
+          >
+            <Zap className="h-3 w-3" strokeWidth={2.5} />
+            1-clic
+          </button>
+          <button
+            type="button"
             onClick={openCombo}
             className="h-8 rounded-xl bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white active:scale-95"
           >
@@ -135,6 +152,7 @@ export function ComboSheet() {
     openRecharge,
     oddsFormat,
     toast,
+    user,
   } = useApp();
 
   const [stakeText, setStakeText] = useState("10");
@@ -195,6 +213,8 @@ export function ComboSheet() {
       });
       setBalance(res.balance);
       bumpBets();
+      playUiSound(user?.sound, "bet");
+      triggerHaptic(user?.haptics, [18, 30]);
       setPlacedInfo(res.bet);
       clearCombo();
       setPhase("success");

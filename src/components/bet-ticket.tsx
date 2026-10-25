@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, HandCoins, Layers, Loader2, Share2, TrendingUp, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
+import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
@@ -16,7 +17,7 @@ export function BetTicket({
   index?: number;
   onShare?: (bet: ClientBet) => void;
 }) {
-  const { oddsFormat, setBalance, bumpBets, toast } = useApp();
+  const { oddsFormat, setBalance, bumpBets, toast, user } = useApp();
   const [confirming, setConfirming] = useState(false);
   const [cashing, setCashing] = useState(false);
 
@@ -35,6 +36,8 @@ export function BetTicket({
       const r = await api.cashOut(bet.id, bet.kind);
       setBalance(r.balance);
       bumpBets();
+      playUiSound(user?.sound, "win");
+      triggerHaptic(user?.haptics, [22, 30, 45]);
       toast({
         kind: "success",
         title: "Pari encaissé",

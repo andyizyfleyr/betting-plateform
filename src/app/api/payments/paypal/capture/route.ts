@@ -3,7 +3,7 @@ import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { getAuthUserId } from "@/lib/session";
+import { requireUserId } from "@/lib/session";
 import { capturePayPalOrder, creditDeposit } from "@/lib/payments";
 import { publicUser } from "@/lib/auth";
 
@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   await ensureSeeded();
-  const uid = (await getAuthUserId(req)) ?? 1;
+  const auth = await requireUserId(req);
+  if (typeof auth !== "number") return auth;
+  const uid = auth;
 
   let body: { orderId?: string } = {};
   try {

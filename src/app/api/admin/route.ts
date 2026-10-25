@@ -12,6 +12,7 @@ import {
   matches,
   predictionBets,
   predictionQuestions,
+  walletAdjustments,
   withdrawals,
   type PredictionOption,
 } from "@/db/schema";
@@ -29,6 +30,7 @@ import {
 import { STALE_LATENCY_MS } from "@/lib/risk";
 import { getAuthUserId } from "@/lib/session";
 import { settleFinishedBets, settleMatchBets } from "@/lib/settle";
+import { resetSyncThrottle } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
@@ -134,6 +136,8 @@ export async function GET(req: NextRequest) {
     return true;
   });
 
+  const pendingDepCount = depRows.filter((d) => d.status === "pending_review").length;
+
   return NextResponse.json({
     stats: {
       totalUsers: totalUsers?.value ?? 0,
@@ -143,6 +147,7 @@ export async function GET(req: NextRequest) {
       predBets: totalPredBets?.value ?? 0,
       comboBets: totalComboBets?.value ?? 0,
       deposits: Number(totalDeposits?.value ?? 0),
+      pendingDeposits: pendingDepCount,
       pendingWithdrawals: Number(pendingWdCount?.value ?? 0),
       stake,
       payouts,
@@ -155,7 +160,10 @@ export async function GET(req: NextRequest) {
     bets: betsRows,
     predictionBets: predBetsRows,
     comboBets: comboRows,
-    deposits: depRows,
+    deposits: depRows.map((d) => ({
+      ...d,
+      userName: userNameMap.get(d.userId) ?? `Joueur #${d.userId}`,
+    })),
     withdrawals: wdRows.map((w) => ({
       ...w,
       userName: userNameMap.get(w.userId) ?? `Joueur #${w.userId}`,
@@ -187,18 +195,32 @@ export async function POST(req: NextRequest) {
   const action = String(body.action ?? "");
 
   try {
+    resetSyncThrottle();
     if (action === "setBalance") {
       const userId = Number(body.userId);
       const amount = roundNumber(body.amount);
       if (!userId || amount == null || amount < 0) {
         return NextResponse.json({ error: "Montant valide requis (≥ 0 €)" }, { status: 400 });
       }
+      const [prevUser] = await db
+        .select({ balance: appUser.balance })
+        .from(appUser)
+        .where(eq(appUser.id, userId));
+      if (!prevUser) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+
+      const delta = round2(amount - (prevUser.balance ?? 0));
       const [u] = await db
         .update(appUser)
         .set({ balance: amount })
         .where(eq(appUser.id, userId))
         .returning();
-      if (!u) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+      if (Math.abs(delta) >= 0.01) {
+        await db.insert(walletAdjustments).values({
+          userId,
+          amount: delta,
+          reason: `Mise à jour manuelle du solde (${amount.toFixed(2)} €)`,
+        });
+      }
       return NextResponse.json({ ok: true, user: publicUser(u) });
     }
 
@@ -857,6 +879,51 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Ce retrait a déjà été traité" }, { status: 400 });
       }
       return NextResponse.json({ ok: true, withdrawal: updated });
+    }
+
+    if (action === "approveDeposit") {
+      const did = Number(body.depositId);
+      if (!did) return NextResponse.json({ error: "depositId requis" }, { status: 400 });
+
+      const updated = await db.transaction(async (tx) => {
+        const [credited] = await tx
+          .update(deposits)
+          .set({ status: "credited", updatedAt: new Date() })
+          .where(and(eq(deposits.id, did), eq(deposits.status, "pending_review")))
+          .returning();
+
+        if (!credited) return null;
+
+        await tx
+          .update(appUser)
+          .set({
+            balance: sql`ROUND((${appUser.balance} + ${round2(credited.amount)})::numeric, 2)::float8`,
+          })
+          .where(eq(appUser.id, credited.userId));
+
+        return credited;
+      });
+
+      if (!updated) {
+        return NextResponse.json({ error: "Ce dépôt a déjà été traité" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, deposit: updated });
+    }
+
+    if (action === "rejectDeposit") {
+      const did = Number(body.depositId);
+      if (!did) return NextResponse.json({ error: "depositId requis" }, { status: 400 });
+
+      const [rejected] = await db
+        .update(deposits)
+        .set({ status: "rejected", updatedAt: new Date() })
+        .where(and(eq(deposits.id, did), eq(deposits.status, "pending_review")))
+        .returning();
+
+      if (!rejected) {
+        return NextResponse.json({ error: "Ce dépôt a déjà été traité" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, deposit: rejected });
     }
 
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
