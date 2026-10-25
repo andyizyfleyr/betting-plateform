@@ -159,7 +159,11 @@ export function MarketSheet() {
   const isReal = match.source === "manual";
   const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const suspended = Boolean(match.suspended);
-  const { homeGoals, awayGoals } = formatGoalSummary(match.events);
+  const { homeGoals, awayGoals } = formatGoalSummary(
+    match.events,
+    match.homeScore,
+    match.awayScore
+  );
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
   return (

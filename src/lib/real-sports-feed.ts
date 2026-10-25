@@ -4,6 +4,12 @@ import type { MatchTimelineEvent } from "@/db/fixtures";
 import { adminSettings, matches, type MatchRow, type RealMatchStats } from "@/db/schema";
 import { isFirstHalfCompleted, isRealMatchPostIncidentSuspended } from "@/lib/markets";
 import {
+  pickPreferredPlayerLabel,
+  reconcileRedCardCounts,
+  samePlayerIdentity,
+  sanitizeMatchEvents,
+} from "@/lib/match-events";
+import {
   officialLeagueLabel,
   resolveEspnSlugForLeague,
   TOP_DISCOVERY_LEAGUE_SLUGS,
@@ -546,12 +552,22 @@ function parseDetailsEvents(
   homeTeamId: string,
   awayTeamId: string,
   homeTeamName = "",
-  awayTeamName = ""
+  awayTeamName = "",
+  homeScore: number | null = null,
+  awayScore: number | null = null
 ): { events: MatchTimelineEvent[]; redHome: number; redAway: number } {
-  const events: MatchTimelineEvent[] = [];
-  const seenKeys = new Set<string>();
-  let redHome = 0;
-  let redAway = 0;
+  interface ParsedCandidate {
+    type: "goal" | "red";
+    team: "home" | "away";
+    minute: number;
+    stoppageMin: number;
+    player?: string;
+    playId: string;
+    athleteId: string;
+    secBucket: number | null;
+  }
+
+  const candidates: ParsedCandidate[] = [];
 
   for (const raw of rawDetails) {
     const d = asRec(raw);
@@ -560,7 +576,13 @@ function parseDetailsEvents(
     const periodRec = asRec(d.period);
     const periodNum = asNum(periodRec?.number);
     const clockObj = asRec(d.clock);
-    const rawClock = asStr(clockObj?.displayValue);
+    const rawClockBase = asStr(clockObj?.displayValue);
+    const addedClockObj = asRec(d.addedClock);
+    const addedClockStr = asStr(addedClockObj?.displayValue);
+    const rawClock =
+      addedClockStr && !rawClockBase.includes("+")
+        ? `${rawClockBase}${addedClockStr.startsWith("+") ? "" : "+"}${addedClockStr}`
+        : rawClockBase;
     const secVal = asNum(clockObj?.value);
 
     // Règlement paris 1xBet temps réglementaire (90 min) : on ignore prolongation (> 90') et tirs au but
@@ -604,11 +626,18 @@ function parseDetailsEvents(
     if (!isGoal && !isRed) continue;
 
     const minute = parseClockMinuteInt(rawClock, periodNum, secVal);
+    const mStop = /\+\s*(\d+)/.exec(rawClock);
+    const stoppageMin = mStop ? Number(mStop[1]) : 0;
 
     const athletes = asArr(d.athletesInvolved);
     const firstAth = asRec(athletes[0]);
     const participants = asArr(d.participants);
     const firstPartAth = asRec(asRec(participants[0])?.athlete);
+
+    const playId = asStr(d.id);
+    const athleteId = asStr(firstAth?.id || firstPartAth?.id);
+    const secBucket = secVal != null && secVal >= 0 ? Math.round(secVal) : null;
+
     let player =
       asStr(firstAth?.shortName || firstAth?.displayName) ||
       asStr(firstPartAth?.shortName || firstPartAth?.displayName) ||
@@ -622,24 +651,65 @@ function parseDetailsEvents(
       }
     }
 
-    const dedupeKey = `${isGoal ? "G" : "R"}|${side}|${minute}|${player ?? ""}`;
-    if (seenKeys.has(dedupeKey)) continue;
-    seenKeys.add(dedupeKey);
+    const evType: "goal" | "red" = isGoal ? "goal" : "red";
 
-    if (isRed) {
-      if (side === "home") redHome += 1;
-      else redAway += 1;
+    // Déduplication primaire inter-tableaux ESPN (`header.details` porte `shortName`,
+    // `keyEvents` porte uniquement `displayName`, mais tous deux partagent `athlete.id` et `clock.value`).
+    const duplicate = candidates.find((prev) => {
+      if (prev.type !== evType || prev.team !== side) return false;
+      if (playId && prev.playId && playId === prev.playId) return true;
+      if (evType === "red" && athleteId && prev.athleteId && athleteId === prev.athleteId) {
+        return true;
+      }
+      if (athleteId && prev.athleteId && athleteId === prev.athleteId) {
+        const sameClockSec =
+          secBucket != null &&
+          prev.secBucket != null &&
+          Math.abs(secBucket - prev.secBucket) <= 60;
+        if (stoppageMin === prev.stoppageMin && (sameClockSec || Math.abs(minute - prev.minute) <= 1)) {
+          return true;
+        }
+      }
+      if (
+        minute === prev.minute &&
+        stoppageMin === prev.stoppageMin &&
+        (!player || !prev.player || samePlayerIdentity(player, prev.player))
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (duplicate) {
+      duplicate.player = pickPreferredPlayerLabel(duplicate.player, player);
+      if (!duplicate.playId && playId) duplicate.playId = playId;
+      if (!duplicate.athleteId && athleteId) duplicate.athleteId = athleteId;
+      if (duplicate.secBucket == null && secBucket != null) duplicate.secBucket = secBucket;
+      continue;
     }
 
-    events.push({
-      type: isGoal ? "goal" : "red",
+    candidates.push({
+      type: evType,
       team: side,
       minute,
+      stoppageMin,
       ...(player ? { player } : {}),
+      playId,
+      athleteId,
+      secBucket,
     });
   }
 
-  events.sort((a, b) => a.minute - b.minute);
+  const rawEvents: MatchTimelineEvent[] = candidates.map((c) => ({
+    type: c.type,
+    team: c.team,
+    minute: c.minute,
+    ...(c.player ? { player: c.player } : {}),
+  }));
+
+  const events = sanitizeMatchEvents(rawEvents, homeScore, awayScore);
+  const redHome = events.filter((e) => e.type === "red" && e.team === "home").length;
+  const redAway = events.filter((e) => e.type === "red" && e.team === "away").length;
   return { events, redHome, redAway };
 }
 
@@ -794,7 +864,9 @@ export function parseEspnScoreboardEvent(
     homeTeamId,
     awayTeamId,
     hNames.full,
-    aNames.full
+    aNames.full,
+    homeScore,
+    awayScore
   );
 
   // Déduction complémentaire du score MT si tous les buts du match sont présents dans `events`
@@ -1200,8 +1272,27 @@ export async function applyFeedUpdateToRealMatch(
 
   const nextHome = feed.homeScore ?? prevHome;
   const nextAway = feed.awayScore ?? prevAway;
-  const nextRedH = Math.max(prevRedH, feed.redHome);
-  const nextRedA = Math.max(prevRedA, feed.redAway);
+  const rawCandidateEvents =
+    feed.events.length > 0 ? feed.events : (m.events ?? []);
+  const mergedEvents = sanitizeMatchEvents(
+    rawCandidateEvents,
+    nextHome,
+    nextAway
+  );
+  const reconciledReds = reconcileRedCardCounts(
+    m.events,
+    mergedEvents,
+    prevRedH,
+    prevRedA
+  );
+  const nextRedH =
+    feed.realStats != null || feed.events.length > 0
+      ? Math.max(feed.redHome, mergedEvents.filter((e) => e.type !== "goal" && e.team === "home").length)
+      : Math.max(reconciledReds.redHome, feed.redHome);
+  const nextRedA =
+    feed.realStats != null || feed.events.length > 0
+      ? Math.max(feed.redAway, mergedEvents.filter((e) => e.type !== "goal" && e.team === "away").length)
+      : Math.max(reconciledReds.redAway, feed.redAway);
 
   const incidentChanged =
     m.status === "live" &&
@@ -1210,8 +1301,6 @@ export async function applyFeedUpdateToRealMatch(
       nextRedH !== prevRedH ||
       nextRedA !== prevRedA);
 
-  const mergedEvents =
-    feed.events.length > 0 ? feed.events : (m.events ?? []);
   const mergedStats = feed.realStats ?? m.realStats ?? null;
   const nextHtHome = feed.htHomeScore ?? m.htHomeScore ?? null;
   const nextHtAway = feed.htAwayScore ?? m.htAwayScore ?? null;

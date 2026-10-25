@@ -13,6 +13,7 @@ import {
   minuteNumber,
 } from "@/lib/markets";
 import { ensureMlLoaded } from "@/lib/ml-engine";
+import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
@@ -58,7 +59,24 @@ export async function GET() {
 
   const rows = [...activeManual, ...finishedManual, ...activeVirtual, ...finishedVirtual];
 
-  const withMarkets = rows.map((m) => {
+  const withMarkets = rows.map((rawRow) => {
+    const cleanEvents = sanitizeMatchEvents(
+      rawRow.events,
+      rawRow.homeScore,
+      rawRow.awayScore
+    );
+    const { redHome: cleanRedHome, redAway: cleanRedAway } = reconcileRedCardCounts(
+      rawRow.events,
+      cleanEvents,
+      rawRow.redHome,
+      rawRow.redAway
+    );
+    const m = {
+      ...rawRow,
+      events: cleanEvents,
+      redHome: cleanRedHome,
+      redAway: cleanRedAway,
+    };
     const isReal = m.source === "manual";
 
     // On masque strictement les variables internes du simulateur et les scénarios anticipés admin

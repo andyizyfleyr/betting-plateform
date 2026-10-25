@@ -12,6 +12,7 @@ import {
   tryEarlyLiveSettle,
 } from "@/lib/markets";
 import { recordSettledBetMl } from "@/lib/ml-engine";
+import { sanitizeMatchEvents } from "@/lib/match-events";
 import {
   getRealMatchSettlementMode,
   type RealMatchSettlementMode,
@@ -33,19 +34,20 @@ function resolveBet(
   const home = match.homeScore ?? 0;
   const away = match.awayScore ?? 0;
   if (!isKnownMarket(bet.market)) return { won: false, voided: true };
+  const cleanEvents = sanitizeMatchEvents(match.events, home, away);
   if (match.source === "manual") {
     return realMatchSettle(
       bet.market,
       bet.selection,
       home,
       away,
-      match.events ?? null,
+      cleanEvents,
       match.id,
       match.htHomeScore ?? null,
       match.htAwayScore ?? null
     );
   }
-  return marketSettle(bet.market, bet.selection, home, away, match.events ?? null, match.id);
+  return marketSettle(bet.market, bet.selection, home, away, cleanEvents, match.id);
 }
 
 /**
@@ -66,15 +68,19 @@ export function resolveEarlyLiveMatchBet(
   const isManual = match.source === "manual";
   if (isManual && realSettlementMode !== "auto") return null;
 
+  const home = match.homeScore ?? 0;
+  const away = match.awayScore ?? 0;
+  const cleanEvents = sanitizeMatchEvents(match.events, home, away);
+
   const decision = tryEarlyLiveSettle(bet.market, bet.selection, {
     source: isManual ? "manual" : "virtual",
     status: match.status,
     minute: match.minute,
-    homeScore: match.homeScore ?? 0,
-    awayScore: match.awayScore ?? 0,
+    homeScore: home,
+    awayScore: away,
     htHomeScore: match.htHomeScore ?? match.realStats?.htHomeScore ?? null,
     htAwayScore: match.htAwayScore ?? match.realStats?.htAwayScore ?? null,
-    events: match.events ?? null,
+    events: cleanEvents,
     matchId: match.id,
   });
 

@@ -30,6 +30,7 @@ import { publicUser } from "@/lib/auth";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { isKnownMarket, marketLabelFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
+import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { getAdminMlOverview, retrainAllMlModels } from "@/lib/ml-engine";
 import {
   reopenSettledQuestion,
@@ -248,11 +249,23 @@ export async function GET(req: NextRequest) {
       ...w,
       userName: userNameMap.get(w.userId) ?? `Joueur #${w.userId}`,
     })),
-    matches: matchRows.map((m) => ({
-      ...m,
-      homeLogo: teamLogo(m.homeTeam, m.homeLogo),
-      awayLogo: teamLogo(m.awayTeam, m.awayLogo),
-    })),
+    matches: matchRows.map((m) => {
+      const cleanEvents = sanitizeMatchEvents(m.events, m.homeScore, m.awayScore);
+      const { redHome, redAway } = reconcileRedCardCounts(
+        m.events,
+        cleanEvents,
+        m.redHome,
+        m.redAway
+      );
+      return {
+        ...m,
+        events: cleanEvents,
+        redHome,
+        redAway,
+        homeLogo: teamLogo(m.homeTeam, m.homeLogo),
+        awayLogo: teamLogo(m.awayTeam, m.awayLogo),
+      };
+    }),
     questions: uniqueQuestions.map((q) => ({
       ...q,
       resolvesAt: q.resolvesAt.toISOString(),
@@ -547,8 +560,16 @@ export async function POST(req: NextRequest) {
           isLive && typeof f.redHome === "number" ? Math.max(0, Math.round(f.redHome)) : 0;
         const redAway =
           isLive && typeof f.redAway === "number" ? Math.max(0, Math.round(f.redAway)) : 0;
+        const liveHomeScore = isLive ? Math.max(0, Number(f.homeScore ?? 0)) : null;
+        const liveAwayScore = isLive ? Math.max(0, Number(f.awayScore ?? 0)) : null;
         const initialEvents =
-          isLive && Array.isArray(f.events) ? (f.events as MatchTimelineEvent[]) : [];
+          isLive && Array.isArray(f.events)
+            ? sanitizeMatchEvents(
+                f.events as MatchTimelineEvent[],
+                liveHomeScore,
+                liveAwayScore
+              )
+            : [];
         const initialStats =
           isLive && f.realStats && typeof f.realStats === "object"
             ? (f.realStats as RealMatchStats)

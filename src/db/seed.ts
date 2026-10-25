@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, matches, predictionBets, predictionQuestions } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
+import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 
 let seededOnce = false;
 let seedPromise: Promise<void> | null = null;
@@ -87,6 +88,46 @@ async function runSeedInternal(): Promise<void> {
       AND m1."away_team" = m2."away_team"
       AND NOT EXISTS (SELECT 1 FROM "bets" b WHERE b."match_id" = m1."id");
   `);
+
+  // Réparation idempotente des chronologies d'événements existantes en base
+  // (supprime les doublons inter-flux ex. "5' C. Egan-Riley" + "5' CJ Egan-Riley"
+  //  sur les matchs déjà terminés ou en cours, et recalibre `red_home`/`red_away`).
+  const rowsWithEvents = await db
+    .select({
+      id: matches.id,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      redHome: matches.redHome,
+      redAway: matches.redAway,
+      events: matches.events,
+    })
+    .from(matches)
+    .where(sql`jsonb_typeof(${matches.events}) = 'array' AND jsonb_array_length(${matches.events}) >= 1`);
+
+  for (const row of rowsWithEvents) {
+    const rawEvents = row.events ?? [];
+    const cleanEvents = sanitizeMatchEvents(rawEvents, row.homeScore, row.awayScore);
+    const { redHome: cleanRedH, redAway: cleanRedA } = reconcileRedCardCounts(
+      rawEvents,
+      cleanEvents,
+      row.redHome,
+      row.redAway
+    );
+    const eventsChanged = JSON.stringify(cleanEvents) !== JSON.stringify(rawEvents);
+    const redsChanged =
+      cleanRedH !== (row.redHome ?? 0) || cleanRedA !== (row.redAway ?? 0);
+
+    if (eventsChanged || redsChanged) {
+      await db
+        .update(matches)
+        .set({
+          events: cleanEvents,
+          redHome: cleanRedH,
+          redAway: cleanRedA,
+        })
+        .where(eq(matches.id, row.id));
+    }
+  }
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })

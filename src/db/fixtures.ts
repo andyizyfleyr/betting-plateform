@@ -2,6 +2,7 @@ import {
   getCachedClubGlickoModifiers,
   getCachedMarketCalibratorMultiplier,
 } from "@/lib/ml-weights";
+import { sanitizeMatchEvents } from "@/lib/match-events";
 
 export const VIRTUAL_LEAGUE = "Ligue des Champions · Europe";
 export const ROUND_MS = 300_000;
@@ -858,7 +859,8 @@ export function hasVerifiedGoalTimeline(
   ) {
     return true;
   }
-  const goals = (events ?? []).filter(
+  const cleanEvents = sanitizeMatchEvents(events, h, a);
+  const goals = cleanEvents.filter(
     (e) => e.type === "goal" && (e.team === "home" || e.team === "away")
   );
   const evH = goals.filter((g) => g.team === "home").length;
@@ -927,6 +929,12 @@ export function realMatchHalfSplitModel(params: {
   let htGrid: number[][];
   let h2Grid: number[][];
 
+  const cleanParamEvents = sanitizeMatchEvents(
+    params.events,
+    homeScore,
+    awayScore
+  );
+
   if (!isLive || minute < 45) {
     const cur1H = isLive ? homeScore : 0;
     const cur1A = isLive ? awayScore : 0;
@@ -953,7 +961,7 @@ export function realMatchHalfSplitModel(params: {
     const lam2A = Math.max(0.003, baseA * (1 - htShare));
     h2Grid = bivariatePoissonGrid(lam2H, lam2A, 8, false);
   } else {
-    const goals = (params.events ?? []).filter(
+    const goals = cleanParamEvents.filter(
       (e) => e.type === "goal" && (e.team === "home" || e.team === "away")
     );
     const fixed1H = clamp(
@@ -1073,7 +1081,7 @@ export function realMatchHalfSplitModel(params: {
     htFt[k] /= sumHtFt;
   }
 
-  const goalsSorted = [...(params.events ?? [])]
+  const goalsSorted = [...cleanParamEvents]
     .filter((e) => e.type === "goal" && (e.team === "home" || e.team === "away"))
     .sort((a, b) => a.minute - b.minute);
 
@@ -1195,7 +1203,8 @@ export function extractMatchTimelineStats(
     return { htHome: 0, htAway: 0, h2Home: 0, h2Away: 0, firstScorer: "none" };
   }
 
-  const goals = (events ?? [])
+  const cleanEvents = sanitizeMatchEvents(events, h, a);
+  const goals = cleanEvents
     .map((e, idx) => ({ e, idx }))
     .filter(({ e }) => e.type === "goal" && (e.team === "home" || e.team === "away"))
     .sort((x, y) => x.e.minute - y.e.minute || x.idx - y.idx)
