@@ -318,7 +318,7 @@ export default function BetslipPage() {
   // État après validation réussie
   if (receipt && comboLegs.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-[1360px] px-4 pt-6 pb-8 lg:px-8 lg:py-10">
+      <div className="mx-auto w-full max-w-[1360px] px-4 pt-6 pb-8 lg:px-0 lg:py-4">
         <div className="glass-card mx-auto max-w-[540px] rounded-3xl p-5 text-center lg:p-7">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
             <Check className="h-7 w-7" strokeWidth={2.6} />
@@ -382,7 +382,7 @@ export default function BetslipPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1360px] px-4 pt-4 pb-8 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full max-w-[1360px] px-4 pt-4 pb-8 lg:px-0 lg:py-0">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
         <div>

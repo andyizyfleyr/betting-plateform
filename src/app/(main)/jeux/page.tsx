@@ -30,7 +30,7 @@ const MINI_GAMES = [
 
 export default function JeuxPage() {
   return (
-    <div className="mx-auto w-full max-w-[1360px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full max-w-[1360px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
