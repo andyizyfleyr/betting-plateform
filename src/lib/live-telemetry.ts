@@ -540,308 +540,378 @@ export interface LivePlayFrame {
   players: TacticalPlayerDot[];
 }
 
-interface SequenceNode {
+interface KeyframeState {
   kind: PlayActionKind;
-  side: "home" | "away";
-  x: number;
-  y: number;
+  side: "home" | "away" | "neutral";
+  ballX: number;
+  ballY: number;
+  carrierId: string | null;
   label: string;
   sublabel: string;
   trajectory: "none" | "pass" | "shot" | "cross" | "free_kick";
+  wall?: { x: number; y: number; side: "home" | "away" } | null;
 }
 
-function buildBeatNode(
+function smoothstep(x: number): number {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Génère une séquence connectée de 6 temps tactiques cohérents (aucun saut brusque) :
+ * 0: Relance défense (#4/#5) -> 1: Relais milieu (#6) -> 2: Progression couloir/axe (#8/#10/#7/#11)
+ * -> 3: Approche 30m -> 4: Climax (Tir / Corner / Coup franc / Centre) -> 5: Récupération & transition adverse.
+ */
+function buildConnectedKeyframe(
   match: TelemetryMatchInput,
   telemetry: LiveMatchTelemetry,
   beatIdx: number
-): SequenceNode {
-  const seqIdx = Math.floor(beatIdx / 4);
-  const step = ((beatIdx % 4) + 4) % 4;
-  const rng = mulberry32(hashString(`seq-v2|${match.id}|${seqIdx}`));
+): KeyframeState {
+  const cycleIdx = Math.floor(beatIdx / 6);
+  const step = ((beatIdx % 6) + 6) % 6;
 
+  // Détermine quelle équipe mène ce cycle offensif (en alternant naturellement selon la pression)
+  const rng = mulberry32(hashString(`coh-seq-v3|${match.id}|${cycleIdx}`));
   const domShare = telemetry.recentHomePressure / 100;
   const side: "home" | "away" = rng() < domShare ? "home" : "away";
-  const teamName = side === "home" ? match.homeTeam : match.awayTeam;
-  const dir = side === "home" ? 1 : -1;
-  const ax = (progressFromOwnGoal: number) =>
-    side === "home" ? progressFromOwnGoal : 100 - progressFromOwnGoal;
+  const oppSide: "home" | "away" = side === "home" ? "away" : "home";
 
-  // Couloir principal de la séquence (haut, axe, bas)
-  const laneRoll = rng();
-  const baseLaneY = laneRoll < 0.34 ? 22 + rng() * 14 : laneRoll > 0.66 ? 64 + rng() * 14 : 40 + rng() * 20;
-  const stepRng = mulberry32(hashString(`seq-step|${match.id}|${seqIdx}|${step}`));
+  const teamName = side === "home" ? match.homeTeam : match.awayTeam;
+  const oppName = oppSide === "home" ? match.homeTeam : match.awayTeam;
+  const prefix = side === "home" ? "h" : "a";
+  const oppPrefix = oppSide === "home" ? "h" : "a";
+  const ax = (prog: number) => (side === "home" ? prog : 100 - prog);
+
+  // Choix du couloir du cycle : haut (gauche domicile), axe, ou bas (droite domicile)
+  const wingRoll = rng();
+  const isTopWing = wingRoll < 0.38;
+  const isBottomWing = wingRoll > 0.62;
+  const climaxRoll = rng();
+  const stepRng = mulberry32(hashString(`coh-step-v3|${match.id}|${cycleIdx}|${step}`));
+
+  const redCount = side === "home" ? clamp(match.redHome ?? 0, 0, 3) : clamp(match.redAway ?? 0, 0, 3);
+  // Si carton(s) rouge(s), les derniers numéros offensifs (11, 9, 7) sortent : rabat sur un joueur bien présent
+  const safeWingNum = (want11: boolean) => {
+    if (want11 && redCount === 0) return 11;
+    if (!want11 && redCount <= 2) return 7;
+    return 8;
+  };
+  const strikerNum = redCount >= 2 ? 10 : 9;
 
   if (step === 0) {
-    const x = ax(26 + stepRng() * 16);
-    const y = clamp(baseLaneY + (stepRng() - 0.5) * 14, 16, 84);
+    const cbNum = isTopWing ? 4 : 5;
+    const y = isTopWing ? 36 + stepRng() * 6 : isBottomWing ? 58 + stepRng() * 6 : 48 + (stepRng() - 0.5) * 8;
     return {
       kind: "build_up",
       side,
-      x,
-      y,
+      ballX: ax(23 + stepRng() * 6),
+      ballY: y,
+      carrierId: `${prefix}-${cbNum}`,
       label: `Relance · ${teamName}`,
-      sublabel: "Construction depuis le camp",
+      sublabel: "Sortie de balle propre",
       trajectory: "pass",
     };
   }
 
   if (step === 1) {
-    const x = ax(46 + stepRng() * 16);
-    const y = clamp(baseLaneY + (stepRng() - 0.5) * 18, 12, 88);
+    const midNum = isTopWing ? 8 : isBottomWing ? 10 : 6;
+    const y = isTopWing ? 28 + stepRng() * 8 : isBottomWing ? 64 + stepRng() * 8 : 48 + (stepRng() - 0.5) * 10;
+    return {
+      kind: "build_up",
+      side,
+      ballX: ax(41 + stepRng() * 7),
+      ballY: y,
+      carrierId: `${prefix}-${midNum}`,
+      label: `Construction · ${teamName}`,
+      sublabel: "Orientation au milieu",
+      trajectory: "pass",
+    };
+  }
+
+  if (step === 2) {
+    const useTop = side === "home" ? isTopWing : !isTopWing;
+    const carrierNum = isTopWing || isBottomWing ? safeWingNum(!useTop) : 10;
+    const y = isTopWing ? 18 + stepRng() * 8 : isBottomWing ? 74 + stepRng() * 8 : 44 + stepRng() * 12;
     return {
       kind: "progression",
       side,
-      x,
-      y,
+      ballX: ax(59 + stepRng() * 7),
+      ballY: y,
+      carrierId: `${prefix}-${carrierNum}`,
       label: `Progression · ${teamName}`,
-      sublabel: baseLaneY < 35 || baseLaneY > 65 ? "Débordement couloir" : "Percée dans l'axe",
+      sublabel: isTopWing || isBottomWing ? "Accélération sur l'aile" : "Percée plein axe",
       trajectory: "pass",
     };
   }
 
-  const climaxRoll = rng(); // Déterminé par la séquence pour cohérence entre step 2 et step 3
-
-  if (step === 2) {
-    if (climaxRoll > 0.86) {
-      // Préparation coup franc offensif aux 24m
-      const fkX = ax(75 + stepRng() * 5);
-      const fkY = clamp(30 + stepRng() * 40, 26, 74);
+  if (step === 3) {
+    if (climaxRoll > 0.85) {
+      const fkX = ax(75 + stepRng() * 3);
+      const fkY = clamp(34 + stepRng() * 32, 30, 70);
       return {
         kind: "free_kick",
         side,
-        x: fkX,
-        y: fkY,
-        label: `Coup franc dangereux · ${teamName}`,
+        ballX: fkX,
+        ballY: fkY,
+        carrierId: `${prefix}-10`,
+        label: `Coup franc offensif · ${teamName}`,
         sublabel: "23m · Mur en place",
+        trajectory: "none",
+        wall: {
+          x: ax(84.5),
+          y: clamp(fkY + (50 - fkY) * 0.3, 36, 64),
+          side: oppSide,
+        },
+      };
+    }
+
+    if (climaxRoll > 0.68) {
+      const topCorner = isTopWing || (!isBottomWing && stepRng() > 0.5);
+      const takerNum = safeWingNum(!topCorner);
+      return {
+        kind: "corner",
+        side,
+        ballX: ax(98),
+        ballY: topCorner ? 6 : 94,
+        carrierId: `${prefix}-${takerNum}`,
+        label: `Corner · ${teamName}`,
+        sublabel: "Joueurs montés dans la surface",
         trajectory: "none",
       };
     }
-    const x = ax(68 + stepRng() * 12);
-    const y = clamp(baseLaneY + (stepRng() - 0.5) * 16, 14, 86);
+
+    const y = isTopWing ? 28 + stepRng() * 10 : isBottomWing ? 62 + stepRng() * 10 : 45 + stepRng() * 10;
     return {
       kind: "dangerous_attack",
       side,
-      x,
-      y,
+      ballX: ax(74 + stepRng() * 5),
+      ballY: y,
+      carrierId: `${prefix}-10`,
       label: `Attaque dangereuse · ${teamName}`,
-      sublabel: "Entrée dans les 30 derniers mètres",
+      sublabel: "30 derniers mètres",
       trajectory: "pass",
     };
   }
 
-  // Step 3 : dénouement de l'action
-  if (climaxRoll > 0.86) {
-    // Tir sur coup franc vers la lucarne
-    const targetY = baseLaneY < 50 ? 44 : 56;
-    return {
-      kind: "shot_on_target",
-      side,
-      x: ax(96.5),
-      y: targetY,
-      label: `Tir sur coup franc · ${teamName}`,
-      sublabel: "Parade décisive sur la ligne",
-      trajectory: "free_kick",
-    };
-  }
+  if (step === 4) {
+    if (climaxRoll > 0.85) {
+      return {
+        kind: "shot_on_target",
+        side,
+        ballX: ax(96.5),
+        ballY: isTopWing ? 44 : 56,
+        carrierId: `${oppPrefix}-1`,
+        label: `Coup franc cadré · ${teamName}`,
+        sublabel: "Parade du gardien",
+        trajectory: "free_kick",
+        wall: {
+          x: ax(84.5),
+          y: 50,
+          side: oppSide,
+        },
+      };
+    }
 
-  if (climaxRoll > 0.7) {
-    // Corner obtenu & botté vers le point de penalty
-    const topCorner = baseLaneY < 50;
-    return {
-      kind: "corner",
-      side,
-      x: ax(98.2),
-      y: topCorner ? 5.5 : 94.5,
-      label: `Corner · ${teamName}`,
-      sublabel: topCorner ? "Côté gauche offensif" : "Côté droit offensif",
-      trajectory: "cross",
-    };
-  }
+    if (climaxRoll > 0.68) {
+      return {
+        kind: "shot_on_target",
+        side,
+        ballX: ax(90 + stepRng() * 5),
+        ballY: 46 + stepRng() * 8,
+        carrierId: `${prefix}-${strikerNum}`,
+        label: `Tête sur corner · ${teamName}`,
+        sublabel: "Duel aérien au point de penalty",
+        trajectory: "cross",
+      };
+    }
 
-  if (climaxRoll > 0.5) {
-    // Frappe cadrée !
-    return {
-      kind: "shot_on_target",
-      side,
-      x: ax(96.8),
-      y: 44 + stepRng() * 12,
-      label: `Tir cadré ! · ${teamName}`,
-      sublabel: "Danger immédiat dans la surface",
-      trajectory: "shot",
-    };
-  }
+    if (climaxRoll > 0.4) {
+      return {
+        kind: "shot_on_target",
+        side,
+        ballX: ax(96.2),
+        ballY: 44 + stepRng() * 12,
+        carrierId: `${oppPrefix}-1`,
+        label: `Tir cadré ! · ${teamName}`,
+        sublabel: "Arrêt décisif du gardien",
+        trajectory: "shot",
+      };
+    }
 
-  if (climaxRoll > 0.34) {
-    // Frappe frôlant le poteau
-    const high = baseLaneY < 50;
     return {
       kind: "shot_off",
       side,
-      x: ax(98.5),
-      y: high ? 35 : 65,
-      label: `Frappe non cadrée · ${teamName}`,
-      sublabel: "À ras du montant",
+      ballX: ax(97.5),
+      ballY: isTopWing ? 36 : 64,
+      carrierId: null,
+      label: `Frappe · ${teamName}`,
+      sublabel: "À ras du poteau",
       trajectory: "shot",
     };
   }
 
-  // Récupération défensive adverse
-  const defSide = side === "home" ? "away" : "home";
-  const defName = defSide === "home" ? match.homeTeam : match.awayTeam;
+  // Step 5 : Récupération propre par la défense / gardien adverse et transition fluide vers le centre
   return {
     kind: "interception",
-    side: defSide,
-    x: clamp(ax(82) - dir * 8, 12, 88),
-    y: clamp(baseLaneY, 18, 82),
-    label: `Récupération · ${defName}`,
-    sublabel: "Transition rapide amorcée",
+    side: oppSide,
+    ballX: ax(76 - stepRng() * 8),
+    ballY: 42 + stepRng() * 16,
+    carrierId: `${oppPrefix}-6`,
+    label: `Récupération · ${oppName}`,
+    sublabel: "Transition collective",
     trajectory: "pass",
   };
 }
 
-const HOME_BASE_OUTFIELD: Array<[number, number, number]> = [
-  // [baseX %, baseY %, numéro]
-  [18, 18, 2],
-  [16, 38, 4],
-  [16, 62, 5],
-  [18, 82, 3],
-  [36, 26, 8],
-  [33, 50, 6],
-  [36, 74, 10],
-  [54, 20, 7],
-  [57, 50, 9],
-  [54, 80, 11],
+/**
+ * Structure 4-3-3 structurée : [ligne (0=Déf, 1=Mil, 2=Att), yBase %, numéro]
+ * Ordre pensé pour qu'en cas de carton rouge (.slice), l'équipe retire un attaquant
+ * et conserve sa ligne défensive intacte.
+ */
+const STRUCTURED_OUTFIELD: Array<[0 | 1 | 2, number, number]> = [
+  [0, 17, 2],
+  [0, 39, 4],
+  [0, 61, 5],
+  [0, 83, 3],
+  [1, 50, 6],
+  [1, 27, 8],
+  [1, 73, 10],
+  [2, 20, 7],
+  [2, 50, 9],
+  [2, 80, 11],
 ];
 
-function buildTacticalPlayers(
+function computeFormationAtKeyframe(
   match: TelemetryMatchInput,
-  ballX: number,
-  ballY: number,
-  side: "home" | "away" | "neutral",
-  kind: PlayActionKind,
-  beatIdx: number
-): TacticalPlayerDot[] {
+  kf: KeyframeState
+): Map<string, { team: "home" | "away"; role: "gk" | "outfield"; number: number; x: number; y: number }> {
   const redH = clamp(match.redHome ?? 0, 0, 3);
   const redA = clamp(match.redAway ?? 0, 0, 3);
-  const homeOutfieldCount = Math.max(7, 10 - redH);
-  const awayOutfieldCount = Math.max(7, 10 - redA);
+  const homeCount = Math.max(7, 10 - redH);
+  const awayCount = Math.max(7, 10 - redA);
 
-  const dots: TacticalPlayerDot[] = [];
+  const map = new Map<
+    string,
+    { team: "home" | "away"; role: "gk" | "outfield"; number: number; x: number; y: number }
+  >();
 
-  // Gardiens positionnés dans leurs 6 mètres et suivant l'angle Y du ballon
-  const gkHomeY = clamp(50 + (ballY - 50) * 0.18, 41, 59);
-  const gkAwayY = clamp(50 + (ballY - 50) * 0.18, 41, 59);
-  const gkHomeX = side === "away" && ballX < 28 ? 3.8 : 5.4;
-  const gkAwayX = side === "home" && ballX > 72 ? 96.2 : 94.6;
-
-  dots.push({
-    id: "h-gk",
+  // Gardiens suivant calmement l'axe vertical du jeu
+  const gkShiftY = (kf.ballY - 50) * 0.16;
+  map.set("h-1", {
     team: "home",
     role: "gk",
     number: 1,
-    x: gkHomeX,
-    y: gkHomeY,
-    isCarrier: false,
+    x: kf.side === "away" && kf.ballX < 25 ? 4.2 : 5.8,
+    y: clamp(50 + gkShiftY, 42, 58),
   });
-  dots.push({
-    id: "a-gk",
+  map.set("a-1", {
     team: "away",
     role: "gk",
     number: 1,
-    x: gkAwayX,
-    y: gkAwayY,
-    isCarrier: false,
+    x: kf.side === "home" && kf.ballX > 75 ? 95.8 : 94.2,
+    y: clamp(50 + gkShiftY, 42, 58),
   });
 
-  // Translation collective du bloc équipe en fonction de la position du ballon
-  const ballShiftX = (ballX - 50) * 0.46;
-  const ballShiftY = (ballY - 50) * 0.22;
+  if (kf.kind === "halftime" || kf.kind === "fulltime") {
+    for (let i = 0; i < homeCount; i++) {
+      const [line, yBase, num] = STRUCTURED_OUTFIELD[i];
+      map.set(`h-${num}`, {
+        team: "home",
+        role: "outfield",
+        number: num,
+        x: 20 + line * 12,
+        y: yBase,
+      });
+    }
+    for (let i = 0; i < awayCount; i++) {
+      const [line, yBase, num] = STRUCTURED_OUTFIELD[i];
+      map.set(`a-${num}`, {
+        team: "away",
+        role: "outfield",
+        number: num,
+        x: 80 - line * 12,
+        y: 100 - yBase,
+      });
+    }
+    return map;
+  }
 
-  for (let i = 0; i < homeOutfieldCount; i++) {
-    const [bx, by, num] = HOME_BASE_OUTFIELD[i];
-    const jitter = (((hashString(`jp|h|${match.id}|${beatIdx}|${i}`) % 9) - 4) * 0.65);
-    const atkBoost = side === "home" ? 7 : side === "away" ? -4 : 0;
-    const x =
-      kind === "halftime"
-        ? 36 + (i % 3) * 4
-        : clamp(bx + ballShiftX + atkBoost + jitter, 9, 92);
-    const y =
-      kind === "halftime"
-        ? 24 + i * 5.2
-        : clamp(by + ballShiftY + jitter * 0.8, 8, 92);
-    dots.push({
-      id: `h-${num}`,
+  // Hauteurs de lignes coordonnées (Défense, Milieu, Attaque coulissent en bloc harmonieux)
+  const ballOffset = kf.ballX - 50; // -50 .. +50
+  const latShift = (kf.ballY - 50) * 0.24;
+
+  // Bloc Domicile (défend à gauche x=0, attaque vers la droite x=100)
+  const homeAttacking = kf.side === "home";
+  const homeDefLine = clamp(22 + ballOffset * 0.36 + (homeAttacking ? 4 : -3), 12, 48);
+  const homeSpan = homeAttacking ? 17.5 : 12.5; // bloc étiré en possession, resserré en défense
+  const homeWidthScale = homeAttacking ? 1.0 : 0.78;
+
+  for (let i = 0; i < homeCount; i++) {
+    const [line, yBase, num] = STRUCTURED_OUTFIELD[i];
+    let x = homeDefLine + line * homeSpan;
+    let y = 50 + (yBase - 50) * homeWidthScale + latShift;
+
+    // Montée coordonnée dans la surface sur corner offensif Domicile
+    if (kf.kind === "corner" && homeAttacking && (num === 4 || num === 5 || num === 9 || num === 10)) {
+      x = num === 9 ? 89 : num === 4 ? 86 : 83;
+      y = num === 4 ? 42 : num === 5 ? 58 : num === 9 ? 49 : 64;
+    }
+
+    map.set(`h-${num}`, {
       team: "home",
       role: "outfield",
       number: num,
-      x,
-      y,
-      isCarrier: false,
+      x: clamp(x, 9, 93),
+      y: clamp(y, 9, 91),
     });
   }
 
-  for (let i = 0; i < awayOutfieldCount; i++) {
-    const [bx, by, num] = HOME_BASE_OUTFIELD[i];
-    const mx = 100 - bx;
-    const my = 100 - by;
-    const jitter = (((hashString(`jp|a|${match.id}|${beatIdx}|${i}`) % 9) - 4) * 0.65);
-    const atkBoost = side === "away" ? -7 : side === "home" ? 4 : 0;
-    const x =
-      kind === "halftime"
-        ? 64 - (i % 3) * 4
-        : clamp(mx + ballShiftX + atkBoost + jitter, 8, 91);
-    const y =
-      kind === "halftime"
-        ? 24 + i * 5.2
-        : clamp(my + ballShiftY - jitter * 0.8, 8, 92);
-    dots.push({
-      id: `a-${num}`,
+  // Bloc Extérieur (défend à droite x=100, attaque vers la gauche x=0)
+  const awayAttacking = kf.side === "away";
+  const awayDefLine = clamp(78 + ballOffset * 0.36 + (awayAttacking ? -4 : 3), 52, 88);
+  const awaySpan = awayAttacking ? 17.5 : 12.5;
+  const awayWidthScale = awayAttacking ? 1.0 : 0.78;
+
+  for (let i = 0; i < awayCount; i++) {
+    const [line, yBase, num] = STRUCTURED_OUTFIELD[i];
+    const my = 100 - yBase;
+    let x = awayDefLine - line * awaySpan;
+    let y = 50 + (my - 50) * awayWidthScale + latShift;
+
+    // Montée coordonnée sur corner offensif Extérieur
+    if (kf.kind === "corner" && awayAttacking && (num === 4 || num === 5 || num === 9 || num === 10)) {
+      x = num === 9 ? 11 : num === 4 ? 14 : 17;
+      y = num === 4 ? 42 : num === 5 ? 58 : num === 9 ? 51 : 36;
+    }
+
+    map.set(`a-${num}`, {
       team: "away",
       role: "outfield",
       number: num,
-      x,
-      y,
-      isCarrier: false,
+      x: clamp(x, 7, 91),
+      y: clamp(y, 9, 91),
     });
   }
 
-  // Assigne le porteur du ballon (ou tireur de corner / coup franc) au joueur le plus proche du camp actif
-  if (side !== "neutral" && kind !== "goal" && kind !== "halftime" && kind !== "fulltime") {
-    let bestIdx = -1;
-    let bestDist = Infinity;
-    for (let i = 0; i < dots.length; i++) {
-      const d = dots[i];
-      if (d.team !== side || d.role === "gk") continue;
-      const dist = Math.hypot(d.x - ballX, d.y - ballY);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIdx = i;
-      }
-    }
-    if (bestIdx >= 0) {
-      // Sur un tir déjà parti vers les filets, le tireur reste à l'entrée de la surface
-      if (kind === "shot_on_target" || kind === "shot_off") {
-        dots[bestIdx] = {
-          ...dots[bestIdx],
-          isCarrier: true,
-        };
-      } else {
-        dots[bestIdx] = {
-          ...dots[bestIdx],
-          x: clamp(ballX + (side === "home" ? -1.4 : 1.4), 3, 97),
-          y: clamp(ballY, 5, 95),
-          isCarrier: true,
-        };
-      }
+  // Le porteur désigné accompagne naturellement le ballon sans téléportation d'un autre pion
+  if (kf.carrierId && map.has(kf.carrierId)) {
+    const c = map.get(kf.carrierId)!;
+    if (c.role !== "gk") {
+      const offset = c.team === "home" ? -1.3 : 1.3;
+      map.set(kf.carrierId, {
+        ...c,
+        x: clamp(kf.ballX + offset, 3, 97),
+        y: clamp(kf.ballY, 5, 95),
+      });
     }
   }
 
-  return dots;
+  return map;
 }
 
 /**
- * Calcule la frame radar temps réel (cadencée sur l'horloge réelle du match,
- * avec interpolation fluide entre deux battements tactiques).
+ * Calcule la frame radar temps réel avec interpolation C¹ continue (smoothstep)
+ * entre les formations clés : aucun saut de pion, coordination collective fluide.
  */
 export function computeLivePlayFrame(
   match: TelemetryMatchInput,
@@ -851,47 +921,80 @@ export function computeLivePlayFrame(
   const min = telemetry.minute;
   const events = match.events ?? [];
 
-  // Cadence alignée sur le moteur serveur (~1,35 s par phase pour suivre chaque minute virtuelle)
-  const stepMs = matchStepMs(match.id, match.source);
-  const beatDurationMs = match.source === "manual" ? 2_200 : Math.min(1_450, Math.max(1_150, Math.round(stepMs * 0.82)));
+  // Rythme calme et lisible (~2,2 s à 2,6 s par temps de passe/action)
+  const beatDurationMs =
+    match.source === "manual"
+      ? 2_600
+      : 2_150 + (matchStepMs(match.id, match.source) % 240);
   const beatIdx = Math.floor(nowMs / beatDurationMs);
-  const rawProgress = (nowMs % beatDurationMs) / beatDurationMs;
-  // Courbe ease-out fluide
-  const ease = 1 - Math.pow(1 - rawProgress, 2.4);
+  const u = (nowMs % beatDurationMs) / beatDurationMs;
+  const teamEase = smoothstep(u);
+  // Le ballon voyage un peu plus vite que la course des joueurs, puis est contrôlé proprement
+  const ballEase = smoothstep(clamp((u - 0.06) / 0.78, 0, 1));
 
   // 1. Match terminé
   if (match.status === "finished" || match.minute === "Terminé") {
+    const kf: KeyframeState = {
+      kind: "fulltime",
+      side: "neutral",
+      ballX: 50,
+      ballY: 50,
+      carrierId: null,
+      label: `Terminé · ${match.homeScore ?? 0} – ${match.awayScore ?? 0}`,
+      sublabel: "Coup de sifflet final",
+      trajectory: "none",
+    };
+    const form = computeFormationAtKeyframe(match, kf);
     return {
       kind: "fulltime",
       side: "neutral",
-      label: `Coup de sifflet final · ${match.homeScore ?? 0} – ${match.awayScore ?? 0}`,
-      sublabel: "Rencontre terminée",
+      label: kf.label,
+      sublabel: kf.sublabel,
       ballX: 50,
       ballY: 50,
       fromX: 50,
       fromY: 50,
       trajectory: "none",
-      players: buildTacticalPlayers(match, 50, 50, "neutral", "fulltime", 0),
+      players: [...form.entries()].map(([id, p]) => ({
+        id,
+        ...p,
+        isCarrier: false,
+      })),
     };
   }
 
   // 2. Mi-temps
   if (match.minute === "MT" || match.minute === "HT") {
+    const kf: KeyframeState = {
+      kind: "halftime",
+      side: "neutral",
+      ballX: 50,
+      ballY: 50,
+      carrierId: null,
+      label: `Mi-temps · ${match.homeScore ?? 0} – ${match.awayScore ?? 0}`,
+      sublabel: "Pause au vestiaire",
+      trajectory: "none",
+    };
+    const form = computeFormationAtKeyframe(match, kf);
     return {
       kind: "halftime",
       side: "neutral",
-      label: "Mi-temps · Pause au vestiaire",
-      sublabel: `Score à la pause : ${match.homeScore ?? 0} – ${match.awayScore ?? 0}`,
+      label: kf.label,
+      sublabel: kf.sublabel,
       ballX: 50,
       ballY: 50,
       fromX: 50,
       fromY: 50,
       trajectory: "none",
-      players: buildTacticalPlayers(match, 50, 50, "neutral", "halftime", beatIdx),
+      players: [...form.entries()].map(([id, p]) => ({
+        id,
+        ...p,
+        isCarrier: false,
+      })),
     };
   }
 
-  // 3. But tout juste inscrit (marché suspendu après but ou minute courante)
+  // 3. But tout juste inscrit
   const latestGoal = [...events]
     .reverse()
     .find((e) => e.type === "goal" && Math.abs(e.minute - min) <= 1);
@@ -899,24 +1002,30 @@ export function computeLivePlayFrame(
   if (latestGoal && (match.suspended || latestGoal.minute === min)) {
     const isHome = latestGoal.team === "home";
     const teamName = isHome ? match.homeTeam : match.awayTeam;
-    const scorer = latestGoal.player ? `${latestGoal.player} (${latestGoal.minute}')` : `${latestGoal.minute}'`;
-    const netX = isHome ? 99.1 : 0.9;
+    const scorer = latestGoal.player
+      ? `${latestGoal.player} (${latestGoal.minute}')`
+      : `${latestGoal.minute}'`;
+    const netX = isHome ? 99 : 1;
     const shotOriginX = isHome ? 84 : 16;
-    const shotOriginY = 44 + (hashString(`goal-y|${match.id}|${latestGoal.minute}`) % 13);
-    const players = buildTacticalPlayers(
-      match,
-      shotOriginX,
-      shotOriginY,
-      isHome ? "home" : "away",
-      "goal",
-      beatIdx
-    );
+    const shotOriginY = 45 + (hashString(`goal-y|${match.id}|${latestGoal.minute}`) % 11);
+
+    const kf: KeyframeState = {
+      kind: "goal",
+      side: isHome ? "home" : "away",
+      ballX: shotOriginX,
+      ballY: shotOriginY,
+      carrierId: isHome ? "h-9" : "a-9",
+      label: `⚽ BUT ! ${teamName} (${scorer})`,
+      sublabel: `Score ${match.homeScore ?? 0} – ${match.awayScore ?? 0}`,
+      trajectory: "shot",
+    };
+    const form = computeFormationAtKeyframe(match, kf);
 
     return {
       kind: "goal",
       side: isHome ? "home" : "away",
-      label: `BUT ! ${teamName}`,
-      sublabel: `${scorer} · Score ${match.homeScore ?? 0} – ${match.awayScore ?? 0}`,
+      label: kf.label,
+      sublabel: kf.sublabel,
       ballX: netX,
       ballY: 50,
       fromX: shotOriginX,
@@ -928,47 +1037,51 @@ export function computeLivePlayFrame(
         subtitle: `${scorer}  •  ${match.homeScore ?? 0} – ${match.awayScore ?? 0}`,
         team: isHome ? "home" : "away",
       },
-      players,
+      players: [...form.entries()].map(([id, p]) => ({
+        id,
+        ...p,
+        isCarrier: id === kf.carrierId,
+      })),
     };
   }
 
-  // 4. Carton rouge récent
+  // 4. Interpolation continue entre l'état clé (beatIdx - 1) et l'état clé (beatIdx)
+  const prevKf = buildConnectedKeyframe(match, telemetry, beatIdx - 1);
+  const currKf = buildConnectedKeyframe(match, telemetry, beatIdx);
+
+  const prevForm = computeFormationAtKeyframe(match, prevKf);
+  const currForm = computeFormationAtKeyframe(match, currKf);
+
+  const ballX = prevKf.ballX + (currKf.ballX - prevKf.ballX) * ballEase;
+  const ballY = prevKf.ballY + (currKf.ballY - prevKf.ballY) * ballEase;
+
+  const activeCarrierId = u < 0.28 ? prevKf.carrierId : currKf.carrierId;
+
+  const players: TacticalPlayerDot[] = [];
+  for (const [id, target] of currForm.entries()) {
+    const start = prevForm.get(id) ?? target;
+    // Respiration sinusoïdale douce et déphasée (jamais de saut aléatoire)
+    const phase = (hashString(`phase|${id}`) % 628) / 100;
+    const swayX = Math.sin(nowMs * 0.0015 + phase) * 0.45;
+    const swayY = Math.cos(nowMs * 0.0013 + phase * 1.3) * 0.45;
+
+    const ix = start.x + (target.x - start.x) * teamEase + (target.role === "gk" ? 0 : swayX);
+    const iy = start.y + (target.y - start.y) * teamEase + (target.role === "gk" ? 0 : swayY);
+
+    players.push({
+      id,
+      team: target.team,
+      role: target.role,
+      number: target.number,
+      x: Math.round(clamp(ix, 2.5, 97.5) * 100) / 100,
+      y: Math.round(clamp(iy, 5, 95) * 100) / 100,
+      isCarrier: id === activeCarrierId,
+    });
+  }
+
   const latestRed = [...events]
     .reverse()
     .find((e) => e.type === "red_card" && e.minute === min);
-
-  // 5. Chaîne d'action continue entre beatIdx - 1 et beatIdx
-  const prevNode = buildBeatNode(match, telemetry, beatIdx - 1);
-  const currNode = buildBeatNode(match, telemetry, beatIdx);
-
-  // Sur un tir ou un centre de corner, le ballon file du point précédent vers la cible
-  const interpX =
-    currNode.kind === "corner" || currNode.kind === "free_kick"
-      ? currNode.x
-      : prevNode.x + (currNode.x - prevNode.x) * ease;
-  const interpY =
-    currNode.kind === "corner" || currNode.kind === "free_kick"
-      ? currNode.y
-      : prevNode.y + (currNode.y - prevNode.y) * ease;
-
-  const fromX =
-    currNode.kind === "corner"
-      ? currNode.x
-      : prevNode.x;
-  const fromY =
-    currNode.kind === "corner"
-      ? currNode.y
-      : prevNode.y;
-
-  // Mur défensif à 9m15 sur coup franc offensif
-  const wall =
-    currNode.kind === "free_kick" || currNode.trajectory === "free_kick"
-      ? {
-          x: currNode.side === "home" ? 84.5 : 15.5,
-          y: clamp(fromY + (50 - fromY) * 0.32, 34, 66),
-          side: (currNode.side === "home" ? "away" : "home") as "home" | "away",
-        }
-      : null;
 
   let banner: LivePlayFrame["banner"] = null;
   if (latestRed) {
@@ -980,38 +1093,29 @@ export function computeLivePlayFrame(
         : Math.max(1, match.redAway ?? 1));
     banner = {
       type: "red_card",
-      title: `🟥 CARTON ROUGE · ${redTeam}`,
-      subtitle: `${latestRed.minute}' · Réduit à ${remaining} joueurs`,
+      title: `🟥 ROUGE · ${redTeam} (${remaining}j)`,
+      subtitle: `${latestRed.minute}'`,
       team: latestRed.team === "home" ? "home" : "away",
     };
   } else if (match.suspended) {
     banner = {
       type: "suspended",
-      title: "🔒 Action décisive en cours",
-      subtitle: "Cotes temporairement suspendues",
+      title: "🔒 Cotes suspendues",
+      subtitle: "Action décisive",
     };
   }
 
-  const players = buildTacticalPlayers(
-    match,
-    interpX,
-    interpY,
-    currNode.side,
-    currNode.kind,
-    beatIdx
-  );
-
   return {
-    kind: currNode.kind,
-    side: currNode.side,
-    label: currNode.label,
-    sublabel: currNode.sublabel,
-    ballX: Math.round(interpX * 100) / 100,
-    ballY: Math.round(interpY * 100) / 100,
-    fromX: Math.round(fromX * 100) / 100,
-    fromY: Math.round(fromY * 100) / 100,
-    trajectory: currNode.trajectory,
-    wall,
+    kind: currKf.kind,
+    side: currKf.side,
+    label: currKf.label,
+    sublabel: currKf.sublabel,
+    ballX: Math.round(ballX * 100) / 100,
+    ballY: Math.round(ballY * 100) / 100,
+    fromX: Math.round(prevKf.ballX * 100) / 100,
+    fromY: Math.round(prevKf.ballY * 100) / 100,
+    trajectory: currKf.trajectory,
+    wall: currKf.wall ?? null,
     banner,
     players,
   };
