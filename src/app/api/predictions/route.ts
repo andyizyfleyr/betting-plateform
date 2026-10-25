@@ -4,16 +4,11 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser, predictionBets, predictionQuestions } from "@/db/schema";
 import {
-  exposureAdjustedOdds,
-  netExposureWith,
-  PRED_EXPOSURE_CAP,
   PRED_MAX_STAKE,
   PRED_MIN_STAKE,
   round2,
   settleResolvedQuestions,
-  totalExposure,
 } from "@/lib/predictions";
-import { type BetLike } from "@/lib/risk";
 import { getAuthUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +18,6 @@ type PredSelection = (typeof PRED_SELECTIONS)[number];
 
 const PRED_CATEGORIES = ["Sport", "Actus", "Crypto", "Culture"] as const;
 
-/** Anti-triche : intervalle minimal entre deux paris (mêmes valeurs que les paris sportifs). */
 const BET_COOLDOWN_MS = 700;
 
 export async function GET(req: NextRequest) {
@@ -55,43 +49,36 @@ export async function GET(req: NextRequest) {
     .from(predictionQuestions)
     .where(where)
     .orderBy(
-      asc(
-        sql`CASE ${predictionQuestions.status} WHEN 'open' THEN 0 ELSE 1 END`
-      ),
+      asc(sql`CASE ${predictionQuestions.status} WHEN 'open' THEN 0 ELSE 1 END`),
       asc(predictionQuestions.resolvesAt),
       desc(predictionQuestions.id)
     )
     .limit(limit)
     .offset((page - 1) * limit);
 
-  // Exposition du bookmaker par question : les paris en attente resserrent les cotes
-  // affichées de la même façon que lors de la validation serveur d'un pari.
-  const pending = await db
-    .select({ questionId: predictionBets.questionId, selection: predictionBets.selection, stake: predictionBets.stake, odds: predictionBets.odds })
-    .from(predictionBets)
-    .where(eq(predictionBets.status, "pending"));
-  const pendingByQuestion = new Map<number, BetLike[]>();
-  for (const b of pending) {
-    const arr = pendingByQuestion.get(b.questionId) ?? [];
-    arr.push({ market: "yesno", selection: b.selection, stake: b.stake, odds: b.odds });
-    pendingByQuestion.set(b.questionId, arr);
-  }
-
-  // Paris de l'utilisateur connecté, par question (pour le badge « Votre pari »).
+  // Paris de l'utilisateur connecté, par question (pour le badge « Votre mise »).
   const myBets = await db
-    .select({ questionId: predictionBets.questionId, selection: predictionBets.selection, status: predictionBets.status, stake: predictionBets.stake, potentialWin: predictionBets.potentialWin, odds: predictionBets.odds, cashOutAmount: predictionBets.cashOutAmount })
+    .select({
+      questionId: predictionBets.questionId,
+      selection: predictionBets.selection,
+      status: predictionBets.status,
+      stake: predictionBets.stake,
+      potentialWin: predictionBets.potentialWin,
+      odds: predictionBets.odds,
+      cashOutAmount: predictionBets.cashOutAmount,
+    })
     .from(predictionBets)
     .where(eq(predictionBets.userId, uid));
-  const myBetsByQuestion = new Map<number, typeof myBets[number][]>();
+
+  const myBetsByQuestion = new Map<number, (typeof myBets)[number][]>();
   for (const b of myBets) {
     const arr = myBetsByQuestion.get(b.questionId) ?? [];
     arr.push(b);
     myBetsByQuestion.set(b.questionId, arr);
   }
 
+  // Cotes fixes bookmaker : ne dépendent pas d'un pool mutuel entre joueurs.
   const questions = rows.map((q) => {
-    const exposure = pendingByQuestion.get(q.id) ?? [];
-    const priced = exposureAdjustedOdds(q.oddsYes, q.oddsNo, exposure);
     const mine = myBetsByQuestion.get(q.id) ?? [];
     return {
       id: q.id,
@@ -99,8 +86,8 @@ export async function GET(req: NextRequest) {
       category: q.category,
       status: q.status,
       resolution: q.resolution,
-      oddsYes: priced.oddsYes,
-      oddsNo: priced.oddsNo,
+      oddsYes: q.oddsYes,
+      oddsNo: q.oddsNo,
       volume: q.volume,
       yesCount: q.yesCount,
       noCount: q.noCount,
@@ -144,7 +131,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Anti-spam : une mise toutes les 700 ms maximum.
   const [lastBet] = await db
     .select({ placedAt: predictionBets.placedAt })
     .from(predictionBets)
@@ -174,42 +160,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Solde insuffisant" }, { status: 400 });
   }
 
-  // Paris en attente sur cette question → recotation par exposition + garde-fou.
-  const rawPendingBets = await db
-    .select({ selection: predictionBets.selection, stake: predictionBets.stake, odds: predictionBets.odds })
-    .from(predictionBets)
-    .where(and(eq(predictionBets.status, "pending"), eq(predictionBets.questionId, question.id)));
-
-  const pendingBets: BetLike[] = rawPendingBets.map((b) => ({
-    market: "yesno",
-    selection: b.selection,
-    stake: b.stake,
-    odds: b.odds,
-  }));
-
-  const priced = exposureAdjustedOdds(question.oddsYes, question.oddsNo, pendingBets);
-
-  // Anti-triche : plafond d'exposition nette par question.
-  const exposureWithNew = Math.max(
-    0,
-    netExposureWith(pendingBets, question.oddsYes, question.oddsNo, selection, round2(stake))
-  );
-  if (exposureWithNew > PRED_EXPOSURE_CAP) {
-    return NextResponse.json(
-      { error: `Exposition maximale atteinte sur cette question (${PRED_EXPOSURE_CAP} €)` },
-      { status: 400 }
-    );
-  }
-
-  // Recotation serveur : la cote est toujours lue depuis la base (ajustée par exposition),
-  // jamais celle du client.
+  // Cote fixe verrouillée au moment de la validation : gain = mise × cote garanti.
   const isYes = selection === "yes";
-  const odds = isYes ? priced.oddsYes : priced.oddsNo;
+  const odds = isYes ? question.oddsYes : question.oddsNo;
   const selectionLabel = isYes ? "Oui" : "Non";
   const roundedStakeValue = round2(stake);
   const potentialWin = round2(roundedStakeValue * odds);
 
-  // Transaction : pari + débit solde + mise à jour du marché (volume, compteurs, cotes).
   const result = await db.transaction(async (tx) => {
     const [bet] = await tx
       .insert(predictionBets)
@@ -236,8 +193,6 @@ export async function POST(req: NextRequest) {
     await tx
       .update(predictionQuestions)
       .set({
-        oddsYes: priced.oddsYes,
-        oddsNo: priced.oddsNo,
         volume: sql`${predictionQuestions.volume} + ${roundedStakeValue}`,
         yesCount: sql`${predictionQuestions.yesCount} + ${isYes ? 1 : 0}`,
         noCount: sql`${predictionQuestions.noCount} + ${isYes ? 0 : 1}`,

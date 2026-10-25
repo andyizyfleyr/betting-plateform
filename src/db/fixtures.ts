@@ -10,7 +10,7 @@ const ELO_SENSITIVITY = 0.028;
 const PREMATCH_MARGIN = 1.045;
 const LIVE_MARGIN_MIN = 1.05;
 const LIVE_MARGIN_MAX = 1.12;
-const LIVE_ODDS_MAX = 120;
+const LIVE_ODDS_MAX = 100;
 const LIVE_MAX_REMAIN = 14;
 
 export interface VirtualTeam {

@@ -326,10 +326,10 @@ function PredictionBetSheet({
               </p>
             )}
 
-            {/* Gain estimé */}
+            {/* Gain potentiel à cote fixe */}
             <div className="mt-3.5 flex items-center justify-between rounded-2xl bg-elev px-3.5 py-3">
               <div>
-                <p className="text-[11px] font-semibold text-mist">Gain estimé (pool mutuel)</p>
+                <p className="text-[11px] font-semibold text-mist">Gain potentiel (cote fixe)</p>
                 <p className="text-[11px] font-medium text-win">
                   Bénéfice net +{eur(Math.max(profit, 0))}
                 </p>
@@ -423,7 +423,7 @@ function SuccessView({
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase text-dim">Estimé</p>
+            <p className="text-[10px] font-semibold uppercase text-dim">Gain max</p>
             <p className="mt-0.5 font-display text-[13.5px] font-bold tabular-nums text-win">
               {eur(payout)}
             </p>

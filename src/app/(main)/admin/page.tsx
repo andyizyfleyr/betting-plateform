@@ -1285,7 +1285,7 @@ function QuestionsTab({
                     </span>
                   </div>
                   <p className="mt-1 text-[11.5px] text-dim">
-                    {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · Pool{" "}
+                    {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · Mises{" "}
                     {eur(q.volume)}
                   </p>
                   <div className="mt-2.5 flex items-center gap-1.5">

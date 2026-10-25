@@ -5,7 +5,7 @@ import {
   partitionOutcomeOdds,
   type LiveScoreModel,
 } from "@/db/fixtures";
-import { adjustOddsForExposure, marginOverround, netExposure, type BetLike } from "./risk";
+import { marginOverround, type BetLike } from "./risk";
 
 export type MarketCategory = "main" | "goals" | "teams" | "scores";
 
@@ -63,11 +63,14 @@ const SCORE_EXACT_LISTED = new Set([
 ]);
 
 const MARKET_MAX_ODDS: Record<string, number> = {
-  result: 120,
+  result: 100,
   double_chance: 25,
+  result_total: 100,
   total_exact: 90,
-  score_exact: 150,
+  score_exact: 120,
 };
+
+const DEFAULT_MAX_ODDS = 80;
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -78,15 +81,17 @@ function effectiveMargin(market: string, baseMargin = 1.045): number {
   return Math.round(baseMargin * (marginOverround(market) / marginOverround("result")) * 10000) / 10000;
 }
 
-/** Applique la correction d'exposition du bookmaker après cotation probabiliste. */
+/** Cotes fixes non mutualisées : les mises des autres joueurs ne déforment pas la cote. */
 function exposureAdjustedOdds(
-  market: string,
-  outcome: string,
+  _market: string,
+  _outcome: string,
   modelOdds: number,
-  bets?: BetLike[]
+  _bets?: BetLike[]
 ): number {
-  if (!bets || bets.length === 0) return modelOdds;
-  return adjustOddsForExposure(modelOdds, netExposure(bets, market, outcome));
+  void _market;
+  void _outcome;
+  void _bets;
+  return modelOdds;
 }
 
 const w = {
@@ -433,7 +438,7 @@ function buildMarketGroup(
   bets?: BetLike[]
 ): MarketGroup | null {
   const overround = effectiveMargin(m.key, model.margin);
-  const maxOdds = MARKET_MAX_ODDS[m.key] ?? 65;
+  const maxOdds = MARKET_MAX_ODDS[m.key] ?? DEFAULT_MAX_ODDS;
   const specs = m.outcomes(home, away);
 
   // Cas 1 : marché structuré en lignes Plus/Moins (total_ou, home_total, away_total)
@@ -450,8 +455,8 @@ function buildMarketGroup(
           const prob = rawProbOnModel(m, s.key, model);
           const settled = isLive
             ? marketOutcomeSettled(m.key, s.key, homeScore, awayScore, minute) ||
-              prob < 0.0015 ||
-              prob > 0.994
+              prob < 0.008 ||
+              prob > 0.985
             : false;
           return { spec: s, prob, settled };
         });
@@ -491,8 +496,8 @@ function buildMarketGroup(
     const prob = rawProbOnModel(m, s.key, model);
     const settled = isLive
       ? marketOutcomeSettled(m.key, s.key, homeScore, awayScore, minute) ||
-        prob < 0.0012 ||
-        prob > 0.994
+        prob < 0.006 ||
+        prob > 0.985
       : false;
     return { spec: s, prob, settled };
   });

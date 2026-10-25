@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -7,7 +7,7 @@ import { appUser, bets, matches, predictionBets, predictionQuestions } from "@/d
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { settleResolvedQuestions } from "@/lib/predictions";
-import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile, type BetLike } from "@/lib/risk";
+import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { getAuthUserId } from "@/lib/session";
 import { settleFinishedBets } from "@/lib/settle";
 
@@ -276,15 +276,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Ce marché est déjà décidé" }, { status: 400 });
   }
 
-  // Recotation serveur : en direct = grille de scores finaux, sinon cotes d'avant-match.
-  // Match manuel = marchés/cotes personnalisés saisis par l'admin, utilisés tels quels.
-  // L'exposition courante du bookmaker (paris en cours sur ce marché) resserre la cote.
-  const pendingBets = await db
-    .select({ market: bets.market, selection: bets.selection, stake: bets.stake, odds: bets.odds })
-    .from(bets)
-    .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
-  const exposureBets: BetLike[] = pendingBets.map((b) => b);
-
+  // Cotation fixe bookmaker (non mutualisée) : le prix dépend uniquement du match
+  // et est verrouillé contractuellement sur le ticket à la validation.
   let odds: number | null = null;
   let selectionLabel: string | null = null;
   if (pricedMatch.source === "manual" && pricedMatch.markets && pricedMatch.markets.length > 0) {
@@ -309,10 +302,9 @@ export async function POST(req: NextRequest) {
               awayForm: pricedMatch.awayForm ?? 1,
               redHome: pricedMatch.redHome ?? 0,
               redAway: pricedMatch.redAway ?? 0,
-            },
-            exposureBets
+            }
           )
-        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam, exposureBets);
+        : marketOddsFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
     selectionLabel = marketLabelFor(market, selection, pricedMatch.homeTeam, pricedMatch.awayTeam);
     if (odds == null || selectionLabel == null) {
       return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
