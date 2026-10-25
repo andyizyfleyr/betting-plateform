@@ -222,6 +222,7 @@ export function DesktopBetslipSidebar() {
 
     const refreshPredictions = () => {
       if (typeof document !== "undefined" && document.hidden) return;
+      if (typeof window !== "undefined" && window.innerWidth < 1024) return;
       api
         .predictions()
         .then((pRes) => {
@@ -233,7 +234,7 @@ export function DesktopBetslipSidebar() {
     };
 
     refreshPredictions();
-    const id = setInterval(refreshPredictions, 8_000);
+    const id = setInterval(refreshPredictions, 12_000);
     return () => {
       active = false;
       clearInterval(id);

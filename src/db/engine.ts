@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { settlePendingCombos } from "@/lib/combo";
@@ -1205,7 +1205,7 @@ async function tickLiveMatch(
       to: targetSimMin,
     });
   }
-  const trimmedHistory = tickHistory.slice(-24);
+  const trimmedHistory = isOver ? tickHistory.slice(-8) : tickHistory.slice(-24);
 
   const lastGoalDate = justScoredNow ? new Date(now) : m.lastGoalAt;
   const recentGoal = lastGoalDate != null && now - lastGoalDate.getTime() < GOAL_SUSPEND_MS;
@@ -1276,6 +1276,7 @@ async function tickLiveMatch(
       homeLogo,
       awayLogo,
       startsAt: m.startsAt,
+      ...(isOver && m.source === "virtual" ? { scriptedEvents: null } : {}),
       ...(isOver ? { finishedAt: new Date(Math.min(now, naturalEndMs)) } : {}),
     })
     .where(eq(matches.id, m.id))
@@ -1296,6 +1297,35 @@ async function tickLiveMatch(
   }
 
   return { finished: isOver, row: updated ?? m };
+}
+
+/**
+ * Purge douce des anciens matchs virtuels terminés au-delà des 150 plus récents
+ * lorsqu'aucun pari simple ni combiné n'y fait référence : maintient la table `matches`
+ * légère (< 2 Mo) et protège le quota de transfert réseau PostgreSQL (Neon egress).
+ */
+export async function pruneOldFinishedVirtualMatches(): Promise<void> {
+  await db.execute(sql`
+    DELETE FROM "matches" m
+    WHERE m."source" = 'virtual'
+      AND m."status" = 'finished'
+      AND m."id" NOT IN (
+        SELECT "id"
+        FROM "matches"
+        WHERE "source" = 'virtual' AND "status" = 'finished'
+        ORDER BY "finished_at" DESC NULLS LAST, "id" DESC
+        LIMIT 150
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM "bets" b WHERE b."match_id" = m."id"
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM "combo_bets" cb,
+             jsonb_array_elements(cb."legs") AS leg
+        WHERE (leg->>'matchId') = m."id"::text
+      );
+  `);
 }
 
 /* ============================================================================

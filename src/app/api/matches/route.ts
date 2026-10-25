@@ -1,4 +1,4 @@
-import { asc, desc, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { matches } from "@/db/schema";
@@ -29,36 +29,34 @@ export async function GET() {
     await syncLiveMatchesThrottled();
 
   const now = Date.now();
-  const allRows = await db
-    .select()
-    .from(matches)
-    .orderBy(
-      asc(sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`),
-      asc(matches.startsAt),
-      desc(matches.id)
-    );
+  // Filtrage et LIMIT directement en SQL (au lieu d'un `SELECT *` complet de tout l'historique)
+  // pour réduire de > 99 % le transfert réseau PostgreSQL (Neon egress) à chaque rafraîchissement.
+  const [activeRows, finishedManual, finishedVirtual] = await Promise.all([
+    db
+      .select()
+      .from(matches)
+      .where(ne(matches.status, "finished"))
+      .orderBy(
+        asc(sql`CASE ${matches.status} WHEN 'live' THEN 0 ELSE 1 END`),
+        asc(matches.startsAt),
+        desc(matches.id)
+      ),
+    db
+      .select()
+      .from(matches)
+      .where(and(eq(matches.source, "manual"), eq(matches.status, "finished")))
+      .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
+      .limit(20),
+    db
+      .select()
+      .from(matches)
+      .where(and(ne(matches.source, "manual"), eq(matches.status, "finished")))
+      .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
+      .limit(12),
+  ]);
 
-  // Séparation stricte des files : les résultats rapides des matchs virtuels (2-3 min)
-  // n'évincent jamais les matchs réels ajoutés par l'admin.
-  const activeManual = allRows.filter((r) => r.source === "manual" && r.status !== "finished");
-  const finishedManual = allRows
-    .filter((r) => r.source === "manual" && r.status === "finished")
-    .sort((a, b) => {
-      const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
-      const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
-      return tb - ta;
-    })
-    .slice(0, 20);
-
-  const activeVirtual = allRows.filter((r) => r.source !== "manual" && r.status !== "finished");
-  const finishedVirtual = allRows
-    .filter((r) => r.source !== "manual" && r.status === "finished")
-    .sort((a, b) => {
-      const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
-      const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
-      return tb - ta;
-    })
-    .slice(0, 12);
+  const activeManual = activeRows.filter((r) => r.source === "manual");
+  const activeVirtual = activeRows.filter((r) => r.source !== "manual");
 
   const rows = [...activeManual, ...finishedManual, ...activeVirtual, ...finishedVirtual];
 
