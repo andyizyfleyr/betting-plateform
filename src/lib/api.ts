@@ -1,7 +1,7 @@
 import type { LiveMatchTelemetry } from "@/lib/live-telemetry";
 
 export type MatchStatus = "live" | "upcoming" | "finished";
-export type BetStatus = "pending" | "won" | "lost" | "cashed";
+export type BetStatus = "pending" | "won" | "lost" | "cashed" | "void";
 export type Selection = "home" | "draw" | "away";
 export type BetKind = "sport" | "prediction" | "combo";
 
@@ -37,7 +37,7 @@ export interface MarketGroup {
   key: string;
   label: string;
   short: string;
-  category?: "main" | "goals" | "teams" | "scores";
+  category?: "main" | "halftime" | "goals" | "teams" | "scores";
   outcomes: MarketOutcome[];
   rows?: MarketRow[];
 }

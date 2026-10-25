@@ -16,7 +16,15 @@ const ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { pendingCount } = useApp();
+  const { pendingCount, user } = useApp();
+
+  if (
+    user?.role === "admin" ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/")
+  ) {
+    return null;
+  }
 
   return (
     <nav className="sticky bottom-0 z-40 w-full border-t border-edge bg-white/98 backdrop-blur-md">

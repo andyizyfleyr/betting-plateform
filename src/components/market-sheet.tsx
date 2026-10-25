@@ -14,20 +14,25 @@ import { cn, formatOdds } from "@/lib/format";
 
 const POLL_INTERVAL = 4_000;
 
-type SheetCategory = "all" | "main" | "goals" | "teams" | "scores";
+type SheetCategory = "all" | "main" | "halftime" | "goals" | "teams" | "scores";
 
 const CATEGORY_TABS: Array<{ key: SheetCategory; label: string }> = [
   { key: "all", label: "Tous" },
   { key: "main", label: "Principaux" },
+  { key: "halftime", label: "Mi-temps" },
   { key: "goals", label: "Buts" },
   { key: "teams", label: "Équipes" },
   { key: "scores", label: "Scores" },
 ];
 
 const TWO_COL_MARKETS = new Set([
+  "dnb",
   "btts",
   "odd_even",
   "result_total",
+  "result_btts",
+  "goal_range",
+  "winning_margin",
   "home_to_nil",
   "away_to_nil",
   "home_clean_sheet",
@@ -36,11 +41,25 @@ const TWO_COL_MARKETS = new Set([
 
 function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
   if (g.category) return g.category;
-  if (["result", "double_chance", "total_ou", "btts", "result_total"].includes(g.key)) {
+  if (
+    [
+      "result",
+      "dnb",
+      "double_chance",
+      "handicap_euro",
+      "total_ou",
+      "btts",
+      "result_total",
+      "result_btts",
+    ].includes(g.key)
+  ) {
     return "main";
   }
-  if (g.key === "score_exact") return "scores";
-  if (["total_exact", "odd_even"].includes(g.key)) return "goals";
+  if (["ht_result", "ht_total_ou", "highest_scoring_half"].includes(g.key)) {
+    return "halftime";
+  }
+  if (["score_exact", "winning_margin", "ht_ft"].includes(g.key)) return "scores";
+  if (["total_exact", "odd_even", "goal_range"].includes(g.key)) return "goals";
   return "teams";
 }
 
@@ -482,13 +501,30 @@ function AccordionItem({
         <div className="rounded-b-2xl border-t border-edge/70 bg-white p-3">
           {group.rows ? (
             <div className="space-y-2">
-              <div className="grid grid-cols-[46px_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
-                <span className="text-center">Seuil</span>
-                <span className="text-center">Plus de</span>
-                <span className="text-center">Moins de</span>
-              </div>
+              {(group.rows[0]?.outcomes.length ?? 2) === 3 ? (
+                <div className="grid grid-cols-[46px_1fr_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
+                  <span className="text-center">Hcap</span>
+                  <span className="text-center">1</span>
+                  <span className="text-center">Nul</span>
+                  <span className="text-center">2</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-[46px_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
+                  <span className="text-center">Seuil</span>
+                  <span className="text-center">Plus de</span>
+                  <span className="text-center">Moins de</span>
+                </div>
+              )}
               {group.rows.map((row) => (
-                <div key={row.label} className="grid grid-cols-[46px_1fr_1fr] items-center gap-2">
+                <div
+                  key={row.label}
+                  className={cn(
+                    "grid items-center gap-2",
+                    row.outcomes.length === 3
+                      ? "grid-cols-[46px_1fr_1fr_1fr]"
+                      : "grid-cols-[46px_1fr_1fr]"
+                  )}
+                >
                   <span className="flex h-11 items-center justify-center rounded-xl bg-elev font-display text-[12px] font-bold tabular-nums text-ink">
                     {row.label}
                   </span>

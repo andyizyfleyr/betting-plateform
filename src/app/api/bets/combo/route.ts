@@ -251,8 +251,20 @@ export async function POST(req: NextRequest) {
       const h = m.homeScore ?? 0;
       const a = m.awayScore ?? 0;
       const min = minuteNumber(m.minute);
+      const formOpts = {
+        homeForm: m.homeForm ?? 1,
+        awayForm: m.awayForm ?? 1,
+        redHome: m.redHome ?? 0,
+        redAway: m.redAway ?? 0,
+        events: m.events ?? [],
+        matchId: m.id,
+      };
 
-      if (m.status === "live" && isKnownMarket(market) && marketOutcomeSettled(market, leg.selection, h, a, min)) {
+      if (
+        m.status === "live" &&
+        isKnownMarket(market) &&
+        marketOutcomeSettled(market, leg.selection, h, a, min, formOpts)
+      ) {
         return NextResponse.json(
           { error: `Sélection déjà décidée sur ${m.homeTeam} – ${m.awayTeam}` },
           { status: 400 }
@@ -266,12 +278,6 @@ export async function POST(req: NextRequest) {
         odds = customMarketOdds(m.markets, market, leg.selection);
         selectionLabel = customMarketLabel(m.markets, market, leg.selection);
       } else {
-        const formOpts = {
-          homeForm: m.homeForm ?? 1,
-          awayForm: m.awayForm ?? 1,
-          redHome: m.redHome ?? 0,
-          redAway: m.redAway ?? 0,
-        };
         odds =
           m.status === "live"
             ? liveMarketOddsFor(market, leg.selection, m.homeTeam, m.awayTeam, h, a, min, formOpts)

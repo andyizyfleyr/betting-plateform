@@ -39,7 +39,8 @@ export async function computeWithdrawalEligibility(uid: number): Promise<Withdra
           eq(bets.userId, uid),
           gte(bets.odds, MIN_WAGER_ODDS_SINGLE),
           ne(bets.status, "pending"),
-          ne(bets.status, "cashed")
+          ne(bets.status, "cashed"),
+          ne(bets.status, "void")
         )
       ),
     db
@@ -52,7 +53,8 @@ export async function computeWithdrawalEligibility(uid: number): Promise<Withdra
           eq(predictionBets.userId, uid),
           gte(predictionBets.odds, MIN_WAGER_ODDS_SINGLE),
           ne(predictionBets.status, "pending"),
-          ne(predictionBets.status, "cashed")
+          ne(predictionBets.status, "cashed"),
+          ne(predictionBets.status, "void")
         )
       ),
     db
@@ -65,7 +67,8 @@ export async function computeWithdrawalEligibility(uid: number): Promise<Withdra
           eq(comboBets.userId, uid),
           gte(comboBets.totalOdds, MIN_WAGER_ODDS_COMBO),
           ne(comboBets.status, "pending"),
-          ne(comboBets.status, "cashed")
+          ne(comboBets.status, "cashed"),
+          ne(comboBets.status, "void")
         )
       ),
   ]);

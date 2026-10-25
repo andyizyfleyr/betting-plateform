@@ -2,16 +2,21 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches, type MatchRow } from "@/db/schema";
 import { settlePendingCombos } from "@/lib/combo";
-import { closingOddsFor, customMarketOdds, isKnownMarket, marketWin } from "@/lib/markets";
+import { closingOddsFor, customMarketOdds, isKnownMarket, marketSettle } from "@/lib/markets";
 import { recordSettledBetMl } from "@/lib/ml-engine";
 
 /**
- * Règlement déterministe d'un pari sportif depuis le score final du match.
- * Un marché inconnu (jamais coté côté serveur) est remboursé (void-like).
+ * Règlement déterministe d'un pari sportif depuis le score final et la chronologie du match.
+ * Un marché inconnu ou nul remboursé (ex. DNB sur match nul) déclenche `voided: true`.
  */
-function resolveBet(bet: { market: string; selection: string }, home: number, away: number): { won: boolean; voided: boolean } {
+function resolveBet(
+  bet: { market: string; selection: string },
+  match: MatchRow
+): { won: boolean; voided: boolean } {
+  const home = match.homeScore ?? 0;
+  const away = match.awayScore ?? 0;
   if (!isKnownMarket(bet.market)) return { won: false, voided: true };
-  return { won: marketWin(bet.market, bet.selection, home, away), voided: false };
+  return marketSettle(bet.market, bet.selection, home, away, match.events ?? null, match.id);
 }
 
 /**
@@ -36,6 +41,8 @@ function closingOddsForBet(bet: { market: string; selection: string }, match: Ma
       awayForm: match.awayForm ?? 1,
       redHome: match.redHome ?? 0,
       redAway: match.redAway ?? 0,
+      events: match.events ?? null,
+      matchId: match.id,
     }
   );
 }
@@ -45,14 +52,12 @@ async function settleRows(
 ) {
   for (const { bet, match } of rows) {
     if (!match) continue;
-    const home = match.homeScore ?? 0;
-    const away = match.awayScore ?? 0;
-    const { won, voided } = resolveBet(bet, home, away);
+    const { won, voided } = resolveBet(bet, match);
 
     const payoutMultiplier = bet.payoutMultiplier ?? 1;
     const stakeReturned = bet.stakeReturned ?? 0;
     const payout = voided
-      ? bet.stake // remboursement
+      ? Math.round(bet.stake * 100) / 100 // remboursement intégral de la mise (ex. DNB nul)
       : won
         ? Math.round((bet.stake * bet.odds * payoutMultiplier + stakeReturned) * 100) / 100
         : 0;
@@ -67,7 +72,8 @@ async function settleRows(
     await db
       .update(bets)
       .set({
-        status: voided ? "won" : won ? "won" : "lost",
+        status: voided ? "void" : won ? "won" : "lost",
+        ...(voided ? { potentialWin: payout } : {}),
         settledAt,
         ...(closingOdds != null ? { closingOdds } : {}),
       })

@@ -26,6 +26,7 @@ export function BetTicket({
   const won = bet.status === "won";
   const lost = bet.status === "lost";
   const cashed = bet.status === "cashed";
+  const voided = bet.status === "void";
   const live = bet.matchStatus === "live" && bet.status === "pending";
   const canCashOut = bet.status === "pending" && bet.cashOut != null;
 
@@ -120,10 +121,18 @@ export function BetTicket({
                         ? "bg-win/15 text-win"
                         : leg.status === "lost"
                           ? "bg-betclic-red/15 text-betclic-red"
-                          : "bg-white text-dim"
+                          : leg.status === "void"
+                            ? "bg-amber-500/15 text-amber-700"
+                            : "bg-white text-dim"
                     )}
                   >
-                    {leg.status === "won" ? "✓" : leg.status === "lost" ? "✕" : "•"}
+                    {leg.status === "won"
+                      ? "✓"
+                      : leg.status === "lost"
+                        ? "✕"
+                        : leg.status === "void"
+                          ? "↺"
+                          : "•"}
                   </span>
                   <div className="min-w-0">
                     <p className="truncate font-display text-[12.5px] font-semibold text-ink">
@@ -208,6 +217,13 @@ export function BetTicket({
             tone="cash"
             align="right"
           />
+        ) : voided ? (
+          <Amount
+            label="Remboursé"
+            value={`+${eur(bet.stake)}`}
+            tone="neutral"
+            align="right"
+          />
         ) : (
           <Amount label="Gain max" value={eur(bet.potentialWin)} tone="pot" align="right" />
         )}
@@ -286,6 +302,13 @@ function StatusPill({
     return (
       <span className="shrink-0 rounded-full bg-sky-500/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-sky-700">
         Cash-out
+      </span>
+    );
+  }
+  if (status === "void") {
+    return (
+      <span className="shrink-0 rounded-full bg-amber-500/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-amber-800">
+        Remboursé
       </span>
     );
   }

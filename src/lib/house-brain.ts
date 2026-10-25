@@ -68,6 +68,7 @@ export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
         paid: sql<number>`COALESCE(SUM(CASE
           WHEN ${bets.status} = 'won' THEN ${bets.potentialWin}
           WHEN ${bets.status} = 'cashed' THEN COALESCE(${bets.cashOutAmount}, 0)
+          WHEN ${bets.status} = 'void' THEN ${bets.stake}
           ELSE 0 END), 0)::float8`,
       })
       .from(bets)
@@ -78,6 +79,7 @@ export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
         paid: sql<number>`COALESCE(SUM(CASE
           WHEN ${predictionBets.status} = 'won' THEN ${predictionBets.potentialWin}
           WHEN ${predictionBets.status} = 'cashed' THEN COALESCE(${predictionBets.cashOutAmount}, 0)
+          WHEN ${predictionBets.status} = 'void' THEN ${predictionBets.stake}
           ELSE 0 END), 0)::float8`,
       })
       .from(predictionBets)
@@ -88,6 +90,7 @@ export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
         paid: sql<number>`COALESCE(SUM(CASE
           WHEN ${comboBets.status} = 'won' THEN ${comboBets.potentialWin}
           WHEN ${comboBets.status} = 'cashed' THEN COALESCE(${comboBets.cashOutAmount}, 0)
+          WHEN ${comboBets.status} = 'void' THEN ${comboBets.stake}
           ELSE 0 END), 0)::float8`,
       })
       .from(comboBets)

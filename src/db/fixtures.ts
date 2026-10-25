@@ -730,6 +730,322 @@ export function liveResultProbs(
   };
 }
 
+export interface MatchTimelineEvent {
+  type: string;
+  team: string;
+  minute: number;
+  player?: string;
+}
+
+export interface MatchTimelineStats {
+  htHome: number;
+  htAway: number;
+  h2Home: number;
+  h2Away: number;
+  firstScorer: "home" | "away" | "none";
+}
+
+/**
+ * Extrait de manière 100 % déterministe les statistiques temporelles d'un match
+ * (score à la mi-temps, buts en 2e période, première équipe à avoir marqué)
+ * depuis le journal d'événements `events`, avec repli cohérent si un score manuel
+ * a été forcé sans journal détaillé.
+ */
+export function extractMatchTimelineStats(
+  homeScore: number,
+  awayScore: number,
+  events?: MatchTimelineEvent[] | null,
+  matchId = 0
+): MatchTimelineStats {
+  const h = Math.max(0, Math.round(homeScore));
+  const a = Math.max(0, Math.round(awayScore));
+  if (h === 0 && a === 0) {
+    return { htHome: 0, htAway: 0, h2Home: 0, h2Away: 0, firstScorer: "none" };
+  }
+
+  const goals = (events ?? [])
+    .map((e, idx) => ({ e, idx }))
+    .filter(({ e }) => e.type === "goal" && (e.team === "home" || e.team === "away"))
+    .sort((x, y) => x.e.minute - y.e.minute || x.idx - y.idx)
+    .map(({ e }) => e);
+
+  const evH = goals.filter((g) => g.team === "home").length;
+  const evA = goals.filter((g) => g.team === "away").length;
+
+  if (evH === h && evA === a && goals.length > 0) {
+    const htHome = goals.filter((g) => g.team === "home" && g.minute <= 45).length;
+    const htAway = goals.filter((g) => g.team === "away" && g.minute <= 45).length;
+    return {
+      htHome,
+      htAway,
+      h2Home: h - htHome,
+      h2Away: a - htAway,
+      firstScorer: goals[0].team === "home" ? "home" : "away",
+    };
+  }
+
+  // Repli déterministe si les événements ne couvrent pas exactement le score forcé
+  const rng = mulberry32(hashString(`tl-fallback|${matchId}|${h}|${a}`));
+  const htShare = goalTimeCDF(45);
+
+  let htHome = Math.min(h, goals.filter((g) => g.team === "home" && g.minute <= 45).length);
+  for (let i = evH; i < h; i++) {
+    if (rng() < htShare) htHome++;
+  }
+  htHome = clamp(htHome, 0, h);
+
+  let htAway = Math.min(a, goals.filter((g) => g.team === "away" && g.minute <= 45).length);
+  for (let i = evA; i < a; i++) {
+    if (rng() < htShare) htAway++;
+  }
+  htAway = clamp(htAway, 0, a);
+
+  let firstScorer: "home" | "away";
+  if (a === 0) firstScorer = "home";
+  else if (h === 0) firstScorer = "away";
+  else if (goals.length > 0 && ((goals[0].team === "home" && h > 0) || (goals[0].team === "away" && a > 0))) {
+    firstScorer = goals[0].team === "home" ? "home" : "away";
+  } else if (htHome > 0 && htAway === 0) {
+    firstScorer = "home";
+  } else if (htAway > 0 && htHome === 0) {
+    firstScorer = "away";
+  } else {
+    firstScorer = rng() < h / (h + a) ? "home" : "away";
+  }
+
+  return {
+    htHome,
+    htAway,
+    h2Home: h - htHome,
+    h2Away: a - htAway,
+    firstScorer,
+  };
+}
+
+export interface LiveHalfSplitModel {
+  htResult: { home: number; draw: number; away: number };
+  /** Probabilité exacte que `htHome + htAway > line`. */
+  htOver: (line: number) => number;
+  htFt: Record<"1_1" | "X_1" | "2_1" | "1_X" | "X_X" | "2_X" | "1_2" | "X_2" | "2_2", number>;
+  highestHalf: { h1: number; equal: number; h2: number };
+  firstScorer: { home: number; none: number; away: number };
+}
+
+/**
+ * Modèle joint rapide Mi-Temps / 2e Période parfaitement cohérent avec `liveScoreModel` :
+ * couvre les marchés `1N2 Mi-Temps`, `Plus/Moins Mi-Temps`, `MT / FM`,
+ * `Mi-temps la plus prolifique` et `Première équipe à marquer` en avant-match comme en live.
+ */
+export function liveHalfSplitModel(
+  home: string,
+  away: string,
+  homeScore: number,
+  awayScore: number,
+  minute: number,
+  opts?: {
+    homeForm?: number;
+    awayForm?: number;
+    redHome?: number;
+    redAway?: number;
+    events?: MatchTimelineEvent[] | null;
+    matchId?: number;
+  },
+  ftModel?: LiveScoreModel
+): LiveHalfSplitModel {
+  const fullModel = ftModel ?? liveScoreModel(home, away, homeScore, awayScore, minute, opts);
+  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
+  const pMin = livePricingMinute(minute);
+  const htShare = goalTimeCDF(45);
+
+  let baseH = lambdaHome * (opts?.homeForm ?? 1);
+  let baseA = lambdaAway * (opts?.awayForm ?? 1);
+  const rh = opts?.redHome ?? 0;
+  const ra = opts?.redAway ?? 0;
+  baseH *= Math.pow(0.68, rh) * (1 + 0.18 * ra);
+  baseA *= Math.pow(0.68, ra) * (1 + 0.18 * rh);
+
+  let htGrid: number[][];
+  let h2Grid: number[][];
+
+  if (minute < 45) {
+    const cur1H = Math.max(0, homeScore);
+    const cur1A = Math.max(0, awayScore);
+    const rem1Share = Math.max(0.002, htShare - goalTimeCDF(pMin));
+    const lam1H = Math.max(0.002, baseH * rem1Share);
+    const lam1A = Math.max(0.002, baseA * rem1Share);
+    const max1 = 7;
+    const rem1 = bivariatePoissonGrid(
+      lam1H,
+      lam1A,
+      max1,
+      pMin === 0 && cur1H === 0 && cur1A === 0
+    );
+    htGrid = Array.from({ length: cur1H + max1 + 1 }, () =>
+      new Array<number>(cur1A + max1 + 1).fill(0)
+    );
+    for (let i = 0; i <= max1; i++) {
+      for (let j = 0; j <= max1; j++) {
+        htGrid[cur1H + i][cur1A + j] = rem1[i][j];
+      }
+    }
+
+    const lam2H = Math.max(0.003, baseH * (1 - htShare));
+    const lam2A = Math.max(0.003, baseA * (1 - htShare));
+    h2Grid = bivariatePoissonGrid(lam2H, lam2A, 8, false);
+  } else {
+    const tl = extractMatchTimelineStats(homeScore, awayScore, opts?.events, opts?.matchId ?? 0);
+    const fixed1H = clamp(tl.htHome, 0, Math.max(0, homeScore));
+    const fixed1A = clamp(tl.htAway, 0, Math.max(0, awayScore));
+    htGrid = Array.from({ length: fixed1H + 1 }, () => new Array<number>(fixed1A + 1).fill(0));
+    htGrid[fixed1H][fixed1A] = 1;
+
+    const cur2H = Math.max(0, homeScore - fixed1H);
+    const cur2A = Math.max(0, awayScore - fixed1A);
+    const max2 = pMin >= 90 ? 2 : 7;
+    const rem2 = bivariatePoissonGrid(fullModel.lamH, fullModel.lamA, max2, false);
+    h2Grid = Array.from({ length: cur2H + max2 + 1 }, () =>
+      new Array<number>(cur2A + max2 + 1).fill(0)
+    );
+    for (let i = 0; i <= max2; i++) {
+      for (let j = 0; j <= max2; j++) {
+        h2Grid[cur2H + i][cur2A + j] = rem2[i][j];
+      }
+    }
+  }
+
+  let htHomeP = 0;
+  let htDrawP = 0;
+  let htAwayP = 0;
+  const maxTot1 = htGrid.length + (htGrid[0]?.length ?? 1);
+  const tot1 = new Array<number>(maxTot1).fill(0);
+  const minDiff1 = -((htGrid[0]?.length ?? 1) - 1);
+  const maxDiff1 = htGrid.length - 1;
+  const diff1ByHt: Record<"1" | "X" | "2", Map<number, number>> = {
+    "1": new Map(),
+    X: new Map(),
+    "2": new Map(),
+  };
+
+  for (let i = 0; i < htGrid.length; i++) {
+    for (let j = 0; j < htGrid[i].length; j++) {
+      const p = htGrid[i][j];
+      if (p <= 0) continue;
+      tot1[i + j] += p;
+      const d = i - j;
+      if (d > 0) {
+        htHomeP += p;
+        diff1ByHt["1"].set(d, (diff1ByHt["1"].get(d) ?? 0) + p);
+      } else if (d === 0) {
+        htDrawP += p;
+        diff1ByHt.X.set(0, (diff1ByHt.X.get(0) ?? 0) + p);
+      } else {
+        htAwayP += p;
+        diff1ByHt["2"].set(d, (diff1ByHt["2"].get(d) ?? 0) + p);
+      }
+    }
+  }
+  void minDiff1;
+  void maxDiff1;
+
+  const maxTot2 = h2Grid.length + (h2Grid[0]?.length ?? 1);
+  const tot2 = new Array<number>(maxTot2).fill(0);
+  const diff2 = new Map<number, number>();
+  for (let i = 0; i < h2Grid.length; i++) {
+    for (let j = 0; j < h2Grid[i].length; j++) {
+      const p = h2Grid[i][j];
+      if (p <= 0) continue;
+      tot2[i + j] += p;
+      const d = i - j;
+      diff2.set(d, (diff2.get(d) ?? 0) + p);
+    }
+  }
+
+  let h1More = 0;
+  let hEqual = 0;
+  let h2More = 0;
+  for (let g1 = 0; g1 < tot1.length; g1++) {
+    const p1 = tot1[g1];
+    if (p1 <= 0) continue;
+    for (let g2 = 0; g2 < tot2.length; g2++) {
+      const p2 = tot2[g2];
+      if (p2 <= 0) continue;
+      const joint = p1 * p2;
+      if (g1 > g2) h1More += joint;
+      else if (g1 === g2) hEqual += joint;
+      else h2More += joint;
+    }
+  }
+  const sumHalf = h1More + hEqual + h2More || 1;
+
+  const htFt: LiveHalfSplitModel["htFt"] = {
+    "1_1": 0,
+    X_1: 0,
+    "2_1": 0,
+    "1_X": 0,
+    X_X: 0,
+    "2_X": 0,
+    "1_2": 0,
+    X_2: 0,
+    "2_2": 0,
+  };
+  for (const htKey of ["1", "X", "2"] as const) {
+    for (const [d1, p1] of diff1ByHt[htKey].entries()) {
+      for (const [d2, p2] of diff2.entries()) {
+        const ftDiff = d1 + d2;
+        const ftKey = ftDiff > 0 ? "1" : ftDiff === 0 ? "X" : "2";
+        const comboKey = `${htKey}_${ftKey}` as keyof LiveHalfSplitModel["htFt"];
+        htFt[comboKey] += p1 * p2;
+      }
+    }
+  }
+  const sumHtFt = Object.values(htFt).reduce((a, b) => a + b, 0) || 1;
+  for (const k of Object.keys(htFt) as Array<keyof LiveHalfSplitModel["htFt"]>) {
+    htFt[k] /= sumHtFt;
+  }
+
+  let firstScorer: LiveHalfSplitModel["firstScorer"];
+  if (homeScore + awayScore > 0) {
+    const tl = extractMatchTimelineStats(homeScore, awayScore, opts?.events, opts?.matchId ?? 0);
+    firstScorer = {
+      home: tl.firstScorer === "home" ? 1 : 0,
+      none: 0,
+      away: tl.firstScorer === "away" ? 1 : 0,
+    };
+  } else {
+    const pNone = clamp(fullModel.grid[0]?.[0] ?? 0, 0, 0.999);
+    const pAny = Math.max(0, 1 - pNone);
+    const rateSum = Math.max(1e-6, fullModel.lamH + fullModel.lamA);
+    firstScorer = {
+      home: pAny * (fullModel.lamH / rateSum),
+      none: pNone,
+      away: pAny * (fullModel.lamA / rateSum),
+    };
+  }
+
+  const sumHtRes = htHomeP + htDrawP + htAwayP || 1;
+  return {
+    htResult: {
+      home: htHomeP / sumHtRes,
+      draw: htDrawP / sumHtRes,
+      away: htAwayP / sumHtRes,
+    },
+    htOver: (line: number) => {
+      let s = 0;
+      for (let g = 0; g < tot1.length; g++) {
+        if (g > line) s += tot1[g];
+      }
+      return clamp(s / sumHtRes, 0, 1);
+    },
+    htFt,
+    highestHalf: {
+      h1: h1More / sumHalf,
+      equal: hEqual / sumHalf,
+      h2: h2More / sumHalf,
+    },
+    firstScorer,
+  };
+}
+
 /** Cotes live du marché Résultat (1/N/2) parfaitement alignées avec tous les autres marchés. */
 export function liveOddsFor(
   home: string,

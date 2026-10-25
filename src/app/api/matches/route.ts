@@ -44,6 +44,8 @@ export async function GET() {
       awayForm: m.awayForm ?? 1,
       redHome: m.redHome ?? 0,
       redAway: m.redAway ?? 0,
+      events: m.events ?? [],
+      matchId: m.id,
     };
 
     const markets =

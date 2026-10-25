@@ -2396,7 +2396,7 @@ function BetsTab({
   ].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
   const [query, setQuery] = useState("");
-  const [betStatusFilter, setBetStatusFilter] = useState<"all" | "pending" | "won" | "lost" | "cashed">("all");
+  const [betStatusFilter, setBetStatusFilter] = useState<"all" | "pending" | "won" | "lost" | "cashed" | "void">("all");
   const [betKindFilter, setBetKindFilter] = useState<"all" | "Sport" | "Préd." | "Combiné">("all");
   const q = query.trim().toLowerCase();
   const searchedRows = q
@@ -2473,6 +2473,11 @@ function BetsTab({
                 value: "cashed",
                 label: "Cash-out",
                 count: searchedRows.filter((r) => r.status === "cashed").length,
+              },
+              {
+                value: "void",
+                label: "Remboursés",
+                count: searchedRows.filter((r) => r.status === "void").length,
               },
             ],
           },
@@ -2804,6 +2809,7 @@ function StatusBadge({ status }: { status: string }) {
     won: { label: "Gagné", cls: "bg-win/12 text-win" },
     lost: { label: "Perdu", cls: "bg-elev text-dim" },
     cashed: { label: "Cash-out", cls: "bg-sky-500/12 text-sky-700" },
+    void: { label: "Remboursé", cls: "bg-amber-500/12 text-amber-800" },
     paid: { label: "Payé", cls: "bg-win/12 text-win" },
     credited: { label: "Crédité", cls: "bg-win/12 text-win" },
     failed: { label: "Échec", cls: "bg-betclic-red/10 text-betclic-red" },
