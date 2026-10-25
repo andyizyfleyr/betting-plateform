@@ -223,8 +223,39 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export interface ClientMlRecommendedPick {
+  matchId: number;
+  league: string;
+  homeTeam: string;
+  awayTeam: string;
+  status: string;
+  minute: string | null;
+  startsAt: string;
+  market: string;
+  marketLabel: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+  matchScorePct: number;
+  reason: string;
+}
+
+export interface ClientMlRecommendations {
+  personalized: boolean;
+  preferredOdds: number;
+  favoriteLeague: string | null;
+  picks: ClientMlRecommendedPick[];
+  smartCombo: {
+    title: string;
+    reason: string;
+    legs: ClientMlRecommendedPick[];
+    combinedOdds: number;
+  } | null;
+}
+
 export const api = {
   matches: () => request<{ matches: ClientMatch[] }>("/api/matches"),
+  mlRecommendations: () => request<ClientMlRecommendations>("/api/ml/recommendations"),
   bets: (filter: "ongoing" | "finished") =>
     request<{ bets: ClientBet[]; balance: number | null }>(`/api/bets?filter=${filter}`),
   allBets: () => request<{ bets: ClientBet[]; balance: number | null }>("/api/bets?filter=all"),

@@ -7,6 +7,7 @@ import {
   predictionBets,
   tapHistory,
 } from "@/db/schema";
+import { predictBatchUserMlRisk } from "./ml-engine";
 
 /**
  * Cerveau global du bookmaker (« House Brain ») :
@@ -409,6 +410,17 @@ export async function computeUserPatternRiskWeights(
     }
 
     result.set(uid, clamp(weight, 1.0, 2.15));
+  }
+
+  // Fusionne le score heuristique avec l'inférence du Modèle 1 ML (`sharp_detector` Logistic SGD)
+  try {
+    const mlMap = await predictBatchUserMlRisk(uniqueIds);
+    for (const [uid, ml] of mlMap.entries()) {
+      const prev = result.get(uid) ?? 1.0;
+      result.set(uid, clamp(Math.max(prev, ml.riskWeight), 1.0, 2.25));
+    }
+  } catch {
+    // En cas d'indisponibilité transitoire, conserve les poids heuristiques
   }
 
   return result;

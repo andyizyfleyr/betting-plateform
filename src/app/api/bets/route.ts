@@ -16,6 +16,7 @@ import {
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
 import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
+import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled, syncLiveMatchesThrottled } from "@/lib/sync-throttle";
@@ -249,6 +250,7 @@ export async function POST(req: NextRequest) {
   const auth = await requireUserId(req);
   if (typeof auth !== "number") return auth;
   const uid = auth;
+  await ensureMlLoaded();
   await runLiveEngine();
 
   let body: { matchId?: number; selection?: string; market?: string; stake?: number };
@@ -326,7 +328,9 @@ export async function POST(req: NextRequest) {
       closingOdds: b.closingOdds ?? null,
     }))
   );
-  const maxStake = maxStakeFor(profile);
+  const mlRiskMap = await predictBatchUserMlRisk([uid]);
+  const mlCeiling = mlRiskMap.get(uid)?.maxStake ?? 500;
+  const maxStake = Math.min(maxStakeFor(profile), mlCeiling);
   if (stake > maxStake) {
     return NextResponse.json(
       { error: `Mise plafonnée à ${maxStake} € pour votre profil de risque` },

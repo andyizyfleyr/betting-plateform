@@ -19,6 +19,7 @@ import {
   getGlobalHouseHealth,
 } from "@/lib/house-brain";
 import { isKnownMarket, marketWin, minuteNumber } from "@/lib/markets";
+import { ensureMlLoaded, recordMatchFinishedMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
 import { teamLogo } from "@/lib/team-logos";
 
@@ -437,6 +438,7 @@ async function executeTick(now: number): Promise<void> {
     .where(eq(appUser.id, 1));
   if (user && !user.liveSim) return;
 
+  await ensureMlLoaded();
   await ensureActiveSchedule(now);
 
   const openMatches = await db
@@ -1308,6 +1310,16 @@ async function tickLiveMatch(
     .returning();
 
   if (isOver) {
+    try {
+      await recordMatchFinishedMl({
+        homeTeam: m.homeTeam,
+        awayTeam: m.awayTeam,
+        homeScore: home,
+        awayScore: away,
+      });
+    } catch (mlErr) {
+      console.error("[ml online match update]", mlErr);
+    }
     await settleMatchBets(m.id);
   }
 

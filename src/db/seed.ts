@@ -181,6 +181,18 @@ async function runSeedInternal(): Promise<void> {
     );
   `);
 
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "ml_models" (
+      "model_key" text PRIMARY KEY NOT NULL,
+      "version" integer DEFAULT 1 NOT NULL,
+      "samples_count" integer DEFAULT 0 NOT NULL,
+      "brier_score" double precision DEFAULT 0.21 NOT NULL,
+      "log_loss" double precision DEFAULT 0.61 NOT NULL,
+      "state" jsonb NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
   // ──────────────────────────────────────────────────────────────────────────
   //  Déduplication automatique des questions en base + contrainte d'unicité
   // ──────────────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { Search, Trophy, X } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
+import { AiRecommendationsStrip } from "@/components/ai-recommendations-strip";
 import { useApp } from "@/components/providers";
 import { cn, todayLabel } from "@/lib/format";
 
@@ -321,6 +322,10 @@ export default function MatchsPage() {
       ) : (
         <div className="mt-3 flex flex-col gap-5">
           {featured && <FeaturedMatch match={featured} />}
+
+          {filter === "all" && !query.trim() && (
+            <AiRecommendationsStrip matches={activeMatches} />
+          )}
 
           {liveRest.length > 0 && (
             <section>

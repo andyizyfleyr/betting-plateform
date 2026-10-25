@@ -5,6 +5,7 @@ import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
+import { ensureMlLoaded } from "@/lib/ml-engine";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   await ensureSeeded();
+  await ensureMlLoaded();
   await syncLiveMatchesThrottled();
 
   const allRows = await db

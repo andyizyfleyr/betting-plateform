@@ -28,6 +28,7 @@ import {
   minuteNumber,
 } from "@/lib/markets";
 import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
+import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
   const auth = await requireUserId(req);
   if (typeof auth !== "number") return auth;
   const uid = auth;
+  await ensureMlLoaded();
   await runLiveEngine();
 
   let body: { legs?: IncomingLeg[]; stake?: number };
@@ -135,7 +137,9 @@ export async function POST(req: NextRequest) {
       closingOdds: b.closingOdds ?? null,
     }))
   );
-  const maxAllowed = Math.min(MAX_COMBO_STAKE, maxStakeFor(profile));
+  const mlRiskMap = await predictBatchUserMlRisk([uid]);
+  const mlCeiling = mlRiskMap.get(uid)?.maxStake ?? 500;
+  const maxAllowed = Math.min(MAX_COMBO_STAKE, maxStakeFor(profile), mlCeiling);
   if (stake > maxAllowed) {
     return NextResponse.json(
       { error: `Mise maximale autorisée sur ce combiné : ${maxAllowed} €` },

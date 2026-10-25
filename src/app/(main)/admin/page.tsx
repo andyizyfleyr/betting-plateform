@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   BarChart3,
+  Brain,
   CalendarPlus,
   CheckCircle2,
   ChevronDown,
@@ -29,7 +30,7 @@ import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
-type TabKey = "dashboard" | "matches" | "questions" | "users" | "bets" | "deposits";
+type TabKey = "dashboard" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
 
 const POLL_INTERVAL = 5_000;
 
@@ -186,10 +187,71 @@ interface PanelData {
   withdrawals?: AdminWithdrawal[];
   matches: AdminMatch[];
   questions: AdminQuestion[];
+  ml?: AdminMlOverview;
+}
+
+interface AdminMlOverview {
+  models: Array<{
+    key: string;
+    name: string;
+    algorithm: string;
+    version: number;
+    samplesCount: number;
+    brierScore: number;
+    logLoss: number;
+    updatedAt: string;
+  }>;
+  sharpWeights: Array<{
+    key: string;
+    label: string;
+    weight: number;
+    prior: number;
+  }>;
+  sharpBias: number;
+  playerProfiles: Array<{
+    userId: number;
+    name: string;
+    email: string | null;
+    betsCount: number;
+    pSharpPct: number;
+    zScore: number;
+    roiPct: number;
+    riskWeight: number;
+    maxStake: number;
+    topReason: string;
+  }>;
+  calibratedSegments: Array<{
+    segment: string;
+    market: string;
+    bucket: string;
+    samples: number;
+    predWinPct: number;
+    obsWinPct: number;
+    staked: number;
+    paid: number;
+    marginMult: number;
+  }>;
+  clubRatings: Array<{
+    clubKey: string;
+    attack: number;
+    defense: number;
+    netPower: number;
+    rd: number;
+    matches: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    lastDelta: number;
+  }>;
+  recommenderSummary: {
+    avgPreferredOdds: number;
+    totalAnalysedBets: number;
+    topLeagues: Array<{ league: string; weight: number }>;
+  };
 }
 
 const TABS: { key: TabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "dashboard", label: "Synthèse", Icon: BarChart3 },
+  { key: "ml", label: "IA & ML", Icon: Brain },
   { key: "matches", label: "Matchs", Icon: Trophy },
   { key: "questions", label: "Pronostics", Icon: HelpCircle },
   { key: "users", label: "Joueurs", Icon: Users },
@@ -561,6 +623,9 @@ export default function AdminPage() {
       ) : (
         <div className="mt-3">
           {tab === "dashboard" && <Dashboard stats={panel.stats} />}
+          {tab === "ml" && (
+            <MlAdminTab ml={panel.ml} busy={busy} act={act} />
+          )}
           {tab === "matches" && (
             <MatchesTab
               matches={panel.matches}
@@ -2574,6 +2639,260 @@ function StatPill({ label, value }: { label: string; value: number }) {
     <div className="glass-card rounded-2xl p-3 text-center">
       <p className="font-display text-[16px] font-bold tabular-nums text-ink">{value}</p>
       <p className="text-[10.5px] font-medium text-dim">{label}</p>
+    </div>
+  );
+}
+
+/* ---------------- IA & Machine Learning ---------------- */
+
+function MlAdminTab({
+  ml,
+  busy,
+  act,
+}: {
+  ml?: AdminMlOverview;
+  busy: Record<string, boolean>;
+  act: (payload: Record<string, unknown>, key: string, okMsg: string) => Promise<boolean>;
+}) {
+  if (!ml) {
+    return (
+      <div className="glass-card rounded-2xl p-6 text-center text-[13px] text-dim">
+        Chargement de la télémétrie Machine Learning…
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      {/* Bandeau d'action & statut global */}
+      <section className="glass-card rounded-2xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <Brain className="h-4 w-4 text-betclic-red" />
+              <h2 className="font-display text-[15px] font-bold text-ink">
+                Moteur IA & Machine Learning (4 modèles actifs)
+              </h2>
+            </div>
+            <p className="mt-0.5 text-[11.5px] text-dim">
+              Apprentissage en ligne continu à chaque règlement + consolidation batch PostgreSQL.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={Boolean(busy["retrain-ml"])}
+            onClick={() =>
+              void act(
+                { action: "retrainMl" },
+                "retrain-ml",
+                "Les 4 modèles IA ont été ré-entraînés sur l'historique complet"
+              )
+            }
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-ink px-3.5 font-display text-[12px] font-bold text-white transition-opacity disabled:opacity-50"
+          >
+            {busy["retrain-ml"] ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Ré-entraîner les modèles
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {ml.models.map((m) => (
+            <div
+              key={m.key}
+              className="rounded-xl border border-edge bg-elev/60 p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-display text-[13px] font-bold text-ink">
+                  {m.name}
+                </span>
+                <span className="rounded-full bg-ink/8 px-2 py-0.5 font-display text-[10px] font-bold text-ink">
+                  v{m.version}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] font-medium text-mist">{m.algorithm}</p>
+              <div className="mt-2 flex items-center justify-between border-t border-edge/70 pt-2 text-[11px] tabular-nums">
+                <span className="text-dim">
+                  Échantillons : <strong className="text-ink">{m.samplesCount}</strong>
+                </span>
+                <span className="text-dim">
+                  Brier : <strong className="text-win">{m.brierScore.toFixed(3)}</strong>
+                </span>
+                <span className="text-dim">
+                  LogLoss : <strong className="text-ink">{m.logLoss.toFixed(3)}</strong>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Modèle 1 : Poids appris Logistic SGD + Radar comptes */}
+      <section className="glass-card rounded-2xl p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-[14px] font-bold text-ink">
+            1. Poids appris · Détecteur Sharp (Logistic SGD)
+          </h3>
+          <span className="text-[11px] tabular-nums text-dim">
+            Biais b₀ = {ml.sharpBias.toFixed(2)}
+          </span>
+        </div>
+        <div className="mt-2.5 space-y-2">
+          {ml.sharpWeights.map((w) => {
+            const pct = Math.min(100, Math.max(8, Math.round((w.weight / 2.2) * 100)));
+            const delta = w.weight - w.prior;
+            return (
+              <div key={w.key}>
+                <div className="flex items-center justify-between text-[11.5px]">
+                  <span className="truncate font-medium text-ink">{w.label}</span>
+                  <span className="shrink-0 font-display font-bold tabular-nums text-ink">
+                    {w.weight.toFixed(3)}{" "}
+                    <span className="text-[10px] font-normal text-dim">
+                      ({delta >= 0 ? "+" : ""}
+                      {delta.toFixed(2)} vs prior)
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elev">
+                  <div
+                    className="h-full rounded-full bg-betclic-red transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <h4 className="mt-4 font-display text-[12.5px] font-bold text-ink">
+          Radar IA des profils joueurs ({ml.playerProfiles.length})
+        </h4>
+        {ml.playerProfiles.length === 0 ? (
+          <p className="mt-1.5 text-[12px] text-dim">
+            Aucun historique de pari suffisant pour scorer les profils.
+          </p>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {ml.playerProfiles.map((p) => (
+              <div
+                key={p.userId}
+                className="flex flex-col gap-1 rounded-xl border border-edge bg-white p-2.5 text-[11.5px]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-bold text-ink">
+                    {p.name}{" "}
+                    <span className="font-normal text-dim">({p.betsCount} paris)</span>
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums",
+                      p.pSharpPct >= 55
+                        ? "bg-betclic-red/12 text-betclic-red"
+                        : p.pSharpPct >= 35
+                          ? "bg-amber-500/15 text-amber-700"
+                          : "bg-win/12 text-win"
+                    )}
+                  >
+                    P(Sharp) {p.pSharpPct.toFixed(0)} %
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[11px] text-dim">
+                  <span>Z-Score : <strong className="text-ink">{p.zScore}</strong></span>
+                  <span>ROI : <strong className="text-ink">{p.roiPct}%</strong></span>
+                  <span>Bouclier : <strong className="text-ink">×{p.riskWeight}</strong></span>
+                  <span>Plafond IA : <strong className="text-ink">{p.maxStake} €</strong></span>
+                </div>
+                <p className="truncate text-[10.5px] text-mist">
+                  Signal dominant : {p.topReason}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Modèle 2 : Auto-Calibration Bayésienne des Marchés */}
+      <section className="glass-card rounded-2xl p-4">
+        <h3 className="font-display text-[14px] font-bold text-ink">
+          2. Auto-Calibration Bayésienne des Marchés
+        </h3>
+        <p className="mt-0.5 text-[11.5px] text-dim">
+          Ajuste tout seul le multiplicateur de marge si un segment gagne plus souvent que prévu.
+        </p>
+        {ml.calibratedSegments.length === 0 ? (
+          <p className="mt-2 text-[12px] text-dim">
+            En attente des premiers paris réglés pour calibrer les segments.
+          </p>
+        ) : (
+          <div className="mt-2.5 space-y-1.5">
+            {ml.calibratedSegments.map((s) => (
+              <div
+                key={s.segment}
+                className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-white px-3 py-2 text-[11.5px]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-ink">
+                    {s.market}{" "}
+                    <span className="rounded bg-elev px-1.5 py-0.5 text-[10px] font-semibold uppercase text-mist">
+                      {s.bucket}
+                    </span>
+                  </p>
+                  <p className="text-[10.5px] tabular-nums text-dim">
+                    {s.samples} paris · Prédit {s.predWinPct}% vs Réel {s.obsWinPct}%
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-lg px-2 py-1 font-display text-[11px] font-bold tabular-nums",
+                    s.marginMult > 1.005
+                      ? "bg-amber-500/15 text-amber-800"
+                      : "bg-elev text-ink"
+                  )}
+                >
+                  ×{s.marginMult.toFixed(3)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Modèle 3 : Classement Dynamique Glicko-2 des Clubs */}
+      <section className="glass-card rounded-2xl p-4">
+        <h3 className="font-display text-[14px] font-bold text-ink">
+          3. Forces Dynamiques des Clubs (Glicko-2 Attaque / Défense)
+        </h3>
+        <p className="mt-0.5 text-[11.5px] text-dim">
+          Mis à jour automatiquement après chaque coup de sifflet final.
+        </p>
+        {ml.clubRatings.length === 0 ? (
+          <p className="mt-2 text-[12px] text-dim">
+            Les ratings apparaissent dès les premiers matchs terminés.
+          </p>
+        ) : (
+          <div className="mt-2.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {ml.clubRatings.map((c) => (
+              <div
+                key={c.clubKey}
+                className="flex items-center justify-between rounded-xl border border-edge bg-white px-3 py-2 text-[11.5px]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-bold capitalize text-ink">{c.clubKey}</p>
+                  <p className="text-[10.5px] tabular-nums text-dim">
+                    {c.matches} m · Att ×{c.attack.toFixed(2)} · Déf ×{c.defense.toFixed(2)} ({c.goalsFor}:{c.goalsAgainst})
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-lg bg-ink px-2 py-0.5 font-display text-[11px] font-bold tabular-nums text-white">
+                  {c.netPower.toFixed(1)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

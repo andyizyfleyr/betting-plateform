@@ -1,3 +1,8 @@
+import {
+  getCachedClubGlickoModifiers,
+  getCachedMarketCalibratorMultiplier,
+} from "@/lib/ml-weights";
+
 export const VIRTUAL_LEAGUE = "Ligue des Champions · Europe";
 export const ROUND_MS = 300_000;
 
@@ -284,13 +289,25 @@ export interface LiveScoreModel {
   lamA: number;
 }
 
-export function expectedGoals(home: string, away: string): { lambdaHome: number; lambdaAway: number } {
+export function expectedGoalsRaw(
+  home: string,
+  away: string
+): { lambdaHome: number; lambdaAway: number } {
   const sh = teamStrength(home);
   const sa = teamStrength(away);
   const diff = sh - sa;
   return {
     lambdaHome: clamp(BASE_HOME * Math.exp(diff * ELO_SENSITIVITY), 0.45, 3.2),
     lambdaAway: clamp(BASE_AWAY * Math.exp(-diff * ELO_SENSITIVITY), 0.38, 2.95),
+  };
+}
+
+export function expectedGoals(home: string, away: string): { lambdaHome: number; lambdaAway: number } {
+  const raw = expectedGoalsRaw(home, away);
+  const glicko = getCachedClubGlickoModifiers(home, away);
+  return {
+    lambdaHome: clamp(raw.lambdaHome * glicko.homeGoalMod, 0.42, 3.3),
+    lambdaAway: clamp(raw.lambdaAway * glicko.awayGoalMod, 0.36, 3.1),
   };
 }
 
@@ -373,12 +390,14 @@ export function oddsFor(
   opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
 ) {
   const p = liveResultProbs(home, away, 0, 0, 0, opts);
-  const [oddsHome, oddsDraw, oddsAway] = partitionOutcomeOdds(
+  const [rawH, rawD, rawA] = partitionOutcomeOdds(
     [p.home, p.draw, p.away],
     PREMATCH_MARGIN,
     LIVE_ODDS_MAX
   );
-  return { oddsHome, oddsDraw, oddsAway };
+  const cal = (o: number) =>
+    round2(clamp(o / getCachedMarketCalibratorMultiplier("result", o), 1.01, LIVE_ODDS_MAX));
+  return { oddsHome: cal(rawH), oddsDraw: cal(rawD), oddsAway: cal(rawA) };
 }
 
 export function winProbabilities(
@@ -722,10 +741,12 @@ export function liveOddsFor(
 ) {
   const { margin } = liveScoreModel(home, away, currentHomeScore, currentAwayScore, minute, opts);
   const p = liveResultProbs(home, away, currentHomeScore, currentAwayScore, minute, opts);
-  const [oddsHome, oddsDraw, oddsAway] = partitionOutcomeOdds(
+  const [rawH, rawD, rawA] = partitionOutcomeOdds(
     [p.home, p.draw, p.away],
     margin,
     LIVE_ODDS_MAX
   );
-  return { oddsHome, oddsDraw, oddsAway };
+  const cal = (o: number) =>
+    round2(clamp(o / getCachedMarketCalibratorMultiplier("result", o), 1.01, LIVE_ODDS_MAX));
+  return { oddsHome: cal(rawH), oddsDraw: cal(rawD), oddsAway: cal(rawA) };
 }
