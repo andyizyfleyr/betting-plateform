@@ -10,74 +10,151 @@ export type DbErrorCode =
 export interface ClassifiedServerError {
   code: DbErrorCode;
   message: string;
+  detail: string | null;
   status: number;
 }
 
-export function classifyServerError(err: unknown): ClassifiedServerError {
-  const raw =
-    err instanceof Error
-      ? `${err.name}: ${err.message} ${"cause" in err && err.cause instanceof Error ? err.cause.message : ""}`
-      : String(err ?? "");
-  const lower = raw.toLowerCase();
+function sanitizeDiagnosticLine(input: string): string {
+  return input
+    .replace(/postgres(?:ql)?:\/\/[^\s"']+/gi, "[url-masquee]")
+    .replace(/password=\S+/gi, "password=***")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
 
-  if (lower.includes("database_url is required") || lower.includes("database_url")) {
+/**
+ * Extrait récursivement toutes les causes sous-jacentes (`DrizzleQueryError.cause`,
+ * `AggregateError.errors[]`, codes PostgreSQL `code` / `detail` / `hint`).
+ */
+export function extractErrorChain(err: unknown): {
+  combinedText: string;
+  rootReason: string | null;
+} {
+  const parts: string[] = [];
+  const leafMessages: string[] = [];
+  const visited = new Set<unknown>();
+
+  const walk = (node: unknown, depth: number) => {
+    if (node == null || depth > 6 || visited.has(node)) return;
+    if (typeof node === "object") visited.add(node);
+
+    if (typeof node === "string") {
+      if (node.trim()) {
+        parts.push(node);
+        leafMessages.push(node);
+      }
+      return;
+    }
+
+    if (typeof node === "object") {
+      const rec = node as Record<string, unknown>;
+      const name = typeof rec.name === "string" ? rec.name : "";
+      const msg = typeof rec.message === "string" ? rec.message : "";
+      const code = typeof rec.code === "string" ? rec.code : "";
+      const detail = typeof rec.detail === "string" ? rec.detail : "";
+      const hint = typeof rec.hint === "string" ? rec.hint : "";
+
+      if (name || msg || code) {
+        parts.push(`${name} ${code} ${msg} ${detail} ${hint}`);
+      }
+
+      const isDrizzleWrapper = /^Failed query:/i.test(msg);
+      if (!isDrizzleWrapper && (msg.trim() || code.trim())) {
+        const cleanLeaf = [code ? `[${code}]` : "", msg.trim(), detail.trim()]
+          .filter(Boolean)
+          .join(" ");
+        if (cleanLeaf) leafMessages.push(cleanLeaf);
+      }
+
+      if (Array.isArray(rec.errors)) {
+        for (const sub of rec.errors) walk(sub, depth + 1);
+      }
+      if ("cause" in rec && rec.cause != null) {
+        walk(rec.cause, depth + 1);
+      }
+    }
+  };
+
+  walk(err, 0);
+
+  const combinedText = parts.join(" | ");
+  const bestLeaf =
+    leafMessages[leafMessages.length - 1] ??
+    (err instanceof Error && !/^Failed query:/i.test(err.message)
+      ? err.message
+      : null);
+
+  return {
+    combinedText,
+    rootReason: bestLeaf ? sanitizeDiagnosticLine(bestLeaf) : null,
+  };
+}
+
+export function classifyServerError(err: unknown): ClassifiedServerError {
+  const { combinedText, rootReason } = extractErrorChain(err);
+  const lower = combinedText.toLowerCase();
+
+  if (lower.includes("database_url is required")) {
     return {
       code: "MISSING_DATABASE_URL",
       message:
-        "Base de données non configurée (DATABASE_URL manquante dans les variables d'environnement Vercel du projet be-plateform).",
+        "Aucune base PostgreSQL n'est connectée à ce projet Vercel (variable DATABASE_URL absente). Allez dans Vercel → be-plateform → Storage → Connect Database puis redéployez.",
+      detail: rootReason,
       status: 503,
     };
   }
 
   if (
-    lower.includes("compute time quota") ||
-    lower.includes("quota exceeded") ||
-    lower.includes("data transfer quota") ||
-    lower.includes("project size limit")
+    /compute time quota|quota.*exceeded|exceeded.*(quota|limit|compute|transfer|size|storage)|project size limit|data transfer/i.test(
+      lower
+    )
   ) {
     return {
       code: "DB_QUOTA_EXCEEDED",
       message:
-        "Quota gratuit de la base PostgreSQL (Neon) atteint — vérifiez l'onglet Storage sur Vercel.",
+        "Le quota gratuit mensuel de votre base PostgreSQL (Neon) est atteint. Créez ou rattachez une nouvelle base dans Vercel → be-plateform → Storage puis redéployez.",
+      detail: rootReason,
       status: 503,
     };
   }
 
   if (
-    lower.includes("enotfound") ||
-    lower.includes("endpoint is disabled") ||
-    lower.includes("endpoint not found") ||
-    lower.includes("password authentication failed") ||
-    (lower.includes("database ") && lower.includes(" does not exist")) ||
-    lower.includes("project not found")
+    /enotfound|getaddrinfo|endpoint\b.*?\b(disabled|not found|does not exist|suspended|inactive)|project\b.*?\bnot found|branch\b.*?\bnot found|tenant or user not found|password authentication failed|authentication failed|caller is not authorized|database .* does not exist|role .* does not exist/i.test(
+      lower
+    )
   ) {
     return {
       code: "DB_UNREACHABLE",
-      message:
-        "Base PostgreSQL introuvable ou désactivée (possiblement supprimée avec le projet doublon) — reconnectez une base Storage au projet be-plateform sur Vercel.",
+      message: `La base PostgreSQL liée à DATABASE_URL est désactivée ou a été supprimée avec l'ancien projet doublon${
+        rootReason ? ` (${rootReason})` : ""
+      }. Dans Vercel → be-plateform → Storage, connectez une base PostgreSQL active puis redéployez.`,
+      detail: rootReason,
       status: 503,
     };
   }
 
   if (
-    lower.includes("timeout") ||
-    lower.includes("etimedout") ||
-    lower.includes("econnrefused") ||
-    lower.includes("econnreset") ||
-    lower.includes("connection terminated") ||
-    lower.includes("57p01")
+    /timeout|etimedout|econnrefused|econnreset|connection terminated|server closed the connection|57p01/i.test(
+      lower
+    )
   ) {
     return {
       code: "DB_TIMEOUT",
-      message:
-        "La base de données se réveille ou met trop de temps à répondre — veuillez réessayer dans quelques secondes.",
+      message: `Connexion à la base PostgreSQL interrompue${
+        rootReason ? ` (${rootReason})` : ""
+      } — appuyez sur Réessayer ou vérifiez l'onglet Storage sur Vercel.`,
+      detail: rootReason,
       status: 503,
     };
   }
 
   return {
     code: "SERVER_ERROR",
-    message: "Service temporairement indisponible — veuillez réessayer.",
+    message: rootReason
+      ? `Erreur serveur (${rootReason}).`
+      : "Service temporairement indisponible — veuillez réessayer.",
+    detail: rootReason,
     status: 503,
   };
 }
@@ -92,6 +169,7 @@ export function formatServerErrorResponse(
     {
       ok: false,
       error: classified.message,
+      detail: classified.detail,
       code: classified.code,
     },
     { status: classified.status }

@@ -1,6 +1,6 @@
-import { count, eq, sql } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { db, ensureHealthyDbConnection, getCandidateDatabaseUrls } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { matches, predictionQuestions } from "@/db/schema";
 import { classifyServerError } from "@/lib/db-error";
@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET() {
+  const envKeys = getCandidateDatabaseUrls().map((c) => c.envName);
   try {
-    // 1. Test immédiat de connectivité PostgreSQL (< 100 ms) sans dépendre d'aucun flux externe
-    await db.execute(sql`SELECT 1`);
+    await ensureHealthyDbConnection();
     await ensureSeeded();
 
     const [[live], [matchTotal], [predTotal]] = await Promise.all([
@@ -34,6 +34,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       db: "connected",
+      envKeys,
       matchesCount: matchTotal?.n ?? 0,
       predictionsCount: predTotal?.n ?? 0,
       liveMatch: live ?? null,
@@ -46,8 +47,10 @@ export async function GET() {
       {
         ok: false,
         db: "error",
+        envKeys,
         code: classified.code,
         error: classified.message,
+        detail: classified.detail,
       },
       { status: classified.status }
     );
