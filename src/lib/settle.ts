@@ -58,12 +58,16 @@ async function settleRows(
 
     // CLV : capture de la cote de clôture au moment du règlement.
     const closingOdds = closingOddsForBet(bet, match);
+    const nowMs = Date.now();
+    const rawFinishedMs = match.finishedAt ? match.finishedAt.getTime() : nowMs;
+    const minSettledMs = bet.placedAt ? bet.placedAt.getTime() + 1_000 : 0;
+    const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawFinishedMs)));
 
     await db
       .update(bets)
       .set({
         status: voided ? "won" : won ? "won" : "lost",
-        settledAt: new Date(),
+        settledAt,
         ...(closingOdds != null ? { closingOdds } : {}),
       })
       .where(eq(bets.id, bet.id));
