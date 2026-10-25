@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   acceleratorRounds,
   bets,
+  comboBets,
   predictionBets,
   tapHistory,
 } from "@/db/schema";
@@ -59,7 +60,7 @@ export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
     return houseCache.data;
   }
 
-  const [[sportAgg], [predAgg], [tapAgg], [accelAgg]] = await Promise.all([
+  const [[sportAgg], [predAgg], [comboAgg], [tapAgg], [accelAgg]] = await Promise.all([
     db
       .select({
         staked: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
@@ -80,6 +81,16 @@ export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
       })
       .from(predictionBets)
       .where(sql`${predictionBets.placedAt} > now() - interval '24 hours'`),
+    db
+      .select({
+        staked: sql<number>`COALESCE(SUM(${comboBets.stake}), 0)::float8`,
+        paid: sql<number>`COALESCE(SUM(CASE
+          WHEN ${comboBets.status} = 'won' THEN ${comboBets.potentialWin}
+          WHEN ${comboBets.status} = 'cashed' THEN COALESCE(${comboBets.cashOutAmount}, 0)
+          ELSE 0 END), 0)::float8`,
+      })
+      .from(comboBets)
+      .where(sql`${comboBets.placedAt} > now() - interval '24 hours'`),
     db
       .select({
         staked: sql<number>`COALESCE(SUM(${tapHistory.betAmount}), 0)::float8`,
@@ -103,11 +114,13 @@ export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
   const totalIn24h =
     (sportAgg?.staked ?? 0) +
     (predAgg?.staked ?? 0) +
+    (comboAgg?.staked ?? 0) +
     (tapAgg?.staked ?? 0) +
     (accelAgg?.staked ?? 0);
   const totalOut24h =
     (sportAgg?.paid ?? 0) +
     (predAgg?.paid ?? 0) +
+    (comboAgg?.paid ?? 0) +
     (tapAgg?.paid ?? 0) +
     (accelAgg?.paid ?? 0);
 

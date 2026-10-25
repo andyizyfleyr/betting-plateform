@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ArrowRight, Check, Loader2, Lock, Plus, Ticket, X } from "lucide-react";
+import { ArrowRight, Check, Layers, Loader2, Lock, Plus, Ticket, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApp, type BetTarget } from "./providers";
 import { TeamAvatar } from "./team-avatar";
@@ -44,7 +44,16 @@ function BetModalSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const { balance, setBalance, bumpBets, oddsFormat, toast, openRecharge } = useApp();
+  const {
+    balance,
+    setBalance,
+    bumpBets,
+    oddsFormat,
+    toast,
+    openRecharge,
+    comboLegs,
+    toggleComboLeg,
+  } = useApp();
   const dragControls = useDragControls();
 
   const [stakeText, setStakeText] = useState(() => {
@@ -140,6 +149,43 @@ function BetModalSheet({
       parts.length > 1 ? `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}` : parts[0];
     setStakeText(normalized);
     setError(null);
+  };
+
+  const comboUid = `sport-${target.match.id}`;
+  const inComboExact = comboLegs.some(
+    (l) =>
+      l.uid === comboUid &&
+      l.market === target.market &&
+      l.selection === target.selection
+  );
+
+  const handleAddToCombo = () => {
+    if (marketSuspended || marketClosed) return;
+    const outcome = toggleComboLeg({
+      uid: comboUid,
+      kind: "sport",
+      matchId: target.match.id,
+      title: `${target.match.homeTeam} – ${target.match.awayTeam}`,
+      league: target.match.league,
+      market: target.market,
+      selection: target.selection,
+      selectionLabel: target.label,
+      odds: displayOdds,
+    });
+    if (outcome === "full") {
+      toast({ kind: "error", title: "Combiné complet (8 sélections max)" });
+      return;
+    }
+    if (outcome === "removed") {
+      toast({ kind: "info", title: "Retiré du combiné" });
+    } else {
+      toast({
+        kind: "success",
+        title: outcome === "replaced" ? "Sélection remplacée dans le combiné" : "Ajouté au combiné",
+        description: `${target.match.homeTeam} – ${target.match.awayTeam} · ${target.label}`,
+      });
+      onClose();
+    }
   };
 
   const canSubmit =
@@ -415,34 +461,54 @@ function BetModalSheet({
               />
             </div>
 
-            {/* Validation */}
-            <button
-              type="button"
-              disabled={!canSubmit}
-              onClick={confirm}
-              className={cn(
-                "mt-3.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
-                canSubmit
-                  ? "bg-betclic-red text-white shadow-sm"
-                  : "bg-elev text-dim"
+            {/* Validation simple ou Ajout au combiné */}
+            <div className="mt-3.5 flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={confirm}
+                className={cn(
+                  "flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
+                  canSubmit
+                    ? "bg-betclic-red text-white shadow-sm"
+                    : "bg-elev text-dim"
+                )}
+              >
+                {phase === "loading" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
+                    Validation en cours…
+                  </>
+                ) : marketClosed ? (
+                  "Sélection clôturée"
+                ) : marketSuspended ? (
+                  "Marché suspendu…"
+                ) : (
+                  <>
+                    Placer {stake > 0 ? eur(stake) : "le pari"}
+                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+                  </>
+                )}
+              </button>
+
+              {!marketClosed && !marketSuspended && (
+                <button
+                  type="button"
+                  onClick={handleAddToCombo}
+                  className={cn(
+                    "flex h-10 w-full items-center justify-center gap-1.5 rounded-2xl border font-display text-[12.5px] font-bold transition-colors active:scale-[0.99]",
+                    inComboExact
+                      ? "border-ink bg-ink text-white"
+                      : "border-edge bg-white text-ink active:bg-elev"
+                  )}
+                >
+                  <Layers className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+                  {inComboExact
+                    ? "Dans le combiné (toucher pour retirer)"
+                    : `Ajouter au combiné${comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}`}
+                </button>
               )}
-            >
-              {phase === "loading" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
-                  Validation en cours…
-                </>
-              ) : marketClosed ? (
-                "Sélection clôturée"
-              ) : marketSuspended ? (
-                "Marché suspendu…"
-              ) : (
-                <>
-                  Placer {stake > 0 ? eur(stake) : "le pari"}
-                  <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-                </>
-              )}
-            </button>
+            </div>
           </div>
         )}
       </motion.div>

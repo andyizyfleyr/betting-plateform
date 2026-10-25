@@ -123,13 +123,29 @@ const defaultQuestionOptions = () => [
   { label: "", odds: "4.50" },
 ];
 
+interface AdminWithdrawal {
+  id: number;
+  userId: number;
+  userName: string;
+  userEmail: string;
+  method: string;
+  destination: string;
+  amount: number;
+  status: string;
+  note?: string | null;
+  createdAt: string;
+}
+
 interface PanelData {
   stats: {
     totalUsers: number;
     totalBets: number;
     sportsBets: number;
     predBets: number;
+    comboBets?: number;
     deposits: number;
+    withdrawalsPaid?: number;
+    pendingWithdrawals?: number;
     stake: number;
     payouts: number;
     balance: number;
@@ -150,7 +166,18 @@ interface PanelData {
     status: string;
     placedAt: string;
   }>;
+  comboBets?: Array<{
+    id: number;
+    legs: Array<{ title: string; selectionLabel: string }>;
+    totalOdds: number;
+    boostPct: number;
+    stake: number;
+    potentialWin: number;
+    status: string;
+    placedAt: string;
+  }>;
   deposits: AdminDeposit[];
+  withdrawals?: AdminWithdrawal[];
   matches: AdminMatch[];
   questions: AdminQuestion[];
 }
@@ -161,7 +188,7 @@ const TABS: { key: TabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "questions", label: "Pronostics", Icon: HelpCircle },
   { key: "users", label: "Joueurs", Icon: Users },
   { key: "bets", label: "Paris", Icon: Ticket },
-  { key: "deposits", label: "Dépôts", Icon: CircleDollarSign },
+  { key: "deposits", label: "Finance", Icon: CircleDollarSign },
 ];
 
 const MARKET_CATALOG: {
@@ -490,6 +517,7 @@ export default function AdminPage() {
         <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
           {TABS.map(({ key, label, Icon }) => {
             const active = tab === key;
+            const pendingW = key === "deposits" ? (panel?.stats.pendingWithdrawals ?? 0) : 0;
             return (
               <button
                 key={key}
@@ -504,6 +532,11 @@ export default function AdminPage() {
               >
                 <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
                 <span>{label}</span>
+                {pendingW > 0 && (
+                  <span className="ml-0.5 rounded-full bg-betclic-red px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                    {pendingW}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -548,8 +581,21 @@ export default function AdminPage() {
               act={act}
             />
           )}
-          {tab === "bets" && <BetsTab bets={panel.bets} predBets={panel.predictionBets} />}
-          {tab === "deposits" && <DepositsTab deposits={panel.deposits} />}
+          {tab === "bets" && (
+            <BetsTab
+              bets={panel.bets}
+              predBets={panel.predictionBets}
+              comboBets={panel.comboBets ?? []}
+            />
+          )}
+          {tab === "deposits" && (
+            <DepositsTab
+              deposits={panel.deposits}
+              withdrawals={panel.withdrawals ?? []}
+              busy={busy}
+              act={act}
+            />
+          )}
         </div>
       )}
     </div>
@@ -1926,9 +1972,11 @@ function UsersTab({
 function BetsTab({
   bets,
   predBets,
+  comboBets,
 }: {
   bets: AdminBet[];
   predBets: PanelData["predictionBets"];
+  comboBets: NonNullable<PanelData["comboBets"]>;
 }) {
   const rows = [
     ...bets.map((b) => ({
@@ -1954,6 +2002,18 @@ function BetsTab({
       riskFlag: null,
       clv: null,
       placedAt: p.placedAt,
+    })),
+    ...comboBets.map((c) => ({
+      id: c.id,
+      kind: "Combiné",
+      label: `Combiné ${c.legs.length} sél. (${c.totalOdds.toFixed(2)})`,
+      detail: c.legs.map((l) => l.selectionLabel).join(" · "),
+      stake: c.stake,
+      win: c.potentialWin,
+      status: c.status,
+      riskFlag: null,
+      clv: null,
+      placedAt: c.placedAt,
     })),
   ].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
@@ -2008,24 +2068,136 @@ function BetsTab({
   );
 }
 
-/* ---------------- Dépôts ---------------- */
+/* ---------------- Finance (Retraits & Dépôts) ---------------- */
 
-function DepositsTab({ deposits }: { deposits: AdminDeposit[] }) {
-  const total = deposits
+function DepositsTab({
+  deposits,
+  withdrawals,
+  busy,
+  act,
+}: {
+  deposits: AdminDeposit[];
+  withdrawals: AdminWithdrawal[];
+  busy: Record<string, boolean>;
+  act: (payload: Record<string, unknown>, key: string, okMsg: string) => Promise<boolean>;
+}) {
+  const totalDeposits = deposits
     .filter((d) => d.status === "credited")
     .reduce((s, d) => s + d.amount, 0);
+  const totalWithdrawals = withdrawals
+    .filter((w) => w.status === "approved")
+    .reduce((s, w) => s + w.amount, 0);
+  const pendingWithdrawals = withdrawals.filter((w) => w.status === "pending");
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="glass-card rounded-2xl p-4 text-center">
-        <p className="text-[11px] font-medium text-dim">Total crédité</p>
-        <p className="mt-0.5 font-display text-[24px] font-bold tabular-nums text-ink">
-          {eur(total)}
-        </p>
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="glass-card rounded-2xl p-3.5 text-center">
+          <p className="text-[11px] font-medium text-dim">Dépôts crédités</p>
+          <p className="mt-0.5 font-display text-[20px] font-bold tabular-nums text-win">
+            {eur(totalDeposits)}
+          </p>
+        </div>
+        <div className="glass-card rounded-2xl p-3.5 text-center">
+          <p className="text-[11px] font-medium text-dim">Retraits payés</p>
+          <p className="mt-0.5 font-display text-[20px] font-bold tabular-nums text-ink">
+            {eur(totalWithdrawals)}
+          </p>
+        </div>
       </div>
-      <AdminSectionTitle label="Transactions" count={deposits.length} />
+
+      <AdminSectionTitle label="Demandes de retrait en attente" count={pendingWithdrawals.length} />
+      {pendingWithdrawals.length === 0 ? (
+        <p className="rounded-2xl border border-edge bg-white py-5 text-center text-[12px] text-dim">
+          Aucune demande de retrait en attente.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {pendingWithdrawals.map((w) => {
+            const approveKey = `w-app-${w.id}`;
+            const rejectKey = `w-rej-${w.id}`;
+            return (
+              <div key={w.id} className="glass-card rounded-2xl p-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-[14px] font-bold text-ink">
+                      {w.userName} · {eur(w.amount)}
+                    </p>
+                    <p className="truncate text-[11.5px] font-medium text-mist">
+                      {w.method.toUpperCase()} · {w.destination}
+                    </p>
+                    <p className="text-[10.5px] text-dim">
+                      {w.userEmail || `Joueur #${w.userId}`} · {formatPlacedAt(w.createdAt)}
+                    </p>
+                  </div>
+                  <StatusBadge status={w.status} />
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!!busy[approveKey] || !!busy[rejectKey]}
+                    onClick={() =>
+                      act(
+                        { action: "approveWithdrawal", withdrawalId: w.id },
+                        approveKey,
+                        `Retrait de ${eur(w.amount)} approuvé`
+                      )
+                    }
+                    className="h-9 rounded-xl bg-win font-display text-[12px] font-bold text-white disabled:opacity-50"
+                  >
+                    {busy[approveKey] ? "Validation…" : "Approuver"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!!busy[approveKey] || !!busy[rejectKey]}
+                    onClick={() =>
+                      act(
+                        { action: "rejectWithdrawal", withdrawalId: w.id },
+                        rejectKey,
+                        `Retrait refusé et ${eur(w.amount)} recrédités`
+                      )
+                    }
+                    className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[12px] font-bold text-betclic-red disabled:opacity-50"
+                  >
+                    {busy[rejectKey] ? "Remboursement…" : "Refuser & rembourser"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {withdrawals.filter((w) => w.status !== "pending").length > 0 && (
+        <>
+          <AdminSectionTitle
+            label="Historique des retraits"
+            count={withdrawals.filter((w) => w.status !== "pending").length}
+          />
+          <div className="flex flex-col gap-2">
+            {withdrawals
+              .filter((w) => w.status !== "pending")
+              .map((w) => (
+                <div key={w.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-display text-[13px] font-semibold text-ink">
+                      {w.userName} · {eur(w.amount)} ({w.method.toUpperCase()})
+                    </p>
+                    <p className="truncate text-[11px] text-dim">
+                      {w.destination} · {formatPlacedAt(w.createdAt)}
+                    </p>
+                  </div>
+                  <StatusBadge status={w.status} />
+                </div>
+              ))}
+          </div>
+        </>
+      )}
+
+      <AdminSectionTitle label="Dépôts enregistrés" count={deposits.length} />
       {deposits.length === 0 ? (
-        <p className="py-8 text-center text-[12.5px] text-dim">Aucun dépôt enregistré.</p>
+        <p className="py-6 text-center text-[12.5px] text-dim">Aucun dépôt enregistré.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {deposits.map((d) => (
@@ -2052,7 +2224,10 @@ function DepositsTab({ deposits }: { deposits: AdminDeposit[] }) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    pending: { label: "En cours", cls: "bg-elev text-ink" },
+    pending: { label: "En attente", cls: "bg-amber-500/15 text-amber-800" },
+    approved: { label: "Validé", cls: "bg-win/12 text-win" },
+    rejected: { label: "Refusé", cls: "bg-betclic-red/10 text-betclic-red" },
+    cancelled: { label: "Annulé", cls: "bg-elev text-dim" },
     won: { label: "Gagné", cls: "bg-win/12 text-win" },
     lost: { label: "Perdu", cls: "bg-elev text-dim" },
     cashed: { label: "Cash-out", cls: "bg-sky-500/12 text-sky-700" },

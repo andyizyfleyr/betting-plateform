@@ -14,8 +14,10 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { api, type ClientMatch, type ClientUser } from "@/lib/api";
+import { MAX_COMBO_LEGS } from "@/lib/combo-math";
 import { cn } from "@/lib/format";
 import { BetModal } from "./bet-modal";
+import { ComboFloatingBar, ComboSheet, type ComboSelection } from "./combo-slip";
 import { MarketSheet } from "./market-sheet";
 import { RechargeModal } from "./recharge-modal";
 
@@ -50,6 +52,13 @@ interface AppContextValue {
   rechargeOpen: boolean;
   openRecharge: () => void;
   closeRecharge: () => void;
+  comboLegs: ComboSelection[];
+  comboOpen: boolean;
+  openCombo: () => void;
+  closeCombo: () => void;
+  toggleComboLeg: (sel: ComboSelection) => "added" | "replaced" | "removed" | "full";
+  removeComboLeg: (uid: string) => void;
+  clearCombo: () => void;
   toast: (t: Omit<Toast, "id">) => void;
   betsVersion: number;
   bumpBets: () => void;
@@ -66,6 +75,7 @@ export function useApp() {
 
 let toastId = 0;
 const POLL_INTERVAL = 5_000;
+const COMBO_STORAGE_KEY = "pulsebet_combo_v1";
 
 export function Providers({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -75,10 +85,36 @@ export function Providers({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<BetTarget | null>(null);
   const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
   const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [comboLegs, setComboLegs] = useState<ComboSelection[]>([]);
+  const [comboOpen, setComboOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const raw = sessionStorage.getItem(COMBO_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as ComboSelection[];
+          if (Array.isArray(parsed)) setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+        }
+      } catch {
+        /* silencieux */
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  const persistCombo = useCallback((next: ComboSelection[]) => {
+    setComboLegs(next);
+    try {
+      sessionStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* silencieux */
+    }
+  }, []);
 
   useEffect(() => {
     if (isAuthRoute || user) return;
@@ -141,6 +177,40 @@ export function Providers({ children }: { children: ReactNode }) {
     timers.current.set(id, timer);
   }, []);
 
+  const toggleComboLeg = useCallback(
+    (sel: ComboSelection): "added" | "replaced" | "removed" | "full" => {
+      const existingIdx = comboLegs.findIndex((l) => l.uid === sel.uid);
+      if (existingIdx >= 0) {
+        const existing = comboLegs[existingIdx];
+        if (existing.market === sel.market && existing.selection === sel.selection) {
+          persistCombo(comboLegs.filter((l) => l.uid !== sel.uid));
+          return "removed";
+        }
+        const replaced = [...comboLegs];
+        replaced[existingIdx] = sel;
+        persistCombo(replaced);
+        return "replaced";
+      }
+      if (comboLegs.length >= MAX_COMBO_LEGS) {
+        return "full";
+      }
+      persistCombo([...comboLegs, sel]);
+      return "added";
+    },
+    [comboLegs, persistCombo]
+  );
+
+  const removeComboLeg = useCallback(
+    (uid: string) => {
+      persistCombo(comboLegs.filter((l) => l.uid !== uid));
+    },
+    [comboLegs, persistCombo]
+  );
+
+  const clearCombo = useCallback(() => {
+    persistCombo([]);
+  }, [persistCombo]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       user,
@@ -157,17 +227,39 @@ export function Providers({ children }: { children: ReactNode }) {
       rechargeOpen,
       openRecharge: () => setRechargeOpen(true),
       closeRecharge: () => setRechargeOpen(false),
+      comboLegs,
+      comboOpen,
+      openCombo: () => setComboOpen(true),
+      closeCombo: () => setComboOpen(false),
+      toggleComboLeg,
+      removeComboLeg,
+      clearCombo,
       toast,
       betsVersion,
       bumpBets: () => setBetsVersion((v) => v + 1),
       pendingCount,
     }),
-    [user, target, marketMatch, rechargeOpen, toast, betsVersion, pendingCount]
+    [
+      user,
+      target,
+      marketMatch,
+      rechargeOpen,
+      comboLegs,
+      comboOpen,
+      toggleComboLeg,
+      removeComboLeg,
+      clearCombo,
+      toast,
+      betsVersion,
+      pendingCount,
+    ]
   );
 
   return (
     <AppContext.Provider value={value}>
       {children}
+      <ComboFloatingBar />
+      <ComboSheet />
       <MarketSheet />
       <BetModal />
       <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />

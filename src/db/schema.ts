@@ -232,10 +232,62 @@ export const deposits = pgTable("deposits", {
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+export interface ComboLeg {
+  kind: "sport" | "prediction";
+  matchId?: number | null;
+  questionId?: number | null;
+  sport: string;
+  league: string;
+  title: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  market: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+  status: "pending" | "won" | "lost" | "void";
+}
+
+/**
+ * Paris combinés (2 à 8 sélections : matchs sportifs et/ou questions de prédiction).
+ * status: "pending" | "won" | "lost" | "cashed"
+ */
+export const comboBets = pgTable("combo_bets", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().default(1),
+  legs: jsonb("legs").$type<ComboLeg[]>().notNull(),
+  baseOdds: doublePrecision("base_odds").notNull(),
+  boostPct: doublePrecision("boost_pct").notNull().default(0),
+  totalOdds: doublePrecision("total_odds").notNull(),
+  stake: doublePrecision("stake").notNull(),
+  potentialWin: doublePrecision("potential_win").notNull(),
+  status: text("status").notNull().default("pending"),
+  cashOutAmount: doublePrecision("cash_out_amount"),
+  placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+/**
+ * Demandes de retrait effectuées par les joueurs.
+ * status: "pending" | "approved" | "rejected" | "cancelled"
+ */
+export const withdrawals = pgTable("withdrawals", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().default(1),
+  method: text("method").notNull(), // "iban" | "paypal" | "card"
+  destination: text("destination").notNull(),
+  amount: doublePrecision("amount").notNull(),
+  status: text("status").notNull().default("pending"),
+  adminNote: text("admin_note"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { mode: "date" }),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type PredictionQuestionRow = typeof predictionQuestions.$inferSelect;
 export type PredictionBetRow = typeof predictionBets.$inferSelect;
+export type ComboBetRow = typeof comboBets.$inferSelect;
+export type WithdrawalRow = typeof withdrawals.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
 export type DepositRow = typeof deposits.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;

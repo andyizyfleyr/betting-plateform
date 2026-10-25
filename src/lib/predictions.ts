@@ -6,6 +6,7 @@ import {
   predictionQuestions,
   type PredictionOption,
 } from "@/db/schema";
+import { settlePendingCombos } from "./combo";
 import { getGlobalHouseHealth, invalidateHouseHealthCache } from "./house-brain";
 
 export const PRED_MIN_STAKE = 0.5;
@@ -154,6 +155,7 @@ export async function settleQuestion(questionId: number, resolution: string) {
       }
     }
   });
+  await settlePendingCombos();
   invalidateHouseHealthCache();
 }
 

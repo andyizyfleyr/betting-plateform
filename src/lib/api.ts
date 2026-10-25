@@ -1,7 +1,23 @@
 export type MatchStatus = "live" | "upcoming" | "finished";
 export type BetStatus = "pending" | "won" | "lost" | "cashed";
 export type Selection = "home" | "draw" | "away";
-export type BetKind = "sport" | "prediction";
+export type BetKind = "sport" | "prediction" | "combo";
+
+export interface ClientComboLeg {
+  kind: "sport" | "prediction";
+  matchId?: number | null;
+  questionId?: number | null;
+  sport: string;
+  league: string;
+  title: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  market: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+  status: "pending" | "won" | "lost" | "void";
+}
 
 export interface MarketOutcome {
   key: string;
@@ -70,6 +86,9 @@ export interface ClientBet {
   selection: string;
   selectionLabel: string;
   odds: number;
+  baseOdds?: number;
+  boostPct?: number;
+  legs?: ClientComboLeg[];
   stake: number;
   potentialWin: number;
   status: BetStatus;
@@ -151,6 +170,41 @@ export interface PaymentProvider {
   live: boolean;
 }
 
+export interface ClientWithdrawal {
+  id: number;
+  userId: number;
+  method: string;
+  destination: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  adminNote?: string | null;
+  createdAt: string;
+  processedAt?: string | null;
+}
+
+export interface ClientWalletEntry {
+  id: string;
+  type: "deposit" | "withdrawal" | "win" | "cashout" | "stake";
+  title: string;
+  subtitle: string;
+  amount: number;
+  status: string;
+  canCancel?: boolean;
+  rawId?: number;
+  createdAt: string;
+}
+
+export interface ClientWalletData {
+  balance: number;
+  summary: {
+    totalDeposited: number;
+    totalWithdrawn: number;
+    pendingWithdrawals: number;
+  };
+  withdrawals: ClientWithdrawal[];
+  entries: ClientWalletEntry[];
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
@@ -176,11 +230,42 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
-  cashOut: (betId: number) =>
+  placeComboBet: (payload: {
+    legs: Array<{
+      kind: "sport" | "prediction";
+      matchId?: number;
+      questionId?: number;
+      market?: string;
+      selection: string;
+    }>;
+    stake: number;
+  }) =>
+    request<{ bet: { id: number; totalOdds: number; stake: number; potentialWin: number; boostPct: number }; balance: number }>(
+      "/api/bets/combo",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    ),
+  cashOut: (betId: number, kind?: BetKind) =>
     request<{ balance: number; value: number }>("/api/bets/cashout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ betId }),
+      body: JSON.stringify({ betId, kind }),
+    }),
+  wallet: () => request<ClientWalletData>("/api/wallet"),
+  requestWithdrawal: (payload: { method: string; destination: string; amount: number }) =>
+    request<{ withdrawal: ClientWithdrawal; balance: number }>("/api/withdrawals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  cancelWithdrawal: (withdrawalId: number) =>
+    request<{ withdrawal: ClientWithdrawal; balance: number }>("/api/withdrawals", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ withdrawalId }),
     }),
   predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100"),
   placePredictionBet: (payload: {
