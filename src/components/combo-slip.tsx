@@ -84,7 +84,7 @@ export function ComboFloatingBar() {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-display text-[13px] font-bold">
-                {comboLegs.length === 1 ? "1 sélection (ajoutez-en 1)" : "Ticket Combiné"}
+                {comboLegs.length === 1 ? "Coupon (1 sélection)" : "Coupon de pari · Combiné"}
               </span>
               {quote.boostPct > 0 && (
                 <span className="rounded-md bg-emerald-500/25 px-1.5 py-0.5 font-display text-[10px] font-bold text-emerald-300">
@@ -126,7 +126,7 @@ export function ComboFloatingBar() {
           <button
             type="button"
             onClick={clearCombo}
-            aria-label="Vider le combiné"
+            aria-label="Vider le coupon"
             className="grid h-8 w-8 place-items-center rounded-xl bg-white/10 text-white/75 active:bg-white/20"
           >
             <X className="h-3.5 w-3.5" strokeWidth={2.3} />
@@ -266,7 +266,7 @@ export function ComboSheet() {
                 <Check className="h-7 w-7" strokeWidth={2.6} />
               </div>
               <h3 className="mt-3 font-display text-[19px] font-bold text-ink">
-                Combiné validé !
+                Pari combiné accepté !
               </h3>
               <p className="mt-1 text-[12.5px] text-mist">
                 Cote totale{" "}
@@ -318,10 +318,10 @@ export function ComboSheet() {
                     </span>
                     <div>
                       <h2 className="font-display text-[16px] font-bold text-ink">
-                        Panier Combiné ({comboLegs.length}/{MAX_COMBO_LEGS})
+                        Coupon de pari ({comboLegs.length}/{MAX_COMBO_LEGS})
                       </h2>
                       <p className="text-[11px] text-dim">
-                        Combinez 2 à 8 matchs ou prédictions
+                        Pari combiné · 2 à 8 événements
                       </p>
                     </div>
                   </div>
@@ -406,14 +406,14 @@ export function ComboSheet() {
                 {!enoughLegs && (
                   <p className="mt-3 rounded-xl bg-elev px-3 py-2 text-center text-[11.5px] font-medium text-mist">
                     Ajoutez encore au moins <strong>1 sélection</strong> depuis Matchs ou
-                    Prédictions pour former un combiné.
+                    Prédictions pour former un pari combiné.
                   </p>
                 )}
 
                 {/* Mise */}
                 <div className="mt-4">
                   <div className="flex items-center justify-between text-[11.5px]">
-                    <span className="font-semibold text-mist">Mise du combiné</span>
+                    <span className="font-semibold text-mist">Mise du coupon</span>
                     <span className="text-dim">
                       Solde : <strong className="font-semibold text-ink">{eur(balance)}</strong>
                     </span>
@@ -533,11 +533,11 @@ export function ComboSheet() {
                   {phase === "loading" ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
-                      Validation du combiné…
+                      Validation du coupon…
                     </>
                   ) : (
                     <>
-                      Valider le combiné {stake > 0 ? `(${eur(stake)})` : ""}
+                      Placer le pari combiné {stake > 0 ? `(${eur(stake)})` : ""}
                       <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
                     </>
                   )}

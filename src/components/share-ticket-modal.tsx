@@ -59,7 +59,8 @@ function drawTicketCanvas(canvas: HTMLCanvasElement, bet: ClientBet, hideAmounts
 
   const isWon = bet.status === "won";
   const isCashed = bet.status === "cashed";
-  const accentColor = isWon ? "#10b981" : isCashed ? "#0ea5e9" : "#e11d48";
+  const isVoid = bet.status === "void";
+  const accentColor = isWon ? "#10b981" : isCashed ? "#0ea5e9" : isVoid ? "#d97706" : "#e11d48";
 
   const glow = ctx.createRadialGradient(W * 0.5, 160, 40, W * 0.5, 160, 560);
   glow.addColorStop(0, isWon ? "rgba(16,185,129,0.26)" : "rgba(225,29,72,0.28)");
@@ -67,7 +68,7 @@ function drawTicketCanvas(canvas: HTMLCanvasElement, bet: ClientBet, hideAmounts
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
 
-  // Carte principale du ticket
+  // Carte principale du coupon
   const cardX = 72;
   const cardY = 84;
   const cardW = W - 144;
@@ -102,20 +103,22 @@ function drawTicketCanvas(canvas: HTMLCanvasElement, bet: ClientBet, hideAmounts
   ctx.font = "600 22px system-ui, -apple-system, sans-serif";
   const kindTitle =
     bet.kind === "combo"
-      ? `TICKET COMBINÉ · ${legs.length} SÉLECTIONS`
+      ? `COUPON COMBINÉ · ${legs.length} ÉVÉNEMENTS`
       : bet.kind === "prediction"
-        ? "TICKET PRÉDICTION · COTES FIXES"
-        : "TICKET SPORT · COTES FIXES";
+        ? "COUPON PRÉDICTION · COTES FIXES"
+        : "COUPON DE PARI · COTES FIXES";
   ctx.fillText(kindTitle, cardX + 52, cardY + 114);
 
   // Badge de statut en haut à droite
   const statusText = isWon
     ? "GAGNÉ ✓"
     : isCashed
-      ? "CASH-OUT"
-      : bet.status === "lost"
-        ? "TERMINÉ"
-        : "EN COURS";
+      ? "COUPON VENDU"
+      : isVoid
+        ? "REMBOURSÉ"
+        : bet.status === "lost"
+          ? "PERDU"
+          : "EN COURS";
   ctx.font = "800 24px system-ui, -apple-system, sans-serif";
   const badgeW = ctx.measureText(statusText).width + 52;
   roundRect(ctx, cardX + cardW - badgeW - 48, cardY + 46, badgeW, 56, 28);
@@ -138,7 +141,9 @@ function drawTicketCanvas(canvas: HTMLCanvasElement, bet: ClientBet, hideAmounts
           ? "#10b981"
           : leg.status === "lost"
             ? "#ef4444"
-            : "#64748b";
+            : leg.status === "void"
+              ? "#d97706"
+              : "#64748b";
       ctx.beginPath();
       ctx.arc(cardX + 78, y + 39, 9, 0, Math.PI * 2);
       ctx.fillStyle = dotColor;
@@ -282,9 +287,15 @@ function drawTicketCanvas(canvas: HTMLCanvasElement, bet: ClientBet, hideAmounts
     const winLabel = isWon
       ? "GAIN REMPORTÉ"
       : isCashed
-        ? "MONTANT ENCAISSÉ"
-        : "GAIN POTENTIEL";
-    const winAmount = isCashed ? (bet.cashOutAmount ?? 0) : bet.potentialWin;
+        ? "COUPON VENDU"
+        : isVoid
+          ? "MISE REMBOURSÉE"
+          : "GAIN POTENTIEL";
+    const winAmount = isCashed
+      ? (bet.cashOutAmount ?? 0)
+      : isVoid
+        ? bet.stake
+        : bet.potentialWin;
 
     ctx.fillStyle = "#64748b";
     ctx.font = "700 22px system-ui, -apple-system, sans-serif";
@@ -340,11 +351,13 @@ export function ShareTicketModal({ bet, onClose }: Props) {
       bet.status === "won"
         ? "✅ GAGNÉ"
         : bet.status === "cashed"
-          ? "💰 CASH-OUT"
-          : "🔥 EN COURS";
+          ? "💰 COUPON VENDU"
+          : bet.status === "void"
+            ? "↺ REMBOURSÉ"
+            : "🔥 EN COURS";
     const gainPart = hideAmounts
       ? `Cote ×${formatOdds(bet.odds)}`
-      : `Cote ×${formatOdds(bet.odds)} → ${eur(bet.status === "cashed" ? (bet.cashOutAmount ?? 0) : bet.potentialWin)}`;
+      : `Cote ×${formatOdds(bet.odds)} → ${eur(bet.status === "cashed" ? (bet.cashOutAmount ?? 0) : bet.status === "void" ? bet.stake : bet.potentialWin)}`;
     return `${statusLabel} sur Pulse Bet !\n${title}\n${gainPart}`;
   })();
 
@@ -417,7 +430,7 @@ export function ShareTicketModal({ bet, onClose }: Props) {
           <div className="flex shrink-0 items-center justify-between border-b border-edge px-4 py-3">
             <div>
               <h2 className="font-display text-[16px] font-bold text-ink">
-                Partager mon ticket
+                Partager mon coupon
               </h2>
               <p className="text-[11px] text-dim">Carte haute définition prête à partager</p>
             </div>

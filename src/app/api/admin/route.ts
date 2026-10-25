@@ -29,7 +29,7 @@ import {
 import { publicUser } from "@/lib/auth";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
-import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
+import { isKnownMarket, marketLabelFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { getAdminMlOverview, retrainAllMlModels } from "@/lib/ml-engine";
 import {
   reopenSettledQuestion,
@@ -172,9 +172,26 @@ export async function GET(req: NextRequest) {
       netRevenue: round2(stake - payouts),
     },
     users: users.map(publicUser),
-    bets: betsRows,
+    bets: betsRows.map((b) => ({
+      ...b,
+      selectionLabel: isKnownMarket(b.market)
+        ? (marketLabelFor(b.market, b.selection, b.homeTeam, b.awayTeam) ?? b.selectionLabel)
+        : b.selectionLabel,
+    })),
     predictionBets: predBetsRows,
-    comboBets: comboRows,
+    comboBets: comboRows.map((cb) => ({
+      ...cb,
+      legs: (cb.legs ?? []).map((l) =>
+        l.kind === "sport" && l.homeTeam && l.awayTeam && isKnownMarket(l.market)
+          ? {
+              ...l,
+              selectionLabel:
+                marketLabelFor(l.market, l.selection, l.homeTeam, l.awayTeam) ??
+                l.selectionLabel,
+            }
+          : l
+      ),
+    })),
     deposits: depRows.map((d) => ({
       ...d,
       userName: userNameMap.get(d.userId) ?? `Joueur #${d.userId}`,

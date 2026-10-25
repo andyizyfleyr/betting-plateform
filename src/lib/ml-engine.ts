@@ -9,7 +9,7 @@ import {
   mlModels,
   type MatchRow,
 } from "@/db/schema";
-import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
+import { buildLiveMarkets, buildMarkets, marketTitleFor, minuteNumber } from "@/lib/markets";
 import {
   computeSegmentMarginMultiplier,
   defaultGlickoClubsState,
@@ -753,16 +753,16 @@ const RECOMMENDABLE_MARKETS = new Set([
 ]);
 
 const MARKET_SHORT_REASON: Record<string, string> = {
-  result: "1N2",
-  dnb: "Remboursé si nul",
+  result: "1x2",
+  dnb: "Handicap (0)",
   double_chance: "Double chance",
-  handicap_euro: "Handicap 1N2",
-  total_ou: "Plus/Moins buts",
-  btts: "Les 2 marquent",
-  result_total: "Résultat & Buts",
-  result_btts: "1N2 & BTTS",
-  goal_range: "Multi-buts",
-  ht_result: "Mi-temps 1N2",
+  handicap_euro: "Handicap européen",
+  total_ou: "Total",
+  btts: "Les 2 vont marquer",
+  result_total: "Résultat + Total",
+  result_btts: "1x2 + Les 2 marquent",
+  goal_range: "Nombre de buts",
+  ht_result: "1x2. 1ère MT",
   first_team_to_score: "1er but",
 };
 
@@ -1070,7 +1070,7 @@ export async function getAdminMlOverview() {
       const obsWinPct = s.n > 0 ? round2((s.sumWins / s.n) * 100) : 0;
       return {
         segment: segKey,
-        market,
+        market: marketTitleFor(market) ?? market,
         bucket,
         samples: Math.round(s.n),
         predWinPct,

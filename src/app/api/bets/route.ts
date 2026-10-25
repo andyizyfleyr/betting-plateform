@@ -54,6 +54,12 @@ export async function GET(req: NextRequest) {
 
   const mapped = rows.map(({ bet, match }) => {
     const livePending = bet.status === "pending" && match?.status === "live";
+    const resolvedLabel =
+      !(match?.source === "manual" && match.markets && match.markets.length > 0) &&
+      isKnownMarket(bet.market)
+        ? (marketLabelFor(bet.market, bet.selection, bet.homeTeam, bet.awayTeam) ??
+          bet.selectionLabel)
+        : bet.selectionLabel;
     return {
       id: bet.id,
       kind: "sport" as const,
@@ -66,7 +72,7 @@ export async function GET(req: NextRequest) {
       questionId: null,
       market: bet.market,
       selection: bet.selection,
-      selectionLabel: bet.selectionLabel,
+      selectionLabel: resolvedLabel,
       odds: bet.odds,
       stake: bet.stake,
       potentialWin: bet.potentialWin,
@@ -196,7 +202,16 @@ export async function GET(req: NextRequest) {
   }
 
   const comboMapped = comboRows.map((cb) => {
-    const legs = cb.legs ?? [];
+    const legs = (cb.legs ?? []).map((l) => {
+      if (l.kind === "sport" && l.homeTeam && l.awayTeam && isKnownMarket(l.market)) {
+        return {
+          ...l,
+          selectionLabel:
+            marketLabelFor(l.market, l.selection, l.homeTeam, l.awayTeam) ?? l.selectionLabel,
+        };
+      }
+      return l;
+    });
     const liveMatch = legs
       .map((l) => (l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined))
       .find((m) => m?.status === "live");
@@ -206,7 +221,7 @@ export async function GET(req: NextRequest) {
       kind: "combo" as const,
       matchId: null,
       sport: "combiné",
-      league: `Combiné (${legs.length} sélections)`,
+      league: `Pari combiné (${legs.length} événements)`,
       homeTeam: "",
       awayTeam: "",
       question: null,

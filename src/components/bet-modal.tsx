@@ -175,15 +175,15 @@ function BetModalSheet({
       odds: displayOdds,
     });
     if (outcome === "full") {
-      toast({ kind: "error", title: "Combiné complet (8 sélections max)" });
+      toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
       return;
     }
     if (outcome === "removed") {
-      toast({ kind: "info", title: "Retiré du combiné" });
+      toast({ kind: "info", title: "Retiré du coupon" });
     } else {
       toast({
         kind: "success",
-        title: outcome === "replaced" ? "Sélection remplacée dans le combiné" : "Ajouté au combiné",
+        title: outcome === "replaced" ? "Sélection remplacée dans le coupon" : "Ajouté au coupon de pari",
         description: `${target.match.homeTeam} – ${target.match.awayTeam} · ${target.label}`,
       });
       onClose();
@@ -277,7 +277,7 @@ function BetModalSheet({
 
             <div className="mt-3 flex items-center justify-between">
               <h2 className="font-display text-[17px] font-bold tracking-tight text-ink">
-                Ticket de pari
+                Coupon de pari
               </h2>
               <button
                 type="button"
@@ -508,8 +508,8 @@ function BetModalSheet({
                 >
                   <Layers className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
                   {inComboExact
-                    ? "Dans le combiné (toucher pour retirer)"
-                    : `Ajouter au combiné${comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}`}
+                    ? "Dans le coupon (toucher pour retirer)"
+                    : `Ajouter au coupon${comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}`}
                 </button>
               )}
             </div>
@@ -545,8 +545,8 @@ function SuccessView({
         <div className="grid h-14 w-14 place-items-center rounded-full bg-win/12 text-win">
           <Check className="h-7 w-7" strokeWidth={2.8} />
         </div>
-        <h3 className="mt-3 font-display text-[20px] font-bold text-ink">Pari enregistré</h3>
-        <p className="mt-0.5 text-[12.5px] text-mist">Ticket #{String(betId).padStart(5, "0")}</p>
+        <h3 className="mt-3 font-display text-[20px] font-bold text-ink">Pari accepté</h3>
+        <p className="mt-0.5 text-[12.5px] text-mist">Coupon #{String(betId).padStart(5, "0")}</p>
       </div>
 
       <div className="mt-4 rounded-2xl border border-edge bg-elev/50 p-3.5">

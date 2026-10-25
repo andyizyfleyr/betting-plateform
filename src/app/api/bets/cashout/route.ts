@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       .where(and(eq(comboBets.id, betId), eq(comboBets.userId, uid)));
 
     if (!cb || cb.status !== "pending") {
-      return NextResponse.json({ error: "Ce combiné n'est plus encaissable" }, { status: 400 });
+      return NextResponse.json({ error: "Ce coupon ne peut plus être vendu" }, { status: 400 });
     }
 
     const matchIds = (cb.legs ?? [])
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     );
     if (value == null) {
       return NextResponse.json(
-        { error: "Le cash-out est momentanément indisponible sur ce combiné" },
+        { error: "La vente du coupon est momentanément indisponible sur ce combiné" },
         { status: 400 }
       );
     }
@@ -118,18 +118,18 @@ export async function POST(req: NextRequest) {
       const { bet, match } = sportRow;
       if (bet.status !== "pending") {
         if (kind === "sport") {
-          return NextResponse.json({ error: "Ce pari n'est plus encaissable" }, { status: 400 });
+          return NextResponse.json({ error: "Ce coupon ne peut plus être vendu" }, { status: 400 });
         }
       } else {
         if (!match || match.status !== "live") {
           return NextResponse.json(
-            { error: "Le cash-out n'est disponible que pendant le match" },
+            { error: "La vente du coupon n'est disponible que pendant le match" },
             { status: 400 }
           );
         }
         if (match.suspended) {
           return NextResponse.json(
-            { error: "Marché suspendu — cash-out indisponible" },
+            { error: "Marché suspendu — vente du coupon indisponible" },
             { status: 400 }
           );
         }
@@ -148,10 +148,12 @@ export async function POST(req: NextRequest) {
           redAway: match.redAway,
           homeForm: match.homeForm,
           awayForm: match.awayForm,
+          events: match.events ?? null,
+          matchId: match.id,
         });
         if (value == null) {
           return NextResponse.json(
-            { error: "Le cash-out n'est plus disponible sur ce pari actuellement" },
+            { error: "La vente du coupon n'est plus disponible sur ce pari actuellement" },
             { status: 400 }
           );
         }
@@ -193,11 +195,11 @@ export async function POST(req: NextRequest) {
   if (predRow && predRow.bet) {
     const { bet, question } = predRow;
     if (bet.status !== "pending") {
-      return NextResponse.json({ error: "Ce pari n'est plus encaissable" }, { status: 400 });
+      return NextResponse.json({ error: "Ce coupon ne peut plus être vendu" }, { status: 400 });
     }
     if (!question || question.status !== "open" || question.resolvesAt.getTime() <= Date.now()) {
       return NextResponse.json(
-        { error: "Le cash-out n'est disponible que sur les prédictions ouvertes" },
+        { error: "La vente du coupon n'est disponible que sur les prédictions ouvertes" },
         { status: 400 }
       );
     }
