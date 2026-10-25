@@ -18,14 +18,14 @@ import {
 } from "@/lib/combo-math";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import {
-  customMarketLabel,
-  customMarketOdds,
   isKnownMarket,
+  isRealMatchKickoffReached,
   liveMarketOddsFor,
   marketLabelFor,
   marketOddsFor,
   marketOutcomeSettled,
   minuteNumber,
+  realMatchOddsFor,
 } from "@/lib/markets";
 import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
@@ -173,6 +173,34 @@ export async function POST(req: NextRequest) {
   let matchMap = new Map(matchRows.map((m) => [m.id, m]));
   const questionMap = new Map(questionRows.map((q) => [q.id, q]));
 
+  // Séparation stricte : interdiction absolue de mélanger des matchs réels et des matchs virtuels dans un même combiné
+  const hasRealMatch = matchRows.some((m) => m.source === "manual");
+  const hasVirtualMatch = matchRows.some((m) => m.source !== "manual");
+  if (hasRealMatch && hasVirtualMatch) {
+    return NextResponse.json(
+      {
+        error:
+          "Impossible de mélanger des matchs réels et des matchs virtuels dans un même pari combiné",
+      },
+      { status: 400 }
+    );
+  }
+
+  for (const m of matchRows) {
+    if (m.suspended) {
+      return NextResponse.json(
+        { error: `Cotes suspendues sur ${m.homeTeam} – ${m.awayTeam}` },
+        { status: 400 }
+      );
+    }
+    if (m.source === "manual" && isRealMatchKickoffReached(m)) {
+      return NextResponse.json(
+        { error: `Coup d'envoi dépassé sur ${m.homeTeam} – ${m.awayTeam}` },
+        { status: 400 }
+      );
+    }
+  }
+
   // Si au moins un match du combiné est en direct, on effectue le contrôle anti-but (300 ms)
   const liveInitial = new Map<
     number,
@@ -197,7 +225,9 @@ export async function POST(req: NextRequest) {
 
   if (liveInitial.size > 0) {
     await new Promise((r) => setTimeout(r, LIVE_VALIDATION_MS));
-    await runLiveEngine();
+    if (hasVirtualMatch) {
+      await runLiveEngine();
+    }
     const freshMatches = await db
       .select()
       .from(matches)
@@ -274,9 +304,12 @@ export async function POST(req: NextRequest) {
       let odds: number | null = null;
       let selectionLabel: string | null = null;
 
-      if (m.source === "manual" && m.markets && m.markets.length > 0) {
-        odds = customMarketOdds(m.markets, market, leg.selection);
-        selectionLabel = customMarketLabel(m.markets, market, leg.selection);
+      if (m.source === "manual") {
+        const realHit = realMatchOddsFor(m, market, leg.selection);
+        if (realHit) {
+          odds = realHit.odds;
+          selectionLabel = realHit.label;
+        }
       } else {
         odds =
           m.status === "live"

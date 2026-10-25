@@ -13,7 +13,7 @@ import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
 import { formatGoalSummary, LiveStatusBadge } from "./match-card";
-import { cn, formatOdds } from "@/lib/format";
+import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
 const POLL_INTERVAL = 4_000;
 
@@ -155,7 +155,8 @@ export function MarketSheet() {
 
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
-  const suspended = isLive && match.suspended;
+  const isReal = match.source === "manual";
+  const suspended = Boolean(match.suspended);
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
@@ -197,6 +198,16 @@ export function MarketSheet() {
                 <div className="mx-auto h-1 w-10 rounded-full bg-edge" />
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-mist">
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
+                        isReal
+                          ? "bg-emerald-600/12 text-emerald-700"
+                          : "bg-elev text-dim"
+                      )}
+                    >
+                      {isReal ? "Match réel" : "Virtuel"}
+                    </span>
                     <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
                     <span className="truncate font-semibold">{match.league}</span>
                   </div>
@@ -224,7 +235,7 @@ export function MarketSheet() {
                       />
                       Betslip{comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}
                     </button>
-                    {(isLive || isFinished) && (
+                    {!isReal && (isLive || isFinished) && (
                       <button
                         type="button"
                         onPointerDown={(e) => e.stopPropagation()}
@@ -283,6 +294,10 @@ export function MarketSheet() {
                           )}
                         </div>
                       </>
+                    ) : isReal ? (
+                      <span className="rounded-full bg-surface px-2.5 py-0.5 font-display text-[10.5px] font-semibold text-ink">
+                        {formatKickoff(match.startsAt)}
+                      </span>
                     ) : (
                       <KickoffCountdown startsAt={match.startsAt} />
                     )}
@@ -319,7 +334,13 @@ export function MarketSheet() {
               {suspended && (
                 <div className="mt-2 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-1.5 text-[11px] font-semibold text-amber-800">
                   <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-                  <span>Action en cours — réouverture automatique des cotes…</span>
+                  <span>
+                    {isReal && !isLive && match.kickoffReached
+                      ? "Coup d'envoi officiel atteint — paris pré-match clôturés en attente du direct."
+                      : isReal
+                        ? "Marchés temporairement suspendus par l'opérateur."
+                        : "Action en cours — réouverture automatique des cotes…"}
+                  </span>
                 </div>
               )}
 
@@ -358,7 +379,7 @@ export function MarketSheet() {
 
             {/* Zone scrollable en bloc standard : aucune compression verticale possible */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pb-8 pt-3">
-              {(isLive || isFinished) && showTracker && (
+              {!isReal && (isLive || isFinished) && showTracker && (
                 <LiveMatchTracker
                   key={match.id}
                   match={match}
@@ -410,6 +431,7 @@ export function MarketSheet() {
                               uid: `sport-${match.id}`,
                               kind: "sport",
                               matchId: match.id,
+                              matchSource: match.source,
                               title: `${match.homeTeam} – ${match.awayTeam}`,
                               league: match.league,
                               market: g.key,
@@ -421,6 +443,13 @@ export function MarketSheet() {
                               toast({
                                 kind: "error",
                                 title: "Betslip complet (8 sélections max)",
+                              });
+                            } else if (res === "source_conflict") {
+                              toast({
+                                kind: "error",
+                                title: "Mélange interdit",
+                                description:
+                                  "Impossible de mélanger match réel et match virtuel.",
                               });
                             }
                             return;
@@ -480,6 +509,7 @@ function AccordionItem({
     uid: `sport-${match.id}`,
     kind: "sport",
     matchId: match.id,
+    matchSource: match.source,
     title: `${match.homeTeam} – ${match.awayTeam}`,
     league: match.league,
     market: group.key,

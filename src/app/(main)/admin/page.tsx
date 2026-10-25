@@ -468,10 +468,11 @@ export default function AdminPage() {
 
   const onAddMatch = async (e: FormEvent): Promise<boolean> => {
     e.preventDefault();
+    const parseOdd = (raw: string) => Number(String(raw).trim().replace(",", "."));
     const builtMarkets = matchForm.markets
       .map((g) => {
         const outcomes = g.outcomes
-          .map((o) => ({ ...o, odds: Number(o.odds) || 0 }))
+          .map((o) => ({ ...o, odds: parseOdd(o.odds) || 0 }))
           .filter((o) => o.odds > 1);
         return outcomes.length > 0
           ? { key: g.key, label: g.label, short: g.short, outcomes }
@@ -485,9 +486,9 @@ export default function AdminPage() {
         home: matchForm.home,
         away: matchForm.away,
         league: matchForm.league,
-        oddsHome: Number(matchForm.oddsHome),
-        oddsDraw: Number(matchForm.oddsDraw),
-        oddsAway: Number(matchForm.oddsAway),
+        oddsHome: parseOdd(matchForm.oddsHome),
+        oddsDraw: parseOdd(matchForm.oddsDraw),
+        oddsAway: parseOdd(matchForm.oddsAway),
         status: matchForm.status,
         startsAt: matchForm.startsAt || undefined,
         homeLogo: matchForm.homeLogo,
@@ -495,7 +496,7 @@ export default function AdminPage() {
         markets: builtMarkets,
       },
       "add-match",
-      "Match créé"
+      "Match réel publié"
     );
     if (ok) {
       setMatchForm({
@@ -808,33 +809,51 @@ function MatchesTab({
   setForm: (f: MatchFormState) => void;
   onAdd: (e: FormEvent) => Promise<boolean>;
 }) {
+  const [universe, setUniverse] = useState<"real" | "virtual">("real");
   const [formOpen, setFormOpen] = useState(false);
   const [openLogos, setOpenLogos] = useState(false);
   const [openMarkets, setOpenMarkets] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "live" | "upcoming" | "finished">("all");
   const [leagueFilter, setLeagueFilter] = useState<string>("all");
   const [matchQuery, setMatchQuery] = useState("");
+  const [nowTs, setNowTs] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setNowTs(Date.now()), 0);
+    const id = setInterval(() => setNowTs(Date.now()), 5_000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(id);
+    };
+  }, []);
+
+  const realMatches = matches.filter((m) => m.source === "manual");
+  const virtualMatches = matches.filter((m) => m.source !== "manual");
+  const isReal = universe === "real";
+  const scopedMatches = isReal ? realMatches : virtualMatches;
 
   const activeLeague = findLeague(form.league);
   const clubOptions = (activeLeague?.clubs ?? []).map((c) => c.name);
-  const activeMarkets = form.markets.filter((g) => g.outcomes.some((o) => Number(o.odds) > 1));
+  const activeMarkets = form.markets.filter((g) =>
+    g.outcomes.some((o) => Number(String(o.odds).replace(",", ".")) > 1)
+  );
 
   const qMatch = matchQuery.trim().toLowerCase();
   const searchedMatches = qMatch
-    ? matches.filter(
+    ? scopedMatches.filter(
         (m) =>
           m.homeTeam.toLowerCase().includes(qMatch) ||
           m.awayTeam.toLowerCase().includes(qMatch) ||
           m.league.toLowerCase().includes(qMatch)
       )
-    : matches;
+    : scopedMatches;
 
   const byMatchStatus =
     statusFilter === "all"
       ? searchedMatches
       : searchedMatches.filter((m) => m.status === statusFilter);
 
-  const matchLeagueOptions = Array.from(new Set(matches.map((m) => m.league))).map((lg) => ({
+  const matchLeagueOptions = Array.from(new Set(scopedMatches.map((m) => m.league))).map((lg) => ({
     value: lg,
     label: lg,
     count: byMatchStatus.filter((m) => m.league === lg).length,
@@ -852,7 +871,77 @@ function MatchesTab({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Tiroir repliable pour ne pas encombrer l'écran mobile */}
+      {/* Sélecteur strict entre Matchs réels (ajoutés par l'admin) et Matchs virtuels (simulateur) */}
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+        <button
+          type="button"
+          onClick={() => {
+            setUniverse("real");
+            setLeagueFilter("all");
+          }}
+          className={cn(
+            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+            isReal ? "bg-emerald-600 text-white shadow-xs" : "text-mist active:bg-elev"
+          )}
+        >
+          <span>Matchs réels</span>
+          <span
+            className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+              isReal ? "bg-white/20 text-white" : "bg-elev text-ink"
+            )}
+          >
+            {realMatches.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setUniverse("virtual");
+            setLeagueFilter("all");
+          }}
+          className={cn(
+            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+            !isReal ? "bg-betclic-red text-white shadow-xs" : "text-mist active:bg-elev"
+          )}
+        >
+          <span>Matchs virtuels</span>
+          <span
+            className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+              !isReal ? "bg-white/20 text-white" : "bg-elev text-ink"
+            )}
+          >
+            {virtualMatches.length}
+          </span>
+        </button>
+      </div>
+
+      {isReal ? (
+        <div className="rounded-xl border border-emerald-600/20 bg-emerald-600/8 px-3 py-2 text-[11.5px] text-emerald-900">
+          <strong className="font-display font-bold">Mode Opérateur Réel :</strong> plusieurs matchs
+          peuvent être en direct simultanément. Le simulateur virtuel ne touche jamais à vos matchs
+          réels, vos cotes ni vos scores.
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/70 px-3 py-2 text-[11.5px] text-mist">
+          <span>
+            <strong className="font-display font-bold text-ink">Simulateur 2-3 min :</strong> 1 seul
+            match en direct à tour de rôle, 100 % séparé des matchs réels.
+          </span>
+          <button
+            type="button"
+            onClick={onOpenForecasts}
+            className="shrink-0 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[10.5px] font-bold text-betclic-red"
+          >
+            Scores prévus →
+          </button>
+        </div>
+      )}
+
+      {/* Tiroir de création réservé aux matchs réels */}
+      {isReal && (
       <div className="glass-card overflow-hidden rounded-2xl">
         <button
           type="button"
@@ -860,8 +949,8 @@ function MatchesTab({
           className="flex w-full items-center justify-between px-4 py-3.5 text-left"
         >
           <span className="flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
-            <Plus className="h-4 w-4 text-betclic-red" strokeWidth={2.5} />
-            Ajouter un match
+            <Plus className="h-4 w-4 text-emerald-600" strokeWidth={2.5} />
+            Ajouter un match réel
           </span>
           <ChevronDown
             className={cn("h-4 w-4 text-dim transition-transform", formOpen && "rotate-180")}
@@ -1071,18 +1160,19 @@ function MatchesTab({
             <button
               type="submit"
               disabled={!form.home || !form.away || busy["add-match"]}
-              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red font-display text-[13.5px] font-bold text-white disabled:opacity-55"
+              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 font-display text-[13.5px] font-bold text-white disabled:opacity-55"
             >
               {busy["add-match"] ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <CalendarPlus className="h-4 w-4" strokeWidth={2.2} />
               )}
-              Publier le match
+              Publier le match réel
             </button>
           </form>
         )}
       </div>
+      )}
 
       <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
         <Search className="h-4 w-4 shrink-0 text-dim" />
@@ -1090,7 +1180,11 @@ function MatchesTab({
           type="text"
           value={matchQuery}
           onChange={(e) => setMatchQuery(e.target.value)}
-          placeholder="Rechercher un club ou une ligue…"
+          placeholder={
+            isReal
+              ? "Rechercher un match réel ou une compétition…"
+              : "Rechercher un match virtuel…"
+          }
           className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
         />
         {matchQuery && (
@@ -1144,33 +1238,46 @@ function MatchesTab({
           setStatusFilter("all");
           setLeagueFilter("all");
         }}
-        resultCountText={`${filteredMatches.length} match${filteredMatches.length > 1 ? "s" : ""}`}
+        resultCountText={`${filteredMatches.length} match${filteredMatches.length > 1 ? "s" : ""} ${
+          isReal ? "réel" : "virtuel"
+        }${filteredMatches.length > 1 ? "s" : ""}`}
       />
 
-      <div className="flex flex-col gap-2.5">
-        {filteredMatches.map((m) => (
-          <AdminMatchCard
-            key={m.id}
-            m={m}
-            forecast={forecasts[m.id]}
-            onOpenForecasts={onOpenForecasts}
-            busy={busy}
-            act={act}
-          />
-        ))}
-      </div>
+      {filteredMatches.length === 0 ? (
+        <div className="glass-card rounded-2xl p-5 text-center text-[12.5px] text-mist">
+          {isReal && realMatches.length === 0
+            ? "Aucun match réel créé pour l'instant. Ouvrez « Ajouter un match réel » ci-dessus pour publier votre première rencontre officielle."
+            : "Aucun match dans cette sélection."}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {filteredMatches.map((m) => (
+            <AdminMatchCard
+              key={m.id}
+              m={m}
+              nowTs={nowTs}
+              forecast={!isReal ? forecasts[m.id] : undefined}
+              onOpenForecasts={onOpenForecasts}
+              busy={busy}
+              act={act}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function AdminMatchCard({
   m,
+  nowTs,
   forecast,
   onOpenForecasts,
   busy,
   act,
 }: {
   m: AdminMatch;
+  nowTs: number;
   forecast?: AdminMatchForecast;
   onOpenForecasts: () => void;
   busy: Record<string, boolean>;
@@ -1182,8 +1289,14 @@ function AdminMatchCard({
   const [oN, setON] = useState(String(m.oddsDraw ?? 3.2));
   const [o2, setO2] = useState(String(m.oddsAway));
 
+  const kickoffReached =
+    isManual &&
+    m.status === "upcoming" &&
+    nowTs > 0 &&
+    new Date(m.startsAt).getTime() <= nowTs;
+
   return (
-    <div className={cn("glass-card rounded-2xl p-3.5", m.suspended && "opacity-70")}>
+    <div className={cn("glass-card rounded-2xl p-3.5", m.suspended && "opacity-75")}>
       <div className="flex items-center gap-2.5">
         <div className="flex shrink-0 -space-x-2">
           <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} />
@@ -1197,10 +1310,10 @@ function AdminMatchCard({
             <span
               className={cn(
                 "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase",
-                isManual ? "bg-ink text-white" : "bg-elev text-mist"
+                isManual ? "bg-emerald-600 text-white" : "bg-elev text-mist"
               )}
             >
-              {isManual ? "Manuel" : "Virtuel 2-3m"}
+              {isManual ? "Match réel" : "Virtuel 2-3m"}
             </span>
           </div>
           <p className="truncate text-[11.5px] text-mist">
@@ -1220,7 +1333,7 @@ function AdminMatchCard({
               act(
                 { action: "toggleMatch", matchId: m.id, suspended: !v },
                 `tg-${m.id}`,
-                v ? "Match réactivé" : "Match suspendu"
+                v ? "Marchés réactivés" : "Marchés suspendus"
               )
             }
           />
@@ -1240,8 +1353,18 @@ function AdminMatchCard({
         </div>
       </div>
 
-      {/* Aperçu direct du score final prévu avant/pendant le match */}
-      {m.status !== "finished" && forecast && (
+      {kickoffReached && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800">
+          <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+          <span>
+            Coup d&apos;envoi officiel atteint — paris pré-match verrouillés. Passez en direct ou
+            réglez le score final.
+          </span>
+        </div>
+      )}
+
+      {/* Aperçu direct du score final prévu — réservé aux matchs virtuels uniquement */}
+      {!isManual && m.status !== "finished" && forecast && (
         <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/60 px-2.5 py-1.5 text-[11.5px]">
           <div className="flex min-w-0 items-center gap-1.5">
             {forecast.isLocked ? (
@@ -1361,9 +1484,13 @@ function MatchControls({
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
+  const isManual = m.source === "manual";
   const [homeEdit, setHomeEdit] = useState<{ base: number | null; val: string } | null>(null);
   const [awayEdit, setAwayEdit] = useState<{ base: number | null; val: string } | null>(null);
   const [mp, setMp] = useState("");
+  const [directSettleOpen, setDirectSettleOpen] = useState(false);
+  const [htHome, setHtHome] = useState("");
+  const [htAway, setHtAway] = useState("");
 
   const home = homeEdit && homeEdit.base === m.homeScore ? homeEdit.val : String(m.homeScore ?? 0);
   const away = awayEdit && awayEdit.base === m.awayScore ? awayEdit.val : String(m.awayScore ?? 0);
@@ -1372,23 +1499,125 @@ function MatchControls({
 
   if (m.status === "upcoming") {
     return (
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-edge pt-2.5">
-        <span className="text-[11px] text-dim">Démarrage auto à l&apos;heure prévue</span>
-        <button
-          type="button"
-          onClick={() =>
-            act({ action: "startMatch", matchId: m.id }, `start-${m.id}`, "Match passé en direct")
-          }
-          disabled={busy[`start-${m.id}`]}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60"
-        >
-          {busy[`start-${m.id}`] ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Play className="h-3.5 w-3.5" strokeWidth={2.4} />
-          )}
-          Lancer en direct
-        </button>
+      <div className="mt-3 border-t border-edge pt-2.5 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11px] text-dim">
+            {isManual
+              ? "Pilotage opérateur (aucun démarrage simulé)"
+              : "Démarrage séquentiel automatique"}
+          </span>
+          <div className="flex items-center gap-1.5">
+            {isManual && (
+              <button
+                type="button"
+                onClick={() => setDirectSettleOpen((s) => !s)}
+                className="flex h-8 items-center gap-1 rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink"
+              >
+                <Flag className="h-3 w-3 text-emerald-600" strokeWidth={2.3} />
+                {directSettleOpen ? "Fermer" : "Régler score"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() =>
+                act(
+                  { action: "startMatch", matchId: m.id },
+                  `start-${m.id}`,
+                  isManual
+                    ? "Match réel passé en direct (sans affecter les autres matchs)"
+                    : "Match virtuel lancé en direct"
+                )
+              }
+              disabled={busy[`start-${m.id}`]}
+              className={cn(
+                "flex h-8 items-center gap-1.5 rounded-lg px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60",
+                isManual ? "bg-emerald-600" : "bg-betclic-red"
+              )}
+            >
+              {busy[`start-${m.id}`] ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5" strokeWidth={2.4} />
+              )}
+              {isManual ? "Passer en direct" : "Lancer en direct"}
+            </button>
+          </div>
+        </div>
+
+        {/* Règlement direct d'un match réel sans passer par le live */}
+        {isManual && directSettleOpen && (
+          <div className="rounded-xl bg-elev/70 p-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-ink">Score final officiel :</span>
+              <div className="flex items-center gap-1">
+                <input
+                  inputMode="numeric"
+                  value={home}
+                  onChange={(e) => setHome(e.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="0"
+                  className="h-8 w-10 rounded-lg border border-edge bg-white text-center font-display text-[14px] font-bold text-ink"
+                />
+                <span className="text-dim">–</span>
+                <input
+                  inputMode="numeric"
+                  value={away}
+                  onChange={(e) => setAway(e.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="0"
+                  className="h-8 w-10 rounded-lg border border-edge bg-white text-center font-display text-[14px] font-bold text-ink"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10.5px] text-mist">Mi-temps (optionnel) :</span>
+              <div className="flex items-center gap-1">
+                <input
+                  inputMode="numeric"
+                  value={htHome}
+                  onChange={(e) => setHtHome(e.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="MT"
+                  className="h-7 w-10 rounded-lg border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+                />
+                <span className="text-dim">–</span>
+                <input
+                  inputMode="numeric"
+                  value={htAway}
+                  onChange={(e) => setHtAway(e.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="MT"
+                  className="h-7 w-10 rounded-lg border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={busy[`fin-${m.id}`]}
+              onClick={async () => {
+                const hasHt = htHome.trim() !== "" && htAway.trim() !== "";
+                const ok = await act(
+                  {
+                    action: "finishMatch",
+                    matchId: m.id,
+                    homeScore: Number(home) || 0,
+                    awayScore: Number(away) || 0,
+                    ...(hasHt
+                      ? { htHomeScore: Number(htHome), htAwayScore: Number(htAway) }
+                      : {}),
+                  },
+                  `fin-${m.id}`,
+                  "Match réel clôturé et paris réglés"
+                );
+                if (ok) setDirectSettleOpen(false);
+              }}
+              className="flex h-8.5 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 font-display text-[12px] font-bold text-white disabled:opacity-60"
+            >
+              {busy[`fin-${m.id}`] ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Flag className="h-3.5 w-3.5" strokeWidth={2.2} />
+              )}
+              Valider le résultat officiel & régler
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -1418,9 +1647,13 @@ function MatchControls({
     );
   }
 
+  const scoreDirty =
+    Number(home || "0") !== (m.homeScore ?? 0) ||
+    Number(away || "0") !== (m.awayScore ?? 0);
+
   return (
-    <div className="mt-3 rounded-xl bg-elev/60 p-2.5">
-      <div className="flex items-center justify-between gap-2">
+    <div className="mt-3 rounded-xl bg-elev/60 p-2.5 space-y-2">
+      <div className="flex items-center justify-between gap-1.5">
         <button
           type="button"
           onClick={() =>
@@ -1447,6 +1680,27 @@ function MatchControls({
             onChange={(e) => setAway(e.target.value.replace(/[^\d]/g, ""))}
             className="h-9 w-10 rounded-lg border border-edge bg-white text-center font-display text-[16px] font-bold text-ink outline-none focus:border-ink"
           />
+          {isManual && scoreDirty && (
+            <button
+              type="button"
+              disabled={busy[`sc-${m.id}`]}
+              onClick={() =>
+                act(
+                  {
+                    action: "setScore",
+                    matchId: m.id,
+                    homeScore: Number(home) || 0,
+                    awayScore: Number(away) || 0,
+                  },
+                  `sc-${m.id}`,
+                  "Score direct mis à jour"
+                )
+              }
+              className="h-9 rounded-lg bg-ink px-2 font-display text-[10.5px] font-bold text-white"
+            >
+              MAJ
+            </button>
+          )}
         </div>
 
         <button
@@ -1462,48 +1716,80 @@ function MatchControls({
         </button>
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-medium text-mist">Min.</span>
           <input
-            inputMode="numeric"
+            type="text"
             value={mp}
-            onChange={(e) => setMp(e.target.value.replace(/[^\d]/g, ""))}
-            placeholder={m.minute ?? "45"}
-            className="h-8 w-14 rounded-lg border border-edge bg-white px-2 text-center text-[16px] font-semibold text-ink outline-none focus:border-ink"
+            onChange={(e) =>
+              setMp(
+                isManual
+                  ? e.target.value.slice(0, 8)
+                  : e.target.value.replace(/[^\d]/g, "")
+              )
+            }
+            placeholder={m.minute ?? "45'"}
+            className="h-8 w-16 rounded-lg border border-edge bg-white px-2 text-center text-[14px] font-semibold text-ink outline-none focus:border-ink"
           />
           <button
             type="button"
-            onClick={() =>
-              act(
-                { action: "setMinute", matchId: m.id, minute: `${mp || "0"}'` },
+            onClick={() => {
+              const raw = mp.trim();
+              const formatted =
+                raw.toUpperCase() === "MT" || raw.endsWith("'") ? raw : `${raw || "0"}'`;
+              void act(
+                { action: "setMinute", matchId: m.id, minute: formatted },
                 `min-${m.id}`,
-                `Minute ${mp}' enregistrée`
-              )
-            }
-            disabled={busy[`min-${m.id}`] || !mp}
-            className="h-8 rounded-lg bg-white px-2.5 text-[11.5px] font-bold text-ink border border-edge disabled:opacity-50"
+                `Minute ${formatted} enregistrée`
+              );
+            }}
+            disabled={busy[`min-${m.id}`] || !mp.trim()}
+            className="h-8 rounded-lg border border-edge bg-white px-2.5 text-[11.5px] font-bold text-ink disabled:opacity-50"
           >
             OK
           </button>
+          {isManual && (
+            <button
+              type="button"
+              disabled={busy[`min-mt-${m.id}`]}
+              onClick={() =>
+                act(
+                  { action: "setMinute", matchId: m.id, minute: "MT" },
+                  `min-mt-${m.id}`,
+                  "Mi-temps affichée"
+                )
+              }
+              className="h-8 rounded-lg border border-edge bg-white px-2 text-[11px] font-bold text-mist active:bg-elev"
+            >
+              MT
+            </button>
+          )}
         </div>
 
         <button
           type="button"
-          onClick={() =>
-            act(
+          onClick={() => {
+            const hasHt = isManual && htHome.trim() !== "" && htAway.trim() !== "";
+            void act(
               {
                 action: "finishMatch",
                 matchId: m.id,
                 homeScore: Number(home) || 0,
                 awayScore: Number(away) || 0,
+                ...(hasHt
+                  ? { htHomeScore: Number(htHome), htAwayScore: Number(htAway) }
+                  : {}),
               },
               `fin-${m.id}`,
               "Match terminé et paris réglés"
-            )
-          }
+            );
+          }}
           disabled={busy[`fin-${m.id}`]}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60"
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-lg px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60",
+            isManual ? "bg-emerald-600" : "bg-betclic-red"
+          )}
         >
           {busy[`fin-${m.id}`] ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1513,6 +1799,29 @@ function MatchControls({
           Terminer
         </button>
       </div>
+
+      {isManual && (
+        <div className="flex items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[10.5px] text-mist">
+          <span>Score MT officiel (optionnel avant « Terminer ») :</span>
+          <div className="flex items-center gap-1">
+            <input
+              inputMode="numeric"
+              value={htHome}
+              onChange={(e) => setHtHome(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="MT"
+              className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+            />
+            <span className="text-dim">–</span>
+            <input
+              inputMode="numeric"
+              value={htAway}
+              onChange={(e) => setHtAway(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="MT"
+              className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3282,9 +3591,14 @@ function ScoresPrevusTab({
     away: 0,
   });
 
-  // Tous les matchs ouverts ayant un scénario prévu, triés dans l'ordre exact de passage
+  // Uniquement les matchs virtuels du simulateur (les matchs réels admin n'ont aucun score simulé)
   const openScheduled = matches
-    .filter((m) => (m.status === "upcoming" || m.status === "live") && forecasts[m.id] != null)
+    .filter(
+      (m) =>
+        m.source !== "manual" &&
+        (m.status === "upcoming" || m.status === "live") &&
+        forecasts[m.id] != null
+    )
     .sort((a, b) => {
       if (a.status !== b.status) return a.status === "live" ? -1 : 1;
       return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() || a.id - b.id;

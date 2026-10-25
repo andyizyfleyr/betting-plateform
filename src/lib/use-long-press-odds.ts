@@ -86,6 +86,12 @@ export function useLongPressOdds({
             title: "Retiré du Betslip",
             description: `${sel.title} · ${sel.selectionLabel}`,
           });
+        } else if (result === "source_conflict") {
+          toast({
+            kind: "error",
+            title: "Mélange interdit",
+            description: "Impossible de mélanger un match réel et un match virtuel dans le Betslip.",
+          });
         } else if (result === "full") {
           toast({
             kind: "error",

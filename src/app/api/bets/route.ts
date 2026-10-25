@@ -15,7 +15,17 @@ import {
 } from "@/db/schema";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut, resolveComboLegStatus } from "@/lib/combo";
-import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
+import {
+  isKnownMarket,
+  isRealMatchKickoffReached,
+  liveMarketOddsFor,
+  liveOutcomeProbability,
+  marketLabelFor,
+  marketOddsFor,
+  marketOutcomeSettled,
+  minuteNumber,
+  realMatchOddsFor,
+} from "@/lib/markets";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import { requireUserId } from "@/lib/session";
@@ -100,15 +110,23 @@ export async function GET(req: NextRequest) {
               awayForm: match.awayForm ?? 1,
               events: match.events ?? null,
               matchId: match.id,
+              source: match.source ?? "virtual",
+              oddsHome: match.oddsHome,
+              oddsDraw: match.oddsDraw,
+              oddsAway: match.oddsAway,
+              markets: match.markets ?? null,
             })
           : null,
       placedAt: bet.placedAt,
       settledAt: bet.settledAt ?? null,
-      matchStatus: match?.status ?? null,
+      matchStatus: match
+        ? (match.status === "live" || match.status === "finished" ? match.status : "upcoming")
+        : null,
       matchHomeScore: match?.homeScore ?? null,
       matchAwayScore: match?.awayScore ?? null,
       matchMinute: match?.minute ?? null,
       matchStartsAt: match?.startsAt ?? null,
+      matchSource: match ? (match.source === "manual" ? "manual" : "virtual") : null,
     };
   });
 
@@ -219,6 +237,7 @@ export async function GET(req: NextRequest) {
         matchHomeScore: m?.homeScore ?? null,
         matchAwayScore: m?.awayScore ?? null,
         matchMinute: m?.minute ?? null,
+        matchSource: m ? (m.source === "manual" ? "manual" : "virtual") : null,
       };
     });
     const liveMatch = legs
@@ -294,9 +313,6 @@ export async function POST(req: NextRequest) {
 
   if (!matchId || !selection || !stake || stake <= 0) {
     return NextResponse.json({ error: "Données du pari incomplètes" }, { status: 400 });
-  }
-  if (!isKnownMarket(market)) {
-    return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
   }
   if (stake < MIN_STAKE) {
     return NextResponse.json(
@@ -382,8 +398,20 @@ export async function POST(req: NextRequest) {
   if (!match) {
     return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
   }
+  if (!isKnownMarket(market) && !(match.source === "manual" && match.markets?.length)) {
+    return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
+  }
   if (match.status === "finished") {
     return NextResponse.json({ error: "Ce match est terminé" }, { status: 400 });
+  }
+  if (match.suspended) {
+    return NextResponse.json({ error: "Les cotes de ce match sont actuellement suspendues" }, { status: 400 });
+  }
+  if (match.source === "manual" && isRealMatchKickoffReached(match)) {
+    return NextResponse.json(
+      { error: "Coup d'envoi dépassé — paris pré-match clôturés en attente du direct" },
+      { status: 400 }
+    );
   }
 
   // Anti-fractionnement : plafonne l'exposition cumulée d'un même joueur sur un même match
@@ -420,7 +448,9 @@ export async function POST(req: NextRequest) {
       );
     }
     await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
-    await runLiveEngine();
+    if (match.source === "virtual") {
+      await runLiveEngine();
+    }
     const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
     if (
       !freshMatch ||
@@ -463,21 +493,22 @@ export async function POST(req: NextRequest) {
   const minute = minuteNumber(pricedMatch.minute);
   if (
     pricedMatch.status === "live" &&
+    isKnownMarket(market) &&
     marketOutcomeSettled(market, selection, homeScore, awayScore, minute, modelOpts)
   ) {
     return NextResponse.json({ error: "Ce marché est déjà décidé" }, { status: 400 });
   }
 
-  // Cotation fixe bookmaker (non mutualisée) : le prix dépend uniquement du match
-  // et est verrouillé contractuellement sur le ticket à la validation.
+  // Cotation fixe bookmaker totalement séparée entre Matchs Réels et Matchs Virtuels
   let odds: number | null = null;
   let selectionLabel: string | null = null;
-  if (pricedMatch.source === "manual" && pricedMatch.markets && pricedMatch.markets.length > 0) {
-    odds = customMarketOdds(pricedMatch.markets, market, selection);
-    selectionLabel = customMarketLabel(pricedMatch.markets, market, selection);
-    if (odds == null || selectionLabel == null) {
-      return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
+  if (pricedMatch.source === "manual") {
+    const realHit = realMatchOddsFor(pricedMatch, market, selection);
+    if (!realHit) {
+      return NextResponse.json({ error: "Sélection fermée ou invalide" }, { status: 400 });
     }
+    odds = realHit.odds;
+    selectionLabel = realHit.label;
   } else {
     odds =
       pricedMatch.status === "live"

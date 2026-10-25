@@ -1,10 +1,12 @@
 import {
   binaryOutcomeOdds,
   extractMatchTimelineStats,
+  hasVerifiedGoalTimeline,
   liveHalfSplitModel,
   liveResultProbs,
   liveScoreModel,
   partitionOutcomeOdds,
+  realMatchScoreModel,
   type LiveHalfSplitModel,
   type LiveScoreModel,
   type MatchTimelineEvent,
@@ -45,6 +47,7 @@ export interface MarketModelOpts {
   redAway?: number;
   events?: MatchTimelineEvent[] | null;
   matchId?: number;
+  skipMlCalibrator?: boolean;
 }
 
 interface OutcomeSpec {
@@ -124,10 +127,12 @@ function exposureAdjustedOdds(
   market: string,
   _outcome: string,
   modelOdds: number,
-  _bets?: BetLike[]
+  _bets?: BetLike[],
+  skipMlCalibrator = false
 ): number {
   void _outcome;
   void _bets;
+  if (skipMlCalibrator) return modelOdds;
   const calMult = getCachedMarketCalibratorMultiplier(market, modelOdds);
   if (calMult === 1.0) return modelOdds;
   return round2(Math.max(1.01, modelOdds / calMult));
@@ -860,7 +865,7 @@ function buildMarketGroup(
         key: e.spec.key,
         label: e.spec.label,
         short: e.spec.short,
-        odds: exposureAdjustedOdds(m.key, e.spec.key, oddsTuple[idx], bets),
+        odds: exposureAdjustedOdds(m.key, e.spec.key, oddsTuple[idx], bets, Boolean(opts?.skipMlCalibrator)),
       }));
 
       builtRows.push({ label: rSpec.label, outcomes: rowOutcomes });
@@ -897,6 +902,7 @@ function buildMarketGroup(
   const open = entries.filter((e) => !e.settled);
   if (open.length === 0) return null;
 
+  const skipMl = Boolean(opts?.skipMlCalibrator);
   let outcomes: MarketOutcome[];
   if (m.conditionalPartition) {
     // Ex. Draw No Bet : cotation conditionnelle sur les issues décisives (hors nul remboursé)
@@ -913,7 +919,7 @@ function buildMarketGroup(
       key: e.spec.key,
       label: e.spec.label,
       short: e.spec.short,
-      odds: exposureAdjustedOdds(m.key, e.spec.key, oddsList[idx], bets),
+      odds: exposureAdjustedOdds(m.key, e.spec.key, oddsList[idx], bets, skipMl),
     }));
   } else if (m.partition && open.length >= 2) {
     const sumOpen = open.reduce((acc, e) => acc + e.prob, 0);
@@ -927,7 +933,7 @@ function buildMarketGroup(
         key: e.spec.key,
         label: e.spec.label,
         short: e.spec.short,
-        odds: exposureAdjustedOdds(m.key, e.spec.key, oddsList[idx], bets),
+        odds: exposureAdjustedOdds(m.key, e.spec.key, oddsList[idx], bets, skipMl),
       }));
     } else {
       outcomes = open.map((e) => ({
@@ -938,7 +944,8 @@ function buildMarketGroup(
           m.key,
           e.spec.key,
           binaryOutcomeOdds(e.prob, overround, maxOdds),
-          bets
+          bets,
+          skipMl
         ),
       }));
     }
@@ -951,7 +958,8 @@ function buildMarketGroup(
         m.key,
         e.spec.key,
         binaryOutcomeOdds(e.prob, overround, maxOdds),
-        bets
+        bets,
+        skipMl
       ),
     }));
   }
@@ -1223,4 +1231,311 @@ export function marketCatalog(): Array<{ key: string; label: string; short: stri
       outcomes: spec.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: 2 })),
     };
   });
+}
+
+/* ============================================================================
+ *  MOTEUR DÉDIÉ AUX MATCHS RÉELS AJOUTÉS PAR L'ADMIN (`source === "manual"`)
+ *  Totalement isolé du simulateur virtuel (`teamStrength`, calibrateur ML, RNG).
+ * ========================================================================== */
+
+export const HT_DEPENDENT_MARKETS = new Set([
+  "ht_result",
+  "ht_total_ou",
+  "ht_ft",
+  "highest_scoring_half",
+  "first_team_to_score",
+]);
+
+const NEUTRAL_SPLIT_MODEL: LiveHalfSplitModel = {
+  htResult: { home: 0.33, draw: 0.34, away: 0.33 },
+  htOver: () => 0.5,
+  htFt: {
+    "1_1": 0.15,
+    X_1: 0.12,
+    "2_1": 0.05,
+    "1_X": 0.06,
+    X_X: 0.18,
+    "2_X": 0.06,
+    "1_2": 0.05,
+    X_2: 0.12,
+    "2_2": 0.21,
+  },
+  highestHalf: { h1: 0.3, equal: 0.22, h2: 0.48 },
+  firstScorer: { home: 0.45, none: 0.1, away: 0.45 },
+};
+
+export interface RealMatchInput {
+  id: number;
+  sport?: string;
+  homeTeam: string;
+  awayTeam: string;
+  status: string;
+  startsAt: Date | string;
+  minute?: string | null;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  redHome?: number | null;
+  redAway?: number | null;
+  oddsHome: number;
+  oddsDraw: number | null;
+  oddsAway: number;
+  suspended?: boolean | null;
+  events?: MatchTimelineEvent[] | null;
+  markets?: CustomMarketGroup[] | null;
+}
+
+/**
+ * Un match réel en statut `upcoming` dont l'heure officielle de coup d'envoi est atteinte
+ * verrouille automatiquement ses paris pré-match jusqu'à ce que l'admin passe le match en
+ * direct ou saisisse le score final (empêche tout pari tardif après le coup d'envoi réel).
+ */
+export function isRealMatchKickoffReached(
+  m: Pick<RealMatchInput, "status" | "startsAt">,
+  now = Date.now()
+): boolean {
+  if (m.status !== "upcoming") return false;
+  const startMs =
+    typeof m.startsAt === "string" ? new Date(m.startsAt).getTime() : m.startsAt.getTime();
+  return Number.isFinite(startMs) && now >= startMs;
+}
+
+/**
+ * Construit les marchés d'un match réel (`source === "manual"`) :
+ * - `1x2` (`result`) reprend EXACTEMENT les cotes `oddsHome / oddsDraw / oddsAway` de l'admin ;
+ * - les 18 marchés secondaires temps réglementaire sont dérivés des cotes de l'admin sans ML virtuel ;
+ * - tout marché personnalisé saisi par l'admin dans `m.markets` remplace ou enrichit la grille.
+ */
+export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): MarketGroup[] {
+  if (m.status === "finished") return [];
+  if (isRealMatchKickoffReached(m, now)) return [];
+
+  const isLive = m.status === "live";
+  const homeScore = m.homeScore ?? 0;
+  const awayScore = m.awayScore ?? 0;
+  const minute = isLive ? minuteNumber(m.minute) : 0;
+
+  const opts: MarketModelOpts = {
+    redHome: m.redHome ?? 0,
+    redAway: m.redAway ?? 0,
+    events: m.events ?? [],
+    matchId: m.id,
+    skipMlCalibrator: true,
+  };
+
+  const model = realMatchScoreModel({
+    oddsHome: m.oddsHome,
+    oddsDraw: m.oddsDraw,
+    oddsAway: m.oddsAway,
+    homeScore,
+    awayScore,
+    minute,
+    isLive,
+    redHome: m.redHome ?? 0,
+    redAway: m.redAway ?? 0,
+  });
+
+  const hasLiveEvolution =
+    isLive &&
+    (homeScore > 0 ||
+      awayScore > 0 ||
+      minute > 0 ||
+      (m.redHome ?? 0) > 0 ||
+      (m.redAway ?? 0) > 0);
+
+  const generated: MarketGroup[] = [];
+
+  if (hasLiveEvolution) {
+    // En direct après coup d'envoi/buts, 1x2 évolue dynamiquement selon le score officiel
+    // et la minute afin d'empêcher tout arbitrage sur les cotes pré-match.
+    const resDef = MARKET_BY_KEY.get("result")!;
+    const liveResGroup = buildMarketGroup(
+      resDef,
+      m.homeTeam,
+      m.awayTeam,
+      model,
+      NEUTRAL_SPLIT_MODEL,
+      homeScore,
+      awayScore,
+      minute,
+      true,
+      opts
+    );
+    if (liveResGroup) generated.push(liveResGroup);
+  } else {
+    generated.push({
+      key: "result",
+      label: "1x2",
+      short: "1x2",
+      category: "main",
+      outcomes: [
+        {
+          key: "home",
+          label: `V1 (${m.homeTeam})`,
+          short: "V1",
+          odds: round2(Math.max(1.01, m.oddsHome)),
+        },
+        ...(m.oddsDraw != null
+          ? [
+              {
+                key: "draw",
+                label: "X (Match nul)",
+                short: "X",
+                odds: round2(Math.max(1.01, m.oddsDraw)),
+              },
+            ]
+          : []),
+        {
+          key: "away",
+          label: `V2 (${m.awayTeam})`,
+          short: "V2",
+          odds: round2(Math.max(1.01, m.oddsAway)),
+        },
+      ],
+    });
+  }
+
+  for (const def of MARKETS) {
+    if (def.key === "result" || HT_DEPENDENT_MARKETS.has(def.key)) continue;
+    // Sur un match réel piloté par l'admin, on ne ferme pas arbitrairement à 75'
+    const safeDef: MarketDef = { ...def, liveCloseMinute: undefined };
+    const grp = buildMarketGroup(
+      safeDef,
+      m.homeTeam,
+      m.awayTeam,
+      model,
+      NEUTRAL_SPLIT_MODEL,
+      homeScore,
+      awayScore,
+      minute,
+      isLive,
+      opts
+    );
+    if (grp) generated.push(grp);
+  }
+
+  // Fusionne proprement les marchés personnalisés saisis par l'admin (sans jamais écraser les autres)
+  if (m.markets && m.markets.length > 0) {
+    const byKey = new Map(generated.map((g) => [g.key, g]));
+    for (const cg of m.markets) {
+      const openOutcomes = isLive
+        ? cg.outcomes.filter(
+            (o) => !marketOutcomeSettled(cg.key, o.key, homeScore, awayScore, minute, opts)
+          )
+        : cg.outcomes;
+      if (openOutcomes.length === 0) {
+        byKey.delete(cg.key);
+        continue;
+      }
+      const existing = byKey.get(cg.key);
+      byKey.set(cg.key, {
+        key: cg.key,
+        label: cg.label || existing?.label || cg.key,
+        short: cg.short || existing?.short || cg.key,
+        category: existing?.category ?? "main",
+        outcomes: openOutcomes,
+        ...(cg.rows ? { rows: cg.rows } : {}),
+      });
+    }
+    return [...byKey.values()];
+  }
+
+  return generated;
+}
+
+export function realMatchOddsFor(
+  m: RealMatchInput,
+  market: string,
+  outcome: string,
+  now = Date.now()
+): { odds: number; label: string } | null {
+  const groups = buildRealMatchMarkets(m, now);
+  const g = groups.find((x) => x.key === market);
+  if (!g) return null;
+  if (g.rows) {
+    for (const r of g.rows) {
+      const hit = r.outcomes.find((o) => o.key === outcome);
+      if (hit) return { odds: hit.odds, label: hit.label };
+    }
+  }
+  const hit = g.outcomes.find((o) => o.key === outcome);
+  if (!hit) return null;
+  return { odds: hit.odds, label: hit.label };
+}
+
+export function realMatchLiveProbability(
+  m: RealMatchInput,
+  market: string,
+  outcome: string
+): number | null {
+  if ((m.sport ?? "football") !== "football") {
+    const cOdds = customMarketOdds(m.markets ?? null, market, outcome);
+    if (cOdds != null) return Math.min(0.95, 0.94 / Math.max(1.02, cOdds));
+    return null;
+  }
+
+  const isLive = m.status === "live";
+  const homeScore = m.homeScore ?? 0;
+  const awayScore = m.awayScore ?? 0;
+  const minute = isLive ? minuteNumber(m.minute) : 0;
+
+  const model = realMatchScoreModel({
+    oddsHome: m.oddsHome,
+    oddsDraw: m.oddsDraw,
+    oddsAway: m.oddsAway,
+    homeScore,
+    awayScore,
+    minute,
+    isLive,
+    redHome: m.redHome ?? 0,
+    redAway: m.redAway ?? 0,
+  });
+
+  const def = MARKET_BY_KEY.get(market);
+  if (def && !HT_DEPENDENT_MARKETS.has(market)) {
+    if (!def.outcomes(m.homeTeam, m.awayTeam).some((o) => o.key === outcome)) {
+      return null;
+    }
+    if (market === "dnb") {
+      const resDef = MARKET_BY_KEY.get("result")!;
+      const pHome = rawProbOnModel(resDef, "home", model, NEUTRAL_SPLIT_MODEL);
+      const pDraw = rawProbOnModel(resDef, "draw", model, NEUTRAL_SPLIT_MODEL);
+      const pAway = rawProbOnModel(resDef, "away", model, NEUTRAL_SPLIT_MODEL);
+      const pWin = outcome === "home" ? pHome : pAway;
+      return Math.min(0.98, pWin + pDraw * 0.48);
+    }
+    return rawProbOnModel(def, outcome, model, NEUTRAL_SPLIT_MODEL);
+  }
+
+  const cOdds = customMarketOdds(m.markets ?? null, market, outcome);
+  if (cOdds != null) {
+    return Math.min(0.95, 0.94 / Math.max(1.02, cOdds));
+  }
+  return null;
+}
+
+/**
+ * Règlement strict d'un match réel (`source === "manual"`) :
+ * - les 19 marchés temps réglementaire dépendent uniquement du score final officiel `(homeScore, awayScore)` ;
+ * - si un marché mi-temps a été joué mais que la mi-temps réelle n'a pas été renseignée,
+ *   le pari est remboursé (`voided: true`) au lieu d'utiliser un tirage pseudo-aléatoire.
+ */
+export function realMatchSettle(
+  market: string,
+  outcome: string,
+  homeScore: number,
+  awayScore: number,
+  events?: MatchTimelineEvent[] | null,
+  matchId = 0
+): { won: boolean; voided: boolean } {
+  const def = MARKET_BY_KEY.get(market);
+  if (!def) return { won: false, voided: true };
+
+  if (
+    HT_DEPENDENT_MARKETS.has(market) &&
+    !hasVerifiedGoalTimeline(homeScore, awayScore, events)
+  ) {
+    return { won: false, voided: true };
+  }
+
+  return marketSettle(market, outcome, homeScore, awayScore, events, matchId);
 }

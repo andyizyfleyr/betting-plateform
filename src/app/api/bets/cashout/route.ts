@@ -150,6 +150,11 @@ export async function POST(req: NextRequest) {
           awayForm: match.awayForm,
           events: match.events ?? null,
           matchId: match.id,
+          source: match.source ?? "virtual",
+          oddsHome: match.oddsHome,
+          oddsDraw: match.oddsDraw,
+          oddsAway: match.oddsAway,
+          markets: match.markets ?? null,
         });
         if (value == null) {
           return NextResponse.json(

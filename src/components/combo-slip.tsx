@@ -20,6 +20,7 @@ export interface ComboSelection {
   uid: string; // ex: "sport-12" ou "pred-5" (1 seule par événement)
   kind: "sport" | "prediction";
   matchId?: number;
+  matchSource?: "virtual" | "manual";
   questionId?: number;
   title: string;
   league: string;

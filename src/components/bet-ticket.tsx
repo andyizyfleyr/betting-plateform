@@ -75,6 +75,18 @@ export function BetTicket({
           ) : (
             <SportIcon sport={bet.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
           )}
+          {!isCombo && !isPrediction && bet.matchSource && (
+            <span
+              className={cn(
+                "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide",
+                bet.matchSource === "manual"
+                  ? "bg-emerald-600/12 text-emerald-700"
+                  : "bg-elev text-dim"
+              )}
+            >
+              {bet.matchSource === "manual" ? "Réel" : "Virtuel"}
+            </span>
+          )}
           <span className="truncate">{bet.league}</span>
           {bet.boostPct != null && bet.boostPct > 0 && (
             <span className="shrink-0 rounded-md bg-win/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold text-win">
@@ -149,6 +161,18 @@ export function BetTicket({
                     </span>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
+                        {leg.kind === "sport" && leg.matchSource && (
+                          <span
+                            className={cn(
+                              "shrink-0 rounded px-1 py-0.5 font-display text-[8.5px] font-bold uppercase tracking-wide",
+                              leg.matchSource === "manual"
+                                ? "bg-emerald-600/12 text-emerald-700"
+                                : "bg-white text-dim ring-1 ring-edge"
+                            )}
+                          >
+                            {leg.matchSource === "manual" ? "Réel" : "Virtuel"}
+                          </span>
+                        )}
                         <p className="truncate font-display text-[12.5px] font-semibold text-ink">
                           {leg.title}
                         </p>

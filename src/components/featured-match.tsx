@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Radio } from "lucide-react";
+import { ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { formatGoalSummary, LiveStatusBadge, ResultOdds } from "./match-card";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
-import { cn } from "@/lib/format";
+import { cn, formatKickoff } from "@/lib/format";
 
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
   const { openMarkets } = useApp();
   const [showTracker, setShowTracker] = useState(true);
   const isLive = match.status === "live";
+  const isReal = match.source === "manual";
   const marketCount = match.markets?.length ?? 0;
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
@@ -25,14 +26,19 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 rounded-md bg-betclic-red px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white">
-            À la une
+          <span
+            className={cn(
+              "shrink-0 rounded-md px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white",
+              isReal ? "bg-emerald-600" : "bg-betclic-red"
+            )}
+          >
+            {isReal ? "Match réel" : "Virtuel · Direct"}
           </span>
           <span className="truncate text-[11.5px] font-semibold text-mist">{match.league}</span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {isLive && (
+          {!isReal && isLive && (
             <button
               type="button"
               onClick={(e) => {
@@ -80,6 +86,25 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
                 <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
               </div>
             </>
+          ) : isReal && match.kickoffReached ? (
+            <>
+              <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                VS
+              </span>
+              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-amber-700">
+                <Lock className="h-2.5 w-2.5" strokeWidth={2.4} />
+                Coup d&apos;envoi atteint
+              </span>
+            </>
+          ) : isReal ? (
+            <>
+              <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                VS
+              </span>
+              <span className="mt-2 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-semibold text-ink">
+                {formatKickoff(match.startsAt)}
+              </span>
+            </>
           ) : (
             <>
               <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
@@ -116,7 +141,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
         </div>
       )}
 
-      {isLive && showTracker && <LiveMatchTracker match={match} className="mb-3" />}
+      {!isReal && isLive && showTracker && <LiveMatchTracker match={match} className="mb-3" />}
 
       <ResultOdds match={match} />
     </section>

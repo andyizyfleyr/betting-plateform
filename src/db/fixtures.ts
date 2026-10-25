@@ -700,6 +700,126 @@ export function liveScoreModel(
   return { grid: finalGrid, margin, lamH: remH, lamA: remA };
 }
 
+/**
+ * Modèle de score dédié EXCLUSIVEMENT aux matchs réels ajoutés manuellement par l'admin (`source = "manual"`).
+ * Ne consulte JAMAIS `teamStrength`, `homeForm` ni les paramètres du simulateur virtuel :
+ * calibre les intensités restantes `(lamH, lamA)` directement à partir des cotes réelles
+ * `(oddsHome, oddsDraw, oddsAway)` définies par l'administrateur.
+ */
+export function realMatchScoreModel(params: {
+  oddsHome: number;
+  oddsDraw: number | null;
+  oddsAway: number;
+  homeScore?: number;
+  awayScore?: number;
+  minute?: number;
+  isLive?: boolean;
+  redHome?: number;
+  redAway?: number;
+}): LiveScoreModel {
+  const homeScore = Math.max(0, Math.round(params.homeScore ?? 0));
+  const awayScore = Math.max(0, Math.round(params.awayScore ?? 0));
+  const isLive = Boolean(params.isLive);
+  const minute = clamp(Math.round(params.minute ?? 0), 0, 90);
+  const redHome = Math.max(0, Math.round(params.redHome ?? 0));
+  const redAway = Math.max(0, Math.round(params.redAway ?? 0));
+
+  const invH = 1 / Math.max(1.02, params.oddsHome || 2.1);
+  const invD =
+    params.oddsDraw != null && params.oddsDraw > 1.01 ? 1 / params.oddsDraw : 0;
+  const invA = 1 / Math.max(1.02, params.oddsAway || 3.2);
+  const sumInv = invH + invD + invA || 1;
+
+  const margin = round2(clamp(sumInv, 1.045, 1.12));
+  const targetH = invH / sumInv;
+  const targetD = invD / sumInv;
+  const targetA = invA / sumInv;
+
+  // 1) Calibrage des forces intrinsèques 90 min (0-0) à partir des cotes officielles de l'admin
+  let baseTotal = 2.62;
+  const logEdge = Math.log(
+    clamp(targetH + 0.025, 0.03, 0.96) / clamp(targetA + 0.025, 0.03, 0.96)
+  );
+  let shareH = clamp(0.5 + 0.24 * logEdge, 0.07, 0.93);
+
+  const evalPreMatch = (tot: number, sh: number) => {
+    const lh = Math.max(0.05, tot * sh);
+    const la = Math.max(0.05, tot * (1 - sh));
+    const g = bivariatePoissonGrid(lh, la, 7, true);
+    let pH = 0;
+    let pD = 0;
+    let pA = 0;
+    for (let i = 0; i <= 7; i++) {
+      for (let j = 0; j <= 7; j++) {
+        const v = g[i][j];
+        if (i > j) pH += v;
+        else if (i === j) pD += v;
+        else pA += v;
+      }
+    }
+    const s = pH + pD + pA || 1;
+    return { pH: pH / s, pD: pD / s, pA: pA / s };
+  };
+
+  for (let iter = 0; iter < 10; iter++) {
+    const cur = evalPreMatch(baseTotal, shareH);
+    const diffEdge = (targetH - targetA) - (cur.pH - cur.pA);
+    shareH = clamp(shareH + 0.28 * diffEdge, 0.05, 0.95);
+    if (invD > 0) {
+      const diffDraw = targetD - cur.pD;
+      baseTotal = clamp(baseTotal * Math.exp(-1.15 * diffDraw), 0.9, 4.2);
+    }
+  }
+
+  // 2) Projection exacte du temps restant et du score officiel (0-0 avant-match ou score live réel)
+  const remShare = isLive ? clamp(1 - goalTimeCDF(livePricingMinute(minute)), 0.04, 1) : 1;
+  const redFactorH = Math.pow(0.74, redHome) * Math.pow(1.18, redAway);
+  const redFactorA = Math.pow(0.74, redAway) * Math.pow(1.18, redHome);
+  const remH = Math.max(0.015, baseTotal * shareH * remShare * redFactorH);
+  const remA = Math.max(0.015, baseTotal * (1 - shareH) * remShare * redFactorA);
+
+  const maxAdd = clamp(Math.ceil(Math.max(remH, remA) * 3 + 6), 7, LIVE_MAX_REMAIN);
+  const remGrid = bivariatePoissonGrid(
+    remH,
+    remA,
+    maxAdd,
+    !isLive && homeScore === 0 && awayScore === 0
+  );
+
+  const sizeH = homeScore + maxAdd + 1;
+  const sizeA = awayScore + maxAdd + 1;
+  const finalGrid: number[][] = Array.from({ length: sizeH }, () =>
+    new Array<number>(sizeA).fill(0)
+  );
+  for (let i = 0; i <= maxAdd; i++) {
+    for (let j = 0; j <= maxAdd; j++) {
+      finalGrid[homeScore + i][awayScore + j] = remGrid[i][j];
+    }
+  }
+
+  return { grid: finalGrid, margin, lamH: remH, lamA: remA };
+}
+
+/**
+ * Indique si le journal d'événements couvre exactement le score final du match
+ * (utilisé pour les matchs réels afin de ne jamais recourir à un tirage aléatoire sur la mi-temps).
+ */
+export function hasVerifiedGoalTimeline(
+  homeScore: number,
+  awayScore: number,
+  events?: MatchTimelineEvent[] | null
+): boolean {
+  const h = Math.max(0, Math.round(homeScore));
+  const a = Math.max(0, Math.round(awayScore));
+  if (h === 0 && a === 0) return true;
+  const goals = (events ?? []).filter(
+    (e) => e.type === "goal" && (e.team === "home" || e.team === "away")
+  );
+  const evH = goals.filter((g) => g.team === "home").length;
+  const evA = goals.filter((g) => g.team === "away").length;
+  return evH === h && evA === a;
+}
+
 /** Probabilités exactes du résultat 1/N/2 issues de la grille unifiée du score final. */
 export function liveResultProbs(
   home: string,

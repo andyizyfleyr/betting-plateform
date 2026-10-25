@@ -1,5 +1,11 @@
 import { livePricingMinute } from "@/db/fixtures";
-import { isKnownMarket, liveOutcomeProbability, minuteNumber } from "@/lib/markets";
+import {
+  isKnownMarket,
+  liveOutcomeProbability,
+  minuteNumber,
+  realMatchLiveProbability,
+  type CustomMarketGroup,
+} from "@/lib/markets";
 
 const CASHOUT_BASE_FACTOR = 0.9;
 
@@ -52,6 +58,11 @@ export function computeCashOut(params: {
   awayForm?: number | null;
   events?: Array<{ type: string; team: string; minute: number; player?: string }> | null;
   matchId?: number | null;
+  source?: string | null;
+  oddsHome?: number | null;
+  oddsDraw?: number | null;
+  oddsAway?: number | null;
+  markets?: CustomMarketGroup[] | null;
 }): number | null {
   const { stake, odds, selection } = params;
   const market = params.market ?? "result";
@@ -62,25 +73,59 @@ export function computeCashOut(params: {
   const h = params.homeScore ?? 0;
   const a = params.awayScore ?? 0;
   const impliedEntry = clamp(0.95 / Math.max(1.02, odds), 0.02, 0.94);
+  const isManual = params.source === "manual";
 
-  if (params.homeTeam && params.awayTeam && isKnownMarket(market)) {
-    const liveProb = liveOutcomeProbability(
-      market,
-      selection,
-      params.homeTeam,
-      params.awayTeam,
-      h,
-      a,
-      min,
-      {
-        homeForm: params.homeForm ?? 1,
-        awayForm: params.awayForm ?? 1,
-        redHome: params.redHome ?? 0,
-        redAway: params.redAway ?? 0,
-        events: params.events ?? null,
-        matchId: params.matchId ?? 0,
-      }
-    );
+  if (
+    params.homeTeam &&
+    params.awayTeam &&
+    (isManual ? Boolean(params.oddsHome && params.oddsAway) : isKnownMarket(market))
+  ) {
+    const liveProb = isManual
+      ? realMatchLiveProbability(
+          {
+            id: params.matchId ?? 0,
+            sport: params.sport,
+            homeTeam: params.homeTeam,
+            awayTeam: params.awayTeam,
+            status: "live",
+            minute: params.minute,
+            startsAt: new Date(0),
+            homeScore: h,
+            awayScore: a,
+            oddsHome: params.oddsHome ?? 2.2,
+            oddsDraw: params.oddsDraw ?? null,
+            oddsAway: params.oddsAway ?? 3.0,
+            redHome: params.redHome ?? 0,
+            redAway: params.redAway ?? 0,
+            events:
+              (params.events as Array<{
+                type: "goal" | "red";
+                team: "home" | "away";
+                minute: number;
+                player?: string;
+              }> | null) ?? null,
+            markets: params.markets ?? null,
+          },
+          market,
+          selection
+        )
+      : liveOutcomeProbability(
+          market,
+          selection,
+          params.homeTeam,
+          params.awayTeam,
+          h,
+          a,
+          min,
+          {
+            homeForm: params.homeForm ?? 1,
+            awayForm: params.awayForm ?? 1,
+            redHome: params.redHome ?? 0,
+            redAway: params.redAway ?? 0,
+            events: params.events ?? null,
+            matchId: params.matchId ?? 0,
+          }
+        );
     if (liveProb == null || liveProb < 0.02) return null;
 
     const lateVolatilityCut = min >= 75 ? 0.94 : min >= 60 ? 0.97 : 1.0;

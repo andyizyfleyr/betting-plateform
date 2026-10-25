@@ -2,12 +2,13 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches, type MatchRow } from "@/db/schema";
 import { settlePendingCombos } from "@/lib/combo";
-import { closingOddsFor, customMarketOdds, isKnownMarket, marketSettle } from "@/lib/markets";
+import { closingOddsFor, customMarketOdds, isKnownMarket, marketSettle, realMatchSettle } from "@/lib/markets";
 import { recordSettledBetMl } from "@/lib/ml-engine";
 
 /**
- * Règlement déterministe d'un pari sportif depuis le score final et la chronologie du match.
- * Un marché inconnu ou nul remboursé (ex. DNB sur match nul) déclenche `voided: true`.
+ * Règlement déterministe d'un pari sportif :
+ * - match réel (`source === "manual"`) : réglé strictement depuis le score officiel (zéro RNG) ;
+ * - match virtuel (`source === "virtual"`) : réglé depuis le score et la chronologie simulée.
  */
 function resolveBet(
   bet: { market: string; selection: string },
@@ -16,18 +17,29 @@ function resolveBet(
   const home = match.homeScore ?? 0;
   const away = match.awayScore ?? 0;
   if (!isKnownMarket(bet.market)) return { won: false, voided: true };
+  if (match.source === "manual") {
+    return realMatchSettle(bet.market, bet.selection, home, away, match.events ?? null, match.id);
+  }
   return marketSettle(bet.market, bet.selection, home, away, match.events ?? null, match.id);
 }
 
 /**
  * Cote de clôture d'un pari au moment du règlement (CLV tracking) :
- * - match manuel = dernier prix du marché personnalisé saisi par l'admin ;
- * - sinon = prix du modèle probabiliste au coup de sifflet final.
+ * - match réel (`source === "manual"`) = cote officielle de l'admin ou cote du ticket ;
+ * - match virtuel = prix du modèle probabiliste virtuel au coup de sifflet final.
  */
-function closingOddsForBet(bet: { market: string; selection: string }, match: MatchRow): number | null {
-  if (match.source === "manual" && match.markets && match.markets.length > 0) {
-    const custom = customMarketOdds(match.markets, bet.market, bet.selection);
-    if (custom != null) return custom;
+function closingOddsForBet(bet: { market: string; selection: string; odds?: number }, match: MatchRow): number | null {
+  if (match.source === "manual") {
+    if (match.markets && match.markets.length > 0) {
+      const custom = customMarketOdds(match.markets, bet.market, bet.selection);
+      if (custom != null) return custom;
+    }
+    if (bet.market === "result") {
+      if (bet.selection === "home") return match.oddsHome;
+      if (bet.selection === "draw") return match.oddsDraw;
+      if (bet.selection === "away") return match.oddsAway;
+    }
+    return bet.odds ?? null;
   }
   return closingOddsFor(
     bet.market,
@@ -86,8 +98,8 @@ async function settleRows(
         .where(eq(appUser.id, bet.userId));
     }
 
-    // Apprentissage en ligne ML (Modèle 1 Sharp SGD + Modèle 2 Calibration Bayésienne)
-    if (!voided) {
+    // Apprentissage en ligne ML réservé aux matchs virtuels pour ne jamais biaiser le calibrateur virtuel
+    if (!voided && match.source === "virtual") {
       try {
         await recordSettledBetMl({
           userId: bet.userId,

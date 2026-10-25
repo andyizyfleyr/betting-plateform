@@ -61,7 +61,9 @@ interface AppContextValue {
   setComboQuickMode: (v: boolean) => void;
   openCombo: () => void;
   closeCombo: () => void;
-  toggleComboLeg: (sel: ComboSelection) => "added" | "replaced" | "removed" | "full";
+  toggleComboLeg: (
+    sel: ComboSelection
+  ) => "added" | "replaced" | "removed" | "full" | "source_conflict";
   isInCombo: (uid: string, market: string, selection: string) => boolean;
   removeComboLeg: (uid: string) => void;
   clearCombo: () => void;
@@ -240,7 +242,9 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 
   const toggleComboLeg = useCallback(
-    (sel: ComboSelection): "added" | "replaced" | "removed" | "full" => {
+    (
+      sel: ComboSelection
+    ): "added" | "replaced" | "removed" | "full" | "source_conflict" => {
       triggerHaptic(userRef.current?.haptics, 14);
       playUiSound(userRef.current?.sound, "tap");
       const existingIdx = comboLegs.findIndex((l) => l.uid === sel.uid);
@@ -255,6 +259,20 @@ export function Providers({ children }: { children: ReactNode }) {
         persistCombo(replaced);
         return "replaced";
       }
+
+      // Interdiction absolue de mélanger un match réel ("manual") et un match virtuel ("virtual")
+      if (sel.kind === "sport" && sel.matchSource) {
+        const hasConflict = comboLegs.some(
+          (l) =>
+            l.kind === "sport" &&
+            l.matchSource != null &&
+            l.matchSource !== sel.matchSource
+        );
+        if (hasConflict) {
+          return "source_conflict";
+        }
+      }
+
       if (comboLegs.length >= MAX_COMBO_LEGS) {
         return "full";
       }
