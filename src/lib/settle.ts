@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches, type MatchRow } from "@/db/schema";
+import { settlePendingCombos } from "@/lib/combo";
 import { closingOddsFor, customMarketOdds, isKnownMarket, marketWin } from "@/lib/markets";
 
 /**
@@ -83,6 +84,7 @@ export async function settleFinishedBets() {
     .leftJoin(matches, eq(bets.matchId, matches.id))
     .where(and(eq(bets.status, "pending"), eq(matches.status, "finished")));
   await settleRows(rows);
+  await settlePendingCombos();
 }
 
 /** Règle les paris « pending » d'un match précis (après clôture manuelle par l'admin). */
@@ -93,4 +95,5 @@ export async function settleMatchBets(matchId: number) {
     .leftJoin(matches, eq(bets.matchId, matches.id))
     .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
   await settleRows(rows);
+  await settlePendingCombos();
 }

@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ChevronDown, Lock, X } from "lucide-react";
+import { ChevronDown, Lock, Radio, X } from "lucide-react";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
+import { LiveMatchTracker } from "./live-match-tracker";
 import { formatGoalSummary, LiveStatusBadge } from "./match-card";
 import { cn, formatOdds } from "@/lib/format";
 
@@ -50,6 +51,7 @@ export function MarketSheet() {
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
   const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
+  const [showTracker, setShowTracker] = useState(false);
 
   const match =
     liveMatch && marketMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
@@ -157,15 +159,31 @@ export function MarketSheet() {
                     <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
                     <span className="truncate font-semibold">{match.league}</span>
                   </div>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={closeMarkets}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-mist active:scale-95"
-                    aria-label="Fermer"
-                  >
-                    <X className="h-4 w-4" strokeWidth={2.2} />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {isLive && (
+                      <button
+                        type="button"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => setShowTracker((s) => !s)}
+                        className={cn(
+                          "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-bold transition-colors",
+                          showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
+                        )}
+                      >
+                        <Radio className="h-3 w-3" strokeWidth={2.4} />
+                        Terrain 2D
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={closeMarkets}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-mist active:scale-95"
+                      aria-label="Fermer"
+                    >
+                      <X className="h-4 w-4" strokeWidth={2.2} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -276,6 +294,7 @@ export function MarketSheet() {
 
             {/* Zone scrollable en bloc standard : aucune compression verticale possible */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pb-8 pt-3">
+              {isLive && showTracker && <LiveMatchTracker match={match} className="mb-3" />}
               {isFinished || filteredGroups.length === 0 ? (
                 <div className="py-10 text-center text-[13px] text-mist">
                   {isFinished

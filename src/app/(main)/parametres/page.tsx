@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   Bell,
   ChevronRight,
   HandCoins,
+  History,
   Loader2,
   LogOut,
   PhoneCall,
@@ -14,18 +17,34 @@ import {
   ShieldCheck,
   Vibrate,
   Volume2,
+  X,
 } from "lucide-react";
-import { api, type ClientBet, type ClientUser } from "@/lib/api";
+import { api, type ClientBet, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { useApp } from "@/components/providers";
 import { AnimatedNumber } from "@/components/animated-number";
 import { Toggle } from "@/components/toggle";
-import { cn, eur, initials, teamHue } from "@/lib/format";
+import { WithdrawModal } from "@/components/withdraw-modal";
+import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
+
+type LedgerFilter = "all" | "deposit" | "withdrawal" | "gains";
 
 export default function ParametresPage() {
-  const { user, applyUser, toast, openRecharge, betsVersion } = useApp();
+  const { user, applyUser, setBalance, toast, openRecharge, betsVersion } = useApp();
   const router = useRouter();
   const [bets, setBets] = useState<ClientBet[] | null>(null);
+  const [wallet, setWallet] = useState<ClientWalletData | null>(null);
+  const [walletFilter, setWalletFilter] = useState<LedgerFilter>("all");
+  const [showAllLedger, setShowAllLedger] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const reloadWallet = useCallback(() => {
+    api
+      .wallet()
+      .then((w) => setWallet(w))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -33,6 +52,12 @@ export default function ParametresPage() {
       .allBets()
       .then((r) => {
         if (active) setBets(r.bets);
+      })
+      .catch(() => undefined);
+    api
+      .wallet()
+      .then((w) => {
+        if (active) setWallet(w);
       })
       .catch(() => undefined);
     return () => {
@@ -62,6 +87,7 @@ export default function ParametresPage() {
           if (s.credited) {
             const r = await api.settings();
             applyUser(r.user);
+            reloadWallet();
             toast({ kind: "success", title: "Solde rechargé" });
             window.history.replaceState({}, "", "/parametres");
             return;
@@ -90,6 +116,7 @@ export default function ParametresPage() {
           try {
             const r = await api.payments.capturePayPal(orderId);
             if (r.user) applyUser(r.user);
+            reloadWallet();
             toast({ kind: "success", title: "Solde rechargé" });
           } catch {
             toast({ kind: "error", title: "Paiement non confirmé" });
@@ -113,6 +140,35 @@ export default function ParametresPage() {
     const rate = settledBets.length ? Math.round((won.length / settledBets.length) * 100) : 0;
     return { total: all.length, wins: won.length, gains, rate };
   }, [bets]);
+
+  const filteredLedger = useMemo(() => {
+    const entries = wallet?.entries ?? [];
+    if (walletFilter === "all") return entries;
+    if (walletFilter === "deposit") return entries.filter((e) => e.type === "deposit");
+    if (walletFilter === "withdrawal") return entries.filter((e) => e.type === "withdrawal");
+    return entries.filter((e) => e.type === "win" || e.type === "cashout");
+  }, [wallet, walletFilter]);
+
+  const visibleLedger = showAllLedger ? filteredLedger : filteredLedger.slice(0, 6);
+
+  const cancelWithdrawal = async (withdrawalId: number) => {
+    if (cancellingId != null) return;
+    setCancellingId(withdrawalId);
+    try {
+      const res = await api.cancelWithdrawal(withdrawalId);
+      setBalance(res.balance);
+      reloadWallet();
+      toast({ kind: "success", title: "Retrait annulé et recrédité" });
+    } catch (e) {
+      toast({
+        kind: "error",
+        title: "Annulation impossible",
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const patch = async (p: Partial<ClientUser>, label: string) => {
     try {
@@ -145,9 +201,9 @@ export default function ParametresPage() {
       <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
         Compte
       </h1>
-      <p className="text-[12px] text-mist">Profil, solde et préférences</p>
+      <p className="text-[12px] text-mist">Profil, portefeuille et préférences</p>
 
-      {/* Profil + Solde réunis proprement */}
+      {/* Profil + Solde + Dépôt / Retrait */}
       <section className="glass-card mt-3 rounded-2xl p-4">
         <div className="flex items-center gap-3">
           <span
@@ -173,28 +229,41 @@ export default function ParametresPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between rounded-xl bg-elev p-3">
-          <div>
-            <p className="text-[11px] font-medium text-dim">Solde disponible</p>
-            <AnimatedNumber
-              value={user?.balance ?? 0}
-              format={eur}
-              className="mt-0.5 block font-display text-[22px] font-bold leading-none tabular-nums text-ink"
-            />
-            {stats.gains > 0 && (
-              <p className="mt-1 text-[11px] font-medium text-win">
-                +{eur(stats.gains)} encaissés au total
-              </p>
+        <div className="mt-4 rounded-xl bg-elev p-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-medium text-dim">Solde disponible</p>
+              <AnimatedNumber
+                value={user?.balance ?? 0}
+                format={eur}
+                className="mt-0.5 block font-display text-[24px] font-bold leading-none tabular-nums text-ink"
+              />
+            </div>
+            {wallet && wallet.summary.pendingWithdrawals > 0 && (
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-amber-800">
+                {eur(wallet.summary.pendingWithdrawals)} en retrait
+              </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={openRecharge}
-            className="flex h-10 items-center gap-1.5 rounded-xl bg-betclic-red px-3.5 font-display text-[12.5px] font-bold text-white active:opacity-90"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2.6} />
-            Recharger
-          </button>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={openRecharge}
+              className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12.5px] font-bold text-white active:opacity-90"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.6} />
+              Déposer
+            </button>
+            <button
+              type="button"
+              onClick={() => setWithdrawOpen(true)}
+              className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[12.5px] font-bold text-ink active:bg-surface"
+            >
+              <ArrowUpRight className="h-4 w-4 text-betclic-red" strokeWidth={2.4} />
+              Retirer
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 grid grid-cols-3 divide-x divide-edge border-t border-edge pt-3 text-center">
@@ -227,11 +296,137 @@ export default function ParametresPage() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-display text-[13.5px] font-bold text-ink">Espace administrateur</p>
-            <p className="text-[11.5px] text-dim">Matchs, pronostics, soldes et statistiques</p>
+            <p className="text-[11.5px] text-dim">Matchs, pronostics, retraits et statistiques</p>
           </div>
           <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
         </button>
       )}
+
+      {/* Portefeuille & Historique complet des transactions */}
+      <div className="mt-5 flex items-center justify-between px-0.5">
+        <h2 className="flex items-center gap-1.5 font-display text-[12px] font-bold uppercase tracking-wider text-mist">
+          <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+          Portefeuille & Mouvements
+        </h2>
+        {wallet && (
+          <span className="text-[11px] font-semibold text-dim">
+            {wallet.entries.length} opér.
+          </span>
+        )}
+      </div>
+
+      <section className="glass-card mt-2 rounded-2xl p-3.5">
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+          {(
+            [
+              { k: "all", l: "Tous" },
+              { k: "withdrawal", l: "Retraits" },
+              { k: "deposit", l: "Dépôts" },
+              { k: "gains", l: "Gains" },
+            ] as const
+          ).map(({ k, l }) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setWalletFilter(k)}
+              className={cn(
+                "h-7 shrink-0 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
+                walletFilter === k
+                  ? "border-ink bg-ink font-semibold text-white"
+                  : "border-edge bg-white text-mist"
+              )}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {visibleLedger.length === 0 ? (
+          <p className="py-6 text-center text-[12px] text-dim">
+            Aucun mouvement dans cette catégorie.
+          </p>
+        ) : (
+          <div className="mt-3 divide-y divide-edge">
+            {visibleLedger.map((entry) => {
+              const positive = entry.amount > 0;
+              const isRejectedOrCancelled =
+                entry.status === "rejected" || entry.status === "cancelled";
+              return (
+                <div key={entry.id} className="flex items-center gap-2.5 py-2.5 first:pt-0 last:pb-0">
+                  <span
+                    className={cn(
+                      "grid h-8 w-8 shrink-0 place-items-center rounded-xl",
+                      positive ? "bg-win/12 text-win" : "bg-elev text-ink"
+                    )}
+                  >
+                    {positive ? (
+                      <ArrowDownLeft className="h-4 w-4" strokeWidth={2.3} />
+                    ) : (
+                      <ArrowUpRight className="h-4 w-4" strokeWidth={2.3} />
+                    )}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate font-display text-[12.5px] font-semibold text-ink">
+                        {entry.title}
+                      </p>
+                      {entry.type === "withdrawal" && (
+                        <WithdrawalBadge status={entry.status} />
+                      )}
+                    </div>
+                    <p className="truncate text-[11px] text-dim">
+                      {entry.subtitle} · {formatPlacedAt(entry.createdAt)}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span
+                      className={cn(
+                        "font-display text-[13px] font-bold tabular-nums",
+                        isRejectedOrCancelled
+                          ? "text-dim line-through"
+                          : positive
+                            ? "text-win"
+                            : "text-ink"
+                      )}
+                    >
+                      {positive ? `+${eur(entry.amount)}` : eur(entry.amount)}
+                    </span>
+
+                    {entry.canCancel && entry.rawId != null && (
+                      <button
+                        type="button"
+                        disabled={cancellingId === entry.rawId}
+                        onClick={() => cancelWithdrawal(entry.rawId!)}
+                        title="Annuler le retrait"
+                        className="inline-flex h-7 items-center gap-1 rounded-lg border border-edge bg-elev px-2 font-display text-[10.5px] font-bold text-ink active:bg-edge disabled:opacity-50"
+                      >
+                        {cancellingId === entry.rawId ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" strokeWidth={2.3} />
+                        )}
+                        Annuler
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {filteredLedger.length > 6 && (
+          <button
+            type="button"
+            onClick={() => setShowAllLedger((s) => !s)}
+            className="mt-3 w-full rounded-xl bg-elev py-2 font-display text-[11.5px] font-bold text-ink"
+          >
+            {showAllLedger ? "Réduire l'historique" : `Voir tout (${filteredLedger.length})`}
+          </button>
+        )}
+      </section>
 
       {/* Préférences réelles */}
       <h2 className="mt-5 px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-mist">
@@ -274,41 +469,37 @@ export default function ParametresPage() {
         </div>
 
         <SwitchRow
-          Icon={<Radio className="h-4 w-4" strokeWidth={2.1} />}
-          label="Simulation en direct"
-          hint="Avancement automatique des matchs"
-          checked={user?.liveSim ?? true}
-          onChange={(v) =>
-            patch({ liveSim: v }, v ? "Simulation activée" : "Simulation en pause")
-          }
+          Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
+          label="Notifications de paris"
+          hint="Alerte quand un pari est réglé"
+          checked={user?.notifications ?? true}
+          onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")}
         />
         <SwitchRow
-          Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-          label="Alertes de résultats"
-          hint="Notifications lors du règlement des paris"
-          checked={user?.notifications ?? true}
-          onChange={(v) =>
-            patch({ notifications: v }, v ? "Alertes activées" : "Alertes désactivées")
-          }
+          Icon={<Radio className="h-4 w-4" strokeWidth={2.1} />}
+          label="Simulation des scores en direct"
+          hint="Évolution automatique des matchs live"
+          checked={user?.liveSim ?? true}
+          onChange={(v) => patch({ liveSim: v }, "Mode direct mis à jour")}
         />
         <SwitchRow
           Icon={<Volume2 className="h-4 w-4" strokeWidth={2.1} />}
           label="Effets sonores"
-          checked={user?.sound ?? false}
-          onChange={(v) => patch({ sound: v }, v ? "Sons activés" : "Sons coupés")}
+          checked={user?.sound ?? true}
+          onChange={(v) => patch({ sound: v }, "Sons mis à jour")}
         />
         <SwitchRow
           Icon={<Vibrate className="h-4 w-4" strokeWidth={2.1} />}
           label="Retour haptique"
           checked={user?.haptics ?? true}
-          onChange={(v) => patch({ haptics: v }, v ? "Vibrations activées" : "Vibrations coupées")}
+          onChange={(v) => patch({ haptics: v }, "Vibrations mises à jour")}
           last
         />
       </div>
 
-      {/* Jeu responsable & Déconnexion */}
+      {/* Aide & Jeu responsable + Déconnexion */}
       <h2 className="mt-5 px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-mist">
-        Assistance & session
+        Assistance & Session
       </h2>
       <div className="glass-card mt-2 overflow-hidden rounded-2xl">
         <a
@@ -352,7 +543,28 @@ export default function ParametresPage() {
       <p className="mt-6 text-center text-[10.5px] leading-relaxed text-dim">
         18+ · Jouer comporte des risques : endettement, isolement, dépendance.
       </p>
+
+      <WithdrawModal
+        open={withdrawOpen}
+        onClose={() => setWithdrawOpen(false)}
+        onSuccess={reloadWallet}
+      />
     </div>
+  );
+}
+
+function WithdrawalBadge({ status }: { status: string }) {
+  const map: Record<string, { l: string; cls: string }> = {
+    pending: { l: "En attente", cls: "bg-amber-500/15 text-amber-800" },
+    approved: { l: "Envoyé", cls: "bg-win/12 text-win" },
+    rejected: { l: "Remboursé", cls: "bg-betclic-red/10 text-betclic-red" },
+    cancelled: { l: "Annulé", cls: "bg-elev text-dim" },
+  };
+  const m = map[status] ?? { l: status, cls: "bg-elev text-mist" };
+  return (
+    <span className={cn("shrink-0 rounded-full px-2 py-0.5 font-display text-[9.5px] font-bold", m.cls)}>
+      {m.l}
+    </span>
   );
 }
 

@@ -135,6 +135,36 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
   `);
 
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "combo_bets" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer DEFAULT 1 NOT NULL,
+      "legs" jsonb NOT NULL,
+      "base_odds" double precision NOT NULL,
+      "boost_pct" double precision DEFAULT 0 NOT NULL,
+      "total_odds" double precision NOT NULL,
+      "stake" double precision NOT NULL,
+      "potential_win" double precision NOT NULL,
+      "status" text DEFAULT 'pending' NOT NULL,
+      "cash_out_amount" double precision,
+      "placed_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "withdrawals" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "user_id" integer DEFAULT 1 NOT NULL,
+      "method" text NOT NULL,
+      "destination" text NOT NULL,
+      "amount" double precision NOT NULL,
+      "status" text DEFAULT 'pending' NOT NULL,
+      "admin_note" text,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      "processed_at" timestamp
+    );
+  `);
+
   // ──────────────────────────────────────────────────────────────────────────
   //  Déduplication automatique des questions en base + contrainte d'unicité
   // ──────────────────────────────────────────────────────────────────────────

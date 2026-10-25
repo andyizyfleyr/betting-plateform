@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Plus, TicketX } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { BetTicket } from "@/components/bet-ticket";
+import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { AnimatedNumber } from "@/components/animated-number";
 import { useApp } from "@/components/providers";
 import { cn, eur } from "@/lib/format";
@@ -32,8 +33,9 @@ function dayLabel(iso: string) {
 export default function ParisPage() {
   const { betsVersion, user, toast, openRecharge } = useApp();
   const [tab, setTab] = useState<Tab>("ongoing");
-  const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction">("all");
+  const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction" | "combo">("all");
   const [bets, setBets] = useState<ClientBet[] | null>(null);
+  const [sharingBet, setSharingBet] = useState<ClientBet | null>(null);
   const prevStatus = useRef<Map<string, string> | null>(null);
 
   useEffect(() => {
@@ -60,9 +62,11 @@ export default function ParisPage() {
                   kind: "info",
                   title: "Pari terminé",
                   description:
-                    b.kind === "prediction"
-                      ? `${b.question} · ${b.selectionLabel}`
-                      : `${b.homeTeam} – ${b.awayTeam} · ${b.selectionLabel}`,
+                    b.kind === "combo"
+                      ? `Combiné (${b.legs?.length ?? 2} sélections)`
+                      : b.kind === "prediction"
+                        ? `${b.question} · ${b.selectionLabel}`
+                        : `${b.homeTeam} – ${b.awayTeam} · ${b.selectionLabel}`,
                 });
               }
             }
@@ -198,12 +202,13 @@ export default function ParisPage() {
           })}
         </div>
 
-        <div className="mt-2 flex gap-1.5">
+        <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto">
           {(
             [
               { key: "all", label: "Tous" },
-              { key: "prediction", label: "Prédictions" },
+              { key: "combo", label: "Combinés" },
               { key: "sport", label: "Sport" },
+              { key: "prediction", label: "Prédictions" },
             ] as const
           ).map(({ key, label }) => (
             <button
@@ -211,9 +216,9 @@ export default function ParisPage() {
               type="button"
               onClick={() => setKindFilter(key)}
               className={cn(
-                "h-7 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
+                "h-7 shrink-0 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
                 kindFilter === key
-                  ? "border-betclic-red bg-betclic-red text-white font-semibold"
+                  ? "border-betclic-red bg-betclic-red font-semibold text-white"
                   : "border-edge bg-white text-mist"
               )}
             >
@@ -266,7 +271,7 @@ export default function ParisPage() {
           {tab === "ongoing" ? (
             <div className="flex flex-col gap-2.5">
               {ongoing.map((b) => (
-                <BetTicket key={`${b.kind}-${b.id}`} bet={b} />
+                <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
               ))}
             </div>
           ) : (
@@ -278,7 +283,7 @@ export default function ParisPage() {
                 </p>
                 <div className="flex flex-col gap-2.5">
                   {group.map((b) => (
-                    <BetTicket key={`${b.kind}-${b.id}`} bet={b} />
+                    <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
                   ))}
                 </div>
               </div>
@@ -286,6 +291,8 @@ export default function ParisPage() {
           )}
         </div>
       )}
+
+      <ShareTicketModal bet={sharingBet} onClose={() => setSharingBet(null)} />
     </div>
   );
 }

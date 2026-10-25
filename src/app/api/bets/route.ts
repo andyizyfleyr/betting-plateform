@@ -1,10 +1,20 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
-import { appUser, bets, matches, predictionBets, predictionQuestions } from "@/db/schema";
+import {
+  appUser,
+  bets,
+  comboBets,
+  matches,
+  predictionBets,
+  predictionQuestions,
+  type MatchRow,
+  type PredictionQuestionRow,
+} from "@/db/schema";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
+import { computeComboCashOut, settlePendingCombos } from "@/lib/combo";
 import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { settleResolvedQuestions } from "@/lib/predictions";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
@@ -25,6 +35,7 @@ export async function GET(req: NextRequest) {
   const uid = (await getAuthUserId(req)) ?? 1;
   await settleFinishedBets();
   await settleResolvedQuestions();
+  await settlePendingCombos();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
 
@@ -145,7 +156,81 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const combined = [...predMapped, ...mapped].sort(
+  const comboRows = await db
+    .select()
+    .from(comboBets)
+    .where(eq(comboBets.userId, uid))
+    .orderBy(desc(comboBets.placedAt));
+
+  let comboMatchMap = new Map<number, MatchRow>();
+  let comboQuestionMap = new Map<number, PredictionQuestionRow>();
+
+  if (comboRows.some((c) => c.status === "pending")) {
+    const cMatchIds = new Set<number>();
+    const cQuestionIds = new Set<number>();
+    for (const c of comboRows) {
+      if (c.status !== "pending") continue;
+      for (const l of c.legs ?? []) {
+        if (l.kind === "sport" && l.matchId) cMatchIds.add(l.matchId);
+        if (l.kind === "prediction" && l.questionId) cQuestionIds.add(l.questionId);
+      }
+    }
+    const [mRows, qRows] = await Promise.all([
+      cMatchIds.size > 0
+        ? db.select().from(matches).where(inArray(matches.id, [...cMatchIds]))
+        : Promise.resolve([] as MatchRow[]),
+      cQuestionIds.size > 0
+        ? db
+            .select()
+            .from(predictionQuestions)
+            .where(inArray(predictionQuestions.id, [...cQuestionIds]))
+        : Promise.resolve([] as PredictionQuestionRow[]),
+    ]);
+    comboMatchMap = new Map(mRows.map((m) => [m.id, m]));
+    comboQuestionMap = new Map(qRows.map((q) => [q.id, q]));
+  }
+
+  const comboMapped = comboRows.map((cb) => {
+    const legs = cb.legs ?? [];
+    const liveMatch = legs
+      .map((l) => (l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined))
+      .find((m) => m?.status === "live");
+
+    return {
+      id: cb.id,
+      kind: "combo" as const,
+      matchId: null,
+      sport: "combiné",
+      league: `Combiné (${legs.length} sélections)`,
+      homeTeam: "",
+      awayTeam: "",
+      question: null,
+      questionId: null,
+      market: "combo",
+      selection: "combo",
+      selectionLabel: legs.map((l) => l.selectionLabel).join(" · "),
+      odds: cb.totalOdds,
+      baseOdds: cb.baseOdds,
+      boostPct: cb.boostPct,
+      legs,
+      stake: cb.stake,
+      potentialWin: cb.potentialWin,
+      status: cb.status,
+      closingOdds: null,
+      riskFlag: null,
+      clv: null,
+      cashOutAmount: cb.cashOutAmount ?? null,
+      cashOut: cb.status === "pending" ? computeComboCashOut(cb, comboMatchMap, comboQuestionMap) : null,
+      placedAt: cb.placedAt,
+      matchStatus: liveMatch ? ("live" as const) : null,
+      matchHomeScore: null,
+      matchAwayScore: null,
+      matchMinute: liveMatch?.minute ?? null,
+      matchStartsAt: null,
+    };
+  });
+
+  const combined = [...comboMapped, ...predMapped, ...mapped].sort(
     (a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime()
   );
 

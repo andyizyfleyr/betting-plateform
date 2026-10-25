@@ -7,13 +7,16 @@ import { liveOddsFor, pickScorerName } from "@/db/fixtures";
 import {
   appUser,
   bets,
+  comboBets,
   deposits,
   matches,
   predictionBets,
   predictionQuestions,
+  withdrawals,
   type PredictionOption,
 } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
+import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import {
@@ -50,14 +53,18 @@ export async function GET(req: NextRequest) {
   await runLiveEngine();
   await settleFinishedBets();
   await settleResolvedQuestions();
+  await settlePendingCombos();
 
   const [
     [totalUsers],
     [totalBets],
     [totalPredBets],
+    [totalComboBets],
     [totalDeposits],
+    [pendingWdCount],
     [sportTotals],
     [predTotals],
+    [comboTotals],
     [liveMatch],
     [openQuestions],
     [totalBalance],
@@ -65,7 +72,9 @@ export async function GET(req: NextRequest) {
     db.select({ value: count() }).from(appUser),
     db.select({ value: count() }).from(bets),
     db.select({ value: count() }).from(predictionBets),
+    db.select({ value: count() }).from(comboBets),
     db.select({ value: count() }).from(deposits),
+    db.select({ value: count() }).from(withdrawals).where(eq(withdrawals.status, "pending")),
     db
       .select({
         stake: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
@@ -78,29 +87,44 @@ export async function GET(req: NextRequest) {
         payouts: sql<number>`COALESCE(SUM(CASE WHEN ${predictionBets.status} = 'won' THEN ${predictionBets.potentialWin} WHEN ${predictionBets.status} = 'cashed' THEN COALESCE(${predictionBets.cashOutAmount}, 0) ELSE 0 END), 0)::float8`,
       })
       .from(predictionBets),
+    db
+      .select({
+        stake: sql<number>`COALESCE(SUM(${comboBets.stake}), 0)::float8`,
+        payouts: sql<number>`COALESCE(SUM(CASE WHEN ${comboBets.status} = 'won' THEN ${comboBets.potentialWin} WHEN ${comboBets.status} = 'cashed' THEN COALESCE(${comboBets.cashOutAmount}, 0) ELSE 0 END), 0)::float8`,
+      })
+      .from(comboBets),
     db.select({ n: count() }).from(matches).where(eq(matches.status, "live")),
     db.select({ n: count() }).from(predictionQuestions).where(eq(predictionQuestions.status, "open")),
     db.select({ value: sql<number>`COALESCE(SUM(${appUser.balance}), 0)::float8` }).from(appUser),
   ]);
 
-  const stake = round2((sportTotals?.stake ?? 0) + (predTotals?.stake ?? 0));
-  const payouts = round2((sportTotals?.payouts ?? 0) + (predTotals?.payouts ?? 0));
+  const stake = round2(
+    (sportTotals?.stake ?? 0) + (predTotals?.stake ?? 0) + (comboTotals?.stake ?? 0)
+  );
+  const payouts = round2(
+    (sportTotals?.payouts ?? 0) + (predTotals?.payouts ?? 0) + (comboTotals?.payouts ?? 0)
+  );
 
-  const [users, betsRows, depRows, matchRows, questionRows, predBetsRows] = await Promise.all([
-    db.select().from(appUser).orderBy(desc(appUser.id)),
-    db.select().from(bets).orderBy(desc(bets.placedAt)).limit(300),
-    db.select().from(deposits).orderBy(desc(deposits.createdAt)).limit(200),
-    db
-      .select()
-      .from(matches)
-      .orderBy(
-        sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`,
-        desc(matches.id)
-      )
-      .limit(120),
-    db.select().from(predictionQuestions).orderBy(desc(predictionQuestions.id)).limit(200),
-    db.select().from(predictionBets).orderBy(desc(predictionBets.placedAt)).limit(300),
-  ]);
+  const [users, betsRows, depRows, wdRows, matchRows, questionRows, predBetsRows, comboRows] =
+    await Promise.all([
+      db.select().from(appUser).orderBy(desc(appUser.id)),
+      db.select().from(bets).orderBy(desc(bets.placedAt)).limit(300),
+      db.select().from(deposits).orderBy(desc(deposits.createdAt)).limit(200),
+      db.select().from(withdrawals).orderBy(desc(withdrawals.createdAt)).limit(200),
+      db
+        .select()
+        .from(matches)
+        .orderBy(
+          sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`,
+          desc(matches.id)
+        )
+        .limit(120),
+      db.select().from(predictionQuestions).orderBy(desc(predictionQuestions.id)).limit(200),
+      db.select().from(predictionBets).orderBy(desc(predictionBets.placedAt)).limit(300),
+      db.select().from(comboBets).orderBy(desc(comboBets.placedAt)).limit(200),
+    ]);
+
+  const userNameMap = new Map(users.map((u) => [u.id, u.name]));
 
   const seenQ = new Set<string>();
   const uniqueQuestions = questionRows.filter((q) => {
@@ -113,10 +137,13 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     stats: {
       totalUsers: totalUsers?.value ?? 0,
-      totalBets: (totalBets?.value ?? 0) + (totalPredBets?.value ?? 0),
+      totalBets:
+        (totalBets?.value ?? 0) + (totalPredBets?.value ?? 0) + (totalComboBets?.value ?? 0),
       sportsBets: totalBets?.value ?? 0,
       predBets: totalPredBets?.value ?? 0,
+      comboBets: totalComboBets?.value ?? 0,
       deposits: Number(totalDeposits?.value ?? 0),
+      pendingWithdrawals: Number(pendingWdCount?.value ?? 0),
       stake,
       payouts,
       balance: round2(Number(totalBalance?.value ?? 0)),
@@ -127,7 +154,12 @@ export async function GET(req: NextRequest) {
     users: users.map(publicUser),
     bets: betsRows,
     predictionBets: predBetsRows,
+    comboBets: comboRows,
     deposits: depRows,
+    withdrawals: wdRows.map((w) => ({
+      ...w,
+      userName: userNameMap.get(w.userId) ?? `Joueur #${w.userId}`,
+    })),
     matches: matchRows.map((m) => ({
       ...m,
       homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
@@ -360,6 +392,7 @@ export async function POST(req: NextRequest) {
         await tx.delete(bets).where(eq(bets.matchId, matchId));
         await tx.delete(matches).where(eq(matches.id, matchId));
       });
+      await settlePendingCombos();
       invalidateHouseHealthCache();
       return NextResponse.json({ ok: true });
     }
@@ -766,8 +799,64 @@ export async function POST(req: NextRequest) {
         await tx.delete(predictionBets).where(eq(predictionBets.questionId, questionId));
         await tx.delete(predictionQuestions).where(eq(predictionQuestions.id, questionId));
       });
+      await settlePendingCombos();
       invalidateHouseHealthCache();
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === "approveWithdrawal") {
+      const wid = Number(body.withdrawalId);
+      const note = body.note ? String(body.note).trim() : null;
+      if (!wid) return NextResponse.json({ error: "withdrawalId requis" }, { status: 400 });
+
+      const [updated] = await db
+        .update(withdrawals)
+        .set({
+          status: "approved",
+          processedAt: new Date(),
+          ...(note ? { adminNote: note } : {}),
+        })
+        .where(and(eq(withdrawals.id, wid), eq(withdrawals.status, "pending")))
+        .returning();
+
+      if (!updated) {
+        return NextResponse.json({ error: "Ce retrait a déjà été traité" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, withdrawal: updated });
+    }
+
+    if (action === "rejectWithdrawal") {
+      const wid = Number(body.withdrawalId);
+      const note = body.note ? String(body.note).trim() : null;
+      if (!wid) return NextResponse.json({ error: "withdrawalId requis" }, { status: 400 });
+
+      const updated = await db.transaction(async (tx) => {
+        const [rejected] = await tx
+          .update(withdrawals)
+          .set({
+            status: "rejected",
+            processedAt: new Date(),
+            ...(note ? { adminNote: note } : {}),
+          })
+          .where(and(eq(withdrawals.id, wid), eq(withdrawals.status, "pending")))
+          .returning();
+
+        if (!rejected) return null;
+
+        await tx
+          .update(appUser)
+          .set({
+            balance: sql`ROUND((${appUser.balance} + ${round2(rejected.amount)})::numeric, 2)::float8`,
+          })
+          .where(eq(appUser.id, rejected.userId));
+
+        return rejected;
+      });
+
+      if (!updated) {
+        return NextResponse.json({ error: "Ce retrait a déjà été traité" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, withdrawal: updated });
     }
 
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });

@@ -1,0 +1,532 @@
+"use client";
+
+import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
+import { ArrowRight, Check, Flame, Layers, Loader2, Plus, Trash2, X } from "lucide-react";
+import { api } from "@/lib/api";
+import {
+  computeComboQuote,
+  MAX_COMBO_LEGS,
+  MIN_COMBO_LEGS,
+  nextComboBoostTier,
+} from "@/lib/combo-math";
+import { AnimatedNumber } from "./animated-number";
+import { useApp } from "./providers";
+import { cn, eur, formatOdds } from "@/lib/format";
+
+export interface ComboSelection {
+  uid: string; // ex: "sport-12" ou "pred-5" (1 seule par événement)
+  kind: "sport" | "prediction";
+  matchId?: number;
+  questionId?: number;
+  title: string;
+  league: string;
+  market: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+}
+
+const QUICK_STAKES = [5, 10, 25, 50];
+
+export function ComboFloatingBar() {
+  const pathname = usePathname();
+  const {
+    comboLegs,
+    comboOpen,
+    openCombo,
+    clearCombo,
+    target,
+    marketMatch,
+    rechargeOpen,
+    oddsFormat,
+  } = useApp();
+
+  // Affiché uniquement sur les pages de paris (/matchs, /predictions, /paris) et jamais sur /tap
+  const allowedRoute =
+    pathname === "/matchs" ||
+    pathname.startsWith("/matchs/") ||
+    pathname === "/predictions" ||
+    pathname.startsWith("/predictions/") ||
+    pathname === "/paris";
+
+  if (!allowedRoute || comboLegs.length === 0 || comboOpen || target || marketMatch || rechargeOpen) {
+    return null;
+  }
+
+  const quote = computeComboQuote(
+    comboLegs.map((l) => l.odds),
+    10
+  );
+
+  return (
+    <div
+      className="pointer-events-none fixed inset-x-0 bottom-[66px] z-40 mx-auto w-full max-w-[440px] px-3.5"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 18, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        className="pointer-events-auto flex items-center justify-between gap-2 rounded-2xl border border-ink/15 bg-ink px-3.5 py-2.5 text-white shadow-xl"
+      >
+        <button
+          type="button"
+          onClick={openCombo}
+          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+        >
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-betclic-red font-display text-[12.5px] font-bold text-white">
+            {comboLegs.length}
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-display text-[13px] font-bold">
+                {comboLegs.length === 1 ? "1 sélection (ajoutez-en 1)" : "Ticket Combiné"}
+              </span>
+              {quote.boostPct > 0 && (
+                <span className="rounded-md bg-emerald-500/25 px-1.5 py-0.5 font-display text-[10px] font-bold text-emerald-300">
+                  +{quote.boostPct}% Bonus
+                </span>
+              )}
+            </div>
+            <p className="truncate text-[11px] text-white/70">
+              Cote totale{" "}
+              <strong className="font-display font-bold text-white">
+                {formatOdds(quote.totalOdds, oddsFormat)}
+              </strong>
+            </p>
+          </div>
+        </button>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={openCombo}
+            className="h-8 rounded-xl bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white active:scale-95"
+          >
+            Ouvrir
+          </button>
+          <button
+            type="button"
+            onClick={clearCombo}
+            aria-label="Vider le combiné"
+            className="grid h-8 w-8 place-items-center rounded-xl bg-white/10 text-white/75 active:bg-white/20"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2.3} />
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+export function ComboSheet() {
+  const router = useRouter();
+  const dragControls = useDragControls();
+  const {
+    comboLegs,
+    comboOpen,
+    closeCombo,
+    removeComboLeg,
+    clearCombo,
+    balance,
+    setBalance,
+    bumpBets,
+    openRecharge,
+    oddsFormat,
+    toast,
+  } = useApp();
+
+  const [stakeText, setStakeText] = useState("10");
+  const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
+  const [error, setError] = useState<string | null>(null);
+  const [placedInfo, setPlacedInfo] = useState<{
+    id: number;
+    totalOdds: number;
+    stake: number;
+    potentialWin: number;
+    boostPct: number;
+  } | null>(null);
+
+  if (!comboOpen) return null;
+
+  const parsed = Number(stakeText.replace(",", "."));
+  const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
+  const overBalance = stake > balance;
+  const belowMin = stake > 0 && stake < 0.5;
+  const enoughLegs = comboLegs.length >= MIN_COMBO_LEGS;
+
+  const quote = computeComboQuote(
+    comboLegs.map((l) => l.odds),
+    stake
+  );
+  const nextBoost = nextComboBoostTier(quote.eligibleLegs);
+
+  const handleStakeInput = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9.,]/g, "");
+    const parts = cleaned.split(/[.,]/);
+    const normalized =
+      parts.length > 1 ? `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}` : parts[0];
+    setStakeText(normalized);
+    setError(null);
+  };
+
+  const canSubmit =
+    phase === "input" &&
+    enoughLegs &&
+    comboLegs.length <= MAX_COMBO_LEGS &&
+    stake >= 0.5 &&
+    !overBalance;
+
+  const submitCombo = async () => {
+    if (!canSubmit) return;
+    setPhase("loading");
+    setError(null);
+    try {
+      const res = await api.placeComboBet({
+        legs: comboLegs.map((l) => ({
+          kind: l.kind,
+          ...(l.matchId ? { matchId: l.matchId } : {}),
+          ...(l.questionId ? { questionId: l.questionId } : {}),
+          market: l.market,
+          selection: l.selection,
+        })),
+        stake,
+      });
+      setBalance(res.balance);
+      bumpBets();
+      setPlacedInfo(res.bet);
+      clearCombo();
+      setPhase("success");
+    } catch (e) {
+      setPhase("input");
+      const msg = e instanceof Error ? e.message : "Validation impossible";
+      setError(msg);
+      toast({ kind: "error", title: "Combiné refusé", description: msg });
+    }
+  };
+
+  const finishAndClose = (goBets = false) => {
+    setPhase("input");
+    setPlacedInfo(null);
+    setError(null);
+    closeCombo();
+    if (goBets) router.push("/paris");
+  };
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[75]">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={phase === "loading" ? undefined : () => finishAndClose(false)}
+          className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
+        />
+
+        <motion.div
+          initial={{ y: "100%" }}
+          animate={{ y: 0 }}
+          exit={{ y: "100%" }}
+          transition={{ type: "spring", stiffness: 380, damping: 36 }}
+          drag={phase === "input" ? "y" : false}
+          dragListener={false}
+          dragControls={dragControls}
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={{ top: 0, bottom: 0.5 }}
+          onDragEnd={(_, info) => {
+            if (info.offset.y > 120 || info.velocity.y > 550) finishAndClose(false);
+          }}
+          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+        >
+          {phase === "success" && placedInfo ? (
+            <div className="px-5 pb-7 pt-6 text-center">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
+                <Check className="h-7 w-7" strokeWidth={2.6} />
+              </div>
+              <h3 className="mt-3 font-display text-[19px] font-bold text-ink">
+                Combiné validé !
+              </h3>
+              <p className="mt-1 text-[12.5px] text-mist">
+                Cote totale{" "}
+                <strong className="text-ink">{formatOdds(placedInfo.totalOdds, oddsFormat)}</strong>
+                {placedInfo.boostPct > 0 && ` (+${placedInfo.boostPct}% Bonus inclus)`}
+              </p>
+
+              <div className="mt-4 flex items-center justify-between rounded-2xl bg-elev px-4 py-3 text-left">
+                <div>
+                  <p className="text-[11px] text-dim">Mise : {eur(placedInfo.stake)}</p>
+                  <p className="font-display text-[12.5px] font-semibold text-ink">
+                    Gain potentiel
+                  </p>
+                </div>
+                <span className="font-display text-[20px] font-bold tabular-nums text-win">
+                  {eur(placedInfo.potentialWin)}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => finishAndClose(true)}
+                  className="h-11 rounded-2xl bg-betclic-red font-display text-[13px] font-bold text-white"
+                >
+                  Voir mes paris
+                </button>
+                <button
+                  type="button"
+                  onClick={() => finishAndClose(false)}
+                  className="h-11 rounded-2xl bg-elev font-display text-[13px] font-bold text-ink"
+                >
+                  Continuer
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* En-tête fixe */}
+              <div className="shrink-0 border-b border-edge px-4 pb-3 pt-2">
+                <div
+                  onPointerDown={(e) => dragControls.start(e)}
+                  className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing"
+                />
+                <div className="mt-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-betclic-red/12 text-betclic-red">
+                      <Layers className="h-4 w-4" strokeWidth={2.3} />
+                    </span>
+                    <div>
+                      <h2 className="font-display text-[16px] font-bold text-ink">
+                        Panier Combiné ({comboLegs.length}/{MAX_COMBO_LEGS})
+                      </h2>
+                      <p className="text-[11px] text-dim">
+                        Combinez 2 à 8 matchs ou prédictions
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {comboLegs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearCombo}
+                        className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
+                        aria-label="Tout vider"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => finishAndClose(false)}
+                      className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
+                      aria-label="Fermer"
+                    >
+                      <X className="h-4 w-4" strokeWidth={2.2} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Zone scrollable en bloc standard */}
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
+                {/* Jauge Bonus Combiné */}
+                <div className="rounded-2xl border border-emerald-600/20 bg-emerald-500/8 px-3.5 py-2.5">
+                  <div className="flex items-center justify-between gap-2 text-[11.5px]">
+                    <span className="flex items-center gap-1.5 font-display font-bold text-emerald-800">
+                      <Flame className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.4} />
+                      {quote.boostPct > 0
+                        ? `Bonus Combiné actif : +${quote.boostPct}%`
+                        : "Bonus Combiné jusqu'à +25%"}
+                    </span>
+                    {nextBoost && (
+                      <span className="text-[10.5px] font-semibold text-emerald-700">
+                        +{nextBoost.needed} sél. (≥1,25) → +{nextBoost.pct}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Liste des sélections */}
+                <div className="mt-3 space-y-2">
+                  {comboLegs.map((leg) => (
+                    <div
+                      key={leg.uid}
+                      className="flex items-center justify-between gap-2.5 rounded-2xl border border-edge bg-white p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-dim">
+                          {leg.league}
+                        </p>
+                        <p className="truncate font-display text-[13px] font-bold text-ink">
+                          {leg.title}
+                        </p>
+                        <p className="truncate text-[11.5px] font-medium text-mist">
+                          {leg.selectionLabel}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="rounded-xl bg-betclic-red/10 px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
+                          {formatOdds(leg.odds, oddsFormat)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeComboLeg(leg.uid)}
+                          className="grid h-7 w-7 place-items-center rounded-lg bg-elev text-mist active:bg-edge"
+                          aria-label="Retirer"
+                        >
+                          <X className="h-3.5 w-3.5" strokeWidth={2.2} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {!enoughLegs && (
+                  <p className="mt-3 rounded-xl bg-elev px-3 py-2 text-center text-[11.5px] font-medium text-mist">
+                    Ajoutez encore au moins <strong>1 sélection</strong> depuis Matchs ou
+                    Prédictions pour former un combiné.
+                  </p>
+                )}
+
+                {/* Mise */}
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-[11.5px]">
+                    <span className="font-semibold text-mist">Mise du combiné</span>
+                    <span className="text-dim">
+                      Solde : <strong className="font-semibold text-ink">{eur(balance)}</strong>
+                    </span>
+                  </div>
+
+                  <div
+                    className={cn(
+                      "mt-1.5 flex h-12 items-center rounded-2xl border bg-white px-3.5",
+                      overBalance || belowMin
+                        ? "border-betclic-red"
+                        : "border-edge focus-within:border-ink"
+                    )}
+                  >
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={stakeText}
+                      onChange={(e) => handleStakeInput(e.target.value)}
+                      placeholder="10"
+                      className="w-full bg-transparent font-display text-[20px] font-bold tabular-nums text-ink outline-none"
+                    />
+                    <span className="font-display text-[16px] font-bold text-dim">€</span>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-5 gap-1.5">
+                    {QUICK_STAKES.map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => {
+                          setStakeText(String(amt));
+                          setError(null);
+                        }}
+                        className={cn(
+                          "h-8 rounded-xl border font-display text-[12px] font-bold",
+                          stake === amt
+                            ? "border-ink bg-ink text-white"
+                            : "border-edge bg-elev text-ink"
+                        )}
+                      >
+                        {amt} €
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStakeText(String(Math.min(200, Math.floor(balance * 100) / 100)));
+                        setError(null);
+                      }}
+                      className="h-8 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
+                    >
+                      MAX
+                    </button>
+                  </div>
+                </div>
+
+                {overBalance && (
+                  <div className="mt-2.5 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
+                    <span className="font-medium text-betclic-red">Solde insuffisant</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeCombo();
+                        openRecharge();
+                      }}
+                      className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline"
+                    >
+                      <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                      Recharger
+                    </button>
+                  </div>
+                )}
+
+                {error && !overBalance && (
+                  <p className="mt-2.5 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+                    {error}
+                  </p>
+                )}
+
+                {/* Récapitulatif Cote & Gain */}
+                <div className="mt-3.5 rounded-2xl bg-elev px-3.5 py-3">
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="text-mist">Cote combinée totale</span>
+                    <span className="font-display font-bold tabular-nums text-ink">
+                      {formatOdds(quote.totalOdds, oddsFormat)}
+                    </span>
+                  </div>
+                  {quote.boostAmount > 0 && (
+                    <div className="mt-1 flex items-center justify-between text-[11.5px] text-win">
+                      <span>Bonus Combiné (+{quote.boostPct}%)</span>
+                      <span className="font-display font-bold tabular-nums">
+                        +{eur(quote.boostAmount)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-center justify-between border-t border-edge pt-2">
+                    <span className="font-display text-[13px] font-bold text-ink">
+                      Gain potentiel
+                    </span>
+                    <AnimatedNumber
+                      value={enoughLegs ? quote.potentialWin : 0}
+                      format={eur}
+                      className="font-display text-[20px] font-bold tabular-nums text-win"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={!canSubmit}
+                  onClick={submitCombo}
+                  className={cn(
+                    "mt-3.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
+                    canSubmit ? "bg-betclic-red text-white shadow-sm" : "bg-elev text-dim"
+                  )}
+                >
+                  {phase === "loading" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
+                      Validation du combiné…
+                    </>
+                  ) : (
+                    <>
+                      Valider le combiné {stake > 0 ? `(${eur(stake)})` : ""}
+                      <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}

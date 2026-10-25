@@ -1,14 +1,18 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { ChevronRight, Radio } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { formatGoalSummary, LiveStatusBadge, ResultOdds } from "./match-card";
 import { KickoffCountdown } from "./kickoff-countdown";
+import { LiveMatchTracker } from "./live-match-tracker";
+import { cn } from "@/lib/format";
 
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
   const { openMarkets } = useApp();
+  const [showTracker, setShowTracker] = useState(true);
   const isLive = match.status === "live";
   const marketCount = match.markets?.length ?? 0;
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
@@ -27,10 +31,30 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
           <span className="truncate text-[11.5px] font-semibold text-mist">{match.league}</span>
         </div>
 
-        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-bold text-ink">
-          {marketCount > 0 ? `${marketCount} marchés` : "Marchés"}
-          <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isLive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTracker((s) => !s);
+              }}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display text-[10.5px] font-bold transition-colors",
+                showTracker
+                  ? "bg-emerald-700 text-white"
+                  : "bg-elev text-mist"
+              )}
+            >
+              <Radio className="h-3 w-3" strokeWidth={2.4} />
+              Terrain 2D
+            </button>
+          )}
+          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-bold text-ink">
+            {marketCount > 0 ? `${marketCount} marchés` : "Marchés"}
+            <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
+          </span>
+        </div>
       </div>
 
       <div className="my-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
@@ -91,6 +115,8 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
           </div>
         </div>
       )}
+
+      {isLive && showTracker && <LiveMatchTracker match={match} className="mb-3" />}
 
       <ResultOdds match={match} />
     </section>
