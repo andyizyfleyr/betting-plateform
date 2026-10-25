@@ -19,8 +19,16 @@ export interface MarketGroup {
   key: string;
   label: string;
   short: string;
+  category?: "main" | "goals" | "teams" | "scores";
   outcomes: MarketOutcome[];
   rows?: MarketRow[];
+}
+
+export interface ClientMatchEvent {
+  type: string;
+  team: string;
+  minute: number;
+  player?: string;
 }
 
 export interface ClientMatch {
@@ -37,10 +45,14 @@ export interface ClientMatch {
   status: MatchStatus;
   minute: string | null;
   startsAt: string;
+  finishedAt?: string | null;
   oddsHome: number;
   oddsDraw: number | null;
   oddsAway: number;
   suspended: boolean;
+  redHome?: number;
+  redAway?: number;
+  events?: ClientMatchEvent[];
   markets: MarketGroup[];
 }
 

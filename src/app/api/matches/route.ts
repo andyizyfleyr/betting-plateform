@@ -5,33 +5,48 @@ import { bets, matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
+import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   await ensureSeeded();
-
   await runLiveEngine();
 
-  const rows = await db
+  const allRows = await db
     .select()
     .from(matches)
     .where(eq(matches.source, "manual"))
     .orderBy(
-      // Live d'abord, puis à venir, puis terminés
-      asc(
-        sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`
-      ),
+      asc(sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`),
       asc(matches.startsAt),
       desc(matches.id)
     );
 
-  // Exposition du bookmaker par match : les paris en cours resserrent les cotes
-  // affichées de la même façon que lors de la validation serveur d'un pari.
+  // Conserve tous les matchs en direct / à venir + les 12 derniers terminés (pour l'onglet Résultats)
+  const activeRows = allRows.filter((r) => r.status !== "finished");
+  const finishedRows = allRows
+    .filter((r) => r.status === "finished")
+    .sort((a, b) => {
+      const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
+      const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
+      return tb - ta;
+    })
+    .slice(0, 12);
+
+  const rows = [...activeRows, ...finishedRows];
+
   const pending = await db
-    .select({ matchId: bets.matchId, market: bets.market, selection: bets.selection, stake: bets.stake, odds: bets.odds })
+    .select({
+      matchId: bets.matchId,
+      market: bets.market,
+      selection: bets.selection,
+      stake: bets.stake,
+      odds: bets.odds,
+    })
     .from(bets)
     .where(eq(bets.status, "pending"));
+
   const pendingByMatch = new Map<number, typeof pending>();
   for (const b of pending) {
     if (b.matchId == null) continue;
@@ -41,27 +56,49 @@ export async function GET() {
   }
 
   const withMarkets = rows.map((m) => {
-    // Match manuel avec marchés saisis par l'admin : servis tels quels.
     const exposure = pendingByMatch.get(m.id) ?? [];
-    const markets = m.source === "manual" && m.markets && m.markets.length > 0
-      ? m.markets
-      : m.status === "live"
-        ? buildLiveMarkets(
-            m.homeTeam,
-            m.awayTeam,
-            m.homeScore ?? 0,
-            m.awayScore ?? 0,
-            minuteNumber(m.minute),
-            {
-              homeForm: m.homeForm ?? 1,
-              awayForm: m.awayForm ?? 1,
-              redHome: m.redHome ?? 0,
-              redAway: m.redAway ?? 0,
-            },
-            exposure
-          )
-        : buildMarkets(m.homeTeam, m.awayTeam, exposure);
-    return { ...m, markets };
+    const markets =
+      m.status === "finished"
+        ? []
+        : m.source === "manual" && m.markets && m.markets.length > 0
+          ? m.markets
+          : m.status === "live"
+            ? buildLiveMarkets(
+                m.homeTeam,
+                m.awayTeam,
+                m.homeScore ?? 0,
+                m.awayScore ?? 0,
+                minuteNumber(m.minute),
+                {
+                  homeForm: m.homeForm ?? 1,
+                  awayForm: m.awayForm ?? 1,
+                  redHome: m.redHome ?? 0,
+                  redAway: m.redAway ?? 0,
+                },
+                exposure
+              )
+            : buildMarkets(m.homeTeam, m.awayTeam, exposure);
+
+    // Garantit une identité stricte à 0,00 près entre les boutons 1/N/2 de la carte et la feuille de marchés
+    const resGroup = markets.find((g) => g.key === "result");
+    const oddsHome =
+      resGroup?.outcomes.find((o) => o.key === "home")?.odds ?? m.oddsHome;
+    const oddsDraw =
+      resGroup
+        ? (resGroup.outcomes.find((o) => o.key === "draw")?.odds ?? m.oddsDraw)
+        : m.oddsDraw;
+    const oddsAway =
+      resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
+
+    return {
+      ...m,
+      homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
+      awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
+      oddsHome,
+      oddsDraw,
+      oddsAway,
+      markets,
+    };
   });
 
   return NextResponse.json({ matches: withMarkets });

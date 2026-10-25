@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Clock } from "lucide-react";
 import { cn } from "@/lib/format";
 
 export function KickoffCountdown({
@@ -16,57 +17,81 @@ export function KickoffCountdown({
   const underOneHour = Number.isFinite(target) && diff > 0 && diff < 3_600_000;
 
   useEffect(() => {
-    const interval = underOneHour ? 1_000 : 30_000;
+    const interval = underOneHour ? 10_000 : 30_000;
     const id = setInterval(() => setNow(Date.now()), interval);
     return () => clearInterval(id);
   }, [underOneHour]);
 
-  if (!Number.isFinite(target) || diff <= 0) {
+  if (!Number.isFinite(target) || diff <= 30_000) {
     return (
-      <span className={cn("font-display text-[11px] font-bold text-betclic-red", className)}>
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10.5px] font-bold text-betclic-red",
+          className
+        )}
+      >
+        <span className="countdown-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
         Imminent
       </span>
     );
   }
 
-  const secs = Math.floor(diff / 1000);
-  const days = Math.floor(secs / 86400);
-  const hours = Math.floor((secs % 86400) / 3600);
-  const mins = Math.floor((secs % 3600) / 60);
-  const remainder = secs % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  if (days >= 2) {
-    const label = new Intl.DateTimeFormat("fr-FR", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-      .format(new Date(target))
-      .replace(/(\d+):(\d+)/, "$1h$2");
+  if (underOneHour) {
+    const mins = Math.max(1, Math.ceil(diff / 60_000));
     return (
-      <span className={cn("shrink-0 text-[11px] font-medium text-dim", className)}>{label}</span>
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red",
+          className
+        )}
+      >
+        <span className="countdown-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+        dans {mins} min
+      </span>
     );
   }
 
-  const label =
-    days === 1
-      ? `J-1 · ${pad(hours)}h${pad(mins)}`
-      : hours >= 1
-        ? `${pad(hours)}h${pad(mins)}`
-        : `${pad(mins)}:${pad(remainder)}`;
+  const kickoffDate = new Date(target);
+  const nowDate = new Date(now);
+
+  const sameDay =
+    kickoffDate.getFullYear() === nowDate.getFullYear() &&
+    kickoffDate.getMonth() === nowDate.getMonth() &&
+    kickoffDate.getDate() === nowDate.getDate();
+
+  const tomorrowDate = new Date(nowDate);
+  tomorrowDate.setDate(nowDate.getDate() + 1);
+  const isTomorrow =
+    kickoffDate.getFullYear() === tomorrowDate.getFullYear() &&
+    kickoffDate.getMonth() === tomorrowDate.getMonth() &&
+    kickoffDate.getDate() === tomorrowDate.getDate();
+
+  const timeStr = new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(kickoffDate);
+
+  let label: string;
+  if (sameDay) {
+    label = `Auj. ${timeStr}`;
+  } else if (isTomorrow) {
+    label = `Demain ${timeStr}`;
+  } else {
+    const dayStr = new Intl.DateTimeFormat("fr-FR", {
+      weekday: "short",
+      day: "numeric",
+    }).format(kickoffDate);
+    label = `${dayStr} · ${timeStr}`;
+  }
 
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 font-display text-[11px] font-semibold tabular-nums text-mist",
-        underOneHour && "font-bold text-betclic-red",
+        "inline-flex shrink-0 items-center gap-1 rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold tabular-nums text-mist",
         className
       )}
     >
-      {underOneHour && <span className="countdown-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />}
+      <Clock className="h-3 w-3 text-dim" strokeWidth={2.2} />
       {label}
     </span>
   );

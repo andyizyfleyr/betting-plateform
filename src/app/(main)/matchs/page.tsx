@@ -8,9 +8,9 @@ import { FeaturedMatch } from "@/components/featured-match";
 import { SportIcon } from "@/components/sport-icon";
 import { cn, todayLabel } from "@/lib/format";
 
-type Filter = "all" | "live" | "upcoming";
+type Filter = "all" | "live" | "upcoming" | "finished";
 
-const POLL_INTERVAL = 5_000;
+const POLL_INTERVAL = 4_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 
@@ -54,9 +54,16 @@ export default function MatchsPage() {
     };
   }, []);
 
+  const allMatches = useMemo(() => matches ?? [], [matches]);
+
   const activeMatches = useMemo(
-    () => (matches ?? []).filter((m) => m.status !== "finished"),
-    [matches]
+    () => allMatches.filter((m) => m.status !== "finished"),
+    [allMatches]
+  );
+
+  const finishedMatches = useMemo(
+    () => allMatches.filter((m) => m.status === "finished"),
+    [allMatches]
   );
 
   const liveCount = useMemo(
@@ -69,21 +76,29 @@ export default function MatchsPage() {
     [activeMatches]
   );
 
+  const baseForTab = useMemo(() => {
+    if (filter === "live") return activeMatches.filter((m) => m.status === "live");
+    if (filter === "upcoming") return activeMatches.filter((m) => m.status === "upcoming");
+    if (filter === "finished") return finishedMatches;
+    return activeMatches;
+  }, [activeMatches, finishedMatches, filter]);
+
   const leagues = useMemo(() => {
     const set = new Set<string>();
-    for (const m of activeMatches) set.add(m.league);
+    for (const m of baseForTab) set.add(m.league);
     return [...set];
-  }, [activeMatches]);
+  }, [baseForTab]);
+
+  const effectiveLeague =
+    leagueFilter === "all" || leagues.includes(leagueFilter) ? leagueFilter : "all";
 
   const visible = useMemo(() => {
-    let list = activeMatches;
-    if (filter === "live") list = list.filter((m) => m.status === "live");
-    else if (filter === "upcoming") list = list.filter((m) => m.status === "upcoming");
-    if (leagueFilter !== "all") list = list.filter((m) => m.league === leagueFilter);
-    return list;
-  }, [activeMatches, filter, leagueFilter]);
+    if (effectiveLeague === "all") return baseForTab;
+    return baseForTab.filter((m) => m.league === effectiveLeague);
+  }, [baseForTab, effectiveLeague]);
 
-  const showFeatured = filter === "all" && leagueFilter === "all" && visible.length > 1;
+  const showFeatured =
+    filter === "all" && effectiveLeague === "all" && visible.length > 1;
   const featured = showFeatured
     ? (visible.find((m) => m.status === "live") ?? visible[0] ?? null)
     : null;
@@ -100,10 +115,15 @@ export default function MatchsPage() {
     return [...map.entries()];
   }, [visible, featured]);
 
+  const finishedList = useMemo(
+    () => visible.filter((m) => m.status === "finished"),
+    [visible]
+  );
+
   return (
     <div className="px-4 pb-8 pt-4">
       {/* En-tête compact */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
             Matchs
@@ -112,45 +132,79 @@ export default function MatchsPage() {
         </div>
 
         {liveCount > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/10 px-2.5 py-1 font-display text-[11.5px] font-bold text-betclic-red">
+          <button
+            type="button"
+            onClick={() => setFilter(filter === "live" ? "all" : "live")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[11.5px] font-bold text-betclic-red active:scale-95"
+          >
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
             {liveCount} en direct
-          </span>
+          </button>
         )}
       </div>
 
-      {/* Filtres collants */}
+      {/* Barre de filtres collante optimisée petits écrans */}
       <div className="sticky top-[52px] z-30 -mx-4 mt-3 border-b border-edge/70 bg-deep/95 px-4 py-2 backdrop-blur-md">
-        <div className="grid grid-cols-3 gap-1 rounded-xl border border-edge bg-white p-1">
+        <div
+          className={cn(
+            "grid gap-1 rounded-xl border border-edge bg-white p-1",
+            finishedMatches.length > 0 ? "grid-cols-4" : "grid-cols-3"
+          )}
+        >
           {(
             [
-              { key: "all", label: `Tous (${activeMatches.length})` },
-              { key: "live", label: `Direct (${liveCount})`, dot: liveCount > 0 },
-              { key: "upcoming", label: `À venir (${upcomingCount})` },
-            ] as const
+              { key: "all" as const, label: "Affiche", count: activeMatches.length },
+              {
+                key: "live" as const,
+                label: "Direct",
+                count: liveCount,
+                dot: liveCount > 0,
+              },
+              { key: "upcoming" as const, label: "À venir", count: upcomingCount },
+              ...(finishedMatches.length > 0
+                ? [
+                    {
+                      key: "finished" as const,
+                      label: "Scores",
+                      count: finishedMatches.length,
+                    },
+                  ]
+                : []),
+            ]
           ).map((item) => {
             const active = filter === item.key;
             return (
               <button
                 key={item.key}
                 type="button"
-                onClick={() => setFilter(item.key)}
+                onClick={() => {
+                  setFilter(item.key);
+                  setLeagueFilter("all");
+                }}
                 className={cn(
-                  "flex h-9 items-center justify-center gap-1.5 rounded-lg font-display text-[11.5px] transition-colors",
+                  "flex h-9 items-center justify-center gap-1 rounded-lg px-1 font-display text-[11px] transition-colors",
                   active
                     ? "bg-ink font-bold text-white"
-                    : "font-medium text-mist active:bg-elev"
+                    : "font-semibold text-mist active:bg-elev"
                 )}
               >
                 {"dot" in item && item.dot && (
                   <span
                     className={cn(
-                      "h-1.5 w-1.5 rounded-full",
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
                       active ? "bg-betclic-red" : "live-dot bg-betclic-red"
                     )}
                   />
                 )}
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
+                <span
+                  className={cn(
+                    "font-display text-[10px] tabular-nums",
+                    active ? "text-white/75" : "text-dim"
+                  )}
+                >
+                  {item.count}
+                </span>
               </button>
             );
           })}
@@ -163,8 +217,8 @@ export default function MatchsPage() {
               onClick={() => setLeagueFilter("all")}
               className={cn(
                 "h-7 shrink-0 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
-                leagueFilter === "all"
-                  ? "border-betclic-red bg-betclic-red text-white font-semibold"
+                effectiveLeague === "all"
+                  ? "border-betclic-red bg-betclic-red font-semibold text-white"
                   : "border-edge bg-white text-mist"
               )}
             >
@@ -177,8 +231,8 @@ export default function MatchsPage() {
                 onClick={() => setLeagueFilter(lg)}
                 className={cn(
                   "h-7 shrink-0 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
-                  leagueFilter === lg
-                    ? "border-betclic-red bg-betclic-red text-white font-semibold"
+                effectiveLeague === lg
+                    ? "border-betclic-red bg-betclic-red font-semibold text-white"
                     : "border-edge bg-white text-mist"
                 )}
               >
@@ -202,10 +256,10 @@ export default function MatchsPage() {
             <Trophy className="h-5 w-5" strokeWidth={1.9} />
           </div>
           <p className="mt-3 font-display text-[15px] font-semibold text-ink">
-            Aucun match trouvé
+            Aucun match dans cette vue
           </p>
           <p className="mt-1 text-[12.5px] text-dim">
-            Changez de filtre pour voir les autres rencontres.
+            Touchez « Affiche » pour retrouver toutes les rencontres ouvertes.
           </p>
         </div>
       ) : (
@@ -243,6 +297,17 @@ export default function MatchsPage() {
                   </div>
                 </div>
               ))}
+            </section>
+          )}
+
+          {finishedList.length > 0 && (
+            <section>
+              <SectionHeader label="Résultats récents" count={finishedList.length} />
+              <div className="mt-2 flex flex-col gap-2.5">
+                {finishedList.map((m) => (
+                  <MatchCard key={m.id} match={m} />
+                ))}
+              </div>
             </section>
           )}
         </div>

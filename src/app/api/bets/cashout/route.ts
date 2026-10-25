@@ -51,22 +51,28 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (bet.market !== "result") {
-      return NextResponse.json(
-        { error: "Le cash-out n'est pas disponible pour ce marché" },
-        { status: 400 }
-      );
-    }
-
     const value = computeCashOut({
       stake: bet.stake,
       odds: bet.odds,
       sport: bet.sport,
       minute: match.minute,
+      market: bet.market,
       selection: bet.selection,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
       homeScore: match.homeScore,
       awayScore: match.awayScore,
+      redHome: match.redHome,
+      redAway: match.redAway,
+      homeForm: match.homeForm,
+      awayForm: match.awayForm,
     });
+    if (value == null) {
+      return NextResponse.json(
+        { error: "Le cash-out n'est plus disponible sur ce pari actuellement" },
+        { status: 400 }
+      );
+    }
 
     await db
       .update(bets)
