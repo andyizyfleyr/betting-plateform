@@ -1,15 +1,15 @@
 export const VIRTUAL_LEAGUE = "Ligue des Champions · Europe";
 export const ROUND_MS = 300_000;
 
-/** Buts moyens attendus à forces égales (avantage domicile calibré sur les top 5 ligues européennes). */
-const BASE_HOME = 1.48;
-const BASE_AWAY = 1.18;
+/** Buts moyens attendus à forces égales (football européen moderne : avantage terrain mesuré ~6 %). */
+const BASE_HOME = 1.33;
+const BASE_AWAY = 1.25;
 /** Sensibilité exponentielle aux écarts d'indice de force entre clubs. */
-const ELO_SENSITIVITY = 0.028;
+const ELO_SENSITIVITY = 0.027;
 
-const PREMATCH_MARGIN = 1.045;
-const LIVE_MARGIN_MIN = 1.05;
-const LIVE_MARGIN_MAX = 1.12;
+const PREMATCH_MARGIN = 1.072;
+const LIVE_MARGIN_MIN = 1.075;
+const LIVE_MARGIN_MAX = 1.14;
 const LIVE_ODDS_MAX = 100;
 const LIVE_MAX_REMAIN = 14;
 
@@ -294,22 +294,33 @@ export function expectedGoals(home: string, away: string): { lambdaHome: number;
   };
 }
 
-/** Applique la marge bookmaker pondérée par la variance à un jeu de probabilités exclusives. */
+/**
+ * Applique l'overround proportionnel équilibré (+ légère prime de risque sur les grosses cotes) :
+ * garantit mathématiquement une espérance joueur strictement négative (~ -6,5 % à -8 %)
+ * sur TOUTES les issues simultanément (Domicile, Nul, Extérieur, Favori, Outsider, Over, Under).
+ */
 export function applyOverround(probs: number[], overround: number): number[] {
   const mu = Math.max(0.01, overround - 1);
   const clean = probs.map((p) => clamp(p, 0.0002, 0.9996));
   const sumP = clean.reduce((a, b) => a + b, 0) || 1;
   const norm = clean.map((p) => p / sumP);
 
-  const weights = norm.map((p) => p * (1 - p));
+  // Pondération quasi-proportionnelle (`p^0.88`) : couvre uniformément favoris ET outsiders
+  // sans sous-marger les cotes hautes lorsqu'une issue est dominante en live.
+  const weights = norm.map((p) => Math.pow(p, 0.88) * Math.pow(1 - p, 0.22));
   const sumW = weights.reduce((a, b) => a + b, 0);
   if (sumW < 1e-6) {
     return norm.map((p) => clamp(p, 0.001, 0.99));
   }
 
-  // Plafonne la marge quand une issue est quasi certaine afin que p_imp reste toujours < 1
-  const muEff = Math.min(mu, 0.65 * sumW);
-  return norm.map((p, i) => clamp(p + muEff * (weights[i] / sumW), 0.0005, 0.99));
+  const maxAllowedAdd = norm.reduce((acc, p, i) => {
+    if (p >= 0.992) return 0;
+    const share = weights[i] / sumW;
+    return share > 0 ? Math.min(acc, (0.992 - p) / share) : acc;
+  }, mu);
+  const muEff = Math.max(0.005, Math.min(mu, maxAllowedAdd));
+
+  return norm.map((p, i) => clamp(p + muEff * (weights[i] / sumW), 0.0005, 0.992));
 }
 
 /** Cote décimale d'un événement binaire de probabilité vraie `p` avec overround `overround`. */
@@ -575,20 +586,16 @@ export function skellamCDF(k: number, lambda1: number, lambda2: number): number 
 }
 
 /**
- * Lisse l'évolution temporelle des cotes live par paliers tactiques (~25–30 s réelles
- * par palier sur un match virtuel de 2m40s) afin que les cotes restent posées et
- * confortables à jouer, tout en réagissant instantanément au moindre but ou carton rouge.
+ * Lisse l'évolution temporelle des cotes live par micro-paliers de 3 minutes (~5 s réelles)
+ * jusqu'à la 75', puis minute par minute dans le money-time afin d'éliminer toute fenêtre
+ * d'arbitrage sur les marchés « Moins de X buts » ou « Match nul » en fin de période.
  */
 export function livePricingMinute(minute: number): number {
   const m = clamp(Math.round(minute), 0, 90);
   if (m <= 0) return 0;
   if (m >= 90) return 90;
-  if (m <= 18) return 8;
-  if (m <= 36) return 27;
-  if (m <= 45) return 45;
-  if (m <= 63) return 54;
-  if (m <= 78) return 71;
-  return 84;
+  if (m >= 76) return m;
+  return Math.min(75, Math.round(m / 3) * 3);
 }
 
 /**

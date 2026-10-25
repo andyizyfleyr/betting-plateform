@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   acceleratorRounds,
@@ -267,4 +267,149 @@ export async function analyzeAcceleratorProfile(
     }));
 
   return buildSmartPlayerSignal(mapped, currentStake);
+}
+
+/**
+ * Détecteur multi-dimensionnel de patterns de paris sportifs par utilisateur :
+ * Repère automatiquement les stratégies répétitives (« 100 % Domicile », « 100 % Favoris »,
+ * « 100 % Over / Under », Martingale après perte, séries gagnantes ou profits nets élevés)
+ * et retourne un coefficient de vigilance ∈ [1.0, 2.15] appliqué au bouclier de risque du match.
+ */
+export async function computeUserPatternRiskWeights(
+  userIds: number[]
+): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  const uniqueIds = [...new Set(userIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (uniqueIds.length === 0) return result;
+
+  const recent = await db
+    .select({
+      userId: bets.userId,
+      market: bets.market,
+      selection: bets.selection,
+      stake: bets.stake,
+      odds: bets.odds,
+      status: bets.status,
+      potentialWin: bets.potentialWin,
+      cashOutAmount: bets.cashOutAmount,
+    })
+    .from(bets)
+    .where(inArray(bets.userId, uniqueIds))
+    .orderBy(desc(bets.id))
+    .limit(Math.min(400, uniqueIds.length * 25));
+
+  const byUser = new Map<number, typeof recent>();
+  for (const r of recent) {
+    const arr = byUser.get(r.userId) ?? [];
+    if (arr.length < 22) {
+      arr.push(r);
+      byUser.set(r.userId, arr);
+    }
+  }
+
+  for (const uid of uniqueIds) {
+    const list = byUser.get(uid) ?? [];
+    if (list.length < 4) {
+      result.set(uid, 1.0);
+      continue;
+    }
+
+    let totalStake = 0;
+    let homeLeanStake = 0;
+    let awayLeanStake = 0;
+    let overLeanStake = 0;
+    let underLeanStake = 0;
+    let heavyFavStake = 0;
+    let settledNet = 0;
+    let winStreak = 0;
+    let streakOpen = true;
+
+    for (const b of list) {
+      totalStake += b.stake;
+
+      if (
+        (b.market === "result" && b.selection === "home") ||
+        (b.market === "double_chance" && b.selection === "1X") ||
+        (b.market === "result_total" && b.selection === "home_over") ||
+        b.market === "home_to_nil"
+      ) {
+        homeLeanStake += b.stake;
+      } else if (
+        (b.market === "result" && b.selection === "away") ||
+        (b.market === "double_chance" && b.selection === "X2") ||
+        (b.market === "result_total" && b.selection === "away_over") ||
+        b.market === "away_to_nil"
+      ) {
+        awayLeanStake += b.stake;
+      }
+
+      if (b.selection.endsWith("_over") || (b.market === "btts" && b.selection === "oui")) {
+        overLeanStake += b.stake;
+      } else if (
+        b.selection.endsWith("_under") ||
+        b.selection === "under" ||
+        (b.market === "btts" && b.selection === "non")
+      ) {
+        underLeanStake += b.stake;
+      }
+
+      if (b.odds <= 1.72) {
+        heavyFavStake += b.stake;
+      }
+
+      if (b.status !== "pending") {
+        const won = b.status === "won";
+        const out = won
+          ? b.potentialWin
+          : b.status === "cashed"
+            ? (b.cashOutAmount ?? 0)
+            : 0;
+        settledNet += out - b.stake;
+        if (streakOpen) {
+          if (won) winStreak++;
+          else streakOpen = false;
+        }
+      }
+    }
+
+    const denom = Math.max(1, totalStake);
+    const maxDirectionalShare = Math.max(
+      homeLeanStake / denom,
+      awayLeanStake / denom,
+      overLeanStake / denom,
+      underLeanStake / denom,
+      (heavyFavStake / denom) * 0.92
+    );
+
+    let weight = 1.0;
+
+    // 1. Pattern systématique (ex. spam Domicile, spam Favoris, spam Over)
+    if (list.length >= 5 && maxDirectionalShare >= 0.7) {
+      weight += clamp((maxDirectionalShare - 0.65) * 1.9, 0.15, 0.65);
+    }
+
+    // 2. Martingale / escalade brusque de mise après une perte
+    const latest = list[0];
+    const avgStake = totalStake / list.length;
+    const prevSettled = list.find((x, idx) => idx > 0 && x.status !== "pending");
+    if (
+      latest &&
+      ((prevSettled?.status === "lost" && latest.stake >= prevSettled.stake * 1.8) ||
+        (latest.stake >= avgStake * 2.3 && latest.stake >= 15))
+    ) {
+      weight += 0.45;
+    }
+
+    // 3. Extraction nette positive ou série chaude
+    if (settledNet > 25) {
+      weight += clamp(settledNet / 180, 0.1, 0.55);
+    }
+    if (winStreak >= 3) {
+      weight += clamp((winStreak - 2) * 0.12, 0.12, 0.36);
+    }
+
+    result.set(uid, clamp(weight, 1.0, 2.15));
+  }
+
+  return result;
 }
