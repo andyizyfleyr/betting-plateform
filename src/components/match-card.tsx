@@ -96,12 +96,16 @@ export function MatchCard({
         "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45"
       )}
     >
-      {isLive && (
+      {(isLive || isReal) && (
         <span
           aria-hidden
           className={cn(
             "absolute inset-y-0 left-0 w-[3px]",
-            isReal ? "bg-emerald-600" : "bg-betclic-red"
+            isReal
+              ? isLive
+                ? "bg-emerald-600"
+                : "bg-emerald-600/55"
+              : "bg-betclic-red"
           )}
         />
       )}
