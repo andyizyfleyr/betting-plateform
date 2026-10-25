@@ -28,7 +28,7 @@ export function BottomNav() {
   }
 
   return (
-    <nav className="sticky bottom-0 z-40 w-full border-t border-edge bg-white/98 backdrop-blur-md">
+    <nav className="sticky bottom-0 z-40 w-full border-t border-edge bg-white/98 backdrop-blur-md lg:hidden">
       <div
         className="pb-safe grid grid-cols-5"
         style={{

@@ -30,13 +30,13 @@ const MINI_GAMES = [
 
 export default function JeuxPage() {
   return (
-    <div className="px-4 pb-8 pt-4">
+    <div className="mx-auto w-full max-w-[1360px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
             Casino & Mini-jeux
           </h1>
-          <p className="text-[12px] text-mist">
+          <p className="text-[12px] text-mist lg:text-[13px]">
             Sessions instantanées branchées sur votre portefeuille
           </p>
         </div>
@@ -45,12 +45,12 @@ export default function JeuxPage() {
         </span>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3.5">
+      <div className="mt-4 grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:mt-5 lg:gap-5">
         {MINI_GAMES.map(({ href, badge, tag, title, subtitle, image, imageAlt, stats }, idx) => (
           <Link
             key={href}
             href={href}
-            className="glass-card group overflow-hidden rounded-2xl border border-edge transition-transform active:scale-[0.99]"
+            className="glass-card group overflow-hidden rounded-2xl border border-edge transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99]"
           >
             {/* Vraie miniature 16:9 haute définition */}
             <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
@@ -60,7 +60,7 @@ export default function JeuxPage() {
                 width={1280}
                 height={720}
                 priority={idx === 0}
-                sizes="(max-width: 640px) 100vw, 520px"
+                sizes="(max-width: 768px) 100vw, 640px"
                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
               />
 

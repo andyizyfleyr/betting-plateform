@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, User, Zap } from "lucide-react";
+import { DesktopSidebar } from "@/components/desktop-sidebar";
 import { useApp } from "@/components/providers";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/format";
@@ -100,10 +101,12 @@ function AuthInner() {
   };
 
   return (
-    <main className="pt-safe pb-safe flex flex-1 flex-col justify-between px-5 py-6">
-      <div>
+    <div className="flex min-h-dvh w-full flex-col lg:flex-row">
+      <DesktopSidebar />
+      <main className="pt-safe pb-safe flex flex-1 flex-col justify-between px-5 py-6 lg:items-center lg:justify-center lg:px-10 lg:py-12">
+        <div className="w-full lg:max-w-[460px] lg:rounded-3xl lg:border lg:border-edge lg:bg-white lg:p-8 lg:shadow-xs">
         {/* En-tête sobre */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 lg:hidden">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-betclic-red text-white">
             <Zap className="h-5 w-5 fill-white" strokeWidth={2.2} />
           </span>
@@ -118,7 +121,7 @@ function AuthInner() {
         </div>
 
         {/* Titre concis */}
-        <div className="mt-6">
+        <div className="mt-6 lg:mt-0">
           <h1 className="font-display text-[24px] font-bold leading-tight tracking-tight text-ink">
             {mode === "login" ? "Bon retour" : "Créer un compte"}
           </h1>
@@ -251,6 +254,7 @@ function AuthInner() {
       <p className="pt-6 text-center text-[10.5px] leading-relaxed text-dim">
         18+ · Jouer comporte des risques : endettement, isolement, dépendance.
       </p>
-    </main>
+      </main>
+    </div>
   );
 }

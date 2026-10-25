@@ -189,35 +189,39 @@ export default function PredictionsPage() {
   };
 
   return (
-    <div className="px-4 pb-8 pt-4">
-      {/* En-tête compact */}
-      <div>
-        <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
-          Prédictions
-        </h1>
-        <p className="text-[12px] text-mist">Choix multiples & Oui / Non à cotes fixes</p>
-      </div>
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
+      {/* En-tête compact + Barre de recherche en ligne sur desktop */}
+      <div className="lg:flex lg:items-center lg:justify-between lg:gap-4">
+        <div>
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+            Prédictions
+          </h1>
+          <p className="text-[12px] text-mist lg:text-[13px]">
+            Choix multiples & Oui / Non à cotes fixes
+          </p>
+        </div>
 
-      {/* Barre de recherche (marge 16 px gauche/droite) */}
-      <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
-        <Search className="h-4 w-4 shrink-0 text-dim" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher une question ou un candidat…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Effacer la recherche"
-            className="text-dim active:text-ink"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+        {/* Barre de recherche */}
+        <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:mt-0 lg:w-[360px] xl:w-[400px]">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher une question ou un candidat…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Effacer la recherche"
+              className="text-dim active:text-ink"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Rangée unique collante de 3 pastilles dropdown */}
@@ -293,8 +297,8 @@ export default function PredictionsPage() {
 
       {/* Liste des questions */}
       {questions === null ? (
-        <div className="flex flex-col gap-3">
-          {[0, 1, 2].map((i) => (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
             <div key={i} className="shimmer h-[168px] rounded-2xl" />
           ))}
         </div>
@@ -313,13 +317,13 @@ export default function PredictionsPage() {
           </p>
         </div>
       ) : statusTab === "resolved" ? (
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
           {visibleQuestions.map((q) => (
             <ResolvedQuestionCard key={q.id} q={q} />
           ))}
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
           {visibleQuestions.map((q) =>
             isMultiChoiceQuestion(q) && q.options ? (
               <MultiChoiceQuestionCard

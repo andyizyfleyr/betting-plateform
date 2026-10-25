@@ -205,14 +205,14 @@ export default function MatchsPage() {
   };
 
   return (
-    <div className="px-4 pb-8 pt-4">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
       {/* En-tête compact */}
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
             Matchs
           </h1>
-          <p className="capitalize text-[12px] text-mist">{todayLabel()}</p>
+          <p className="capitalize text-[12px] text-mist lg:text-[13px]">{todayLabel()}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -247,71 +247,99 @@ export default function MatchsPage() {
         </div>
       </div>
 
-      {/* Sélecteur strict d'univers : Matchs réels vs Matchs virtuels */}
-      <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
-        <button
-          type="button"
-          onClick={() => switchUniverse("real")}
-          className={cn(
-            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
-            isRealUniverse
-              ? "bg-emerald-600 text-white shadow-xs"
-              : "text-mist active:bg-elev"
-          )}
-        >
-          <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-          <span className="truncate">Matchs réels</span>
-          {matches !== null && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
-              )}
-            >
-              {realLiveTotal > 0 && (
-                <span
-                  className={cn(
-                    "live-dot h-1.5 w-1.5 rounded-full",
-                    isRealUniverse ? "bg-white" : "bg-emerald-600"
-                  )}
-                />
-              )}
-              {realActiveTotal}
-            </span>
-          )}
-        </button>
+      {/* Sélecteur strict d'univers + Barre de recherche côte à côte sur desktop */}
+      <div className="mt-3 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center lg:gap-3">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+          <button
+            type="button"
+            onClick={() => switchUniverse("real")}
+            className={cn(
+              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+              isRealUniverse
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-mist hover:bg-elev/60 active:bg-elev"
+            )}
+          >
+            <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+            <span className="truncate">Matchs réels</span>
+            {matches !== null && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                  isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                )}
+              >
+                {realLiveTotal > 0 && (
+                  <span
+                    className={cn(
+                      "live-dot h-1.5 w-1.5 rounded-full",
+                      isRealUniverse ? "bg-white" : "bg-emerald-600"
+                    )}
+                  />
+                )}
+                {realActiveTotal}
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => switchUniverse("virtual")}
-          className={cn(
-            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
-            !isRealUniverse
-              ? "bg-betclic-red text-white shadow-xs"
-              : "text-mist active:bg-elev"
-          )}
-        >
-          <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-          <span className="truncate">Matchs virtuels</span>
-          {matches !== null && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
-              )}
+          <button
+            type="button"
+            onClick={() => switchUniverse("virtual")}
+            className={cn(
+              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+              !isRealUniverse
+                ? "bg-betclic-red text-white shadow-xs"
+                : "text-mist hover:bg-elev/60 active:bg-elev"
+            )}
+          >
+            <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+            <span className="truncate">Matchs virtuels</span>
+            {matches !== null && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                  !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                )}
+              >
+                {virtualLiveTotal > 0 && (
+                  <span
+                    className={cn(
+                      "live-dot h-1.5 w-1.5 rounded-full",
+                      !isRealUniverse ? "bg-white" : "bg-betclic-red"
+                    )}
+                  />
+                )}
+                {virtualActiveTotal}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Barre de recherche */}
+        <div className="mt-2.5 flex h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-3.5 max-lg:h-10 max-lg:rounded-xl max-lg:px-3 lg:mt-0">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={
+              isRealUniverse
+                ? "Rechercher un match réel ou une compétition…"
+                : "Rechercher un club ou une ligue virtuelle…"
+            }
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Effacer la recherche"
+              className="text-dim active:text-ink"
             >
-              {virtualLiveTotal > 0 && (
-                <span
-                  className={cn(
-                    "live-dot h-1.5 w-1.5 rounded-full",
-                    !isRealUniverse ? "bg-white" : "bg-betclic-red"
-                  )}
-                />
-              )}
-              {virtualActiveTotal}
-            </span>
+              <X className="h-4 w-4" />
+            </button>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Bandeau explicatif du mode actif */}
@@ -327,32 +355,6 @@ export default function MatchsPage() {
           <span>Compétitions officielles · Cotes fixes opérateur · Coup d&apos;envoi réel</span>
         ) : (
           <span>Simulateur 24h/24 · Matchs de 2-3 min · 1 seul direct à tour de rôle</span>
-        )}
-      </div>
-
-      {/* Barre de recherche */}
-      <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
-        <Search className="h-4 w-4 shrink-0 text-dim" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={
-            isRealUniverse
-              ? "Rechercher un match réel ou une compétition…"
-              : "Rechercher un club ou une ligue virtuelle…"
-          }
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Effacer la recherche"
-            className="text-dim active:text-ink"
-          >
-            <X className="h-4 w-4" />
-          </button>
         )}
       </div>
 
@@ -450,8 +452,10 @@ export default function MatchsPage() {
       {matches === null ? (
         <div className="flex flex-col gap-3">
           <div className="shimmer h-[196px] rounded-2xl" />
-          <div className="shimmer h-[136px] rounded-2xl" />
-          <div className="shimmer h-[136px] rounded-2xl" />
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <div className="shimmer h-[136px] rounded-2xl" />
+            <div className="shimmer h-[136px] rounded-2xl" />
+          </div>
         </div>
       ) : visible.length === 0 ? (
         <div className="mt-10 flex flex-col items-center text-center">
@@ -501,7 +505,7 @@ export default function MatchsPage() {
                 live
                 real={isRealUniverse}
               />
-              <div className="mt-2 flex flex-col gap-2.5">
+              <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
                 {liveRest.map((m) => (
                   <MatchCard key={m.id} match={m} />
                 ))}
@@ -519,7 +523,7 @@ export default function MatchsPage() {
                 }
                 count={upcomingOrdered.length}
               />
-              <div className="mt-2 flex flex-col gap-2.5">
+              <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
                 {upcomingOrdered.map((m, idx) => (
                   <MatchCard
                     key={m.id}
@@ -544,7 +548,7 @@ export default function MatchsPage() {
                   Tout l&apos;historique →
                 </Link>
               </div>
-              <div className="mt-2 flex flex-col gap-2.5">
+              <div className="mt-2 grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
                 {finishedList.map((m) => (
                   <MatchCard key={m.id} match={m} />
                 ))}

@@ -620,7 +620,7 @@ function ResultatsContent() {
   }, [visible, focusedMatch]);
 
   return (
-    <div className="px-4 pt-3.5 pb-6">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pt-3.5 pb-6 lg:px-8 lg:py-6">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
@@ -628,15 +628,17 @@ function ResultatsContent() {
             type="button"
             onClick={() => router.back()}
             aria-label="Retour"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:hidden"
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
           </button>
           <div>
-            <h1 className="font-display text-[20px] font-bold tracking-tight text-ink">
+            <h1 className="font-display text-[20px] font-bold tracking-tight text-ink lg:text-[25px]">
               Résultats
             </h1>
-            <p className="text-[12px] text-mist">Historique des matchs terminés</p>
+            <p className="text-[12px] text-mist lg:text-[13px]">
+              Historique des matchs terminés
+            </p>
           </div>
         </div>
 
@@ -648,61 +650,85 @@ function ResultatsContent() {
         </Link>
       </div>
 
-      {/* Sélecteur strict d'univers : Matchs réels vs Matchs virtuels */}
-      <div className="mt-3.5 grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedUniverse("real");
-            setLeagueFilter("all");
-          }}
-          className={cn(
-            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
-            isRealUniverse
-              ? "bg-emerald-600 text-white shadow-xs"
-              : "text-mist active:bg-elev"
-          )}
-        >
-          <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-          <span className="truncate">Matchs réels</span>
-          {history !== null && (
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
-              )}
-            >
-              {realHistory.length}
-            </span>
-          )}
-        </button>
+      {/* Sélecteur d'univers + Recherche côte à côte sur desktop */}
+      <div className="mt-3.5 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center lg:gap-3">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedUniverse("real");
+              setLeagueFilter("all");
+            }}
+            className={cn(
+              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+              isRealUniverse
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-mist hover:bg-elev/60 active:bg-elev"
+            )}
+          >
+            <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+            <span className="truncate">Matchs réels</span>
+            {history !== null && (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                  isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                )}
+              >
+                {realHistory.length}
+              </span>
+            )}
+          </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedUniverse("virtual");
-            setLeagueFilter("all");
-          }}
-          className={cn(
-            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
-            !isRealUniverse
-              ? "bg-betclic-red text-white shadow-xs"
-              : "text-mist active:bg-elev"
-          )}
-        >
-          <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-          <span className="truncate">Matchs virtuels</span>
-          {history !== null && (
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
-              )}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedUniverse("virtual");
+              setLeagueFilter("all");
+            }}
+            className={cn(
+              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+              !isRealUniverse
+                ? "bg-betclic-red text-white shadow-xs"
+                : "text-mist hover:bg-elev/60 active:bg-elev"
+            )}
+          >
+            <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+            <span className="truncate">Matchs virtuels</span>
+            {history !== null && (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                  !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                )}
+              >
+                {virtualHistory.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Recherche */}
+        <div className="mt-3 flex h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-3.5 max-lg:h-10 max-lg:rounded-xl max-lg:px-3 lg:mt-0">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher une équipe ou compétition…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Effacer la recherche"
+              className="text-dim active:text-ink"
             >
-              {virtualHistory.length}
-            </span>
+              <X className="h-4 w-4" />
+            </button>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Match ciblé depuis un coupon / pari */}
@@ -729,28 +755,6 @@ function ResultatsContent() {
           />
         </section>
       )}
-
-      {/* Recherche */}
-      <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
-        <Search className="h-4 w-4 shrink-0 text-dim" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher une équipe ou compétition…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            aria-label="Effacer la recherche"
-            className="text-dim active:text-ink"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
 
       {/* Rangée unique collante de 3 pastilles dropdown */}
       <FilterDropdownRow
@@ -825,7 +829,8 @@ function ResultatsContent() {
 
       {/* Liste groupée par journée */}
       {history === null ? (
-        <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+          <div className="shimmer h-[118px] rounded-2xl" />
           <div className="shimmer h-[118px] rounded-2xl" />
           <div className="shimmer h-[118px] rounded-2xl" />
           <div className="shimmer h-[118px] rounded-2xl" />
@@ -843,20 +848,22 @@ function ResultatsContent() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {groupedByDay.map((group) => (
             <section key={group.day} className="space-y-2.5">
               <h2 className="px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-dim">
                 {group.day}
               </h2>
-              {group.items.map((m) => (
-                <MatchHistoryCard
-                  key={m.id}
-                  match={m}
-                  expanded={!!expandedIds[m.id]}
-                  onToggle={() => toggleExpand(m.id)}
-                />
-              ))}
+              <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+                {group.items.map((m) => (
+                  <MatchHistoryCard
+                    key={m.id}
+                    match={m}
+                    expanded={!!expandedIds[m.id]}
+                    onToggle={() => toggleExpand(m.id)}
+                  />
+                ))}
+              </div>
             </section>
           ))}
         </div>
@@ -869,7 +876,7 @@ export default function ResultatsPage() {
   return (
     <Suspense
       fallback={
-        <div className="px-4 pt-4 space-y-3">
+        <div className="mx-auto w-full max-w-[1440px] px-4 pt-4 space-y-3 lg:px-8 lg:py-6">
           <div className="shimmer h-10 rounded-xl" />
           <div className="shimmer h-[120px] rounded-2xl" />
           <div className="shimmer h-[120px] rounded-2xl" />

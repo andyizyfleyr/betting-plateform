@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="fr">
       <body className="bg-deep text-ink antialiased">
         <Providers>
-          <div className="mx-auto flex min-h-dvh w-full flex-col overflow-x-clip bg-deep sm:max-w-[440px] sm:border-x sm:border-edge sm:shadow-sm">
+          <div className="mx-auto flex min-h-dvh w-full flex-col overflow-x-clip bg-deep max-lg:max-w-[480px] max-lg:sm:border-x max-lg:sm:border-edge max-lg:sm:shadow-sm">
             {children}
           </div>
         </Providers>

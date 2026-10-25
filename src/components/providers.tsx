@@ -38,6 +38,16 @@ interface Toast {
   kind: "success" | "error" | "info";
 }
 
+export type AdminTabKey =
+  | "dashboard"
+  | "forecasts"
+  | "matches"
+  | "ml"
+  | "questions"
+  | "users"
+  | "bets"
+  | "deposits";
+
 interface AppContextValue {
   user: ClientUser | null;
   balance: number;
@@ -71,6 +81,10 @@ interface AppContextValue {
   betsVersion: number;
   bumpBets: () => void;
   pendingCount: number;
+  adminTab: AdminTabKey;
+  setAdminTab: (t: AdminTabKey) => void;
+  adminPendingFinance: number;
+  setAdminPendingFinance: (n: number) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -100,6 +114,8 @@ export function Providers({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [adminTab, setAdminTab] = useState<AdminTabKey>("dashboard");
+  const [adminPendingFinance, setAdminPendingFinance] = useState(0);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const prevBetStatuses = useRef<Map<string, string> | null>(null);
   const userRef = useRef<ClientUser | null>(null);
@@ -341,6 +357,10 @@ export function Providers({ children }: { children: ReactNode }) {
       betsVersion,
       bumpBets: () => setBetsVersion((v) => v + 1),
       pendingCount,
+      adminTab,
+      setAdminTab,
+      adminPendingFinance,
+      setAdminPendingFinance,
     }),
     [
       user,
@@ -358,6 +378,8 @@ export function Providers({ children }: { children: ReactNode }) {
       toast,
       betsVersion,
       pendingCount,
+      adminTab,
+      adminPendingFinance,
     ]
   );
 
@@ -386,7 +408,7 @@ const TOAST_STYLE = {
 function Toasts({ toasts }: { toasts: Toast[] }) {
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-3 z-[90] mx-auto flex w-full max-w-[420px] flex-col items-center gap-2 px-3.5"
+      className="pointer-events-none fixed inset-x-0 top-3 z-[90] mx-auto flex w-full max-w-[420px] flex-col items-center gap-2 px-3.5 lg:left-auto lg:right-6 lg:top-4 lg:mx-0 lg:px-0"
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
       <AnimatePresence>

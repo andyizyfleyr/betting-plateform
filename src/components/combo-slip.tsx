@@ -66,7 +66,7 @@ export function ComboFloatingBar() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-[66px] z-40 mx-auto w-full max-w-[440px] px-3.5"
+      className="pointer-events-none fixed inset-x-0 bottom-[66px] z-40 mx-auto w-full max-w-[440px] px-3.5 lg:bottom-6 lg:left-auto lg:right-8 lg:mx-0 lg:max-w-[420px] lg:px-0"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <motion.div
@@ -259,7 +259,7 @@ export function ComboSheet() {
           onDragEnd={(_, info) => {
             if (info.offset.y > 120 || info.velocity.y > 550) finishAndClose(false);
           }}
-          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl lg:inset-0 lg:m-auto lg:h-fit lg:max-h-[85dvh] lg:max-w-[500px] lg:rounded-3xl lg:border"
         >
           {phase === "success" && placedInfo ? (
             <div className="px-5 pb-7 pt-6 text-center">

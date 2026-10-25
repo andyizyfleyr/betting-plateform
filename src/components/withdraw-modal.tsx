@@ -158,7 +158,7 @@ export function WithdrawModal({
           animate={{ y: 0 }}
           exit={{ y: "100%" }}
           transition={{ type: "spring", stiffness: 380, damping: 36 }}
-          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+          className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl lg:inset-0 lg:m-auto lg:h-fit lg:max-h-[85dvh] lg:max-w-[480px] lg:rounded-3xl lg:border"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-edge px-4 py-3.5">
             <div>

@@ -21,10 +21,13 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
+  const hasLiveSidePanel =
+    isLive && showTracker && (isReal ? realStatsAvailable : true);
+
   return (
     <section
       onClick={() => openMarkets(match)}
-      className="glass-card relative cursor-pointer overflow-hidden rounded-2xl border-edge p-4 transition-colors active:bg-elev/40"
+      className="glass-card relative cursor-pointer overflow-hidden rounded-2xl border-edge p-4 transition-colors hover:border-ink/15 active:bg-elev/40 lg:p-6"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -74,98 +77,116 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
         </div>
       </div>
 
-      <div className="my-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <TeamCol
-          name={match.homeTeam}
-          logo={match.homeLogo}
-          redCards={match.redHome ?? 0}
-        />
+      <div
+        className={cn(
+          hasLiveSidePanel && "xl:mt-4 xl:grid xl:grid-cols-2 xl:items-center xl:gap-6"
+        )}
+      >
+        <div>
+          <div className="my-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 xl:my-3">
+            <TeamCol
+              name={match.homeTeam}
+              logo={match.homeLogo}
+              redCards={match.redHome ?? 0}
+            />
 
-        <div className="flex flex-col items-center px-2">
-          {isLive ? (
-            <>
-              <div className="flex items-center gap-1.5 rounded-2xl bg-elev/80 px-3.5 py-1.5">
-                <span className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
-                  {match.homeScore ?? 0}
-                </span>
-                <span className="font-display text-[18px] font-bold text-dim">:</span>
-                <span className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
-                  {match.awayScore ?? 0}
-                </span>
+            <div className="flex flex-col items-center px-2">
+              {isLive ? (
+                <>
+                  <div className="flex items-center gap-1.5 rounded-2xl bg-elev/80 px-3.5 py-1.5">
+                    <span className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
+                      {match.homeScore ?? 0}
+                    </span>
+                    <span className="font-display text-[18px] font-bold text-dim">:</span>
+                    <span className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
+                      {match.awayScore ?? 0}
+                    </span>
+                  </div>
+                  <div className="mt-2">
+                    <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
+                  </div>
+                </>
+              ) : isReal && match.kickoffReached ? (
+                <>
+                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                    VS
+                  </span>
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-amber-700">
+                    <Lock className="h-2.5 w-2.5" strokeWidth={2.4} />
+                    Coup d&apos;envoi atteint
+                  </span>
+                </>
+              ) : isReal ? (
+                <>
+                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                    VS
+                  </span>
+                  <span className="mt-2 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-semibold text-ink">
+                    {formatKickoff(match.startsAt)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                    VS
+                  </span>
+                  <KickoffCountdown startsAt={match.startsAt} className="mt-2" />
+                </>
+              )}
+            </div>
+
+            <TeamCol
+              name={match.awayTeam}
+              logo={match.awayLogo}
+              redCards={match.redAway ?? 0}
+            />
+          </div>
+
+          {isLive && hasGoals && (
+            <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10.5px] text-mist">
+              <div className="min-w-0">
+                {homeGoals.map((g, i) => (
+                  <p key={i} className="truncate font-medium text-ink">
+                    ⚽ {g}
+                  </p>
+                ))}
               </div>
-              <div className="mt-2">
-                <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
+              <div className="min-w-0 text-right">
+                {awayGoals.map((g, i) => (
+                  <p key={i} className="truncate font-medium text-ink">
+                    {g} ⚽
+                  </p>
+                ))}
               </div>
-            </>
-          ) : isReal && match.kickoffReached ? (
-            <>
-              <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
-                VS
-              </span>
-              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-amber-700">
-                <Lock className="h-2.5 w-2.5" strokeWidth={2.4} />
-                Coup d&apos;envoi atteint
-              </span>
-            </>
-          ) : isReal ? (
-            <>
-              <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
-                VS
-              </span>
-              <span className="mt-2 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-semibold text-ink">
-                {formatKickoff(match.startsAt)}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
-                VS
-              </span>
-              <KickoffCountdown startsAt={match.startsAt} className="mt-2" />
-            </>
+            </div>
           )}
+
+          <div className="hidden xl:block">
+            <ResultOdds match={match} />
+          </div>
         </div>
 
-        <TeamCol
-          name={match.awayTeam}
-          logo={match.awayLogo}
-          redCards={match.redAway ?? 0}
-        />
+        <div>
+          {!isReal && isLive && showTracker && (
+            <LiveMatchTracker match={match} className="mb-3 xl:mb-0" />
+          )}
+          {isReal && isLive && showTracker && realStatsAvailable && (
+            <RealMatchStatsCard
+              stats={match.realStats}
+              homeTeam={match.homeTeam}
+              awayTeam={match.awayTeam}
+              htHomeScore={match.htHomeScore}
+              htAwayScore={match.htAwayScore}
+              compact
+              className="mb-3 xl:mb-0"
+            />
+          )}
+
+          <div className="xl:hidden">
+            <ResultOdds match={match} />
+          </div>
+        </div>
       </div>
-
-      {isLive && hasGoals && (
-        <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10.5px] text-mist">
-          <div className="min-w-0">
-            {homeGoals.map((g, i) => (
-              <p key={i} className="truncate font-medium text-ink">
-                ⚽ {g}
-              </p>
-            ))}
-          </div>
-          <div className="min-w-0 text-right">
-            {awayGoals.map((g, i) => (
-              <p key={i} className="truncate font-medium text-ink">
-                {g} ⚽
-              </p>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!isReal && isLive && showTracker && <LiveMatchTracker match={match} className="mb-3" />}
-      {isReal && isLive && showTracker && realStatsAvailable && (
-        <RealMatchStatsCard
-          stats={match.realStats}
-          homeTeam={match.homeTeam}
-          awayTeam={match.awayTeam}
-          htHomeScore={match.htHomeScore}
-          htAwayScore={match.htAwayScore}
-          compact
-          className="mb-3"
-        />
-      )}
-
-      <ResultOdds match={match} />
     </section>
   );
 }
