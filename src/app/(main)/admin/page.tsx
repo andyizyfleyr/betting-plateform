@@ -291,53 +291,53 @@ const MARKET_CATALOG: {
 }[] = [
   {
     key: "result",
-    label: "Résultat du match",
-    short: "1/N/2",
+    label: "1x2",
+    short: "1x2",
     outcomes: [
-      { key: "home", label: "Victoire du domicile (Domicile)", short: "1" },
-      { key: "draw", label: "Match nul", short: "X" },
-      { key: "away", label: "Victoire de l'extérieur (Extérieur)", short: "2" },
+      { key: "home", label: "V1 (Domicile)", short: "V1" },
+      { key: "draw", label: "X (Match nul)", short: "X" },
+      { key: "away", label: "V2 (Extérieur)", short: "V2" },
     ],
   },
   {
     key: "double_chance",
     label: "Double chance",
-    short: "1X/12/X2",
+    short: "1X · 12 · 2X",
     outcomes: [
-      { key: "1X", label: "Domicile ou nul (1X)", short: "1X" },
-      { key: "12", label: "Domicile ou extérieur (12)", short: "12" },
-      { key: "X2", label: "Nul ou extérieur (X2)", short: "X2" },
+      { key: "1X", label: "1X (Domicile ou X)", short: "1X" },
+      { key: "12", label: "12 (Domicile ou Extérieur)", short: "12" },
+      { key: "X2", label: "2X (Extérieur ou X)", short: "2X" },
     ],
   },
   {
     key: "total_ou",
-    label: "Total de buts (plus/moins)",
-    short: "Plus/Moins",
+    label: "Total",
+    short: "Total",
     outcomes: [
-      { key: "ou_1_5_over", label: "Plus de 1,5 buts", short: "+1,5" },
-      { key: "ou_1_5_under", label: "Moins de 1,5 buts", short: "-1,5" },
-      { key: "ou_2_5_over", label: "Plus de 2,5 buts", short: "+2,5" },
-      { key: "ou_2_5_under", label: "Moins de 2,5 buts", short: "-2,5" },
-      { key: "ou_3_5_over", label: "Plus de 3,5 buts", short: "+3,5" },
-      { key: "ou_3_5_under", label: "Moins de 3,5 buts", short: "-3,5" },
+      { key: "ou_1_5_over", label: "Total : Plus de (1.5)", short: "TP (1.5)" },
+      { key: "ou_1_5_under", label: "Total : Moins de (1.5)", short: "TM (1.5)" },
+      { key: "ou_2_5_over", label: "Total : Plus de (2.5)", short: "TP (2.5)" },
+      { key: "ou_2_5_under", label: "Total : Moins de (2.5)", short: "TM (2.5)" },
+      { key: "ou_3_5_over", label: "Total : Plus de (3.5)", short: "TP (3.5)" },
+      { key: "ou_3_5_under", label: "Total : Moins de (3.5)", short: "TM (3.5)" },
     ],
   },
   {
     key: "btts",
-    label: "Les deux équipes marquent",
-    short: "BTTS",
+    label: "Les deux équipes vont marquer",
+    short: "Les 2 marquent",
     outcomes: [
-      { key: "oui", label: "Oui — les deux équipes marquent", short: "Oui" },
-      { key: "non", label: "Non — les deux équipes ne marquent pas", short: "Non" },
+      { key: "oui", label: "Les deux équipes vont marquer : Oui", short: "Oui" },
+      { key: "non", label: "Les deux équipes vont marquer : Non", short: "Non" },
     ],
   },
   {
     key: "odd_even",
-    label: "Total de buts (pair/impair)",
-    short: "Pair/Impair",
+    label: "Total Pair / Impair",
+    short: "Pair / Impair",
     outcomes: [
-      { key: "pair", label: "Total de buts pair", short: "Pair" },
-      { key: "impair", label: "Total de buts impair", short: "Impair" },
+      { key: "pair", label: "Total Pair / Impair : Pair", short: "Pair" },
+      { key: "impair", label: "Total Pair / Impair : Impair", short: "Impair" },
     ],
   },
   {
@@ -345,14 +345,14 @@ const MARKET_CATALOG: {
     label: "Score exact",
     short: "Score exact",
     outcomes: [
-      { key: "1_0", label: "Score exact 1-0", short: "1-0" },
-      { key: "2_0", label: "Score exact 2-0", short: "2-0" },
-      { key: "2_1", label: "Score exact 2-1", short: "2-1" },
-      { key: "0_0", label: "Score exact 0-0", short: "0-0" },
-      { key: "1_1", label: "Score exact 1-1", short: "1-1" },
-      { key: "0_1", label: "Score exact 0-1", short: "0-1" },
-      { key: "0_2", label: "Score exact 0-2", short: "0-2" },
-      { key: "1_2", label: "Score exact 1-2", short: "1-2" },
+      { key: "1_0", label: "Score exact : 1-0", short: "1-0" },
+      { key: "2_0", label: "Score exact : 2-0", short: "2-0" },
+      { key: "2_1", label: "Score exact : 2-1", short: "2-1" },
+      { key: "0_0", label: "Score exact : 0-0", short: "0-0" },
+      { key: "1_1", label: "Score exact : 1-1", short: "1-1" },
+      { key: "0_1", label: "Score exact : 0-1", short: "0-1" },
+      { key: "0_2", label: "Score exact : 0-2", short: "0-2" },
+      { key: "1_2", label: "Score exact : 1-2", short: "1-2" },
     ],
   },
 ];
@@ -719,7 +719,7 @@ function Dashboard({ stats }: { stats: PanelData["stats"] }) {
     { label: "Joueurs", value: String(stats.totalUsers), Icon: Users },
     { label: "Matchs live", value: String(stats.liveMatches), Icon: Trophy, accent: stats.liveMatches > 0 },
     { label: "Pronostics ouverts", value: String(stats.openQuestions), Icon: HelpCircle },
-    { label: "Tickets totaux", value: String(stats.totalBets), Icon: Ticket },
+    { label: "Coupons totaux", value: String(stats.totalBets), Icon: Ticket },
     { label: "Volume misé", value: eur(stats.stake), Icon: CircleDollarSign },
     { label: "Gains versés", value: eur(stats.payouts), Icon: TrendingUp },
   ];
@@ -969,17 +969,17 @@ function MatchesTab({
 
             <div className="mt-2.5 grid grid-cols-3 gap-2">
               <AdminInput
-                label="Cote 1"
+                label="Cote V1"
                 value={form.oddsHome}
                 onChange={(v) => setForm({ ...form, oddsHome: v })}
               />
               <AdminInput
-                label="Cote N"
+                label="Cote X"
                 value={form.oddsDraw}
                 onChange={(v) => setForm({ ...form, oddsDraw: v })}
               />
               <AdminInput
-                label="Cote 2"
+                label="Cote V2"
                 value={form.oddsAway}
                 onChange={(v) => setForm({ ...form, oddsAway: v })}
               />
@@ -1274,12 +1274,12 @@ function AdminMatchCard({
         </div>
       )}
 
-      {/* Cotes 1/N/2 actuelles + édition rapide */}
+      {/* Cotes 1x2 (V1 / X / V2) actuelles + édition rapide */}
       {m.status !== "finished" && (
         <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-dim">
           <span>
-            1: <strong className="text-ink">{formatOdds(m.oddsHome)}</strong> · N:{" "}
-            <strong className="text-ink">{formatOdds(m.oddsDraw ?? 3.2)}</strong> · 2:{" "}
+            V1: <strong className="text-ink">{formatOdds(m.oddsHome)}</strong> · X:{" "}
+            <strong className="text-ink">{formatOdds(m.oddsDraw ?? 3.2)}</strong> · V2:{" "}
             <strong className="text-ink">{formatOdds(m.oddsAway)}</strong>
           </span>
           <button
@@ -1304,7 +1304,7 @@ function AdminMatchCard({
             inputMode="decimal"
             value={o1}
             onChange={(e) => setO1(e.target.value)}
-            placeholder="1"
+            placeholder="V1"
             className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
           />
           <input
@@ -1312,7 +1312,7 @@ function AdminMatchCard({
             inputMode="decimal"
             value={oN}
             onChange={(e) => setON(e.target.value)}
-            placeholder="N"
+            placeholder="X"
             className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
           />
           <input
@@ -1320,7 +1320,7 @@ function AdminMatchCard({
             inputMode="decimal"
             value={o2}
             onChange={(e) => setO2(e.target.value)}
-            placeholder="2"
+            placeholder="V2"
             className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
           />
           <button
@@ -2471,7 +2471,7 @@ function BetsTab({
               },
               {
                 value: "cashed",
-                label: "Cash-out",
+                label: "Vendus",
                 count: searchedRows.filter((r) => r.status === "cashed").length,
               },
               {
@@ -2808,7 +2808,7 @@ function StatusBadge({ status }: { status: string }) {
     cancelled: { label: "Annulé", cls: "bg-elev text-dim" },
     won: { label: "Gagné", cls: "bg-win/12 text-win" },
     lost: { label: "Perdu", cls: "bg-elev text-dim" },
-    cashed: { label: "Cash-out", cls: "bg-sky-500/12 text-sky-700" },
+    cashed: { label: "Vendu", cls: "bg-sky-500/12 text-sky-700" },
     void: { label: "Remboursé", cls: "bg-amber-500/12 text-amber-800" },
     paid: { label: "Payé", cls: "bg-win/12 text-win" },
     credited: { label: "Crédité", cls: "bg-win/12 text-win" },

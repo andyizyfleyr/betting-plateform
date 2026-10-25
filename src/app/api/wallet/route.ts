@@ -12,6 +12,7 @@ import {
   withdrawals,
 } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import { isKnownMarket, marketLabelFor } from "@/lib/markets";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 import { computeWithdrawalEligibility } from "@/lib/wager";
@@ -168,11 +169,14 @@ export async function GET(req: NextRequest) {
 
   // 3. Paris sportifs : trace à la fois le débit (-Mise à placedAt) ET le crédit (+Gain/+Cash-out à settledAt)
   for (const b of sportRows) {
+    const resolvedSel = isKnownMarket(b.market)
+      ? (marketLabelFor(b.market, b.selection, b.homeTeam, b.awayTeam) ?? b.selectionLabel)
+      : b.selectionLabel;
     entries.push({
       id: `sb-st-${b.id}`,
       type: "stake",
       title: `Mise · ${b.homeTeam} – ${b.awayTeam}`,
-      subtitle: `${b.selectionLabel} (${b.odds.toFixed(2)})`,
+      subtitle: `${resolvedSel} (${b.odds.toFixed(2)})`,
       amount: -round2(b.stake),
       status: b.status,
       createdAt: b.placedAt.toISOString(),
@@ -183,7 +187,7 @@ export async function GET(req: NextRequest) {
         id: `sb-win-${b.id}`,
         type: "win",
         title: `Gain · ${b.homeTeam} – ${b.awayTeam}`,
-        subtitle: b.selectionLabel,
+        subtitle: resolvedSel,
         amount: round2(b.potentialWin),
         status: "won",
         createdAt: settledIso,
@@ -192,8 +196,8 @@ export async function GET(req: NextRequest) {
       entries.push({
         id: `sb-co-${b.id}`,
         type: "cashout",
-        title: `Cash-out · ${b.homeTeam} – ${b.awayTeam}`,
-        subtitle: b.selectionLabel,
+        title: `Vente du coupon · ${b.homeTeam} – ${b.awayTeam}`,
+        subtitle: resolvedSel,
         amount: round2(b.cashOutAmount),
         status: "cashed",
         createdAt: settledIso,
@@ -203,7 +207,7 @@ export async function GET(req: NextRequest) {
         id: `sb-void-${b.id}`,
         type: "cashout",
         title: `Remboursement · ${b.homeTeam} – ${b.awayTeam}`,
-        subtitle: b.selectionLabel,
+        subtitle: resolvedSel,
         amount: round2(b.stake),
         status: "void",
         createdAt: settledIso,
@@ -211,7 +215,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 4. Prédictions : débit (-Mise) + crédit éventuel (+Gain / +Cash-out)
+  // 4. Prédictions : débit (-Mise) + crédit éventuel (+Gain / +Vente du coupon)
   for (const p of predRows) {
     entries.push({
       id: `pb-st-${p.id}`,
@@ -237,7 +241,7 @@ export async function GET(req: NextRequest) {
       entries.push({
         id: `pb-co-${p.id}`,
         type: "cashout",
-        title: "Cash-out Prédiction",
+        title: "Vente du coupon · Prédiction",
         subtitle: `${p.question} · ${p.selectionLabel}`,
         amount: round2(p.cashOutAmount),
         status: "cashed",
@@ -246,13 +250,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 5. Combinés : débit (-Mise) + crédit éventuel (+Gain / +Cash-out)
+  // 5. Combinés : débit (-Mise) + crédit éventuel (+Gain / +Vente du coupon)
   for (const c of comboRows) {
     const legCount = (c.legs ?? []).length;
     entries.push({
       id: `cb-st-${c.id}`,
       type: "stake",
-      title: `Mise Combiné (${legCount} sél.)`,
+      title: `Mise Pari combiné (${legCount} sél.)`,
       subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
       amount: -round2(c.stake),
       status: c.status,
@@ -263,7 +267,7 @@ export async function GET(req: NextRequest) {
       entries.push({
         id: `cb-win-${c.id}`,
         type: "win",
-        title: `Gain Combiné (${legCount} sél.)`,
+        title: `Gain Pari combiné (${legCount} sél.)`,
         subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
         amount: round2(c.potentialWin),
         status: "won",
@@ -273,7 +277,7 @@ export async function GET(req: NextRequest) {
       entries.push({
         id: `cb-co-${c.id}`,
         type: "cashout",
-        title: `Cash-out Combiné (${legCount} sél.)`,
+        title: `Vente du coupon · Combiné (${legCount} sél.)`,
         subtitle: `Cote ${c.totalOdds.toFixed(2)}`,
         amount: round2(c.cashOutAmount),
         status: "cashed",

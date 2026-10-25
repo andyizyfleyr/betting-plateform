@@ -175,13 +175,13 @@ export function MatchCard({
       {/* Tracker 2D dépliable sur carte live (recherche / filtre ligue) */}
       {isLive && showTracker && <LiveMatchTracker match={match} className="mt-2.5" />}
 
-      {/* Cotes 1 / N / 2 + accès aux marchés */}
+      {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés */}
       {!isFinished && (
         <div className="mt-3">
           <ResultOdds match={match} />
           {marketCount > 1 && (
             <div className="mt-2 flex items-center justify-between border-t border-edge/60 pt-2 text-[11px]">
-              <span className="text-dim">Plus/Moins, Double chance, Score exact…</span>
+              <span className="text-dim">Total, Double chance, Handicap, Score exact…</span>
               <span className="inline-flex shrink-0 items-center gap-0.5 font-display font-bold text-ink">
                 +{marketCount - 1} marchés
                 <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
@@ -275,34 +275,34 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
   const { openBet, target, isInCombo, comboQuickMode, toggleComboLeg, toast } = useApp();
   const comboUid = `sport-${match.id}`;
 
-  // Si en fin de match une issue 1/N/2 est déjà fermée dans markets, on reflète exactement les issues ouvertes
+  // Si en fin de match une issue 1x2 est déjà fermée dans markets, on reflète exactement les issues ouvertes
   const resGroup = match.markets?.find((g) => g.key === "result");
   const openKeys = resGroup ? new Set(resGroup.outcomes.map((o) => o.key)) : null;
 
   const cells: { key: string; tag: string; odds: number; label: string; closed: boolean }[] = [
     {
       key: "home",
-      tag: "1",
+      tag: "V1",
       odds: match.oddsHome,
-      label: `Victoire ${match.homeTeam}`,
+      label: `V1 (${match.homeTeam})`,
       closed: openKeys ? !openKeys.has("home") : false,
     },
     ...(match.oddsDraw != null
       ? [
           {
             key: "draw",
-            tag: "N",
+            tag: "X",
             odds: match.oddsDraw,
-            label: "Match nul",
+            label: "X (Match nul)",
             closed: openKeys ? !openKeys.has("draw") : false,
           },
         ]
       : []),
     {
       key: "away",
-      tag: "2",
+      tag: "V2",
       odds: match.oddsAway,
-      label: `Victoire ${match.awayTeam}`,
+      label: `V2 (${match.awayTeam})`,
       closed: openKeys ? !openKeys.has("away") : false,
     },
   ];
@@ -341,7 +341,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
                   odds: c.odds,
                 });
                 if (res === "full") {
-                  toast({ kind: "error", title: "Combiné complet (8 sélections max)" });
+                  toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
                 }
                 return;
               }
@@ -351,7 +351,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
                 odds: c.odds,
                 label: c.label,
                 market: "result",
-                marketLabel: "Résultat du match",
+                marketLabel: "1x2",
               });
             }}
           />

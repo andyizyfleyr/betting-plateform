@@ -19,7 +19,7 @@ type SheetCategory = "all" | "main" | "halftime" | "goals" | "teams" | "scores";
 const CATEGORY_TABS: Array<{ key: SheetCategory; label: string }> = [
   { key: "all", label: "Tous" },
   { key: "main", label: "Principaux" },
-  { key: "halftime", label: "Mi-temps" },
+  { key: "halftime", label: "1ère mi-temps" },
   { key: "goals", label: "Buts" },
   { key: "teams", label: "Équipes" },
   { key: "scores", label: "Scores" },
@@ -420,7 +420,7 @@ export function MarketSheet() {
                             if (res === "full") {
                               toast({
                                 kind: "error",
-                                title: "Combiné complet (8 sélections max)",
+                                title: "Coupon complet (8 sélections max)",
                               });
                             }
                             return;
@@ -502,15 +502,15 @@ function AccordionItem({
           {group.rows ? (
             <div className="space-y-2">
               {(group.rows[0]?.outcomes.length ?? 2) === 3 ? (
-                <div className="grid grid-cols-[46px_1fr_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
+                <div className="grid grid-cols-[50px_1fr_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
                   <span className="text-center">Hcap</span>
-                  <span className="text-center">1</span>
-                  <span className="text-center">Nul</span>
-                  <span className="text-center">2</span>
+                  <span className="text-center">V1</span>
+                  <span className="text-center">X</span>
+                  <span className="text-center">V2</span>
                 </div>
               ) : (
-                <div className="grid grid-cols-[46px_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
-                  <span className="text-center">Seuil</span>
+                <div className="grid grid-cols-[50px_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
+                  <span className="text-center">Total</span>
                   <span className="text-center">Plus de</span>
                   <span className="text-center">Moins de</span>
                 </div>
@@ -521,8 +521,8 @@ function AccordionItem({
                   className={cn(
                     "grid items-center gap-2",
                     row.outcomes.length === 3
-                      ? "grid-cols-[46px_1fr_1fr_1fr]"
-                      : "grid-cols-[46px_1fr_1fr]"
+                      ? "grid-cols-[50px_1fr_1fr_1fr]"
+                      : "grid-cols-[50px_1fr_1fr]"
                   )}
                 >
                   <span className="flex h-11 items-center justify-center rounded-xl bg-elev font-display text-[12px] font-bold tabular-nums text-ink">

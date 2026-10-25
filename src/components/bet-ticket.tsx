@@ -41,13 +41,13 @@ export function BetTicket({
       triggerHaptic(user?.haptics, [22, 30, 45]);
       toast({
         kind: "success",
-        title: "Pari encaissé",
+        title: "Coupon vendu",
         description: `+${eur(r.value)} crédités sur votre solde`,
       });
     } catch (e) {
       toast({
         kind: "error",
-        title: "Encaissement impossible",
+        title: "Vente du coupon impossible",
         description: e instanceof Error ? e.message : "Réessayez dans un instant",
       });
     } finally {
@@ -212,7 +212,7 @@ export function BetTicket({
           <Amount label="Résultat" value={`-${eur(bet.stake)}`} tone="lost" align="right" />
         ) : cashed ? (
           <Amount
-            label="Encaissé"
+            label="Vendu pour"
             value={`+${eur(bet.cashOutAmount ?? 0)}`}
             tone="cash"
             align="right"
@@ -229,13 +229,13 @@ export function BetTicket({
         )}
       </div>
 
-      {/* Cash-out */}
+      {/* Vendre le coupon (1xBet Cash Out) */}
       {canCashOut && (
         <div className="mt-3">
           {confirming ? (
             <div className="flex items-center gap-2 rounded-xl border border-edge bg-elev p-2">
               <p className="flex-1 pl-1 text-[12px] font-medium text-ink">
-                Encaisser {eur(bet.cashOut!)} ?
+                Vendre pour {eur(bet.cashOut!)} ?
               </p>
               <button
                 type="button"
@@ -266,7 +266,7 @@ export function BetTicket({
               className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-ink font-display text-[12.5px] font-bold text-white active:opacity-90"
             >
               <HandCoins className="h-4 w-4" strokeWidth={2.1} />
-              Cash-out · {eur(bet.cashOut!)}
+              Vendre le coupon · {eur(bet.cashOut!)}
             </button>
           )}
         </div>
@@ -301,7 +301,7 @@ function StatusPill({
   if (status === "cashed") {
     return (
       <span className="shrink-0 rounded-full bg-sky-500/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-sky-700">
-        Cash-out
+        Vendu
       </span>
     );
   }

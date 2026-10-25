@@ -207,7 +207,7 @@ export default function ParisPage() {
           <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
             Mes paris
           </h1>
-          <p className="text-[12px] text-mist">Tickets en cours et historique</p>
+          <p className="text-[12px] text-mist">Coupons en cours et historique des paris</p>
         </div>
       </div>
 
@@ -261,7 +261,7 @@ export default function ParisPage() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Rechercher un match, une prédiction, un combiné…"
+          placeholder="Rechercher un match, un coupon, un combiné…"
           className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
         />
         {query && (
@@ -359,7 +359,7 @@ export default function ParisPage() {
               },
               {
                 value: "cashed",
-                label: "Cash-out",
+                label: "Vendus",
                 count: bets !== null ? outcomeCounts.cashed : undefined,
               },
               {
@@ -402,7 +402,7 @@ export default function ParisPage() {
           <p className="mt-1 max-w-[240px] text-[12.5px] text-dim">
             {tab === "ongoing"
               ? "Choisissez une prédiction ou un match pour placer une mise."
-              : "Modifiez vos filtres ou consultez vos tickets en cours."}
+              : "Modifiez vos filtres ou consultez vos coupons en cours."}
           </p>
           {tab === "ongoing" && (
             <div className="mt-4 flex gap-2">
