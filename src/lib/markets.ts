@@ -561,8 +561,13 @@ function buildMarketGroup(
   };
 }
 
-export function buildMarkets(home: string, away: string, bets?: BetLike[]): MarketGroup[] {
-  const model = liveScoreModel(home, away, 0, 0, 0);
+export function buildMarkets(
+  home: string,
+  away: string,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number },
+  bets?: BetLike[]
+): MarketGroup[] {
+  const model = liveScoreModel(home, away, 0, 0, 0, opts);
   const out: MarketGroup[] = [];
   for (const m of MARKETS) {
     const grp = buildMarketGroup(m, home, away, model, 0, 0, 0, false, bets);
@@ -594,11 +599,12 @@ export function marketOddsFor(
   outcome: string,
   home: string,
   away: string,
+  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number },
   bets?: BetLike[]
 ): number | null {
   const def = MARKET_BY_KEY.get(market);
   if (!def) return null;
-  const model = liveScoreModel(home, away, 0, 0, 0);
+  const model = liveScoreModel(home, away, 0, 0, 0, opts);
   const grp = buildMarketGroup(def, home, away, model, 0, 0, 0, false, bets);
   return grp?.outcomes.find((o) => o.key === outcome)?.odds ?? null;
 }

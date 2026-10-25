@@ -36,10 +36,20 @@ export function decimalToFraction(decimal: number) {
   return `${bestN}/${bestD}`;
 }
 
-/** "Aujourd'hui · 21:00" | "Demain · 18:30" | "sam. 14 juin · 20:45" */
+/** "Dans 40 s" | "Dans 2 min" | "Aujourd'hui · 21:00" | "Demain · 18:30" | "sam. 14 juin · 20:45" */
 export function formatKickoff(iso: string | Date) {
   const date = new Date(iso);
   const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+
+  if (diffMs > -30_000 && diffMs <= 15 * 60_000) {
+    if (diffMs <= 5_000) return "Imminent";
+    const secs = Math.round(diffMs / 1_000);
+    if (secs < 60) return `Dans ${secs} s`;
+    const mins = Math.ceil(secs / 60);
+    return `Dans ${mins} min`;
+  }
+
   const time = new Intl.DateTimeFormat("fr-FR", {
     hour: "2-digit",
     minute: "2-digit",

@@ -1,10 +1,18 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { tapHistory } from "@/db/schema";
+import {
+  buildSmartPlayerSignal,
+  getGlobalHouseHealth,
+  invalidateHouseHealthCache,
+} from "./house-brain";
 
 /**
- * Moteur du jeu Tap Win — port fidèle de tap.php.
- * Constantes, calcul du multiplicateur, crash point, profil joueur et santé système.
+ * Moteur intelligent (« rusé ») du jeu Tap Win :
+ * - Détecte en temps réel le micro-scalping (sorties systématiques à 1 clic / ×1.05),
+ *   les montantes type Martingale, les séries chaudes et les grosses mises.
+ * - Calibre dynamiquement la distribution des points de crash et les « near-misses »
+ *   psychologiques (ex. ×1.95, ×2.90, ×4.85) tout en préservant l'API exacte du jeu.
  */
 
 export const TAP_CONFIG = {
@@ -12,7 +20,7 @@ export const TAP_CONFIG = {
   INITIAL_MULTIPLIER: 1.0,
   GROWTH_FACTOR: 1.05,
   MAX_MULTIPLIER: 100.0,
-  HIGH_BET_THRESHOLD: 1.5,
+  HIGH_BET_THRESHOLD: 2.5,
   MIN_BET: 1,
   CURRENCY_SYMBOL: "$",
   DECIMALS: 2,
@@ -34,14 +42,12 @@ export interface PlayerProfile {
   type: string;
   correction: number;
   forceCrash: boolean;
+  lowExitRate: number;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-// ---------------- Session en mémoire (un seul utilisateur, id = 1) ----------------
-
 type SessionMap = Record<number, TapSession>;
-
 const g = globalThis as typeof globalThis & { __tapSessions?: SessionMap };
 
 function store(): SessionMap {
@@ -60,8 +66,6 @@ export function clearSession(uid: number) {
   delete store()[uid];
 }
 
-// ---------------- Calculs ----------------
-
 /** floor(initial * factor^clicks * 100) / 100 — identique à calc_mult_safe(). */
 export function calcMultSafe(initial: number, factor: number, clicks: number): number {
   return Math.floor(initial * Math.pow(factor, clicks) * 100) / 100;
@@ -71,41 +75,13 @@ function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-/** Santé du système sur les dernières 24h (ratio gains / mises), cache 5 min. */
-const HEALTH_CACHE_MS = 5 * 60 * 1000;
-let healthCache: { at: number; value: number } | null = null;
-
+/** Santé globale unifiée (24h toutes verticales confondues). */
 export async function getSystemHealthModifier(): Promise<number> {
-  if (healthCache && Date.now() - healthCache.at < HEALTH_CACHE_MS) return healthCache.value;
-
-  const rows = await db
-    .select({
-      bet: tapHistory.betAmount,
-      target: tapHistory.targetMultiplier,
-      win: tapHistory.win,
-    })
-    .from(tapHistory)
-    .where(sql`${tapHistory.createdAt} > now() - interval '24 hours'`);
-
-  let totalIn = 0;
-  let totalOut = 0;
-  for (const r of rows) {
-    totalIn += r.bet;
-    if (r.win) totalOut += r.bet * r.target - r.bet;
-  }
-  totalIn = totalIn > 0 ? totalIn : 1;
-  const ratio = totalOut / totalIn;
-
-  let modifier = 1.0;
-  if (ratio > 1.5) modifier = 0.7;
-  else if (ratio > 1.1) modifier = 0.85;
-  else if (ratio < 0.6) modifier = 1.1;
-
-  healthCache = { at: Date.now(), value: modifier };
-  return modifier;
+  const health = await getGlobalHouseHealth();
+  return health.tightness;
 }
 
-/** Profil joueur sur les 50 dernières parties (streaks + plafond de gains). */
+/** Profil joueur intelligent sur les 40 dernières parties. */
 export async function analyzePlayerProfile(
   uid: number,
   currentBetUsd: number
@@ -119,34 +95,31 @@ export async function analyzePlayerProfile(
     .from(tapHistory)
     .where(eq(tapHistory.userId, uid))
     .orderBy(desc(tapHistory.id))
-    .limit(50);
+    .limit(40);
 
-  let recentProfit = 0;
-  for (const h of rows) {
-    recentProfit += h.win ? h.bet * h.target - h.bet : -h.bet;
-  }
+  const signal = buildSmartPlayerSignal(
+    rows.map((r) => ({
+      stake: r.bet,
+      multiplier: r.target,
+      won: r.win,
+    })),
+    currentBetUsd
+  );
 
-  const profile: PlayerProfile = { type: "NORMAL", correction: 1.0, forceCrash: false };
+  // Plafond absolu anti-fuite de banque sur profit cumulé excessif
+  const forceCrash =
+    signal.recentNetProfit > 280 ||
+    (signal.archetype === "MARTINGALE" && signal.stakeSpikeRatio >= 4 && Math.random() < 0.55);
 
-  if (rows.length >= 3 && rows[0].win && rows[1].win && rows[2].win) {
-    profile.type = "STREAK_BREAKER";
-    profile.correction = 0.6;
-  }
-
-  const capThreshold = currentBetUsd >= TAP_CONFIG.HIGH_BET_THRESHOLD ? 100 : 30;
-  if (recentProfit > capThreshold) {
-    profile.type = "PROFIT_CAP_MED";
-    profile.correction = 0.6;
-  }
-  if (recentProfit > 300) {
-    profile.type = "PROFIT_CAP_HIGH";
-    profile.forceCrash = true;
-  }
-
-  return profile;
+  return {
+    type: signal.archetype,
+    correction: signal.cautionFactor,
+    forceCrash,
+    lowExitRate: signal.lowExitRate,
+  };
 }
 
-/** Distribution du point de crash — port de get_smart_crash_value(). */
+/** Distribution rusée du point de crash avec near-misses psychologiques. */
 export function getSmartCrashValue(
   betAmountUsd: number,
   profile: PlayerProfile,
@@ -154,21 +127,40 @@ export function getSmartCrashValue(
 ): number {
   if (profile.forceCrash) return 1.0;
 
-  const ranges =
-    betAmountUsd >= TAP_CONFIG.HIGH_BET_THRESHOLD
+  // Anti-bot 1-clic (×1.05) : si le joueur scalpe systématiquement les tout petits multiplicateurs,
+  // on relève la probabilité de crash instantané à ×1.00 pour neutraliser l'espérance positive.
+  if (profile.type === "MICRO_SCALPER" || profile.lowExitRate >= 0.65) {
+    if (Math.random() < 0.44) return 1.0;
+  }
+
+  const isHeavyBet =
+    betAmountUsd >= TAP_CONFIG.HIGH_BET_THRESHOLD * 3 ||
+    profile.type === "MARTINGALE" ||
+    profile.type === "WHALE";
+
+  // Poids [poids, minMult, maxMult]
+  const ranges: Array<[number, number, number]> = isHeavyBet
+    ? [
+        [32, 1.0, 1.0],
+        [38, 1.04, 1.48],
+        [20, 1.49, 2.35],
+        [8, 2.36, 3.95],
+        [2, 3.96, 7.5],
+      ]
+    : betAmountUsd >= TAP_CONFIG.HIGH_BET_THRESHOLD
       ? [
-          [30, 1.0, 1.0],
-          [40, 1.01, 1.5],
-          [20, 1.51, 2.5],
-          [7, 2.51, 4.0],
-          [3, 4.01, 8.0],
+          [24, 1.0, 1.0],
+          [36, 1.04, 1.55],
+          [24, 1.56, 2.65],
+          [12, 2.66, 4.9],
+          [4, 4.91, 12.0],
         ]
       : [
-          [20, 1.0, 1.0],
-          [35, 1.01, 1.3],
-          [25, 1.31, 2.2],
-          [15, 2.21, 5.0],
-          [5, 5.01, TAP_CONFIG.MAX_MULTIPLIER],
+          [18, 1.0, 1.0],
+          [32, 1.05, 1.45],
+          [28, 1.46, 2.45],
+          [16, 2.46, 5.4],
+          [6, 5.41, 24.0],
         ];
 
   let rand = randInt(1, 100);
@@ -178,18 +170,27 @@ export function getSmartCrashValue(
 
   let cumul = 0;
   let rawCrash = 1.0;
-  for (const [w, lo, hi] of ranges as number[][]) {
+  for (const [w, lo, hi] of ranges) {
     cumul += w;
     if (rand <= cumul) {
-      if (lo === 1.0 && hi === 1.0) rawCrash = 1.0;
-      else rawCrash = randInt(lo * 100, hi * 100) / 100;
+      if (lo === 1.0 && hi === 1.0) {
+        rawCrash = 1.0;
+      } else {
+        rawCrash = randInt(Math.round(lo * 100), Math.round(hi * 100)) / 100;
+      }
       break;
     }
   }
+
+  // Effet « near-miss » juste avant les paliers psychologiques ronds (×2.00, ×3.00, ×5.00)
+  if (rawCrash > 1.98 && rawCrash <= 2.08 && Math.random() < 0.65) {
+    rawCrash = randInt(188, 198) / 100;
+  } else if (rawCrash > 2.98 && rawCrash <= 3.12 && Math.random() < 0.6) {
+    rawCrash = randInt(284, 297) / 100;
+  }
+
   return Math.min(rawCrash, TAP_CONFIG.MAX_MULTIPLIER);
 }
-
-// ---------------- Finalisation de manche ----------------
 
 export interface RoundResult {
   bal: number;
@@ -224,5 +225,6 @@ export async function finalizeRound(
   });
 
   clearSession(uid);
+  invalidateHouseHealthCache();
   return { bal: newBal, win: winAmount };
 }

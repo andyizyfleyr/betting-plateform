@@ -253,7 +253,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const loadingRef = useRef(false);
+  const mutatingRef = useRef(0);
 
   const [matchForm, setMatchForm] = useState({
     home: "",
@@ -281,33 +282,40 @@ export default function AdminPage() {
 
   const load = useCallback(async (isBackground = false) => {
     if (isBackground && typeof document !== "undefined" && document.hidden) return;
-    if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
+    // Un poll en arrière-plan n'interrompt jamais une action admin ou un chargement en cours
+    if (isBackground && (loadingRef.current || mutatingRef.current > 0)) return;
+    loadingRef.current = true;
     try {
-      const res = await fetch("/api/admin", { signal: abortRef.current.signal });
+      const res = await fetch("/api/admin", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur");
       setPanel(data);
     } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") return;
-      if (!isBackground)
-        setNotice({ kind: "err", msg: "Impossible de charger le tableau de bord" });
+      if (!isBackground) {
+        setNotice({
+          kind: "err",
+          msg: e instanceof Error ? e.message : "Impossible de charger le tableau de bord",
+        });
+      }
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(() => load(true), POLL_INTERVAL);
+    const initTimer = setTimeout(() => {
+      void load(false);
+    }, 0);
+    const id = setInterval(() => void load(true), POLL_INTERVAL);
     const onVisible = () => {
-      if (!document.hidden) load(true);
+      if (!document.hidden) void load(true);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      clearTimeout(initTimer);
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
-      if (abortRef.current) abortRef.current.abort();
     };
   }, [load]);
 
@@ -316,6 +324,7 @@ export default function AdminPage() {
     key: string,
     okMsg: string
   ): Promise<boolean> => {
+    mutatingRef.current += 1;
     setBusy((b) => ({ ...b, [key]: true }));
     setNotice(null);
     try {
@@ -324,15 +333,16 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Erreur");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Erreur lors de l'action");
       setNotice({ kind: "ok", msg: okMsg });
-      await load();
+      await load(false);
       return true;
     } catch (e) {
       setNotice({ kind: "err", msg: e instanceof Error ? e.message : "Erreur" });
       return false;
     } finally {
+      mutatingRef.current = Math.max(0, mutatingRef.current - 1);
       setBusy((b) => ({ ...b, [key]: false }));
     }
   };
@@ -562,7 +572,7 @@ function Dashboard({ stats }: { stats: PanelData["stats"] }) {
   return (
     <div className="flex flex-col gap-3">
       <section className="glass-card rounded-2xl p-4">
-        <p className="text-[11px] font-medium text-dim">Marge brute (mises − gains sport)</p>
+        <p className="text-[11px] font-medium text-dim">Marge brute globale (mises − gains)</p>
         <div className="mt-1 flex items-baseline justify-between gap-2">
           <p className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
             {eur(revenue)}
@@ -642,10 +652,16 @@ function MatchesTab({
   const [formOpen, setFormOpen] = useState(false);
   const [openLogos, setOpenLogos] = useState(false);
   const [openMarkets, setOpenMarkets] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "live" | "upcoming" | "finished">("all");
 
   const activeLeague = findLeague(form.league);
   const clubOptions = (activeLeague?.clubs ?? []).map((c) => c.name);
   const activeMarkets = form.markets.filter((g) => g.outcomes.some((o) => Number(o.odds) > 1));
+
+  const filteredMatches =
+    statusFilter === "all"
+      ? matches
+      : matches.filter((m) => m.status === statusFilter);
 
   return (
     <div className="flex flex-col gap-3">
@@ -700,12 +716,14 @@ function MatchesTab({
                     homeLogo: typeof logo === "string" && logo !== "" ? logo : form.homeLogo,
                   })
                 }
-                options={clubOptions.map((name) => ({
-                  label: name,
-                  logo: activeLeague
-                    ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
-                    : null,
-                }))}
+                options={clubOptions
+                  .filter((name) => name !== form.away)
+                  .map((name) => ({
+                    label: name,
+                    logo: activeLeague
+                      ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
+                      : null,
+                  }))}
               />
               <ComboBox
                 label="Extérieur"
@@ -718,12 +736,14 @@ function MatchesTab({
                     awayLogo: typeof logo === "string" && logo !== "" ? logo : form.awayLogo,
                   })
                 }
-                options={clubOptions.map((name) => ({
-                  label: name,
-                  logo: activeLeague
-                    ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
-                    : null,
-                }))}
+                options={clubOptions
+                  .filter((name) => name !== form.home)
+                  .map((name) => ({
+                    label: name,
+                    logo: activeLeague
+                      ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
+                      : null,
+                  }))}
               />
             </div>
 
@@ -877,9 +897,37 @@ function MatchesTab({
         )}
       </div>
 
-      <AdminSectionTitle label="Matchs programmés" count={matches.length} />
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+        {(
+          [
+            { key: "all", label: `Tous (${matches.length})` },
+            { key: "live", label: `En direct (${matches.filter((m) => m.status === "live").length})` },
+            { key: "upcoming", label: `À venir (${matches.filter((m) => m.status === "upcoming").length})` },
+            { key: "finished", label: `Terminés (${matches.filter((m) => m.status === "finished").length})` },
+          ] as const
+        ).map(({ key, label }) => {
+          const active = statusFilter === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatusFilter(key)}
+              className={cn(
+                "h-8 shrink-0 rounded-full border px-3 font-display text-[11.5px] transition-colors",
+                active
+                  ? "border-betclic-red bg-betclic-red font-bold text-white"
+                  : "border-edge bg-white font-medium text-mist"
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <AdminSectionTitle label="Matchs programmés" count={filteredMatches.length} />
       <div className="flex flex-col gap-2.5">
-        {matches.map((m) => (
+        {filteredMatches.map((m) => (
           <AdminMatchCard key={m.id} m={m} busy={busy} act={act} />
         ))}
       </div>
@@ -897,6 +945,10 @@ function AdminMatchCard({
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
   const isManual = m.source === "manual";
+  const [editingOdds, setEditingOdds] = useState(false);
+  const [o1, setO1] = useState(String(m.oddsHome));
+  const [oN, setON] = useState(String(m.oddsDraw ?? 3.2));
+  const [o2, setO2] = useState(String(m.oddsAway));
 
   return (
     <div className={cn("glass-card rounded-2xl p-3.5", m.suspended && "opacity-70")}>
@@ -906,9 +958,19 @@ function AdminMatchCard({
           <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-[13.5px] font-bold text-ink">
-            {m.homeTeam} – {m.awayTeam}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="truncate font-display text-[13.5px] font-bold text-ink">
+              {m.homeTeam} – {m.awayTeam}
+            </p>
+            <span
+              className={cn(
+                "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase",
+                isManual ? "bg-ink text-white" : "bg-elev text-mist"
+              )}
+            >
+              {isManual ? "Manuel" : "Virtuel 2-3m"}
+            </span>
+          </div>
           <p className="truncate text-[11.5px] text-mist">
             {m.league} ·{" "}
             {m.status === "live"
@@ -932,8 +994,9 @@ function AdminMatchCard({
           />
           <button
             type="button"
+            disabled={busy[`del-${m.id}`]}
             onClick={() => act({ action: "deleteMatch", matchId: m.id }, `del-${m.id}`, "Match supprimé")}
-            className="grid h-9 w-9 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red active:scale-95"
+            className="grid h-9 w-9 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red active:scale-95 disabled:opacity-50"
             aria-label="Supprimer"
           >
             {busy[`del-${m.id}`] ? (
@@ -945,14 +1008,80 @@ function AdminMatchCard({
         </div>
       </div>
 
-      {isManual && (
-        <MatchControls
-          key={`${m.id}-${m.homeScore ?? 0}-${m.awayScore ?? 0}`}
-          m={m}
-          busy={busy}
-          act={act}
-        />
+      {/* Cotes 1/N/2 actuelles + édition rapide */}
+      {m.status !== "finished" && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-dim">
+          <span>
+            1: <strong className="text-ink">{formatOdds(m.oddsHome)}</strong> · N:{" "}
+            <strong className="text-ink">{formatOdds(m.oddsDraw ?? 3.2)}</strong> · 2:{" "}
+            <strong className="text-ink">{formatOdds(m.oddsAway)}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setO1(String(m.oddsHome));
+              setON(String(m.oddsDraw ?? 3.2));
+              setO2(String(m.oddsAway));
+              setEditingOdds((s) => !s);
+            }}
+            className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold text-ink"
+          >
+            {editingOdds ? "Fermer" : "Éditer cotes"}
+          </button>
+        </div>
       )}
+
+      {editingOdds && m.status !== "finished" && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-xl border border-edge bg-elev/50 p-2">
+          <input
+            type="text"
+            inputMode="decimal"
+            value={o1}
+            onChange={(e) => setO1(e.target.value)}
+            placeholder="1"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
+          />
+          <input
+            type="text"
+            inputMode="decimal"
+            value={oN}
+            onChange={(e) => setON(e.target.value)}
+            placeholder="N"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
+          />
+          <input
+            type="text"
+            inputMode="decimal"
+            value={o2}
+            onChange={(e) => setO2(e.target.value)}
+            placeholder="2"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
+          />
+          <button
+            type="button"
+            disabled={busy[`eo-${m.id}`]}
+            onClick={async () => {
+              const ok = await act(
+                {
+                  action: "editMatch",
+                  matchId: m.id,
+                  oddsHome: o1,
+                  oddsDraw: oN,
+                  oddsAway: o2,
+                },
+                `eo-${m.id}`,
+                "Cotes du match mises à jour"
+              );
+              if (ok) setEditingOdds(false);
+            }}
+            className="h-9 shrink-0 rounded-lg bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-50"
+          >
+            OK
+          </button>
+        </div>
+      )}
+
+      <MatchControls m={m} busy={busy} act={act} />
     </div>
   );
 }
@@ -966,9 +1095,14 @@ function MatchControls({
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
-  const [home, setHome] = useState(String(m.homeScore ?? 0));
-  const [away, setAway] = useState(String(m.awayScore ?? 0));
+  const [homeEdit, setHomeEdit] = useState<{ base: number | null; val: string } | null>(null);
+  const [awayEdit, setAwayEdit] = useState<{ base: number | null; val: string } | null>(null);
   const [mp, setMp] = useState("");
+
+  const home = homeEdit && homeEdit.base === m.homeScore ? homeEdit.val : String(m.homeScore ?? 0);
+  const away = awayEdit && awayEdit.base === m.awayScore ? awayEdit.val : String(m.awayScore ?? 0);
+  const setHome = (v: string) => setHomeEdit({ base: m.homeScore, val: v });
+  const setAway = (v: string) => setAwayEdit({ base: m.awayScore, val: v });
 
   if (m.status === "upcoming") {
     return (
@@ -1189,7 +1323,10 @@ function QuestionsTab({
     if (ok) setEditingId(null);
   };
 
+  const [qFilter, setQFilter] = useState<"all" | "open" | "resolved">("all");
   const multiPlaceholders = ["Lamine Yamal", "Kylian Mbappé", "Harry Kane", "Vinícius Jr."];
+  const visibleQuestions =
+    qFilter === "all" ? questions : questions.filter((q) => q.status === qFilter);
 
   return (
     <div className="flex flex-col gap-3">
@@ -1392,9 +1529,36 @@ function QuestionsTab({
         )}
       </div>
 
-      <AdminSectionTitle label="Questions" count={questions.length} />
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+        {(
+          [
+            { key: "all", label: `Toutes (${questions.length})` },
+            { key: "open", label: `Ouvertes (${questions.filter((q) => q.status === "open").length})` },
+            { key: "resolved", label: `Résolues (${questions.filter((q) => q.status === "resolved").length})` },
+          ] as const
+        ).map(({ key, label }) => {
+          const active = qFilter === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setQFilter(key)}
+              className={cn(
+                "h-8 shrink-0 rounded-full border px-3 font-display text-[11.5px] transition-colors",
+                active
+                  ? "border-betclic-red bg-betclic-red font-bold text-white"
+                  : "border-edge bg-white font-medium text-mist"
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <AdminSectionTitle label="Questions" count={visibleQuestions.length} />
       <div className="flex flex-col gap-2.5">
-        {questions.map((q) => {
+        {visibleQuestions.map((q) => {
           const isEditing = editingId === q.id;
           const isMulti = Array.isArray(q.options) && q.options.length >= 2;
           const resolvedLabel =
@@ -1564,22 +1728,30 @@ function QuestionsTab({
 
                   {q.status === "open" && isMulti && q.options && (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {q.options.map((opt) => (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          onClick={() =>
-                            act(
-                              { action: "resolveQuestion", questionId: q.id, resolution: opt.key },
-                              `ro-${q.id}-${opt.key}`,
-                              `Résolue : ${opt.label}`
-                            )
-                          }
-                          className="h-7 rounded-lg bg-win/12 px-2.5 font-display text-[11px] font-bold text-win active:opacity-80"
-                        >
-                          ✓ {opt.label}
-                        </button>
-                      ))}
+                      {q.options.map((opt) => {
+                        const bKey = `ro-${q.id}-${opt.key}`;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            disabled={busy[bKey]}
+                            onClick={() =>
+                              act(
+                                { action: "resolveQuestion", questionId: q.id, resolution: opt.key },
+                                bKey,
+                                `Résolue : ${opt.label}`
+                              )
+                            }
+                            className="inline-flex h-7 items-center gap-1 rounded-lg bg-win/12 px-2.5 font-display text-[11px] font-bold text-win active:opacity-80 disabled:opacity-50"
+                          >
+                            {busy[bKey] ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              `✓ ${opt.label}`
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -1589,6 +1761,7 @@ function QuestionsTab({
                         <>
                           <button
                             type="button"
+                            disabled={busy[`ry-${q.id}`] || busy[`rn-${q.id}`]}
                             onClick={() =>
                               act(
                                 { action: "resolveQuestion", questionId: q.id, resolution: "yes" },
@@ -1596,12 +1769,13 @@ function QuestionsTab({
                                 "Résolue : Oui"
                               )
                             }
-                            className="h-8 flex-1 rounded-lg bg-win/12 font-display text-[11.5px] font-bold text-win"
+                            className="h-8 flex-1 rounded-lg bg-win/12 font-display text-[11.5px] font-bold text-win disabled:opacity-50"
                           >
-                            Oui gagne
+                            {busy[`ry-${q.id}`] ? "..." : "Oui gagne"}
                           </button>
                           <button
                             type="button"
+                            disabled={busy[`ry-${q.id}`] || busy[`rn-${q.id}`]}
                             onClick={() =>
                               act(
                                 { action: "resolveQuestion", questionId: q.id, resolution: "no" },
@@ -1609,25 +1783,26 @@ function QuestionsTab({
                                 "Résolue : Non"
                               )
                             }
-                            className="h-8 flex-1 rounded-lg bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
+                            className="h-8 flex-1 rounded-lg bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red disabled:opacity-50"
                           >
-                            Non gagne
+                            {busy[`rn-${q.id}`] ? "..." : "Non gagne"}
                           </button>
                         </>
                       )
                     ) : (
                       <button
                         type="button"
+                        disabled={busy[`reopen-${q.id}`]}
                         onClick={() =>
                           act(
                             { action: "reopenQuestion", questionId: q.id },
                             `reopen-${q.id}`,
-                            "Question réouverte"
+                            "Question réouverte et paris restaurés"
                           )
                         }
-                        className="h-8 flex-1 rounded-lg bg-sky-500/12 font-display text-[11.5px] font-bold text-sky-700"
+                        className="h-8 flex-1 rounded-lg bg-sky-500/12 font-display text-[11.5px] font-bold text-sky-700 disabled:opacity-50"
                       >
-                        Réouvrir
+                        {busy[`reopen-${q.id}`] ? "..." : "Réouvrir"}
                       </button>
                     )}
                     <button
@@ -1642,6 +1817,7 @@ function QuestionsTab({
                     </button>
                     <button
                       type="button"
+                      disabled={busy[`dq-${q.id}`]}
                       onClick={() =>
                         act(
                           { action: "deleteQuestion", questionId: q.id },
@@ -1649,7 +1825,7 @@ function QuestionsTab({
                           "Question supprimée"
                         )
                       }
-                      className="grid h-8 w-8 place-items-center rounded-lg bg-elev text-mist"
+                      className="grid h-8 w-8 place-items-center rounded-lg bg-elev text-mist disabled:opacity-50"
                       aria-label="Supprimer"
                     >
                       {busy[`dq-${q.id}`] ? (
@@ -1976,11 +2152,11 @@ function ComboBox({
   const boxRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    function onClick(e: MouseEvent) {
+    function onClick(e: PointerEvent) {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("pointerdown", onClick);
+    return () => document.removeEventListener("pointerdown", onClick);
   }, []);
 
   const q = query.trim().toLowerCase();
@@ -2031,8 +2207,10 @@ function ComboBox({
             <button
               key={o.label}
               type="button"
-              onClick={() => {
+              onPointerDown={(e) => {
+                e.preventDefault();
                 onChange(o.label, o.logo);
+                setQuery(o.label);
                 setOpen(false);
               }}
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left active:bg-elev"

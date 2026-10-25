@@ -10,7 +10,7 @@ import { cn, todayLabel } from "@/lib/format";
 
 type Filter = "all" | "live" | "upcoming" | "finished";
 
-const POLL_INTERVAL = 4_000;
+const POLL_INTERVAL = 2_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 
