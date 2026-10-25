@@ -14,6 +14,8 @@ export interface ClientComboLeg {
   title: string;
   homeTeam?: string;
   awayTeam?: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   market: string;
   selection: string;
   selectionLabel: string;
@@ -116,6 +118,8 @@ export interface ClientBet {
   league: string;
   homeTeam: string;
   awayTeam: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   question?: string | null;
   questionId?: number | null;
   market: string;

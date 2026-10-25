@@ -13,6 +13,7 @@ import {
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { AnimatedNumber } from "./animated-number";
+import { TeamAvatar } from "./team-avatar";
 import { useApp } from "./providers";
 import { cn, eur, formatOdds } from "@/lib/format";
 
@@ -23,6 +24,10 @@ export interface ComboSelection {
   matchSource?: "virtual" | "manual";
   questionId?: number;
   title: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   league: string;
   market: string;
   selection: string;
@@ -370,38 +375,65 @@ export function ComboSheet() {
 
                 {/* Liste des sélections */}
                 <div className="mt-3 space-y-2">
-                  {comboLegs.map((leg) => (
-                    <div
-                      key={leg.uid}
-                      className="flex items-center justify-between gap-2.5 rounded-2xl border border-edge bg-white p-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-dim">
-                          {leg.league}
-                        </p>
-                        <p className="truncate font-display text-[13px] font-bold text-ink">
-                          {leg.title}
-                        </p>
-                        <p className="truncate text-[11.5px] font-medium text-mist">
-                          {leg.selectionLabel}
-                        </p>
-                      </div>
+                  {comboLegs.map((leg) => {
+                    const splitTeams =
+                      leg.kind === "sport" && (!leg.homeTeam || !leg.awayTeam) && leg.title.includes("–")
+                        ? leg.title.split("–").map((s) => s.trim())
+                        : null;
+                    const homeName = leg.homeTeam || splitTeams?.[0] || "";
+                    const awayName = leg.awayTeam || splitTeams?.[1] || "";
 
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="rounded-xl bg-betclic-red/10 px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
-                          {formatOdds(leg.odds, oddsFormat)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeComboLeg(leg.uid)}
-                          className="grid h-7 w-7 place-items-center rounded-lg bg-elev text-mist active:bg-edge"
-                          aria-label="Retirer"
-                        >
-                          <X className="h-3.5 w-3.5" strokeWidth={2.2} />
-                        </button>
+                    return (
+                      <div
+                        key={leg.uid}
+                        className="flex items-center justify-between gap-2.5 rounded-2xl border border-edge bg-white p-3"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          {leg.kind === "sport" && homeName && awayName && (
+                            <div className="flex shrink-0 -space-x-2">
+                              <TeamAvatar
+                                name={homeName}
+                                logo={leg.homeLogo}
+                                size="sm"
+                                className="ring-2 ring-white"
+                              />
+                              <TeamAvatar
+                                name={awayName}
+                                logo={leg.awayLogo}
+                                size="sm"
+                                className="ring-2 ring-white"
+                              />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-dim">
+                              {leg.league}
+                            </p>
+                            <p className="truncate font-display text-[13px] font-bold text-ink">
+                              {leg.title}
+                            </p>
+                            <p className="truncate text-[11.5px] font-medium text-mist">
+                              {leg.selectionLabel}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="rounded-xl bg-betclic-red/10 px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
+                            {formatOdds(leg.odds, oddsFormat)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeComboLeg(leg.uid)}
+                            className="grid h-7 w-7 place-items-center rounded-lg bg-elev text-mist active:bg-edge"
+                            aria-label="Retirer"
+                          >
+                            <X className="h-3.5 w-3.5" strokeWidth={2.2} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {!enoughLegs && (

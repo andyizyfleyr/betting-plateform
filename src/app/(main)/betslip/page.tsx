@@ -25,6 +25,7 @@ import {
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { AnimatedNumber } from "@/components/animated-number";
+import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
 import { cn, eur, formatOdds } from "@/lib/format";
 
@@ -538,9 +539,37 @@ export default function BetslipPage() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 truncate font-display text-[13.5px] font-bold text-ink">
-                    {leg.title}
-                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    {(() => {
+                      if (leg.kind !== "sport") return null;
+                      const splitTeams =
+                        (!leg.homeTeam || !leg.awayTeam) && leg.title.includes("–")
+                          ? leg.title.split("–").map((s) => s.trim())
+                          : null;
+                      const hName = leg.matchObj?.homeTeam || leg.homeTeam || splitTeams?.[0] || "";
+                      const aName = leg.matchObj?.awayTeam || leg.awayTeam || splitTeams?.[1] || "";
+                      if (!hName || !aName) return null;
+                      return (
+                        <div className="flex shrink-0 -space-x-2">
+                          <TeamAvatar
+                            name={hName}
+                            logo={leg.matchObj?.homeLogo ?? leg.homeLogo}
+                            size="xs"
+                            className="ring-1 ring-white"
+                          />
+                          <TeamAvatar
+                            name={aName}
+                            logo={leg.matchObj?.awayLogo ?? leg.awayLogo}
+                            size="xs"
+                            className="ring-1 ring-white"
+                          />
+                        </div>
+                      );
+                    })()}
+                    <p className="truncate font-display text-[13.5px] font-bold text-ink">
+                      {leg.title}
+                    </p>
+                  </div>
                   <p className="truncate text-[12px] font-semibold text-betclic-red">
                     {leg.selectionLabel}
                   </p>

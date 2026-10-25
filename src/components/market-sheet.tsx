@@ -413,6 +413,8 @@ export function MarketSheet() {
                   stats={match.realStats}
                   homeTeam={match.homeTeam}
                   awayTeam={match.awayTeam}
+                  homeLogo={match.homeLogo}
+                  awayLogo={match.awayLogo}
                   htHomeScore={match.htHomeScore}
                   htAwayScore={match.htAwayScore}
                   className="mb-3"
@@ -464,6 +466,10 @@ export function MarketSheet() {
                               matchId: match.id,
                               matchSource: match.source,
                               title: `${match.homeTeam} – ${match.awayTeam}`,
+                              homeTeam: match.homeTeam,
+                              awayTeam: match.awayTeam,
+                              homeLogo: match.homeLogo,
+                              awayLogo: match.awayLogo,
                               league: match.league,
                               market: g.key,
                               selection: outcome.key,
@@ -542,6 +548,10 @@ function AccordionItem({
     matchId: match.id,
     matchSource: match.source,
     title: `${match.homeTeam} – ${match.awayTeam}`,
+    homeTeam: match.homeTeam,
+    awayTeam: match.awayTeam,
+    homeLogo: match.homeLogo,
+    awayLogo: match.awayLogo,
     league: match.league,
     market: group.key,
     selection: o.key,

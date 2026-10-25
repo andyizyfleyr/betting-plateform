@@ -32,6 +32,7 @@ import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import { requireUserId } from "@/lib/session";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
+import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
@@ -362,6 +363,8 @@ export async function POST(req: NextRequest) {
         title: `${m.homeTeam} – ${m.awayTeam}`,
         homeTeam: m.homeTeam,
         awayTeam: m.awayTeam,
+        homeLogo: teamLogo(m.homeTeam, m.homeLogo),
+        awayLogo: teamLogo(m.awayTeam, m.awayLogo),
         market,
         selection: leg.selection,
         selectionLabel,

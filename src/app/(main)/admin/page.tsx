@@ -32,10 +32,12 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/providers";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { TeamAvatar } from "@/components/team-avatar";
 import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
 import { OFFICIAL_SOCCER_LEAGUES } from "@/lib/real-leagues";
-import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue } from "@/lib/format";
+import { teamLogo } from "@/lib/team-logos";
+import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials } from "@/lib/format";
 
 type TabKey = "dashboard" | "forecasts" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
 
@@ -57,6 +59,8 @@ interface AdminBet {
   league: string;
   homeTeam: string;
   awayTeam: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
   question?: string | null;
   selectionLabel: string;
   odds: number;
@@ -1214,11 +1218,15 @@ function MatchesTab({
                 label="Domicile"
                 placeholder="Équipe domicile"
                 value={form.home}
+                showClubCrest
                 onChange={(v, logo) =>
                   setForm({
                     ...form,
                     home: v,
-                    homeLogo: typeof logo === "string" && logo !== "" ? logo : form.homeLogo,
+                    homeLogo:
+                      typeof logo === "string" && logo !== ""
+                        ? logo
+                        : (teamLogo(v) ?? ""),
                   })
                 }
                 options={clubOptions
@@ -1226,19 +1234,23 @@ function MatchesTab({
                   .map((name) => ({
                     label: name,
                     logo: activeLeague
-                      ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
-                      : null,
+                      ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? teamLogo(name))
+                      : teamLogo(name),
                   }))}
               />
               <ComboBox
                 label="Extérieur"
                 placeholder="Équipe extérieure"
                 value={form.away}
+                showClubCrest
                 onChange={(v, logo) =>
                   setForm({
                     ...form,
                     away: v,
-                    awayLogo: typeof logo === "string" && logo !== "" ? logo : form.awayLogo,
+                    awayLogo:
+                      typeof logo === "string" && logo !== ""
+                        ? logo
+                        : (teamLogo(v) ?? ""),
                   })
                 }
                 options={clubOptions
@@ -1246,8 +1258,8 @@ function MatchesTab({
                   .map((name) => ({
                     label: name,
                     logo: activeLeague
-                      ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
-                      : null,
+                      ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? teamLogo(name))
+                      : teamLogo(name),
                   }))}
               />
             </div>
@@ -3511,8 +3523,12 @@ function BetsTab({
   const rows = [
     ...bets.map((b) => ({
       id: b.id,
-      kind: "Sport",
+      kind: "Sport" as const,
       label: `${b.homeTeam} – ${b.awayTeam}`,
+      homeTeam: b.homeTeam,
+      awayTeam: b.awayTeam,
+      homeLogo: b.homeLogo ?? null,
+      awayLogo: b.awayLogo ?? null,
       detail: b.selectionLabel,
       stake: b.stake,
       win: b.potentialWin,
@@ -3523,8 +3539,12 @@ function BetsTab({
     })),
     ...predBets.map((p) => ({
       id: p.id,
-      kind: "Préd.",
+      kind: "Préd." as const,
       label: p.question,
+      homeTeam: null as string | null,
+      awayTeam: null as string | null,
+      homeLogo: null as string | null,
+      awayLogo: null as string | null,
       detail: p.selectionLabel,
       stake: p.stake,
       win: p.potentialWin,
@@ -3535,8 +3555,12 @@ function BetsTab({
     })),
     ...comboBets.map((c) => ({
       id: c.id,
-      kind: "Combiné",
+      kind: "Combiné" as const,
       label: `Combiné ${c.legs.length} sél. (${c.totalOdds.toFixed(2)})`,
+      homeTeam: null as string | null,
+      awayTeam: null as string | null,
+      homeLogo: null as string | null,
+      awayLogo: null as string | null,
       detail: c.legs.map((l) => l.selectionLabel).join(" · "),
       stake: c.stake,
       win: c.potentialWin,
@@ -3670,31 +3694,49 @@ function BetsTab({
       {filteredRows.map((b) => (
         <div key={`${b.kind}-${b.id}`} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="truncate font-display text-[13.5px] font-semibold text-ink">{b.label}</p>
-              <p className="mt-0.5 truncate text-[11.5px] text-dim">
-                {b.kind} · {b.detail} · {formatPlacedAt(b.placedAt)}
-              </p>
-              {(b.riskFlag || b.clv != null) && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  {b.riskFlag && (
-                    <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-[10px] font-semibold text-betclic-red">
-                      {riskLabel(b.riskFlag)}
-                    </span>
-                  )}
-                  {b.clv != null && (
-                    <span
-                      className={cn(
-                        "rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
-                        b.clv >= 0 ? "bg-win/12 text-win" : "bg-elev text-mist"
-                      )}
-                    >
-                      CLV {b.clv >= 0 ? "+" : ""}
-                      {(b.clv * 100).toFixed(1)}%
-                    </span>
-                  )}
+            <div className="flex min-w-0 items-center gap-2.5">
+              {b.homeTeam && b.awayTeam && (
+                <div className="flex shrink-0 -space-x-2">
+                  <TeamAvatar
+                    name={b.homeTeam}
+                    logo={b.homeLogo}
+                    size="xs"
+                    className="ring-1 ring-white"
+                  />
+                  <TeamAvatar
+                    name={b.awayTeam}
+                    logo={b.awayLogo}
+                    size="xs"
+                    className="ring-1 ring-white"
+                  />
                 </div>
               )}
+              <div className="min-w-0">
+                <p className="truncate font-display text-[13.5px] font-semibold text-ink">{b.label}</p>
+                <p className="mt-0.5 truncate text-[11.5px] text-dim">
+                  {b.kind} · {b.detail} · {formatPlacedAt(b.placedAt)}
+                </p>
+                {(b.riskFlag || b.clv != null) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {b.riskFlag && (
+                      <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-[10px] font-semibold text-betclic-red">
+                        {riskLabel(b.riskFlag)}
+                      </span>
+                    )}
+                    {b.clv != null && (
+                      <span
+                        className={cn(
+                          "rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                          b.clv >= 0 ? "bg-win/12 text-win" : "bg-elev text-mist"
+                        )}
+                      >
+                        CLV {b.clv >= 0 ? "+" : ""}
+                        {(b.clv * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <StatusBadge status={b.status} />
           </div>
@@ -3978,25 +4020,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function LogoOrAvatar({ logo, name }: { logo?: string | null; name: string }) {
-  const hue = teamHue(name);
-  if (logo) {
-    return (
-      <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-xl bg-white ring-2 ring-white border border-edge">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logo} alt="" loading="lazy" className="h-full w-full object-contain p-1" />
-      </span>
-    );
-  }
-  return (
-    <span
-      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl font-display text-[10px] font-bold text-white ring-2 ring-white"
-      style={{
-        background: `linear-gradient(140deg, hsl(${hue} 62% 46%), hsl(${(hue + 40) % 360} 70% 30%))`,
-      }}
-    >
-      {initials(name)}
-    </span>
-  );
+  return <TeamAvatar name={name} logo={logo} size="sm" className="ring-2 ring-white" />;
 }
 
 function AdminInput({
@@ -4048,12 +4072,14 @@ function ComboBox({
   onChange,
   placeholder,
   options,
+  showClubCrest = false,
 }: {
   label?: string;
   value: string;
   onChange: (v: string, logo?: string | null) => void;
   placeholder?: string;
   options: Array<{ label: string; hint?: string; logo?: string | null }>;
+  showClubCrest?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -4123,16 +4149,8 @@ function ComboBox({
               }}
               className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left active:bg-elev"
             >
-              {o.logo != null && (
-                <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-md bg-white ring-1 ring-edge">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={o.logo}
-                    alt=""
-                    loading="lazy"
-                    className="h-full w-full object-contain p-0.5"
-                  />
-                </span>
+              {(showClubCrest || o.logo != null) && (
+                <TeamAvatar name={o.label} logo={o.logo} size="2xs" />
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-display text-[13px] font-semibold text-ink">

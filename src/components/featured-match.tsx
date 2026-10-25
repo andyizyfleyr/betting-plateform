@@ -175,6 +175,8 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
               stats={match.realStats}
               homeTeam={match.homeTeam}
               awayTeam={match.awayTeam}
+              homeLogo={match.homeLogo}
+              awayLogo={match.awayLogo}
               htHomeScore={match.htHomeScore}
               htAwayScore={match.htAwayScore}
               compact
