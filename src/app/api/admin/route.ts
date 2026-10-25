@@ -75,8 +75,8 @@ export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if (typeof auth !== "number") return auth;
 
-  // Synchronise le moteur live et les règlements pour afficher l'état exact en temps réel
-  await syncPlatformStateThrottled(true);
+  // Synchronise le moteur live et les règlements sans forcer les appels externes à chaque poll
+  await syncPlatformStateThrottled(false);
 
   const [
     [totalUsers],
@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
         sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`,
         desc(matches.id)
       )
-      .limit(100),
+      .limit(50),
     db.select().from(predictionQuestions).orderBy(desc(predictionQuestions.id)).limit(200),
     db.select().from(predictionBets).orderBy(desc(predictionBets.placedAt)).limit(300),
     db.select().from(comboBets).orderBy(desc(comboBets.placedAt)).limit(200),

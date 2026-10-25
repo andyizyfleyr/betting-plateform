@@ -147,7 +147,7 @@ function scoreRealPreMatchPopularity(m: ClientMatch, earliestUpcomingMs: number)
   return base + proximityPts;
 }
 
-const POLL_INTERVAL = 3_000;
+const POLL_INTERVAL = 5_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 

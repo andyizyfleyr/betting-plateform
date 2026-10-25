@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v6";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v7";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -227,6 +227,7 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_finished_at" timestamp;
     ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_status_note" text;
     CREATE INDEX IF NOT EXISTS "matches_external_id_idx" ON "matches" ("external_id");
+    CREATE INDEX IF NOT EXISTS "matches_status_source_idx" ON "matches" ("status", "source", "finished_at" DESC);
   `);
 
   await db.execute(sql`
@@ -241,6 +242,7 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "closing_odds" double precision;
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "risk_flag" text;
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+    CREATE INDEX IF NOT EXISTS "bets_user_status_idx" ON "bets" ("user_id", "status", "placed_at" DESC);
   `);
 
   await db.execute(sql`DROP TABLE IF EXISTS "sim_state";`);
@@ -273,7 +275,9 @@ async function runSeedInternal(): Promise<void> {
       events: matches.events,
     })
     .from(matches)
-    .where(sql`jsonb_typeof(${matches.events}) = 'array' AND jsonb_array_length(${matches.events}) >= 1`);
+    .where(sql`jsonb_typeof(${matches.events}) = 'array' AND jsonb_array_length(${matches.events}) >= 1`)
+    .orderBy(sql`${matches.id} DESC`)
+    .limit(200);
 
   for (const row of rowsWithEvents) {
     const rawEvents = row.events ?? [];

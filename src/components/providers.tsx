@@ -105,7 +105,7 @@ export function useApp() {
 }
 
 let toastId = 0;
-const POLL_INTERVAL = 5_000;
+const POLL_INTERVAL = 8_000;
 const COMBO_STORAGE_KEY = "pulsebet_combo_v1";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -193,12 +193,18 @@ export function Providers({ children }: { children: ReactNode }) {
 
   // Hydratation du flux matchs hors /matchs pour la colonne Ligues, le Betslip et le badge Live desktop
   const isMatchsRoute = pathname === "/matchs" || pathname.startsWith("/matchs/");
+  const needsBackgroundMatchFeed =
+    comboLegs.length > 0 || comboOpen || marketMatch !== null || target !== null;
+
   useEffect(() => {
     if (isAuthRoute || isAdminMode || isMatchsRoute) return;
     let active = true;
 
     const syncMatches = () => {
       if (typeof document !== "undefined" && document.hidden) return;
+      const isDesktop =
+        typeof window !== "undefined" && window.innerWidth >= 1024;
+      if (!isDesktop && !needsBackgroundMatchFeed) return;
       api
         .matches()
         .then((r) => {
@@ -208,7 +214,7 @@ export function Providers({ children }: { children: ReactNode }) {
     };
 
     syncMatches();
-    const id = setInterval(syncMatches, 12_000);
+    const id = setInterval(syncMatches, 15_000);
     const onVisible = () => {
       if (!document.hidden) syncMatches();
     };
@@ -219,7 +225,7 @@ export function Providers({ children }: { children: ReactNode }) {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [isAuthRoute, isAdminMode, isMatchsRoute]);
+  }, [isAuthRoute, isAdminMode, isMatchsRoute, needsBackgroundMatchFeed]);
 
   // Polling global unifié : solde, compteur « En cours » et alertes temps réel sur toutes les pages
   useEffect(() => {

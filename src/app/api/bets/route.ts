@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -57,18 +57,32 @@ export async function GET(req: NextRequest) {
     await syncLiveMatchesThrottled();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
+  const SETTLED_HISTORY_LIMIT = 80;
 
-  const rows = await db
-    .select({ bet: bets, match: matches })
-    .from(bets)
-    .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(eq(bets.userId, uid))
-    .orderBy(desc(bets.placedAt));
-
-  const [user] = await db
-    .select({ balance: appUser.balance })
-    .from(appUser)
-    .where(eq(appUser.id, uid));
+  const [pendingSportRows, settledSportRows, [user]] = await Promise.all([
+    filter === "finished"
+      ? Promise.resolve([])
+      : db
+          .select({ bet: bets, match: matches })
+          .from(bets)
+          .leftJoin(matches, eq(bets.matchId, matches.id))
+          .where(and(eq(bets.userId, uid), eq(bets.status, "pending")))
+          .orderBy(desc(bets.placedAt)),
+    filter === "ongoing"
+      ? Promise.resolve([])
+      : db
+          .select({ bet: bets, match: matches })
+          .from(bets)
+          .leftJoin(matches, eq(bets.matchId, matches.id))
+          .where(and(eq(bets.userId, uid), ne(bets.status, "pending")))
+          .orderBy(sql`${bets.settledAt} DESC NULLS LAST`, desc(bets.placedAt))
+          .limit(SETTLED_HISTORY_LIMIT),
+    db
+      .select({ balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid)),
+  ]);
+  const rows = [...pendingSportRows, ...settledSportRows];
 
   const mapped = rows.map(({ bet, match }) => {
     const livePending = bet.status === "pending" && match?.status === "live";
@@ -150,12 +164,29 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const predRows = await db
-    .select({ bet: predictionBets, question: predictionQuestions })
-    .from(predictionBets)
-    .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
-    .where(eq(predictionBets.userId, uid))
-    .orderBy(desc(predictionBets.placedAt));
+  const [pendingPredRows, settledPredRows] = await Promise.all([
+    filter === "finished"
+      ? Promise.resolve([])
+      : db
+          .select({ bet: predictionBets, question: predictionQuestions })
+          .from(predictionBets)
+          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
+          .where(and(eq(predictionBets.userId, uid), eq(predictionBets.status, "pending")))
+          .orderBy(desc(predictionBets.placedAt)),
+    filter === "ongoing"
+      ? Promise.resolve([])
+      : db
+          .select({ bet: predictionBets, question: predictionQuestions })
+          .from(predictionBets)
+          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
+          .where(and(eq(predictionBets.userId, uid), ne(predictionBets.status, "pending")))
+          .orderBy(
+            sql`${predictionBets.settledAt} DESC NULLS LAST`,
+            desc(predictionBets.placedAt)
+          )
+          .limit(SETTLED_HISTORY_LIMIT),
+  ]);
+  const predRows = [...pendingPredRows, ...settledPredRows];
 
   const predMapped = predRows.map(({ bet: pb, question: q }) => {
     const livePending = pb.status === "pending" && q && q.status === "open" && q.resolvesAt.getTime() > Date.now();
@@ -205,11 +236,24 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const comboRows = await db
-    .select()
-    .from(comboBets)
-    .where(eq(comboBets.userId, uid))
-    .orderBy(desc(comboBets.placedAt));
+  const [pendingComboRows, settledComboRows] = await Promise.all([
+    filter === "finished"
+      ? Promise.resolve([])
+      : db
+          .select()
+          .from(comboBets)
+          .where(and(eq(comboBets.userId, uid), eq(comboBets.status, "pending")))
+          .orderBy(desc(comboBets.placedAt)),
+    filter === "ongoing"
+      ? Promise.resolve([])
+      : db
+          .select()
+          .from(comboBets)
+          .where(and(eq(comboBets.userId, uid), ne(comboBets.status, "pending")))
+          .orderBy(sql`${comboBets.settledAt} DESC NULLS LAST`, desc(comboBets.placedAt))
+          .limit(SETTLED_HISTORY_LIMIT),
+  ]);
+  const comboRows = [...pendingComboRows, ...settledComboRows];
 
   let comboMatchMap = new Map<number, MatchRow>();
   let comboQuestionMap = new Map<number, PredictionQuestionRow>();

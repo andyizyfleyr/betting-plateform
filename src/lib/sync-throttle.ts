@@ -1,4 +1,4 @@
-import { runLiveEngine } from "@/db/engine";
+import { pruneOldFinishedVirtualMatches, runLiveEngine } from "@/db/engine";
 import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
 import { settlePendingCombos } from "@/lib/combo";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
@@ -17,11 +17,13 @@ import { settleFinishedBets } from "@/lib/settle";
  */
 const SYNC_THROTTLE_MS = 1_500;
 const HOUSEKEEPING_THROTTLE_MS = 60_000;
+const PRUNE_THROTTLE_MS = 5 * 60_000;
 const USER_READ_FEED_BUDGET_MS = 2_500;
 
 let lastFullSyncAt = 0;
 let inFlightFullSync: Promise<void> | null = null;
 let lastHousekeepingAt = 0;
+let lastPruneAt = 0;
 
 function withTimeoutBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T | "timed_out"> {
   return new Promise((resolve) => {
@@ -63,8 +65,6 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
           runLiveEngine(),
           withTimeoutBudget(realFeedPromise, USER_READ_FEED_BUDGET_MS),
         ]);
-        // Si le flux externe dépasse 2,5 s, laisse-le finir en tâche de fond et déclenche
-        // le règlement dès qu'il termine sans bloquer l'affichage utilisateur.
         if (feedStatus === "timed_out") {
           void realFeedPromise.then(async (res) => {
             if (res && res.settledCount > 0) {
@@ -85,6 +85,13 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
           expireStaleGatewayDeposits(),
         ]);
         lastHousekeepingAt = Date.now();
+      }
+
+      if (hkNow - lastPruneAt >= PRUNE_THROTTLE_MS) {
+        lastPruneAt = hkNow;
+        await pruneOldFinishedVirtualMatches().catch((err) => {
+          console.error("[pruneOldFinishedVirtualMatches]", err);
+        });
       }
 
       lastFullSyncAt = Date.now();
