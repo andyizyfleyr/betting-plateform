@@ -14,15 +14,16 @@ export function KickoffCountdown({
   const target = new Date(startsAt).getTime();
   const [now, setNow] = useState(() => Date.now());
   const diff = target - now;
+  const underFiveMin = Number.isFinite(target) && diff > 0 && diff < 300_000;
   const underOneHour = Number.isFinite(target) && diff > 0 && diff < 3_600_000;
 
   useEffect(() => {
-    const interval = underOneHour ? 10_000 : 30_000;
+    const interval = underFiveMin ? 5_000 : underOneHour ? 15_000 : 30_000;
     const id = setInterval(() => setNow(Date.now()), interval);
     return () => clearInterval(id);
-  }, [underOneHour]);
+  }, [underFiveMin, underOneHour]);
 
-  if (!Number.isFinite(target) || diff <= 30_000) {
+  if (!Number.isFinite(target) || diff <= 12_000) {
     return (
       <span
         className={cn(
@@ -36,8 +37,8 @@ export function KickoffCountdown({
     );
   }
 
-  if (underOneHour) {
-    const mins = Math.max(1, Math.ceil(diff / 60_000));
+  if (diff < 60_000) {
+    const secs = Math.max(15, Math.ceil(diff / 5_000) * 5);
     return (
       <span
         className={cn(
@@ -46,6 +47,21 @@ export function KickoffCountdown({
         )}
       >
         <span className="countdown-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+        dans {secs} s
+      </span>
+    );
+  }
+
+  if (underOneHour) {
+    const mins = Math.max(1, Math.round(diff / 60_000));
+    return (
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded-full bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold tabular-nums text-mist",
+          className
+        )}
+      >
+        <Clock className="h-3 w-3 text-dim" strokeWidth={2.2} />
         dans {mins} min
       </span>
     );

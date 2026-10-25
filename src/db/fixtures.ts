@@ -575,6 +575,23 @@ export function skellamCDF(k: number, lambda1: number, lambda2: number): number 
 }
 
 /**
+ * Lisse l'évolution temporelle des cotes live par paliers tactiques (~25–30 s réelles
+ * par palier sur un match virtuel de 2m40s) afin que les cotes restent posées et
+ * confortables à jouer, tout en réagissant instantanément au moindre but ou carton rouge.
+ */
+export function livePricingMinute(minute: number): number {
+  const m = clamp(Math.round(minute), 0, 90);
+  if (m <= 0) return 0;
+  if (m >= 90) return 90;
+  if (m <= 18) return 8;
+  if (m <= 36) return 27;
+  if (m <= 45) return 45;
+  if (m <= 63) return 54;
+  if (m <= 78) return 71;
+  return 84;
+}
+
+/**
  * Modèle joint unifié du SCORE FINAL conditionnellement à (homeScore, awayScore, minute).
  * Fonctionne aussi bien en avant-match (0, 0, 0) qu'en plein direct (score courant, minute).
  */
@@ -587,9 +604,9 @@ export function liveScoreModel(
   opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
 ): LiveScoreModel {
   const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const mClamped = clamp(minute, 0, 90);
-  const elapsedShare = goalTimeCDF(mClamped);
-  const remainingShare = mClamped >= 90 ? 0.002 : clamp(1 - elapsedShare, 0.015, 1);
+  const pMin = livePricingMinute(minute);
+  const elapsedShare = goalTimeCDF(pMin);
+  const remainingShare = pMin >= 90 ? 0.002 : clamp(1 - elapsedShare, 0.015, 1);
 
   let baseH = lambdaHome * (opts?.homeForm ?? 1);
   let baseA = lambdaAway * (opts?.awayForm ?? 1);
@@ -602,36 +619,36 @@ export function liveScoreModel(
 
   // Dynamique tactique selon le score en seconde période
   const offset = homeScore - awayScore;
-  if (mClamped >= 55) {
+  if (pMin >= 54) {
     if (offset === -1) {
       // Domicile mené d'un but : pousse fort, s'expose en contre
-      baseH *= 1.14;
-      baseA *= 1.06;
+      baseH *= 1.13;
+      baseA *= 1.05;
     } else if (offset === 1) {
       // Extérieur mené d'un but : pousse, laisse des espaces
-      baseA *= 1.14;
-      baseH *= 1.06;
-    } else if (Math.abs(offset) >= 2 && mClamped >= 65) {
+      baseA *= 1.13;
+      baseH *= 1.05;
+    } else if (Math.abs(offset) >= 2 && pMin >= 71) {
       // Écart confortable : rythme légèrement ralenti
-      baseH *= 0.9;
-      baseA *= 0.9;
+      baseH *= 0.91;
+      baseA *= 0.91;
     }
   }
 
-  // Ajustement doux du rythme global selon l'intensité observée (sans écraser la hiérarchie)
-  if (mClamped >= 20 && elapsedShare >= 0.18) {
+  // Ajustement progressif et doux du rythme selon les buts observés (sans à-coups)
+  if (pMin >= 27 && elapsedShare >= 0.25) {
     const expectedSoFar = (lambdaHome + lambdaAway) * elapsedShare;
     const observedSoFar = homeScore + awayScore;
-    const paceRatio = clamp((observedSoFar + 1.8) / (expectedSoFar + 1.8), 0.82, 1.25);
+    const paceRatio = clamp((observedSoFar + 2.4) / (expectedSoFar + 2.4), 0.88, 1.16);
     baseH *= paceRatio;
     baseA *= paceRatio;
   }
 
-  const remH = mClamped >= 90 ? 0.001 : Math.max(0.003, baseH * remainingShare);
-  const remA = mClamped >= 90 ? 0.001 : Math.max(0.003, baseA * remainingShare);
+  const remH = pMin >= 90 ? 0.001 : Math.max(0.003, baseH * remainingShare);
+  const remA = pMin >= 90 ? 0.001 : Math.max(0.003, baseA * remainingShare);
 
   const margin =
-    mClamped <= 0
+    pMin <= 0
       ? PREMATCH_MARGIN
       : round2(
           clamp(
@@ -641,8 +658,8 @@ export function liveScoreModel(
           )
         );
 
-  const maxAdd = mClamped >= 90 ? 2 : clamp(Math.ceil(Math.max(remH, remA) * 3 + 6), 7, LIVE_MAX_REMAIN);
-  const remGrid = bivariatePoissonGrid(remH, remA, maxAdd, mClamped === 0 && homeScore === 0 && awayScore === 0);
+  const maxAdd = pMin >= 90 ? 2 : clamp(Math.ceil(Math.max(remH, remA) * 3 + 6), 7, LIVE_MAX_REMAIN);
+  const remGrid = bivariatePoissonGrid(remH, remA, maxAdd, pMin === 0 && homeScore === 0 && awayScore === 0);
 
   // Décalage vers la grille des SCORES FINAUX [homeScore + addH][awayScore + addA]
   const sizeH = homeScore + maxAdd + 1;

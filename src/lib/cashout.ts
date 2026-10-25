@@ -1,3 +1,4 @@
+import { livePricingMinute } from "@/db/fixtures";
 import { isKnownMarket, liveOutcomeProbability, minuteNumber } from "@/lib/markets";
 
 const CASHOUT_BASE_FACTOR = 0.9;
@@ -19,7 +20,7 @@ function impliedYes(oddsYes: number, oddsNo: number) {
 export function matchProgress(sport: string, minute: string | null): number {
   if (!minute) return 0;
   if (sport === "football") {
-    const m = minuteNumber(minute);
+    const m = livePricingMinute(minuteNumber(minute));
     return Math.min(m / 90, 0.97);
   }
   return 0;

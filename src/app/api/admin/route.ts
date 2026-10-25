@@ -2,7 +2,7 @@ import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
-import { backdateStartsAtForMinute, runLiveEngine } from "@/db/engine";
+import { backdateStartsAtForMinute, demoteOtherLiveMatches, runLiveEngine } from "@/db/engine";
 import { liveOddsFor, pickScorerName } from "@/db/fixtures";
 import {
   appUser,
@@ -464,6 +464,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      await demoteOtherLiveMatches(matchId);
       return NextResponse.json({ ok: true, match: reprice[0] });
     }
 
@@ -505,6 +506,7 @@ export async function POST(req: NextRequest) {
         })
         .where(eq(matches.id, matchId))
         .returning();
+      await demoteOtherLiveMatches(matchId);
       return NextResponse.json({ ok: true, match: updated });
     }
 
@@ -525,6 +527,7 @@ export async function POST(req: NextRequest) {
         })
         .where(eq(matches.id, matchId))
         .returning();
+      await demoteOtherLiveMatches(matchId);
       return NextResponse.json({ ok: true, match: updated });
     }
 
@@ -606,6 +609,7 @@ export async function POST(req: NextRequest) {
         if (u) updatedMatch = u;
       });
 
+      await demoteOtherLiveMatches(matchId);
       invalidateHouseHealthCache();
       return NextResponse.json({ ok: true, match: updatedMatch });
     }

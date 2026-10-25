@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { settleMatchBets } from "@/lib/settle";
@@ -16,24 +16,27 @@ import { getGlobalHouseHealth } from "@/lib/house-brain";
 import { minuteNumber } from "@/lib/markets";
 import { teamLogo } from "@/lib/team-logos";
 
-/** Suspension brève du marché après un but (~2,2 s adaptée au rythme 2–3 min). */
+/** Suspension brève du marché après un but (~2,2 s). */
 const GOAL_SUSPEND_MS = 2_200;
-const TICK_THROTTLE_MS = 900;
+const TICK_THROTTLE_MS = 1_000;
+/** Transition courte entre la fin d'un match et le coup d'envoi planifié du suivant. */
+const INTER_MATCH_GAP_MS = 3_000;
 
 /**
  * Rythme des matchs :
- * - Matchs virtuels automatiques (`source = "virtual"`) : durée totale entre 2m08s et 2m52s
- *   (95 pas d'horloge × [1 350 ms .. 1 810 ms], moyenne ~2 min 30 s).
+ * - Matchs virtuels automatiques (`source = "virtual"`) : durée totale entre 2m24s et 2m55s
+ *   (95 pas d'horloge × [1 520 ms .. 1 840 ms], moyenne ~2 min 40 s), UN SEUL match en live
+ *   à la fois, à tour de rôle.
  * - Matchs manuels créés par l'admin (`source = "manual"`) : rythme réel confortable (40 s / min)
  *   pour laisser le pilotage complet à l'administrateur.
  */
 export const MANUAL_MINUTE_REAL_MS = 40_000;
-export const VIRTUAL_STEP_MIN_MS = 1_350; // ~2 min 08 s au total
-export const VIRTUAL_STEP_MAX_MS = 1_810; // ~2 min 52 s au total
+export const VIRTUAL_STEP_MIN_MS = 1_520; // ~2 min 24 s au total
+export const VIRTUAL_STEP_MAX_MS = 1_840; // ~2 min 55 s au total
 const TOTAL_CLOCK_STEPS = 95;
 
 const MIN_ACTIVE_VIRTUAL = 7;
-const TARGET_ACTIVE_VIRTUAL = 10;
+const TARGET_ACTIVE_VIRTUAL = 8;
 
 const MATCH_REGIMES = [
   "balanced",
@@ -87,6 +90,15 @@ export function stepMsForMatch(matchId: number, source?: string | null): number 
   return VIRTUAL_STEP_MIN_MS + (h % (span + 1));
 }
 
+/** Durée totale d'un match (ms) du coup d'envoi jusqu'au coup de sifflet final. */
+export function matchDurationMs(matchId: number, source?: string | null): number {
+  return TOTAL_CLOCK_STEPS * stepMsForMatch(matchId, source);
+}
+
+function expectedMatchEndMs(m: Pick<MatchRow, "id" | "source" | "startsAt">, now: number): number {
+  return Math.max(now + 2_000, m.startsAt.getTime() + matchDurationMs(m.id, m.source));
+}
+
 /**
  * Calcule une heure de coup d'envoi cohérente avec une minute de jeu cible
  * (en tenant compte du temps additionnel 1re MT + pause mi-temps).
@@ -123,6 +135,89 @@ function computeClockState(startsAtMs: number, now: number, stepMs: number): Clo
   if (step === 94) return { minuteLabel: "90+2'", gameMinute: 90, phase: "2H_STOPPAGE" };
   if (step === TOTAL_CLOCK_STEPS) return { minuteLabel: "90+3'", gameMinute: 90, phase: "2H_STOPPAGE" };
   return { minuteLabel: "Terminé", gameMinute: 90, phase: "FT" };
+}
+
+/**
+ * Replace proprement un match `live` excédentaire dans la file d'attente `upcoming`
+ * afin de garantir qu'un seul match soit en direct à la fois.
+ */
+async function demoteLiveMatchToUpcoming(m: MatchRow, targetStartsAt: Date): Promise<MatchRow> {
+  const hasCustom = m.source === "manual" && m.markets && m.markets.length > 0;
+  const preOdds = hasCustom
+    ? { oddsHome: m.oddsHome, oddsDraw: m.oddsDraw, oddsAway: m.oddsAway }
+    : oddsFor(m.homeTeam, m.awayTeam, {
+        homeForm: m.homeForm ?? 1,
+        awayForm: m.awayForm ?? 1,
+      });
+
+  const homeLogo = teamLogo(m.homeTeam) || m.homeLogo;
+  const awayLogo = teamLogo(m.awayTeam) || m.awayLogo;
+
+  const [updated] = await db
+    .update(matches)
+    .set({
+      status: "upcoming",
+      homeScore: null,
+      awayScore: null,
+      minute: null,
+      redHome: 0,
+      redAway: 0,
+      events: [],
+      tickHistory: [],
+      suspended: false,
+      lastGoalAt: null,
+      startsAt: targetStartsAt,
+      oddsHome: preOdds.oddsHome,
+      oddsDraw: preOdds.oddsDraw,
+      oddsAway: preOdds.oddsAway,
+      homeLogo,
+      awayLogo,
+    })
+    .where(eq(matches.id, m.id))
+    .returning();
+
+  return updated ?? {
+    ...m,
+    status: "upcoming",
+    homeScore: null,
+    awayScore: null,
+    minute: null,
+    redHome: 0,
+    redAway: 0,
+    events: [],
+    tickHistory: [],
+    suspended: false,
+    lastGoalAt: null,
+    startsAt: targetStartsAt,
+    oddsHome: preOdds.oddsHome,
+    oddsDraw: preOdds.oddsDraw,
+    oddsAway: preOdds.oddsAway,
+    homeLogo,
+    awayLogo,
+  };
+}
+
+/**
+ * Utilisé par l'API Admin lorsqu'un match est lancé ou rouvert manuellement en direct :
+ * garantit que tous les autres matchs en direct cèdent la place et repassent en file d'attente.
+ */
+export async function demoteOtherLiveMatches(keepMatchId: number, now = Date.now()): Promise<void> {
+  const [keepMatch] = await db.select().from(matches).where(eq(matches.id, keepMatchId));
+  const others = await db
+    .select()
+    .from(matches)
+    .where(and(eq(matches.status, "live"), ne(matches.id, keepMatchId)));
+
+  if (others.length === 0) return;
+
+  let cursorMs = keepMatch
+    ? expectedMatchEndMs(keepMatch, now) + INTER_MATCH_GAP_MS
+    : now + 160_000;
+
+  for (const extra of others) {
+    await demoteLiveMatchToUpcoming(extra, new Date(cursorMs));
+    cursorMs += matchDurationMs(extra.id, extra.source) + INTER_MATCH_GAP_MS;
+  }
 }
 
 export async function runLiveEngine(): Promise<void> {
@@ -194,7 +289,7 @@ function computeBookPressure(
   const refBank = 120 * Math.max(0.75, houseTightness);
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-  // Asymétrie domicile vs extérieur : bornée entre 0.74 et 1.24 pour rester 100 % réaliste
+  // Asymétrie domicile vs extérieur : bornée entre 0.75 et 1.22 pour rester 100 % réaliste
   const netSide = (liabHome - liabAway) / refBank;
   let homeTilt = clamp(1 - 0.18 * Math.tanh(netSide), 0.75, 1.22);
   let awayTilt = clamp(1 + 0.18 * Math.tanh(netSide), 0.75, 1.22);
@@ -248,7 +343,6 @@ async function executeTick(now: number): Promise<void> {
 
   if (openMatches.length === 0) return;
 
-  // Charge en une seule requête les paris actifs sur les matchs ouverts (zéro N+1)
   const openIds = openMatches.map((m) => m.id);
   const [pendingBets, houseHealth] = await Promise.all([
     db
@@ -275,75 +369,178 @@ async function executeTick(now: number): Promise<void> {
     betsByMatch.set(b.matchId, arr);
   }
 
-  for (const m of openMatches) {
-    const matchBets = betsByMatch.get(m.id) ?? [];
-    const pressure =
-      m.source === "virtual"
-        ? computeBookPressure(matchBets, houseHealth.tightness)
-        : { homeTilt: 1, awayTilt: 1, tempoTilt: 1 };
+  const pressureFor = (m: MatchRow): MatchBookPressure =>
+    m.source === "virtual"
+      ? computeBookPressure(betsByMatch.get(m.id) ?? [], houseHealth.tightness)
+      : { homeTilt: 1, awayTilt: 1, tempoTilt: 1 };
 
-    if (m.status === "upcoming") {
-      if (now >= m.startsAt.getTime()) {
-        await kickOffAndSimulateMatch(m, now, pressure);
-      } else if (!m.markets || m.markets.length === 0) {
-        const freshOdds = oddsFor(m.homeTeam, m.awayTeam, {
-          homeForm: m.homeForm ?? 1,
-          awayForm: m.awayForm ?? 1,
-          redHome: m.redHome ?? 0,
-          redAway: m.redAway ?? 0,
-        });
-        const homeLogo = teamLogo(m.homeTeam) || m.homeLogo;
-        const awayLogo = teamLogo(m.awayTeam) || m.awayLogo;
-        if (
-          Math.abs(m.oddsHome - freshOdds.oddsHome) > 0.02 ||
-          Math.abs((m.oddsDraw ?? 0) - freshOdds.oddsDraw) > 0.02 ||
-          Math.abs(m.oddsAway - freshOdds.oddsAway) > 0.02 ||
-          homeLogo !== m.homeLogo ||
-          awayLogo !== m.awayLogo
-        ) {
-          await db
-            .update(matches)
-            .set({
-              oddsHome: freshOdds.oddsHome,
-              oddsDraw: freshOdds.oddsDraw,
-              oddsAway: freshOdds.oddsAway,
-              homeLogo,
-              awayLogo,
-            })
-            .where(eq(matches.id, m.id));
-        }
-      }
-      continue;
+  const liveMatches = openMatches.filter((m) => m.status === "live");
+  const upcomingMatches = openMatches.filter((m) => m.status === "upcoming");
+
+  // 1. Clôture d'abord tout match live dont le temps réglementaire est déjà écoulé
+  const stillLive: MatchRow[] = [];
+  for (const m of liveMatches) {
+    const clock = computeClockState(m.startsAt.getTime(), now, stepMsForMatch(m.id, m.source));
+    if (clock.phase === "FT") {
+      await tickLiveMatch(m, now, pressureFor(m));
+    } else {
+      stillLive.push(m);
     }
+  }
 
-    if (m.status === "live") {
-      await tickLiveMatch(m, now, pressure);
+  // 2. Garantit STRICTEMENT UN SEUL match en live : les éventuels doublons repassent en file d'attente
+  let activeLive: MatchRow | null = null;
+  if (stillLive.length > 0) {
+    stillLive.sort((a, b) => {
+      if (a.source !== b.source) return a.source === "manual" ? -1 : 1;
+      const betsDiff = (betsByMatch.get(b.id)?.length ?? 0) - (betsByMatch.get(a.id)?.length ?? 0);
+      if (betsDiff !== 0) return betsDiff;
+      return a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id;
+    });
+
+    activeLive = stillLive[0];
+    if (stillLive.length > 1) {
+      let deferCursor = expectedMatchEndMs(activeLive, now) + INTER_MATCH_GAP_MS;
+      for (const extra of stillLive.slice(1)) {
+        const demoted = await demoteLiveMatchToUpcoming(extra, new Date(deferCursor));
+        upcomingMatches.push(demoted);
+        deferCursor += matchDurationMs(extra.id, extra.source) + INTER_MATCH_GAP_MS;
+      }
+    }
+  }
+
+  // 3. Fait avancer l'unique match en live (s'il existe)
+  if (activeLive) {
+    const finished = await tickLiveMatch(activeLive, now, pressureFor(activeLive));
+    if (finished) {
+      activeLive = null;
+    }
+  }
+
+  // 4. Si aucun match n'est en live, lance UN SEUL match suivant (passage de témoin à tour de rôle)
+  if (!activeLive && upcomingMatches.length > 0) {
+    const dueManual = upcomingMatches
+      .filter((m) => m.source === "manual" && now >= m.startsAt.getTime())
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
+
+    const nextVirtual = upcomingMatches
+      .filter((m) => m.source === "virtual")
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
+
+    const nextMatch = dueManual ?? nextVirtual ?? null;
+    if (nextMatch) {
+      const idx = upcomingMatches.findIndex((u) => u.id === nextMatch.id);
+      if (idx >= 0) upcomingMatches.splice(idx, 1);
+      activeLive = await kickOffAndSimulateMatch(nextMatch, now, pressureFor(nextMatch));
+    }
+  }
+
+  // 5. Aligne séquentiellement la file d'attente des matchs virtuels à venir l'un après l'autre
+  await syncUpcomingQueue(upcomingMatches, activeLive, now);
+}
+
+async function syncUpcomingQueue(
+  upcomingMatches: MatchRow[],
+  activeLive: MatchRow | null,
+  now: number
+): Promise<void> {
+  const virtualQueue = upcomingMatches
+    .filter((m) => m.source === "virtual")
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
+
+  let cursorMs = activeLive
+    ? expectedMatchEndMs(activeLive, now) + INTER_MATCH_GAP_MS
+    : now + INTER_MATCH_GAP_MS;
+
+  for (const m of virtualQueue) {
+    const desiredStartsAt = cursorMs;
+    cursorMs += matchDurationMs(m.id, "virtual") + INTER_MATCH_GAP_MS;
+
+    const freshOdds = oddsFor(m.homeTeam, m.awayTeam, {
+      homeForm: m.homeForm ?? 1,
+      awayForm: m.awayForm ?? 1,
+      redHome: m.redHome ?? 0,
+      redAway: m.redAway ?? 0,
+    });
+    const homeLogo = teamLogo(m.homeTeam) || m.homeLogo;
+    const awayLogo = teamLogo(m.awayTeam) || m.awayLogo;
+
+    const driftMs = Math.abs(m.startsAt.getTime() - desiredStartsAt);
+    const oddsChanged =
+      Math.abs(m.oddsHome - freshOdds.oddsHome) > 0.02 ||
+      Math.abs((m.oddsDraw ?? 0) - freshOdds.oddsDraw) > 0.02 ||
+      Math.abs(m.oddsAway - freshOdds.oddsAway) > 0.02;
+
+    if (driftMs > 6_000 || oddsChanged || homeLogo !== m.homeLogo || awayLogo !== m.awayLogo) {
+      await db
+        .update(matches)
+        .set({
+          startsAt: new Date(desiredStartsAt),
+          oddsHome: freshOdds.oddsHome,
+          oddsDraw: freshOdds.oddsDraw,
+          oddsAway: freshOdds.oddsAway,
+          homeLogo,
+          awayLogo,
+        })
+        .where(eq(matches.id, m.id));
+    }
+  }
+
+  // Matchs manuels à venir : conserve l'horaire choisi par l'admin
+  const manualUpcoming = upcomingMatches.filter((m) => m.source === "manual");
+  for (const m of manualUpcoming) {
+    if (m.markets && m.markets.length > 0) continue;
+    const freshOdds = oddsFor(m.homeTeam, m.awayTeam, {
+      homeForm: m.homeForm ?? 1,
+      awayForm: m.awayForm ?? 1,
+    });
+    const homeLogo = teamLogo(m.homeTeam) || m.homeLogo;
+    const awayLogo = teamLogo(m.awayTeam) || m.awayLogo;
+    if (
+      Math.abs(m.oddsHome - freshOdds.oddsHome) > 0.02 ||
+      Math.abs((m.oddsDraw ?? 0) - freshOdds.oddsDraw) > 0.02 ||
+      Math.abs(m.oddsAway - freshOdds.oddsAway) > 0.02 ||
+      homeLogo !== m.homeLogo ||
+      awayLogo !== m.awayLogo
+    ) {
+      await db
+        .update(matches)
+        .set({
+          oddsHome: freshOdds.oddsHome,
+          oddsDraw: freshOdds.oddsDraw,
+          oddsAway: freshOdds.oddsAway,
+          homeLogo,
+          awayLogo,
+        })
+        .where(eq(matches.id, m.id));
     }
   }
 }
 
 async function ensureActiveSchedule(now: number): Promise<void> {
-  const activeVirtual = await db
+  const openAll = await db
     .select()
     .from(matches)
-    .where(and(eq(matches.source, "virtual"), inArray(matches.status, ["upcoming", "live"])));
+    .where(inArray(matches.status, ["upcoming", "live"]));
 
+  const activeVirtual = openAll.filter((m) => m.source === "virtual");
   if (activeVirtual.length >= MIN_ACTIVE_VIRTUAL) return;
 
   const busyTeams = new Set<string>();
-  let latestStartsAt = now;
-  let liveCount = 0;
+  let tailEndMs = now;
 
-  for (const m of activeVirtual) {
+  for (const m of openAll) {
     busyTeams.add(m.homeTeam);
     busyTeams.add(m.awayTeam);
-    if (m.status === "live") liveCount++;
-    if (m.startsAt.getTime() > latestStartsAt) {
-      latestStartsAt = m.startsAt.getTime();
+    const estEnd =
+      m.status === "live"
+        ? expectedMatchEndMs(m, now)
+        : m.startsAt.getTime() + matchDurationMs(m.id, m.source);
+    if (estEnd > tailEndMs) {
+      tailEndMs = estEnd;
     }
   }
 
-  // Rotation rapide basée sur des cycles de 3 minutes pour varier les affiches en continu
   const waveOffset = Math.floor(now / 180_000) % FIXTURE_POOL.length;
   const needed = TARGET_ACTIVE_VIRTUAL - activeVirtual.length;
   const chosen: FixtureTemplate[] = [];
@@ -356,27 +553,20 @@ async function ensureActiveSchedule(now: number): Promise<void> {
     chosen.push(candidate);
   }
 
-  // Cadence dynamique : nouveaux coups d'envoi toutes les ~40 secondes
-  let upcomingCursor = Math.max(now + 30_000, latestStartsAt + 40_000);
+  const hasAnyOpen = openAll.length > 0;
+  let upcomingCursor = hasAnyOpen ? tailEndMs + INTER_MATCH_GAP_MS : now;
   const rows: Array<typeof matches.$inferInsert> = [];
 
   chosen.forEach((fx, idx) => {
-    const startLive = liveCount < 3;
     const rng = mulberry32(hashString(`sched|${Math.floor(now / 60_000)}|${fx.home}|${fx.away}|${idx}`));
     const regime = MATCH_REGIMES[Math.floor(rng() * MATCH_REGIMES.length)];
-    const homeForm = Math.round((0.9 + rng() * 0.22) * 100) / 100;
-    const awayForm = Math.round((0.9 + rng() * 0.22) * 100) / 100;
+    const homeForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+    const awayForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
 
-    let startsAt: Date;
-    if (startLive) {
-      const presetMinutes = [16, 41, 63];
-      const liveMinute = presetMinutes[liveCount % presetMinutes.length];
-      startsAt = backdateStartsAtForMinute(liveMinute, now, "virtual", idx + 1);
-      liveCount++;
-    } else {
-      startsAt = new Date(upcomingCursor);
-      upcomingCursor += 40_000;
-    }
+    // Tous les nouveaux matchs sont insérés en "upcoming" l'un derrière l'autre ;
+    // `executeTick` démarre immédiatement et uniquement le premier si aucun match n'est en live.
+    const startsAt = new Date(upcomingCursor);
+    upcomingCursor += matchDurationMs(idx + 1, "virtual") + INTER_MATCH_GAP_MS;
 
     const preOdds = oddsFor(fx.home, fx.away, { homeForm, awayForm });
     rows.push({
@@ -416,32 +606,33 @@ async function kickOffAndSimulateMatch(
   m: MatchRow,
   now: number,
   pressure: MatchBookPressure
-): Promise<void> {
-  const stepMs = stepMsForMatch(m.id, m.source);
-  const maxMatchMs = (TOTAL_CLOCK_STEPS + 3) * stepMs;
-  const effectiveStartsAt =
-    now - m.startsAt.getTime() > maxMatchMs ? new Date(now) : m.startsAt;
-
+): Promise<MatchRow | null> {
+  // Démarre toujours proprement à la 1re minute lorsque son tour arrive
+  const kickoffDate = new Date(now);
   const liveDraft: MatchRow = {
     ...m,
     status: "live",
     homeScore: m.homeScore ?? 0,
     awayScore: m.awayScore ?? 0,
     minute: "1'",
-    startsAt: effectiveStartsAt,
+    startsAt: kickoffDate,
     homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
     awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
   };
 
-  await tickLiveMatch(liveDraft, now, pressure, true);
+  const finished = await tickLiveMatch(liveDraft, now, pressure, true);
+  return finished ? null : liveDraft;
 }
 
+/**
+ * Fait progresser un match live et retourne `true` si le match vient de se terminer (`FT`).
+ */
 async function tickLiveMatch(
   m: MatchRow,
   now: number,
   pressure: MatchBookPressure,
   forceWrite = false
-): Promise<void> {
+): Promise<boolean> {
   const stepMs = stepMsForMatch(m.id, m.source);
   const clock = computeClockState(m.startsAt.getTime(), now, stepMs);
   const isOver = clock.phase === "FT";
@@ -466,7 +657,6 @@ async function tickLiveMatch(
   let justScoredNow = false;
 
   // Sur un match manuel créé par l'admin, le score n'évolue que sur action de l'admin !
-  // Seule l'horloge avance doucement et les cotes live s'ajustent au temps restant.
   const simulateEvents = m.source === "virtual";
 
   if (simulateEvents && targetSimMin > prevSimMin) {
@@ -474,7 +664,6 @@ async function tickLiveMatch(
       const share = minuteGoalShare(min);
       const reg = regimeFactors(m.regime, min, lambdaHome, lambdaAway);
 
-      // Dynamique psychologique en cours de match : l'équipe menée pousse en fin de match
       const scoreDiff = home - away;
       const chaseH = min >= 62 && scoreDiff === -1 ? 1.15 : scoreDiff >= 2 ? 0.86 : 1;
       const chaseA = min >= 62 && scoreDiff === 1 ? 1.15 : scoreDiff <= -2 ? 0.86 : 1;
@@ -551,7 +740,7 @@ async function tickLiveMatch(
     redAway,
   });
 
-  if (dynamicOdds.oddsHome !== m.oddsHome) {
+  if (Math.abs(dynamicOdds.oddsHome - m.oddsHome) >= 0.02) {
     tickHistory.push({
       minute: targetSimMin,
       market: "result",
@@ -560,7 +749,7 @@ async function tickLiveMatch(
       to: dynamicOdds.oddsHome,
     });
   }
-  if (dynamicOdds.oddsDraw !== m.oddsDraw && m.oddsDraw != null) {
+  if (m.oddsDraw != null && Math.abs(dynamicOdds.oddsDraw - m.oddsDraw) >= 0.02) {
     tickHistory.push({
       minute: targetSimMin,
       market: "result",
@@ -569,7 +758,7 @@ async function tickLiveMatch(
       to: dynamicOdds.oddsDraw,
     });
   }
-  if (dynamicOdds.oddsAway !== m.oddsAway) {
+  if (Math.abs(dynamicOdds.oddsAway - m.oddsAway) >= 0.02) {
     tickHistory.push({
       minute: targetSimMin,
       market: "result",
@@ -592,7 +781,6 @@ async function tickLiveMatch(
   const lastGoalDate = justScoredNow ? new Date(now) : m.lastGoalAt;
   const recentGoal = lastGoalDate != null && now - lastGoalDate.getTime() < GOAL_SUSPEND_MS;
   const isFinalStoppage = clock.phase === "2H_STOPPAGE";
-  // Pour un match manuel, on respecte la suspension manuelle éventuelle de l'admin
   const suspended = isOver
     ? false
     : m.source === "manual"
@@ -635,7 +823,9 @@ async function tickLiveMatch(
     events.length !== (m.events ?? []).length ||
     targetSimMin !== prevSimMin;
 
-  if (!changed) return;
+  if (!changed) return isOver;
+
+  const naturalEndMs = m.startsAt.getTime() + matchDurationMs(m.id, m.source);
 
   await db
     .update(matches)
@@ -656,11 +846,14 @@ async function tickLiveMatch(
       markets: customMarkets,
       homeLogo,
       awayLogo,
-      ...(isOver ? { finishedAt: new Date(now) } : {}),
+      startsAt: m.startsAt,
+      ...(isOver ? { finishedAt: new Date(Math.min(now, naturalEndMs)) } : {}),
     })
     .where(eq(matches.id, m.id));
 
   if (isOver) {
     await settleMatchBets(m.id);
   }
+
+  return isOver;
 }

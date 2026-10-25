@@ -60,7 +60,14 @@ export function formatGoalSummary(events?: ClientMatchEvent[]): {
   return { homeGoals, awayGoals };
 }
 
-export function MatchCard({ match }: { match: ClientMatch; index?: number }) {
+export function MatchCard({
+  match,
+  nextUp,
+}: {
+  match: ClientMatch;
+  index?: number;
+  nextUp?: boolean;
+}) {
   const { openMarkets } = useApp();
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
@@ -98,7 +105,14 @@ export function MatchCard({ match }: { match: ClientMatch; index?: number }) {
               Terminé
             </span>
           ) : (
-            <KickoffCountdown startsAt={match.startsAt} />
+            <>
+              {nextUp && (
+                <span className="rounded-full bg-ink/8 px-2 py-0.5 font-display text-[10px] font-bold text-ink">
+                  Suivant
+                </span>
+              )}
+              <KickoffCountdown startsAt={match.startsAt} />
+            </>
           )}
         </div>
       </div>
@@ -223,11 +237,12 @@ function useOddsFlash(odds: number) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (odds === prev.current) return;
-    setFlash(odds > prev.current ? "up" : "down");
+    const delta = odds - prev.current;
     prev.current = odds;
+    if (Math.abs(delta) < 0.04) return;
+    setFlash(delta > 0 ? "up" : "down");
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setFlash(null), 900);
+    timeoutRef.current = setTimeout(() => setFlash(null), 850);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };

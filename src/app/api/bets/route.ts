@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
 /** Anti-triche : limites de mise (€) et intervalle minimal entre deux paris. */
 const MIN_STAKE = 0.5;
 const BET_COOLDOWN_MS = 700;
-/** Délai de validation des paris en direct (recotation serveur + vérification anti-but). */
-const LIVE_VALIDATION_MS = 450;
+/** Délai court de validation des paris en direct (recotation serveur + vérification anti-but). */
+const LIVE_VALIDATION_MS = 300;
 
 export async function GET(req: NextRequest) {
   await ensureSeeded();
