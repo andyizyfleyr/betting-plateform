@@ -615,13 +615,13 @@ export default function MatchsPage() {
         isRealUniverse ? (
           <>
             {/* Squelette mobile sur 2 lignes carrousel (Populaire EN DIRECT + Populaire en avant-match) */}
-            <div className="flex flex-col gap-4 lg:hidden">
+            <div className="flex flex-col gap-5 lg:hidden">
               {[0, 1].map((rowIdx) => (
-                <div key={rowIdx} className="space-y-2">
+                <div key={rowIdx} className="space-y-2.5">
                   <div className="shimmer h-4 w-44 rounded-md" />
                   <div className="-mx-4 flex gap-3 overflow-hidden px-4">
-                    <div className="shimmer h-[168px] w-[85vw] max-w-[328px] shrink-0 rounded-2xl" />
-                    <div className="shimmer h-[168px] w-[85vw] max-w-[328px] shrink-0 rounded-2xl" />
+                    <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
+                    <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
                   </div>
                 </div>
               ))}
@@ -680,7 +680,7 @@ export default function MatchsPage() {
       ) : isRealUniverse ? (
         <>
           {/* MOBILE (< lg) : Classement 1xBet sur 2 lignes carrousel défilables gauche-droite */}
-          <div className="flex flex-col gap-4 lg:hidden">
+          <div className="flex flex-col gap-5 lg:hidden">
             {(filter === "all" || filter === "live") && (
               <RealMatchCarouselRow
                 label="Populaire EN DIRECT"
@@ -943,7 +943,7 @@ function RealMatchCarouselRow({
         <div
           ref={scrollerRef}
           onScroll={syncScrollEdges}
-          className="-mx-4 mt-2 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-3 overflow-x-auto px-4 pb-1 scroll-smooth no-scrollbar"
+          className="-mx-4 mt-2.5 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-3 overflow-x-auto px-4 pb-1 scroll-smooth no-scrollbar"
         >
           {items.map((m) => (
             <div
@@ -952,7 +952,7 @@ function RealMatchCarouselRow({
                 "shrink-0 snap-start",
                 items.length === 1
                   ? "w-full"
-                  : "w-[85vw] max-w-[328px] sm:w-[320px]"
+                  : "w-[86vw] max-w-[336px] sm:w-[332px]"
               )}
             >
               <MatchCard match={m} className="h-full" />
