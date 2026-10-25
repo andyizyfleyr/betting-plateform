@@ -4,7 +4,13 @@ import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
-import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
+import {
+  buildLiveMarkets,
+  buildMarkets,
+  buildRealMatchMarkets,
+  isRealMatchKickoffReached,
+  minuteNumber,
+} from "@/lib/markets";
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
@@ -16,6 +22,7 @@ export async function GET() {
   await ensureMlLoaded();
   await syncLiveMatchesThrottled();
 
+  const now = Date.now();
   const allRows = await db
     .select()
     .from(matches)
@@ -25,9 +32,21 @@ export async function GET() {
       desc(matches.id)
     );
 
-  const activeRows = allRows.filter((r) => r.status !== "finished");
-  const finishedRows = allRows
-    .filter((r) => r.status === "finished")
+  // Séparation stricte des files : les résultats rapides des matchs virtuels (2-3 min)
+  // n'évincent jamais les matchs réels ajoutés par l'admin.
+  const activeManual = allRows.filter((r) => r.source === "manual" && r.status !== "finished");
+  const finishedManual = allRows
+    .filter((r) => r.source === "manual" && r.status === "finished")
+    .sort((a, b) => {
+      const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
+      const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
+      return tb - ta;
+    })
+    .slice(0, 20);
+
+  const activeVirtual = allRows.filter((r) => r.source !== "manual" && r.status !== "finished");
+  const finishedVirtual = allRows
+    .filter((r) => r.source !== "manual" && r.status === "finished")
     .sort((a, b) => {
       const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
       const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
@@ -35,49 +54,10 @@ export async function GET() {
     })
     .slice(0, 12);
 
-  const rows = [...activeRows, ...finishedRows];
+  const rows = [...activeManual, ...finishedManual, ...activeVirtual, ...finishedVirtual];
 
-  // Cotes fixes bookmaker basées sur le match (forces, forme, score, minute)
   const withMarkets = rows.map((m) => {
-    const formOpts = {
-      homeForm: m.homeForm ?? 1,
-      awayForm: m.awayForm ?? 1,
-      redHome: m.redHome ?? 0,
-      redAway: m.redAway ?? 0,
-      events: m.events ?? [],
-      matchId: m.id,
-    };
-
-    const markets =
-      m.status === "finished"
-        ? []
-        : m.source === "manual" && m.markets && m.markets.length > 0
-          ? m.markets
-          : m.status === "live"
-            ? buildLiveMarkets(
-                m.homeTeam,
-                m.awayTeam,
-                m.homeScore ?? 0,
-                m.awayScore ?? 0,
-                minuteNumber(m.minute),
-                formOpts
-              )
-            : buildMarkets(m.homeTeam, m.awayTeam, formOpts);
-
-    const resGroup = markets.find((g) => g.key === "result");
-    const oddsHome =
-      resGroup?.outcomes.find((o) => o.key === "home")?.odds ?? m.oddsHome;
-    const oddsDraw =
-      resGroup
-        ? (resGroup.outcomes.find((o) => o.key === "draw")?.odds ?? m.oddsDraw)
-        : m.oddsDraw;
-    const oddsAway =
-      resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
-
-    const telemetry =
-      m.status === "live" || m.status === "finished"
-        ? computeMatchTelemetry(m)
-        : undefined;
+    const isReal = m.source === "manual";
 
     // On masque strictement les variables internes du simulateur et les scénarios anticipés admin
     const {
@@ -96,8 +76,71 @@ export async function GET() {
     void _scenarioNonce;
     void _scriptedEvents;
 
+    if (isReal) {
+      // Moteur dédié aux matchs réels : cotes officielles de l'admin, verrouillage pré-match à l'heure
+      // du coup d'envoi, aucune télémétrie virtuelle simulée.
+      const kickoffReached = isRealMatchKickoffReached(m, now);
+      const markets = buildRealMatchMarkets(m, now);
+      const resGroup = markets.find((g) => g.key === "result");
+      const oddsHome = resGroup?.outcomes.find((o) => o.key === "home")?.odds ?? m.oddsHome;
+      const oddsDraw = resGroup
+        ? (resGroup.outcomes.find((o) => o.key === "draw")?.odds ?? m.oddsDraw)
+        : m.oddsDraw;
+      const oddsAway = resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
+
+      return {
+        ...publicMatch,
+        source: "manual" as const,
+        homeLogo: m.homeLogo || teamLogo(m.homeTeam),
+        awayLogo: m.awayLogo || teamLogo(m.awayTeam),
+        oddsHome,
+        oddsDraw,
+        oddsAway,
+        kickoffReached,
+        suspended: Boolean(m.suspended) || kickoffReached,
+        markets,
+      };
+    }
+
+    // Moteur dédié aux matchs virtuels (2-3 min)
+    const formOpts = {
+      homeForm: m.homeForm ?? 1,
+      awayForm: m.awayForm ?? 1,
+      redHome: m.redHome ?? 0,
+      redAway: m.redAway ?? 0,
+      events: m.events ?? [],
+      matchId: m.id,
+    };
+
+    const markets =
+      m.status === "finished"
+        ? []
+        : m.status === "live"
+          ? buildLiveMarkets(
+              m.homeTeam,
+              m.awayTeam,
+              m.homeScore ?? 0,
+              m.awayScore ?? 0,
+              minuteNumber(m.minute),
+              formOpts
+            )
+          : buildMarkets(m.homeTeam, m.awayTeam, formOpts);
+
+    const resGroup = markets.find((g) => g.key === "result");
+    const oddsHome = resGroup?.outcomes.find((o) => o.key === "home")?.odds ?? m.oddsHome;
+    const oddsDraw = resGroup
+      ? (resGroup.outcomes.find((o) => o.key === "draw")?.odds ?? m.oddsDraw)
+      : m.oddsDraw;
+    const oddsAway = resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
+
+    const telemetry =
+      m.status === "live" || m.status === "finished"
+        ? computeMatchTelemetry(m)
+        : undefined;
+
     return {
       ...publicMatch,
+      source: "virtual" as const,
       homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
       awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
       oddsHome,

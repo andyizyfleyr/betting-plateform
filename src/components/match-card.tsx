@@ -11,7 +11,7 @@ import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
-import { cn, formatOdds } from "@/lib/format";
+import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
 export function LiveStatusBadge({
   minute,
@@ -77,6 +77,7 @@ export function MatchCard({
   const [showTracker, setShowTracker] = useState(false);
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
+  const isReal = match.source === "manual";
   const marketCount = match.markets?.length ?? 0;
   const { homeGoals, awayGoals } = formatGoalSummary(match.events);
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
@@ -97,13 +98,26 @@ export function MatchCard({
       {isLive && (
         <span
           aria-hidden
-          className="absolute inset-y-0 left-0 w-[3px] bg-betclic-red"
+          className={cn(
+            "absolute inset-y-0 left-0 w-[3px]",
+            isReal ? "bg-emerald-600" : "bg-betclic-red"
+          )}
         />
       )}
 
-      {/* En-tête : ligue + statut */}
+      {/* En-tête : type de match + ligue + statut */}
       <div className="flex items-center justify-between gap-2 text-[11.5px]">
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
+          <span
+            className={cn(
+              "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
+              isReal
+                ? "bg-emerald-600/12 text-emerald-700"
+                : "bg-elev text-dim"
+            )}
+          >
+            {isReal ? "Réel" : "Virtuel"}
+          </span>
           <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
           <span className="truncate font-semibold">{match.league}</span>
         </div>
@@ -111,26 +125,37 @@ export function MatchCard({
         <div className="flex shrink-0 items-center gap-1.5">
           {isLive ? (
             <>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowTracker((s) => !s);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors",
-                  showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
-                )}
-              >
-                <Radio className="h-2.5 w-2.5" strokeWidth={2.4} />
-                2D
-              </button>
+              {!isReal && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowTracker((s) => !s);
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors",
+                    showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
+                  )}
+                >
+                  <Radio className="h-2.5 w-2.5" strokeWidth={2.4} />
+                  2D
+                </button>
+              )}
               <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
             </>
           ) : isFinished ? (
             <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold text-dim">
               Terminé · Historique
               <ChevronRight className="h-3 w-3" strokeWidth={2.3} />
+            </span>
+          ) : isReal && match.kickoffReached ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10px] font-bold text-amber-700">
+              <Lock className="h-2.5 w-2.5" strokeWidth={2.4} />
+              Coup d&apos;envoi atteint
+            </span>
+          ) : isReal ? (
+            <span className="rounded-full bg-elev px-2.5 py-0.5 font-display text-[10.5px] font-semibold text-ink">
+              {formatKickoff(match.startsAt)}
             </span>
           ) : (
             <>
@@ -183,8 +208,8 @@ export function MatchCard({
         </div>
       )}
 
-      {/* Tracker 2D dépliable sur carte live (recherche / filtre ligue) */}
-      {isLive && showTracker && <LiveMatchTracker match={match} className="mt-2.5" />}
+      {/* Tracker 2D dépliable exclusivement réservé aux matchs virtuels */}
+      {!isReal && isLive && showTracker && <LiveMatchTracker match={match} className="mt-2.5" />}
 
       {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés */}
       {!isFinished && (
@@ -332,6 +357,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
           uid: comboUid,
           kind: "sport",
           matchId: match.id,
+          matchSource: match.source,
           title: `${match.homeTeam} – ${match.awayTeam}`,
           league: match.league,
           market: "result",
@@ -355,6 +381,12 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
                 const res = toggleComboLeg(comboSel);
                 if (res === "full") {
                   toast({ kind: "error", title: "Betslip complet (8 sélections max)" });
+                } else if (res === "source_conflict") {
+                  toast({
+                    kind: "error",
+                    title: "Mélange interdit",
+                    description: "Impossible de mélanger match réel et match virtuel.",
+                  });
                 }
                 return;
               }

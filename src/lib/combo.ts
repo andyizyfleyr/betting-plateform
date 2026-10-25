@@ -12,7 +12,14 @@ import {
 } from "@/db/schema";
 import { computeComboQuote } from "@/lib/combo-math";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
-import { isKnownMarket, liveOutcomeProbability, marketSettle, minuteNumber } from "@/lib/markets";
+import {
+  isKnownMarket,
+  liveOutcomeProbability,
+  marketSettle,
+  minuteNumber,
+  realMatchLiveProbability,
+  realMatchSettle,
+} from "@/lib/markets";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -48,14 +55,24 @@ export function resolveComboLegStatus(
       }
       return "void";
     }
-    const { won, voided } = marketSettle(
-      leg.market,
-      leg.selection,
-      home,
-      away,
-      m.events ?? null,
-      m.id
-    );
+    const { won, voided } =
+      m.source === "manual"
+        ? realMatchSettle(
+            leg.market,
+            leg.selection,
+            home,
+            away,
+            m.events ?? null,
+            m.id
+          )
+        : marketSettle(
+            leg.market,
+            leg.selection,
+            home,
+            away,
+            m.events ?? null,
+            m.id
+          );
     return voided ? "void" : won ? "won" : "lost";
   }
 
@@ -279,25 +296,28 @@ export function computeComboCashOut(
         const min = minuteNumber(m.minute);
         if (min >= 88) return null;
         hasLiveProgress = true;
-        const pLive = isKnownMarket(leg.market)
-          ? liveOutcomeProbability(
-              leg.market,
-              leg.selection,
-              m.homeTeam,
-              m.awayTeam,
-              m.homeScore ?? 0,
-              m.awayScore ?? 0,
-              min,
-              {
-                homeForm: m.homeForm ?? 1,
-                awayForm: m.awayForm ?? 1,
-                redHome: m.redHome ?? 0,
-                redAway: m.redAway ?? 0,
-                events: m.events ?? null,
-                matchId: m.id,
-              }
-            )
-          : null;
+        const pLive =
+          m.source === "manual"
+            ? realMatchLiveProbability(m, leg.market, leg.selection)
+            : isKnownMarket(leg.market)
+              ? liveOutcomeProbability(
+                  leg.market,
+                  leg.selection,
+                  m.homeTeam,
+                  m.awayTeam,
+                  m.homeScore ?? 0,
+                  m.awayScore ?? 0,
+                  min,
+                  {
+                    homeForm: m.homeForm ?? 1,
+                    awayForm: m.awayForm ?? 1,
+                    redHome: m.redHome ?? 0,
+                    redAway: m.redAway ?? 0,
+                    events: m.events ?? null,
+                    matchId: m.id,
+                  }
+                )
+              : null;
         if (pLive == null || pLive < 0.02) return null;
         jointProb *= pLive;
       } else {

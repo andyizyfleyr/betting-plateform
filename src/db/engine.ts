@@ -260,25 +260,33 @@ async function demoteLiveMatchToUpcoming(m: MatchRow, targetStartsAt: Date): Pro
 }
 
 /**
- * Utilisé par l'API Admin lorsqu'un match est lancé ou rouvert manuellement en direct :
- * garantit que tous les autres matchs en direct cèdent la place et repassent en file d'attente.
+ * Utilisé par l'API Admin lorsqu'un match VIRTUEL est lancé ou rouvert en direct :
+ * garantit qu'un seul match virtuel est en direct à la fois.
+ * Les matchs RÉELS (`source = "manual"`) sont 100 % indépendants : plusieurs matchs réels
+ * peuvent être en direct simultanément sans jamais interrompre le match virtuel ni entre eux.
  */
 export async function demoteOtherLiveMatches(keepMatchId: number, now = Date.now()): Promise<void> {
   const [keepMatch] = await db.select().from(matches).where(eq(matches.id, keepMatchId));
+  if (!keepMatch || keepMatch.source === "manual") return;
+
   const others = await db
     .select()
     .from(matches)
-    .where(and(eq(matches.status, "live"), ne(matches.id, keepMatchId)));
+    .where(
+      and(
+        eq(matches.status, "live"),
+        eq(matches.source, "virtual"),
+        ne(matches.id, keepMatchId)
+      )
+    );
 
   if (others.length === 0) return;
 
-  let cursorMs = keepMatch
-    ? expectedMatchEndMs(keepMatch, now) + INTER_MATCH_GAP_MS
-    : now + 160_000;
+  let cursorMs = expectedMatchEndMs(keepMatch, now) + INTER_MATCH_GAP_MS;
 
   for (const extra of others) {
     await demoteLiveMatchToUpcoming(extra, new Date(cursorMs));
-    cursorMs += matchDurationMs(extra.id, extra.source) + INTER_MATCH_GAP_MS;
+    cursorMs += matchDurationMs(extra.id, "virtual") + INTER_MATCH_GAP_MS;
   }
 }
 
@@ -491,10 +499,12 @@ async function executeTick(now: number): Promise<void> {
   await ensureMlLoaded();
   await ensureActiveSchedule(now);
 
+  // Le moteur de simulation 24h/24 ne pilote QUE les matchs virtuels (`source = "virtual"`).
+  // Les matchs réels ajoutés manuellement par l'admin (`source = "manual"`) sont 100 % isolés.
   const openMatches = await db
     .select()
     .from(matches)
-    .where(inArray(matches.status, ["upcoming", "live"]));
+    .where(and(inArray(matches.status, ["upcoming", "live"]), eq(matches.source, "virtual")));
 
   if (openMatches.length === 0) return;
 
@@ -622,77 +632,52 @@ async function executeTick(now: number): Promise<void> {
     }
   }
 
-  // 4. Rattrapage séquentiel (« Time-Continuum ») de la file d'attente même avec 0 visiteur :
-  //    tous les matchs dont le créneau est passé se déroulent à tour de rôle et règlent leurs paris,
-  //    et celui dont le créneau couvre `now` est repris exactement à sa minute de jeu réelle.
+  // 4. Rattrapage séquentiel (« Time-Continuum ») de la file virtuelle même avec 0 visiteur :
+  //    tous les matchs virtuels dont le créneau est passé se déroulent à tour de rôle et règlent leurs paris,
+  //    et celui dont le créneau couvre `now` est repris exactement à sa minute de jeu simulée.
   if (!activeLive && upcomingMatches.length > 0) {
-    // 4a. Matchs manuels arrivés à échéance
-    const dueManuals = upcomingMatches
-      .filter((m) => m.source === "manual" && m.startsAt.getTime() <= now)
+    const virtualOrdered = upcomingMatches
+      .filter((m) => m.source === "virtual")
       .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
 
-    for (const mm of dueManuals) {
-      const idx = upcomingMatches.findIndex((u) => u.id === mm.id);
+    let seqCursor = lastCompletedEndMs > 0 ? lastCompletedEndMs + INTER_MATCH_GAP_MS : 0;
+
+    for (const vm of virtualOrdered) {
+      const effStartMs =
+        seqCursor > 0 ? Math.max(vm.startsAt.getTime(), seqCursor) : vm.startsAt.getTime();
+
+      if (effStartMs > now) {
+        break;
+      }
+
+      const idx = upcomingMatches.findIndex((u) => u.id === vm.id);
       if (idx >= 0) upcomingMatches.splice(idx, 1);
-      const liveOrDone = await kickOffAtSchedule(mm, mm.startsAt.getTime(), now, pressureFor(mm));
+
+      const liveOrDone = await kickOffAtSchedule(vm, effStartMs, now, pressureFor(vm));
       if (liveOrDone) {
         activeLive = liveOrDone;
         break;
       }
-      lastCompletedEndMs = Math.max(
-        lastCompletedEndMs,
-        mm.startsAt.getTime() + matchDurationMs(mm.id, "manual")
-      );
+
+      const dur = matchDurationMs(vm.id, "virtual");
+      lastCompletedEndMs = Math.max(lastCompletedEndMs, effStartMs + dur);
+      seqCursor = lastCompletedEndMs + INTER_MATCH_GAP_MS;
     }
 
-    // 4b. File séquentielle des matchs virtuels
     if (!activeLive) {
-      const virtualOrdered = upcomingMatches
+      const nextQueuedVirtual = upcomingMatches
         .filter((m) => m.source === "virtual")
-        .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
+        .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
 
-      let seqCursor = lastCompletedEndMs > 0 ? lastCompletedEndMs + INTER_MATCH_GAP_MS : 0;
-
-      for (const vm of virtualOrdered) {
-        const effStartMs =
-          seqCursor > 0 ? Math.max(vm.startsAt.getTime(), seqCursor) : vm.startsAt.getTime();
-
-        if (effStartMs > now) {
-          break;
-        }
-
-        const idx = upcomingMatches.findIndex((u) => u.id === vm.id);
+      if (nextQueuedVirtual) {
+        const idx = upcomingMatches.findIndex((u) => u.id === nextQueuedVirtual.id);
         if (idx >= 0) upcomingMatches.splice(idx, 1);
-
-        const liveOrDone = await kickOffAtSchedule(vm, effStartMs, now, pressureFor(vm));
-        if (liveOrDone) {
-          activeLive = liveOrDone;
-          break;
-        }
-
-        const dur = matchDurationMs(vm.id, "virtual");
-        lastCompletedEndMs = Math.max(lastCompletedEndMs, effStartMs + dur);
-        seqCursor = lastCompletedEndMs + INTER_MATCH_GAP_MS;
-      }
-
-      // Si le match live vient tout juste de se terminer et que la file virtuelle contient déjà
-      // le prochain match programmé dans quelques secondes, passe-lui immédiatement le témoin
-      // au lieu d'insérer un match intercalaire.
-      if (!activeLive) {
-        const nextQueuedVirtual = upcomingMatches
-          .filter((m) => m.source === "virtual")
-          .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
-
-        if (nextQueuedVirtual) {
-          const idx = upcomingMatches.findIndex((u) => u.id === nextQueuedVirtual.id);
-          if (idx >= 0) upcomingMatches.splice(idx, 1);
-          activeLive = await kickOffAtSchedule(
-            nextQueuedVirtual,
-            now,
-            now,
-            pressureFor(nextQueuedVirtual)
-          );
-        }
+        activeLive = await kickOffAtSchedule(
+          nextQueuedVirtual,
+          now,
+          now,
+          pressureFor(nextQueuedVirtual)
+        );
       }
     }
   }
@@ -704,13 +689,13 @@ async function executeTick(now: number): Promise<void> {
     activeLive = await bridgeIdleGapAndStartLive(now, lastCompletedEndMs);
   }
 
-  // 6. Regarnit la file d'attente si le rattrapage a consommé des matchs, puis aligne les coups d'envoi
+  // 6. Regarnit la file virtuelle si le rattrapage a consommé des matchs, puis aligne les coups d'envoi
   if (upcomingMatches.filter((m) => m.source === "virtual").length < MIN_ACTIVE_VIRTUAL) {
     await ensureActiveSchedule(now);
     const refreshedUpcoming = await db
       .select()
       .from(matches)
-      .where(eq(matches.status, "upcoming"));
+      .where(and(eq(matches.status, "upcoming"), eq(matches.source, "virtual")));
     await syncUpcomingQueue(refreshedUpcoming, activeLive, now, betsByMatch);
   } else {
     await syncUpcomingQueue(upcomingMatches, activeLive, now, betsByMatch);
@@ -819,62 +804,32 @@ async function syncUpcomingQueue(
     }
   }
 
-  // Matchs manuels à venir : conserve l'horaire choisi par l'admin
-  const manualUpcoming = upcomingMatches.filter((m) => m.source === "manual");
-  for (const m of manualUpcoming) {
-    if (m.markets && m.markets.length > 0) continue;
-    const freshOdds = oddsFor(m.homeTeam, m.awayTeam, {
-      homeForm: m.homeForm ?? 1,
-      awayForm: m.awayForm ?? 1,
-    });
-    const homeLogo = teamLogo(m.homeTeam) || m.homeLogo;
-    const awayLogo = teamLogo(m.awayTeam) || m.awayLogo;
-    if (
-      Math.abs(m.oddsHome - freshOdds.oddsHome) > 0.02 ||
-      Math.abs((m.oddsDraw ?? 0) - freshOdds.oddsDraw) > 0.02 ||
-      Math.abs(m.oddsAway - freshOdds.oddsAway) > 0.02 ||
-      homeLogo !== m.homeLogo ||
-      awayLogo !== m.awayLogo
-    ) {
-      await db
-        .update(matches)
-        .set({
-          oddsHome: freshOdds.oddsHome,
-          oddsDraw: freshOdds.oddsDraw,
-          oddsAway: freshOdds.oddsAway,
-          homeLogo,
-          awayLogo,
-        })
-        .where(eq(matches.id, m.id));
-    }
-  }
+  // Les matchs réels (`source = "manual"`) ne sont JAMAIS modifiés par `syncUpcomingQueue` :
+  // leurs cotes, équipes, logos et horaires appartiennent exclusivement à l'administrateur.
 }
 
 async function ensureActiveSchedule(now: number): Promise<void> {
-  const openAll = await db
+  const activeVirtual = await db
     .select()
     .from(matches)
-    .where(inArray(matches.status, ["upcoming", "live"]));
+    .where(and(inArray(matches.status, ["upcoming", "live"]), eq(matches.source, "virtual")));
 
-  const activeVirtual = openAll.filter((m) => m.source === "virtual");
   if (activeVirtual.length >= MIN_ACTIVE_VIRTUAL) return;
 
   const busyTeams = new Set<string>();
   let tailEndMs = now;
   let netHomeStronger = 0;
 
-  for (const m of openAll) {
+  for (const m of activeVirtual) {
     busyTeams.add(m.homeTeam);
     busyTeams.add(m.awayTeam);
-    if (m.source === "virtual") {
-      const diff = teamStrength(m.homeTeam) - teamStrength(m.awayTeam);
-      if (diff >= 1) netHomeStronger++;
-      else if (diff <= -1) netHomeStronger--;
-    }
+    const diff = teamStrength(m.homeTeam) - teamStrength(m.awayTeam);
+    if (diff >= 1) netHomeStronger++;
+    else if (diff <= -1) netHomeStronger--;
     const estEnd =
       m.status === "live"
         ? expectedMatchEndMs(m, now)
-        : m.startsAt.getTime() + matchDurationMs(m.id, m.source);
+        : m.startsAt.getTime() + matchDurationMs(m.id, "virtual");
     if (estEnd > tailEndMs) {
       tailEndMs = estEnd;
     }
@@ -898,7 +853,7 @@ async function ensureActiveSchedule(now: number): Promise<void> {
     chosen.push(oriented);
   }
 
-  const hasAnyOpen = openAll.length > 0;
+  const hasAnyOpen = activeVirtual.length > 0;
   let upcomingCursor = hasAnyOpen ? tailEndMs + INTER_MATCH_GAP_MS : now;
   const rows: Array<typeof matches.$inferInsert> = [];
 
@@ -991,7 +946,7 @@ async function bridgeIdleGapAndStartLive(
   const [recentFin] = await db
     .select({ finishedAt: matches.finishedAt })
     .from(matches)
-    .where(eq(matches.status, "finished"))
+    .where(and(eq(matches.status, "finished"), eq(matches.source, "virtual")))
     .orderBy(desc(matches.finishedAt))
     .limit(1);
 
@@ -1003,7 +958,7 @@ async function bridgeIdleGapAndStartLive(
   const openNow = await db
     .select({ homeTeam: matches.homeTeam, awayTeam: matches.awayTeam })
     .from(matches)
-    .where(inArray(matches.status, ["upcoming", "live"]));
+    .where(and(inArray(matches.status, ["upcoming", "live"]), eq(matches.source, "virtual")));
   const busy = new Set<string>();
   for (const r of openNow) {
     busy.add(r.homeTeam);
@@ -1690,7 +1645,7 @@ export async function getAdminMatchForecasts(
 
   const forecasts: Record<number, AdminMatchForecast> = {};
   for (const m of openMatches) {
-    if (m.source === "manual" && !m.scenarioLocked) continue;
+    if (m.source !== "virtual") continue;
     const pressure: MatchBookPressure = {
       tickets: betsByMatch.get(m.id) ?? [],
       houseTightness: houseHealth.tightness,
@@ -1725,7 +1680,7 @@ export async function setScenarioMode(nextMode: ScenarioMode): Promise<ScenarioM
   const openVirtual = await db
     .select()
     .from(matches)
-    .where(inArray(matches.status, ["upcoming", "live"]));
+    .where(and(eq(matches.source, "virtual"), inArray(matches.status, ["upcoming", "live"])));
 
   const neutral: MatchBookPressure = { tickets: [], houseTightness: 1 };
 
@@ -1757,7 +1712,7 @@ export async function setScenarioMode(nextMode: ScenarioMode): Promise<ScenarioM
 export async function lockMatchScenario(matchId: number): Promise<AdminMatchForecast | null> {
   await ensureMlLoaded();
   const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-  if (!m || m.status === "finished") return null;
+  if (!m || m.status === "finished" || m.source !== "virtual") return null;
 
   const { forecasts } = await getAdminMatchForecasts([m]);
   const fc =
@@ -1775,13 +1730,13 @@ export async function unlockMatchScenario(matchId: number): Promise<void> {
   await db
     .update(matches)
     .set({ scenarioLocked: false, scriptedEvents: null })
-    .where(eq(matches.id, matchId));
+    .where(and(eq(matches.id, matchId), eq(matches.source, "virtual")));
 }
 
 export async function rerollMatchScenario(matchId: number): Promise<AdminMatchForecast | null> {
   await ensureMlLoaded();
   const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-  if (!m || m.status === "finished") return null;
+  if (!m || m.status === "finished" || m.source !== "virtual") return null;
 
   const mode = await getScenarioMode();
   const nextNonce = (m.scenarioNonce ?? 0) + 1;
@@ -1827,7 +1782,7 @@ export async function forceMatchFinalScore(
 ): Promise<AdminMatchForecast | null> {
   await ensureMlLoaded();
   const [m] = await db.select().from(matches).where(eq(matches.id, matchId));
-  if (!m || m.status === "finished") return null;
+  if (!m || m.status === "finished" || m.source !== "virtual") return null;
 
   const curMin = elapsedSimulatedMinute(m);
   const curHome = m.status === "live" ? (m.homeScore ?? 0) : 0;

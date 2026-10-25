@@ -23,6 +23,7 @@ export interface ClientComboLeg {
   matchHomeScore?: number | null;
   matchAwayScore?: number | null;
   matchMinute?: string | null;
+  matchSource?: "virtual" | "manual" | null;
 }
 
 export interface MarketOutcome {
@@ -72,6 +73,7 @@ export interface ClientMatch {
   oddsDraw: number | null;
   oddsAway: number;
   suspended: boolean;
+  kickoffReached?: boolean;
   redHome?: number;
   redAway?: number;
   events?: ClientMatchEvent[];
@@ -109,6 +111,7 @@ export interface ClientBet {
   matchAwayScore: number | null;
   matchMinute: string | null;
   matchStartsAt: string | null;
+  matchSource?: "virtual" | "manual" | null;
 }
 
 export interface PredictionOptionClient {
@@ -228,36 +231,6 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export interface ClientMlRecommendedPick {
-  matchId: number;
-  league: string;
-  homeTeam: string;
-  awayTeam: string;
-  status: string;
-  minute: string | null;
-  startsAt: string;
-  market: string;
-  marketLabel: string;
-  selection: string;
-  selectionLabel: string;
-  odds: number;
-  matchScorePct: number;
-  reason: string;
-}
-
-export interface ClientMlRecommendations {
-  personalized: boolean;
-  preferredOdds: number;
-  favoriteLeague: string | null;
-  picks: ClientMlRecommendedPick[];
-  smartCombo: {
-    title: string;
-    reason: string;
-    legs: ClientMlRecommendedPick[];
-    combinedOdds: number;
-  } | null;
-}
-
 export interface ClientMatchHistoryItem {
   id: number;
   sport: string;
@@ -299,7 +272,6 @@ export const api = {
         ? `/api/matches/history?matchId=${encodeURIComponent(matchId)}`
         : "/api/matches/history"
     ),
-  mlRecommendations: () => request<ClientMlRecommendations>("/api/ml/recommendations"),
   bets: (filter: "ongoing" | "finished") =>
     request<{ bets: ClientBet[]; balance: number | null }>(`/api/bets?filter=${filter}`),
   allBets: () => request<{ bets: ClientBet[]; balance: number | null }>("/api/bets?filter=all"),

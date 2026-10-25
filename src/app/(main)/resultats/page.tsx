@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  CalendarClock,
   ChevronDown,
+  Cpu,
   History,
   Search,
   Trophy,
@@ -18,6 +20,7 @@ import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
 import { cn, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 
+type Universe = "real" | "virtual";
 type WinnerFilter = "all" | "V1" | "X" | "V2";
 type GoalsFilter = "all" | "over25" | "under25" | "btts";
 
@@ -56,6 +59,7 @@ function MatchHistoryCard({
   const { oddsFormat } = useApp();
   const isFinished = match.status === "finished";
   const isLive = match.status === "live";
+  const isReal = match.source === "manual";
   const hasScore = match.homeScore != null && match.awayScore != null;
   const h = match.homeScore ?? 0;
   const a = match.awayScore ?? 0;
@@ -98,6 +102,16 @@ function MatchHistoryCard({
         {/* En-tête ligue + heure + statut */}
         <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-mist">
           <div className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={cn(
+                "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide",
+                isReal
+                  ? "bg-emerald-600/12 text-emerald-700"
+                  : "bg-elev text-dim"
+              )}
+            >
+              {isReal ? "Réel" : "Virtuel"}
+            </span>
             <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
             <span className="truncate">{match.league}</span>
             <span className="text-dim">·</span>
@@ -246,14 +260,12 @@ function MatchHistoryCard({
                   }
                 />
                 <SettledPill label="Double chance" value={doubleChanceLabel} />
-                <SettledPill
-                  label="MT-Fin"
-                  value={
-                    match.htWinnerCode && match.winnerCode
-                      ? `${match.htWinnerCode}-${match.winnerCode}`
-                      : "—"
-                  }
-                />
+                {match.htWinnerCode && match.winnerCode && (
+                  <SettledPill
+                    label="MT-Fin"
+                    value={`${match.htWinnerCode}-${match.winnerCode}`}
+                  />
+                )}
                 <SettledPill label="Score exact" value={`${h}-${a}`} />
                 <SettledPill
                   label="Total (2.5)"
@@ -439,10 +451,12 @@ function ResultatsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const matchParam = searchParams.get("match");
+  const universeParam = searchParams.get("universe");
   const requestedMatchId = matchParam ? Number(matchParam) : undefined;
 
   const [history, setHistory] = useState<ClientMatchHistoryItem[] | null>(null);
   const [focusedMatch, setFocusedMatch] = useState<ClientMatchHistoryItem | null>(null);
+  const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(null);
   const [expandedIds, setExpandedIds] = useState<Record<number, boolean>>({});
   const [query, setQuery] = useState("");
   const [leagueFilter, setLeagueFilter] = useState<string>("all");
@@ -475,17 +489,42 @@ function ResultatsContent() {
     setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const realHistory = useMemo(
+    () => (history ?? []).filter((m) => m.source === "manual"),
+    [history]
+  );
+  const virtualHistory = useMemo(
+    () => (history ?? []).filter((m) => m.source !== "manual"),
+    [history]
+  );
+
+  const universe: Universe =
+    selectedUniverse ??
+    (focusedMatch
+      ? focusedMatch.source === "manual"
+        ? "real"
+        : "virtual"
+      : universeParam === "real"
+        ? "real"
+        : universeParam === "virtual"
+          ? "virtual"
+          : realHistory.length > 0
+            ? "real"
+            : "virtual");
+
+  const isRealUniverse = universe === "real";
+  const universeHistory = isRealUniverse ? realHistory : virtualHistory;
+
   const searched = useMemo(() => {
-    if (!history) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return history;
-    return history.filter(
+    if (!q) return universeHistory;
+    return universeHistory.filter(
       (m) =>
         m.homeTeam.toLowerCase().includes(q) ||
         m.awayTeam.toLowerCase().includes(q) ||
         m.league.toLowerCase().includes(q)
     );
-  }, [history, query]);
+  }, [universeHistory, query]);
 
   const leaguesWithCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -590,6 +629,63 @@ function ResultatsContent() {
         </Link>
       </div>
 
+      {/* Sélecteur strict d'univers : Matchs réels vs Matchs virtuels */}
+      <div className="mt-3.5 grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedUniverse("real");
+            setLeagueFilter("all");
+          }}
+          className={cn(
+            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+            isRealUniverse
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "text-mist active:bg-elev"
+          )}
+        >
+          <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+          <span className="truncate">Matchs réels</span>
+          {history !== null && (
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+              )}
+            >
+              {realHistory.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedUniverse("virtual");
+            setLeagueFilter("all");
+          }}
+          className={cn(
+            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+            !isRealUniverse
+              ? "bg-betclic-red text-white shadow-xs"
+              : "text-mist active:bg-elev"
+          )}
+        >
+          <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+          <span className="truncate">Matchs virtuels</span>
+          {history !== null && (
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+              )}
+            >
+              {virtualHistory.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Match ciblé depuis un coupon / pari */}
       {focusedMatch && (
         <section className="mt-4">
@@ -600,7 +696,7 @@ function ResultatsContent() {
             </span>
             <button
               type="button"
-              onClick={() => router.replace("/resultats")}
+              onClick={() => router.replace(`/resultats?universe=${universe}`)}
               className="text-[11.5px] font-semibold text-mist hover:text-ink"
             >
               Fermer le focus
@@ -616,7 +712,7 @@ function ResultatsContent() {
       )}
 
       {/* Recherche */}
-      <div className="mt-3.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+      <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
         <Search className="h-4 w-4 shrink-0 text-dim" />
         <input
           type="text"
@@ -701,7 +797,9 @@ function ResultatsContent() {
         }}
         resultCountText={
           history !== null
-            ? `${visible.length} résultat${visible.length > 1 ? "s" : ""}`
+            ? `${visible.length} résultat${visible.length > 1 ? "s" : ""} ${
+                isRealUniverse ? "réel" : "virtuel"
+              }${visible.length > 1 ? "s" : ""}`
             : null
         }
       />

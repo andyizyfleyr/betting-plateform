@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { matches, type MatchRow } from "@/db/schema";
-import { extractMatchTimelineStats } from "@/db/fixtures";
+import { extractMatchTimelineStats, hasVerifiedGoalTimeline } from "@/db/fixtures";
 import { ensureSeeded } from "@/db/seed";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import { ensureMlLoaded } from "@/lib/ml-engine";
@@ -20,11 +20,16 @@ function toIso(v: Date | string | null | undefined): string | null {
 }
 
 function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
+  const isReal = m.source === "manual";
   const hasScore = m.homeScore != null && m.awayScore != null;
   const h = m.homeScore ?? 0;
   const a = m.awayScore ?? 0;
 
-  const stats = hasScore
+  // Sur un match réel, la mi-temps n'est affichée que si les événements réels couvrent le score
+  // (jamais d'estimation pseudo-aléatoire sur un vrai match).
+  const canComputeHt =
+    hasScore && (!isReal || hasVerifiedGoalTimeline(h, a, m.events));
+  const stats = canComputeHt
     ? extractMatchTimelineStats(h, a, m.events, m.id)
     : null;
 
@@ -44,8 +49,9 @@ function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
         ? "X"
         : "V2";
 
+  // La télémétrie simulée (possession/tirs/xG virtuels) est réservée aux matchs virtuels
   const telemetry =
-    m.status === "finished" || m.status === "live"
+    !isReal && (m.status === "finished" || m.status === "live")
       ? computeMatchTelemetry(m)
       : undefined;
 
@@ -53,16 +59,16 @@ function mapHistoryItem(m: MatchRow): ClientMatchHistoryItem {
     id: m.id,
     sport: m.sport,
     league: m.league,
-    source: (m.source === "manual" ? "manual" : "virtual") as "virtual" | "manual",
+    source: isReal ? "manual" : "virtual",
     homeTeam: m.homeTeam,
     awayTeam: m.awayTeam,
-    homeLogo: teamLogo(m.homeTeam) || m.homeLogo,
-    awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
+    homeLogo: isReal ? m.homeLogo || teamLogo(m.homeTeam) : teamLogo(m.homeTeam) || m.homeLogo,
+    awayLogo: isReal ? m.awayLogo || teamLogo(m.awayTeam) : teamLogo(m.awayTeam) || m.awayLogo,
     homeScore: m.homeScore,
     awayScore: m.awayScore,
     htHome: stats ? stats.htHome : null,
     htAway: stats ? stats.htAway : null,
-    status: (m.status === "live" || m.status === "finished" ? m.status : "upcoming"),
+    status: m.status === "live" || m.status === "finished" ? m.status : "upcoming",
     minute: m.minute,
     startsAt: toIso(m.startsAt) ?? new Date().toISOString(),
     finishedAt: toIso(m.finishedAt),
@@ -89,14 +95,23 @@ export async function GET(req: NextRequest) {
   const matchIdParam = req.nextUrl.searchParams.get("matchId");
   const requestedMatchId = matchIdParam ? Number(matchIdParam) : NaN;
 
-  const finishedRows = await db
-    .select()
-    .from(matches)
-    .where(eq(matches.status, "finished"))
-    .orderBy(desc(matches.finishedAt), desc(matches.id))
-    .limit(150);
+  // Quotas séparés pour que les matchs virtuels (toutes les 2-3 min) n'effacent jamais l'historique réel
+  const [manualFinished, virtualFinished] = await Promise.all([
+    db
+      .select()
+      .from(matches)
+      .where(and(eq(matches.status, "finished"), eq(matches.source, "manual")))
+      .orderBy(desc(matches.finishedAt), desc(matches.id))
+      .limit(120),
+    db
+      .select()
+      .from(matches)
+      .where(and(eq(matches.status, "finished"), ne(matches.source, "manual")))
+      .orderBy(desc(matches.finishedAt), desc(matches.id))
+      .limit(120),
+  ]);
 
-  const sortedFinished = [...finishedRows].sort((a, b) => {
+  const sortedFinished = [...manualFinished, ...virtualFinished].sort((a, b) => {
     const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
     const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
     return tb - ta || b.id - a.id;

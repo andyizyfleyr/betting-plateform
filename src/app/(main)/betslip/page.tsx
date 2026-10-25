@@ -103,10 +103,26 @@ export default function BetslipPage() {
       if (leg.kind === "sport" && leg.matchId) {
         const m = matchMap.get(leg.matchId);
         if (!m) {
-          return { ...leg, liveOdds: leg.odds, isLive: false, closed: false, suspended: false, matchObj: null };
+          return {
+            ...leg,
+            resolvedSource: leg.matchSource ?? null,
+            liveOdds: leg.odds,
+            isLive: false,
+            closed: false,
+            suspended: false,
+            matchObj: null,
+          };
         }
         if (m.status === "finished") {
-          return { ...leg, liveOdds: leg.odds, isLive: false, closed: true, suspended: false, matchObj: m };
+          return {
+            ...leg,
+            resolvedSource: m.source,
+            liveOdds: leg.odds,
+            isLive: false,
+            closed: true,
+            suspended: false,
+            matchObj: m,
+          };
         }
         const grp = m.markets?.find((g) => g.key === leg.market);
         const out = grp?.outcomes.find((o) => o.key === leg.selection);
@@ -122,10 +138,11 @@ export default function BetslipPage() {
 
         return {
           ...leg,
+          resolvedSource: m.source,
           liveOdds: liveOdds ?? leg.odds,
           isLive: m.status === "live",
           closed: grp != null && !out,
-          suspended: Boolean(m.suspended),
+          suspended: Boolean(m.suspended || m.kickoffReached),
           matchObj: m,
         };
       }
@@ -133,7 +150,15 @@ export default function BetslipPage() {
       if (leg.kind === "prediction" && leg.questionId) {
         const q = predMap.get(leg.questionId);
         if (!q) {
-          return { ...leg, liveOdds: leg.odds, isLive: false, closed: false, suspended: false, matchObj: null };
+          return {
+            ...leg,
+            resolvedSource: null,
+            liveOdds: leg.odds,
+            isLive: false,
+            closed: false,
+            suspended: false,
+            matchObj: null,
+          };
         }
         const expired = q.status !== "open" || new Date(q.resolvesAt).getTime() <= nowMs;
         let liveOdds = leg.odds;
@@ -145,6 +170,7 @@ export default function BetslipPage() {
         }
         return {
           ...leg,
+          resolvedSource: null,
           liveOdds,
           isLive: false,
           closed: expired,
@@ -153,7 +179,15 @@ export default function BetslipPage() {
         };
       }
 
-      return { ...leg, liveOdds: leg.odds, isLive: false, closed: false, suspended: false, matchObj: null };
+      return {
+        ...leg,
+        resolvedSource: leg.matchSource ?? null,
+        liveOdds: leg.odds,
+        isLive: false,
+        closed: false,
+        suspended: false,
+        matchObj: null,
+      };
     });
   }, [comboLegs, matchMap, predMap, nowMs]);
 
@@ -164,6 +198,9 @@ export default function BetslipPage() {
   const isCombo = enrichedLegs.length >= 2;
   const hasClosedLeg = enrichedLegs.some((l) => l.closed);
   const hasSuspendedLeg = enrichedLegs.some((l) => l.suspended);
+  const hasMixedSources =
+    enrichedLegs.some((l) => l.resolvedSource === "manual") &&
+    enrichedLegs.some((l) => l.resolvedSource === "virtual");
 
   const quote = useMemo(
     () =>
@@ -191,6 +228,7 @@ export default function BetslipPage() {
     enrichedLegs.length <= MAX_COMBO_LEGS &&
     !hasClosedLeg &&
     !hasSuspendedLeg &&
+    !hasMixedSources &&
     stake >= 0.5 &&
     !overBalance;
 
@@ -468,6 +506,18 @@ export default function BetslipPage() {
                   className="min-w-0 flex-1 text-left"
                 >
                   <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-dim">
+                    {leg.kind === "sport" && leg.resolvedSource && (
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide",
+                          leg.resolvedSource === "manual"
+                            ? "bg-emerald-600/12 text-emerald-700"
+                            : "bg-elev text-dim"
+                        )}
+                      >
+                        {leg.resolvedSource === "manual" ? "Réel" : "Virtuel"}
+                      </span>
+                    )}
                     <span className="truncate">{leg.league}</span>
                     {leg.isLive && (
                       <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold text-betclic-red">
@@ -603,10 +653,26 @@ export default function BetslipPage() {
             </div>
 
             {/* Alertes éventuelles */}
+            {hasMixedSources && (
+              <div className="flex items-center gap-2 rounded-xl bg-betclic-red/10 px-3 py-2 text-[12px] font-medium text-betclic-red">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>
+                  Impossible de mélanger des matchs réels et des matchs virtuels dans un même coupon.
+                </span>
+              </div>
+            )}
+
             {hasClosedLeg && (
               <div className="flex items-center gap-2 rounded-xl bg-betclic-red/10 px-3 py-2 text-[12px] font-medium text-betclic-red">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>Retirez la sélection clôturée pour valider votre coupon.</span>
+              </div>
+            )}
+
+            {hasSuspendedLeg && !hasClosedLeg && (
+              <div className="flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[12px] font-medium text-amber-800">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Une sélection est temporairement suspendue (coup d&apos;envoi ou action live).</span>
               </div>
             )}
 
