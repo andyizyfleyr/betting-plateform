@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, Trophy, X } from "lucide-react";
+import Link from "next/link";
+import { History, Search, Trophy, X } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
 import { FeaturedMatch } from "@/components/featured-match";
@@ -177,16 +178,26 @@ export default function MatchsPage() {
           <p className="capitalize text-[12px] text-mist">{todayLabel()}</p>
         </div>
 
-        {liveCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setFilter(filter === "live" ? "all" : "live")}
-            className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[11.5px] font-bold text-betclic-red active:scale-95"
+        <div className="flex items-center gap-2">
+          <Link
+            href="/resultats"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
           >
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-            {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
-          </button>
-        )}
+            <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
+            Résultats
+          </Link>
+
+          {liveCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter(filter === "live" ? "all" : "live")}
+              className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[11.5px] font-bold text-betclic-red active:scale-95"
+            >
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+              {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Barre de recherche (marge 16 px gauche/droite) */}
@@ -354,7 +365,17 @@ export default function MatchsPage() {
 
           {finishedList.length > 0 && (
             <section>
-              <SectionHeader label="Résultats récents" count={finishedList.length} />
+              <div className="flex items-center justify-between px-0.5">
+                <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                  Résultats récents
+                </h2>
+                <Link
+                  href="/resultats"
+                  className="font-display text-[11.5px] font-bold text-betclic-red"
+                >
+                  Tout l&apos;historique →
+                </Link>
+              </div>
               <div className="mt-2 flex flex-col gap-2.5">
                 {finishedList.map((m) => (
                   <MatchCard key={m.id} match={m} />

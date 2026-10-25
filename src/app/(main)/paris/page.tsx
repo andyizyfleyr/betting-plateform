@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Plus, Search, TicketX, X } from "lucide-react";
+import { ArrowRight, History, Plus, Search, TicketX, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { BetTicket } from "@/components/bet-ticket";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
@@ -202,13 +202,21 @@ export default function ParisPage() {
 
   return (
     <div className="px-4 pb-8 pt-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
             Mes paris
           </h1>
           <p className="text-[12px] text-mist">Coupons en cours et historique des paris</p>
         </div>
+
+        <Link
+          href="/resultats"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
+        >
+          <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
+          Résultats
+        </Link>
       </div>
 
       {/* Résumé portefeuille clair (sans fausse carte bancaire) */}

@@ -5,7 +5,9 @@ import { Check, CheckCircle2, ChevronDown, Clock, ListChecks, Search, TrendingUp
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import type { ComboSelection } from "@/components/combo-slip";
 import { useApp } from "@/components/providers";
+import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import { cn, eur, formatOdds, formatPlacedAt } from "@/lib/format";
 
 const POLL_INTERVAL = 5_000;
@@ -471,70 +473,29 @@ function MultiChoiceQuestionCard({
           const pct = probs.get(opt.key) ?? 0;
           const selected = q.myBet?.selection === opt.key;
           const inCombo = isInCombo(comboUid, "multichoice", opt.key);
+          const comboSel: ComboSelection = {
+            uid: comboUid,
+            kind: "prediction",
+            questionId: q.id,
+            title: q.question,
+            league: q.category,
+            market: "multichoice",
+            selection: opt.key,
+            selectionLabel: opt.label,
+            odds: opt.odds,
+          };
           return (
-            <button
+            <MultiOptionButton
               key={opt.key}
-              type="button"
-              disabled={expired}
-              onClick={expired ? undefined : () => onSelect(opt.key, opt.label, opt.odds)}
-              className={cn(
-                "relative flex min-h-[44px] w-full items-center justify-between gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition-all active:scale-[0.99]",
-                inCombo
-                  ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
-                  : selected
-                    ? "border-betclic-red bg-betclic-red/[0.06]"
-                    : "border-edge bg-elev/55 active:bg-elev",
-                expired && "cursor-not-allowed"
-              )}
-            >
-              {!inCombo && (
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "pointer-events-none absolute inset-y-0 left-0 transition-all duration-300",
-                    selected ? "bg-betclic-red/12" : "bg-ink/[0.045]"
-                  )}
-                  style={{ width: `${Math.max(pct, 4)}%` }}
-                />
-              )}
-
-              <span className="relative z-10 flex min-w-0 items-center gap-1.5">
-                {(selected || inCombo) && (
-                  <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-betclic-red text-white">
-                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                  </span>
-                )}
-                <span
-                  className={cn(
-                    "truncate font-display text-[13.5px] font-semibold",
-                    inCombo ? "text-white" : "text-ink"
-                  )}
-                >
-                  {opt.label}
-                </span>
-              </span>
-
-              <span className="relative z-10 flex shrink-0 items-center gap-2">
-                <span
-                  className={cn(
-                    "text-[11px] font-semibold tabular-nums",
-                    inCombo ? "text-white/75" : "text-dim"
-                  )}
-                >
-                  {pct}%
-                </span>
-                <span
-                  className={cn(
-                    "min-w-[52px] rounded-lg px-2.5 py-1 text-center font-display text-[13px] font-bold tabular-nums",
-                    selected || inCombo
-                      ? "bg-betclic-red text-white"
-                      : "bg-white text-betclic-red shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-edge"
-                  )}
-                >
-                  {formatOdds(opt.odds, oddsFormat)}
-                </span>
-              </span>
-            </button>
+              opt={opt}
+              pct={pct}
+              expired={expired}
+              selected={selected}
+              inCombo={inCombo}
+              oddsFormat={oddsFormat}
+              comboSelection={comboSel}
+              onSelect={() => onSelect(opt.key, opt.label, opt.odds)}
+            />
           );
         })}
       </div>
@@ -622,6 +583,17 @@ function BinaryQuestionCard({
           disabled={expired}
           selected={q.myBet?.selection === "yes"}
           inCombo={isInCombo(comboUid, "yesno", "yes")}
+          comboSelection={{
+            uid: comboUid,
+            kind: "prediction",
+            questionId: q.id,
+            title: q.question,
+            league: q.category,
+            market: "yesno",
+            selection: "yes",
+            selectionLabel: "Oui",
+            odds: q.oddsYes,
+          }}
         />
         <SideButton
           label="Non"
@@ -631,9 +603,113 @@ function BinaryQuestionCard({
           disabled={expired}
           selected={q.myBet?.selection === "no"}
           inCombo={isInCombo(comboUid, "yesno", "no")}
+          comboSelection={{
+            uid: comboUid,
+            kind: "prediction",
+            questionId: q.id,
+            title: q.question,
+            league: q.category,
+            market: "yesno",
+            selection: "no",
+            selectionLabel: "Non",
+            odds: q.oddsNo,
+          }}
         />
       </div>
     </article>
+  );
+}
+
+function MultiOptionButton({
+  opt,
+  pct,
+  expired,
+  selected,
+  inCombo,
+  oddsFormat,
+  comboSelection,
+  onSelect,
+}: {
+  opt: PredictionOptionClient;
+  pct: number;
+  expired: boolean;
+  selected: boolean;
+  inCombo: boolean;
+  oddsFormat: "decimal" | "fractional";
+  comboSelection: ComboSelection;
+  onSelect: () => void;
+}) {
+  const { pressing, handlers, style } = useLongPressOdds({
+    disabled: expired,
+    comboSelection,
+    onTap: () => onSelect(),
+  });
+
+  return (
+    <button
+      type="button"
+      disabled={expired}
+      {...handlers}
+      style={style}
+      className={cn(
+        "relative flex min-h-[44px] w-full items-center justify-between gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition-all active:scale-[0.99]",
+        inCombo
+          ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
+          : selected
+            ? "border-betclic-red bg-betclic-red/[0.06]"
+            : "border-edge bg-elev/55 active:bg-elev",
+        pressing && !expired && "scale-[0.98] ring-2 ring-betclic-red/50",
+        expired && "cursor-not-allowed"
+      )}
+    >
+      {!inCombo && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-y-0 left-0 transition-all duration-300",
+            selected ? "bg-betclic-red/12" : "bg-ink/[0.045]"
+          )}
+          style={{ width: `${Math.max(pct, 4)}%` }}
+        />
+      )}
+
+      <span className="relative z-10 flex min-w-0 items-center gap-1.5">
+        {(selected || inCombo) && (
+          <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-betclic-red text-white">
+            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+          </span>
+        )}
+        <span
+          className={cn(
+            "truncate font-display text-[13.5px] font-semibold",
+            inCombo ? "text-white" : "text-ink"
+          )}
+        >
+          {opt.label}
+        </span>
+      </span>
+
+      <span className="relative z-10 flex shrink-0 items-center gap-2">
+        <span
+          className={cn(
+            "text-[11px] font-semibold tabular-nums",
+            inCombo ? "text-white/75" : "text-dim"
+          )}
+        >
+          {pct}%
+        </span>
+        <span
+          className={cn(
+            "min-w-[52px] rounded-lg px-2.5 py-1 text-center font-display text-[13px] font-bold tabular-nums",
+            selected || inCombo
+              ? "bg-betclic-red text-white"
+              : "bg-white text-betclic-red shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-edge"
+          )}
+        >
+          {formatOdds(opt.odds, oddsFormat)}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -645,6 +721,7 @@ function SideButton({
   disabled,
   selected,
   inCombo,
+  comboSelection,
 }: {
   label: string;
   odds: number;
@@ -653,20 +730,29 @@ function SideButton({
   disabled?: boolean;
   selected?: boolean;
   inCombo?: boolean;
+  comboSelection: ComboSelection;
 }) {
   const active = selected || inCombo;
+  const { pressing, handlers, style } = useLongPressOdds({
+    disabled: Boolean(disabled),
+    comboSelection,
+    onTap: () => onClick?.(),
+  });
+
   return (
     <button
       type="button"
-      onClick={onClick}
       disabled={disabled}
+      {...handlers}
+      style={style}
       className={cn(
-        "flex h-11 items-center justify-between rounded-xl border px-3 transition-colors active:scale-[0.98]",
+        "flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
         selected
           ? "border-betclic-red bg-betclic-red text-white"
           : inCombo
             ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
             : "border-edge bg-elev text-ink active:bg-edge/60",
+        pressing && !disabled && "scale-[0.96] ring-2 ring-betclic-red/50",
         disabled && "cursor-not-allowed"
       )}
     >

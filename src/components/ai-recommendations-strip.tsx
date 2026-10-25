@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Layers, Sparkles } from "lucide-react";
 import {
   api,
@@ -8,11 +9,14 @@ import {
   type ClientMlRecommendations,
   type ClientMlRecommendedPick,
 } from "@/lib/api";
+import type { ComboSelection } from "@/components/combo-slip";
 import { useApp } from "@/components/providers";
-import { formatOdds } from "@/lib/format";
+import { useLongPressOdds } from "@/lib/use-long-press-odds";
+import { cn, formatOdds } from "@/lib/format";
 
 export function AiRecommendationsStrip({ matches }: { matches: ClientMatch[] }) {
-  const { user, openBet, toggleComboLeg, clearCombo, openCombo, oddsFormat, betsVersion } =
+  const router = useRouter();
+  const { user, openBet, toggleComboLeg, clearCombo, isInCombo, oddsFormat, betsVersion } =
     useApp();
   const [data, setData] = useState<ClientMlRecommendations | null>(null);
 
@@ -67,7 +71,7 @@ export function AiRecommendationsStrip({ matches }: { matches: ClientMatch[] }) 
         odds: leg.odds,
       });
     }
-    openCombo();
+    router.push("/betslip");
   };
 
   return (
@@ -118,39 +122,97 @@ export function AiRecommendationsStrip({ matches }: { matches: ClientMatch[] }) 
         {data.picks.map((pick) => {
           const available = matchById.has(pick.matchId);
           if (!available) return null;
+          const uid = `sport-${pick.matchId}`;
+          const inCombo = isInCombo(uid, pick.market, pick.selection);
           return (
-            <button
+            <AiPickCard
               key={`${pick.matchId}-${pick.market}-${pick.selection}`}
-              type="button"
-              onClick={() => handleSingleClick(pick)}
-              className="flex min-w-[196px] max-w-[215px] shrink-0 flex-col justify-between rounded-2xl border border-edge bg-white p-3 text-left shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-transform active:scale-[0.985]"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-1.5">
-                  <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-dim">
-                    {pick.league}
-                  </span>
-                  <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                    IA {pick.matchScorePct}%
-                  </span>
-                </div>
-                <p className="mt-1 truncate text-[12px] font-bold text-ink">
-                  {pick.homeTeam} – {pick.awayTeam}
-                </p>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-mist">
-                  {pick.selectionLabel}
-                </p>
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-2 pt-1">
-                <span className="truncate text-[10px] text-dim">{pick.reason}</span>
-                <span className="shrink-0 rounded-lg bg-amber-400/90 px-2 py-0.5 font-display text-[11.5px] font-extrabold tabular-nums text-zinc-950">
-                  {formatOdds(pick.odds, oddsFormat)}
-                </span>
-              </div>
-            </button>
+              pick={pick}
+              inCombo={inCombo}
+              oddsFormat={oddsFormat}
+              onTap={() => handleSingleClick(pick)}
+            />
           );
         })}
       </div>
     </section>
+  );
+}
+
+function AiPickCard({
+  pick,
+  inCombo,
+  oddsFormat,
+  onTap,
+}: {
+  pick: ClientMlRecommendedPick;
+  inCombo: boolean;
+  oddsFormat: "decimal" | "fractional";
+  onTap: () => void;
+}) {
+  const comboSel: ComboSelection = {
+    uid: `sport-${pick.matchId}`,
+    kind: "sport",
+    matchId: pick.matchId,
+    title: `${pick.homeTeam} – ${pick.awayTeam}`,
+    league: pick.league,
+    market: pick.market,
+    selection: pick.selection,
+    selectionLabel: pick.selectionLabel,
+    odds: pick.odds,
+  };
+  const { pressing, handlers, style } = useLongPressOdds({
+    comboSelection: comboSel,
+    onTap: () => onTap(),
+  });
+
+  return (
+    <button
+      type="button"
+      {...handlers}
+      style={style}
+      className={cn(
+        "flex min-w-[196px] max-w-[215px] shrink-0 flex-col justify-between rounded-2xl border p-3 text-left shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all active:scale-[0.985]",
+        inCombo
+          ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
+          : "border-edge bg-white",
+        pressing && "scale-[0.97] ring-2 ring-betclic-red/50"
+      )}
+    >
+      <div>
+        <div className="flex items-center justify-between gap-1.5">
+          <span
+            className={cn(
+              "truncate text-[10px] font-semibold uppercase tracking-wide",
+              inCombo ? "text-white/70" : "text-dim"
+            )}
+          >
+            {pick.league}
+          </span>
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+              inCombo ? "bg-white/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"
+            )}
+          >
+            IA {pick.matchScorePct}%
+          </span>
+        </div>
+        <p className={cn("mt-1 truncate text-[12px] font-bold", inCombo ? "text-white" : "text-ink")}>
+          {pick.homeTeam} – {pick.awayTeam}
+        </p>
+        <p className={cn("mt-0.5 truncate text-[11px] font-medium", inCombo ? "text-white/80" : "text-mist")}>
+          {pick.selectionLabel}
+        </p>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 pt-1">
+        <span className={cn("truncate text-[10px]", inCombo ? "text-white/65" : "text-dim")}>
+          {pick.reason}
+        </span>
+        <span className="shrink-0 rounded-lg bg-amber-400/90 px-2 py-0.5 font-display text-[11.5px] font-extrabold tabular-nums text-zinc-950">
+          {formatOdds(pick.odds, oddsFormat)}
+        </span>
+      </div>
+    </button>
   );
 }

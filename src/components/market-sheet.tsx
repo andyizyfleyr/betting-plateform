@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ChevronDown, Layers, Lock, Radio, X } from "lucide-react";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
+import { useLongPressOdds } from "@/lib/use-long-press-odds";
+import type { ComboSelection } from "./combo-slip";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
@@ -64,6 +67,7 @@ function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
 }
 
 export function MarketSheet() {
+  const router = useRouter();
   const {
     marketMatch,
     closeMarkets,
@@ -73,10 +77,7 @@ export function MarketSheet() {
     feedMatches,
     comboLegs,
     comboQuickMode,
-    setComboQuickMode,
     toggleComboLeg,
-    isInCombo,
-    openCombo,
     toast,
   } = useApp();
   const dragControls = useDragControls();
@@ -203,28 +204,26 @@ export function MarketSheet() {
                     <button
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
-                      onClick={() => setComboQuickMode(!comboQuickMode)}
+                      onClick={() => {
+                        closeMarkets();
+                        router.push("/betslip");
+                      }}
                       className={cn(
                         "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-bold transition-colors",
-                        comboQuickMode ? "bg-ink text-white" : "bg-elev text-mist"
+                        comboLegs.length > 0
+                          ? "bg-betclic-red text-white"
+                          : "bg-elev text-mist"
                       )}
                     >
-                      <Layers className="h-3 w-3 text-betclic-red" strokeWidth={2.4} />
-                      Combiné{comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}
+                      <Layers
+                        className={cn(
+                          "h-3 w-3",
+                          comboLegs.length > 0 ? "text-white" : "text-betclic-red"
+                        )}
+                        strokeWidth={2.4}
+                      />
+                      Betslip{comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}
                     </button>
-                    {comboLegs.length >= 2 && (
-                      <button
-                        type="button"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={() => {
-                          closeMarkets();
-                          openCombo();
-                        }}
-                        className="h-7 rounded-full bg-betclic-red px-2.5 font-display text-[10.5px] font-bold text-white"
-                      >
-                        Valider
-                      </button>
-                    )}
                     {(isLive || isFinished) && (
                       <button
                         type="button"
@@ -385,6 +384,7 @@ export function MarketSheet() {
                     return (
                       <AccordionItem
                         key={g.key}
+                        match={match}
                         group={g}
                         isLive={isLive}
                         suspended={suspended}
@@ -420,7 +420,7 @@ export function MarketSheet() {
                             if (res === "full") {
                               toast({
                                 kind: "error",
-                                title: "Coupon complet (8 sélections max)",
+                                title: "Betslip complet (8 sélections max)",
                               });
                             }
                             return;
@@ -448,6 +448,7 @@ export function MarketSheet() {
 }
 
 function AccordionItem({
+  match,
   group,
   isLive,
   suspended,
@@ -458,6 +459,7 @@ function AccordionItem({
   onToggle,
   onPick,
 }: {
+  match: ClientMatch;
   group: MarketGroup;
   isLive: boolean;
   suspended: boolean;
@@ -473,6 +475,18 @@ function AccordionItem({
     !group.rows &&
     !isScoreExact &&
     (TWO_COL_MARKETS.has(group.key) || group.outcomes.length <= 2);
+
+  const makeComboSelection = (o: MarketOutcome): ComboSelection => ({
+    uid: `sport-${match.id}`,
+    kind: "sport",
+    matchId: match.id,
+    title: `${match.homeTeam} – ${match.awayTeam}`,
+    league: match.league,
+    market: group.key,
+    selection: o.key,
+    selectionLabel: o.label,
+    odds: o.odds,
+  });
 
   return (
     <div className="rounded-2xl border border-edge bg-white">
@@ -537,6 +551,7 @@ function AccordionItem({
                       selected={selectedKey === o.key}
                       inCombo={comboSelectedKey === o.key}
                       oddsFormat={oddsFormat}
+                      comboSelection={makeComboSelection(o)}
                       onPick={() => onPick(o)}
                     />
                   ))}
@@ -555,6 +570,7 @@ function AccordionItem({
                   inCombo={comboSelectedKey === o.key}
                   oddsFormat={oddsFormat}
                   className={o.key === "other" ? "col-span-3" : undefined}
+                  comboSelection={makeComboSelection(o)}
                   onPick={() => onPick(o)}
                 />
               ))}
@@ -578,6 +594,7 @@ function AccordionItem({
                     inCombo={comboSelectedKey === o.key}
                     oddsFormat={oddsFormat}
                     className={spanFull ? "col-span-2" : undefined}
+                    comboSelection={makeComboSelection(o)}
                     onPick={() => onPick(o)}
                   />
                 );
@@ -598,6 +615,7 @@ function OutcomeCell({
   inCombo,
   oddsFormat,
   className,
+  comboSelection,
   onPick,
 }: {
   o: MarketOutcome;
@@ -607,13 +625,20 @@ function OutcomeCell({
   inCombo?: boolean;
   oddsFormat: "decimal" | "fractional";
   className?: string;
+  comboSelection: ComboSelection;
   onPick: () => void;
 }) {
   const active = selected || inCombo;
+  const { pressing, handlers, style } = useLongPressOdds({
+    disabled: suspended,
+    comboSelection,
+    onTap: () => onPick(),
+  });
   return (
     <button
       type="button"
-      onClick={suspended ? undefined : onPick}
+      {...handlers}
+      style={style}
       aria-disabled={suspended}
       className={cn(
         "flex h-11 items-center justify-between gap-2 rounded-xl border px-3 transition-all active:scale-[0.98]",
@@ -622,6 +647,7 @@ function OutcomeCell({
           : inCombo
             ? "border-ink bg-ink text-white shadow-xs ring-2 ring-betclic-red/35"
             : "border-edge bg-elev/65 active:border-betclic-red/50 active:bg-betclic-red/8",
+        pressing && !suspended && "scale-[0.96] ring-2 ring-betclic-red/50",
         suspended && "cursor-not-allowed opacity-50",
         className
       )}

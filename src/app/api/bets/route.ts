@@ -14,7 +14,7 @@ import {
   type PredictionQuestionRow,
 } from "@/db/schema";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
-import { computeComboCashOut } from "@/lib/combo";
+import { computeComboCashOut, resolveComboLegStatus } from "@/lib/combo";
 import { customMarketLabel, customMarketOdds, isKnownMarket, liveMarketOddsFor, liveOutcomeProbability, marketLabelFor, marketOddsFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
@@ -176,11 +176,10 @@ export async function GET(req: NextRequest) {
   let comboMatchMap = new Map<number, MatchRow>();
   let comboQuestionMap = new Map<number, PredictionQuestionRow>();
 
-  if (comboRows.some((c) => c.status === "pending")) {
+  if (comboRows.length > 0) {
     const cMatchIds = new Set<number>();
     const cQuestionIds = new Set<number>();
     for (const c of comboRows) {
-      if (c.status !== "pending") continue;
       for (const l of c.legs ?? []) {
         if (l.kind === "sport" && l.matchId) cMatchIds.add(l.matchId);
         if (l.kind === "prediction" && l.questionId) cQuestionIds.add(l.questionId);
@@ -203,14 +202,24 @@ export async function GET(req: NextRequest) {
 
   const comboMapped = comboRows.map((cb) => {
     const legs = (cb.legs ?? []).map((l) => {
-      if (l.kind === "sport" && l.homeTeam && l.awayTeam && isKnownMarket(l.market)) {
-        return {
-          ...l,
-          selectionLabel:
-            marketLabelFor(l.market, l.selection, l.homeTeam, l.awayTeam) ?? l.selectionLabel,
-        };
-      }
-      return l;
+      const resolvedStatus = resolveComboLegStatus(l, comboMatchMap, comboQuestionMap);
+      const m = l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined;
+      const resolvedSelLabel =
+        l.kind === "sport" && l.homeTeam && l.awayTeam && isKnownMarket(l.market)
+          ? (marketLabelFor(l.market, l.selection, l.homeTeam, l.awayTeam) ?? l.selectionLabel)
+          : l.selectionLabel;
+
+      return {
+        ...l,
+        status: resolvedStatus,
+        selectionLabel: resolvedSelLabel,
+        matchStatus: m
+          ? (m.status === "live" || m.status === "finished" ? m.status : "upcoming")
+          : null,
+        matchHomeScore: m?.homeScore ?? null,
+        matchAwayScore: m?.awayScore ?? null,
+        matchMinute: m?.minute ?? null,
+      };
     });
     const liveMatch = legs
       .map((l) => (l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined))
@@ -221,7 +230,7 @@ export async function GET(req: NextRequest) {
       kind: "combo" as const,
       matchId: null,
       sport: "combiné",
-      league: `Pari combiné (${legs.length} événements)`,
+      league: `Combiné (${legs.length})`,
       homeTeam: "",
       awayTeam: "",
       question: null,

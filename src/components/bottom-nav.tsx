@@ -2,21 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Gamepad2, SlidersHorizontal, Ticket, TrendingUp, Trophy } from "lucide-react";
+import { Layers, SlidersHorizontal, Ticket, TrendingUp, Trophy } from "lucide-react";
 import { useApp } from "./providers";
 import { cn } from "@/lib/format";
 
 const ITEMS = [
   { href: "/predictions", label: "Prédictions", Icon: TrendingUp },
   { href: "/matchs", label: "Matchs", Icon: Trophy },
-  { href: "/jeux", label: "Jeux", Icon: Gamepad2 },
+  { href: "/betslip", label: "Betslip", Icon: Layers },
   { href: "/paris", label: "Mes paris", Icon: Ticket },
   { href: "/parametres", label: "Compte", Icon: SlidersHorizontal },
 ] as const;
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { pendingCount, user } = useApp();
+  const { pendingCount, comboLegs, user } = useApp();
+  const slipCount = comboLegs.length;
 
   if (
     user?.role === "admin" ||
@@ -36,15 +37,14 @@ export function BottomNav() {
         }}
       >
         {ITEMS.map(({ href, label, Icon }) => {
-          const isGameRoute =
-            href === "/jeux" &&
-            (pathname === "/jeux" ||
-              pathname.startsWith("/jeux/") ||
-              pathname === "/tap" ||
-              pathname.startsWith("/tap/") ||
-              pathname === "/accelerator" ||
-              pathname.startsWith("/accelerator/"));
-          const active = isGameRoute || pathname === href || pathname.startsWith(`${href}/`);
+          const active = pathname === href || pathname.startsWith(`${href}/`);
+          const badgeCount =
+            href === "/betslip"
+              ? slipCount
+              : href === "/paris"
+                ? pendingCount
+                : 0;
+
           return (
             <Link
               key={href}
@@ -63,9 +63,14 @@ export function BottomNav() {
                   )}
                   strokeWidth={active ? 2.4 : 1.9}
                 />
-                {href === "/paris" && pendingCount > 0 && (
-                  <span className="absolute -right-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-betclic-red px-1 font-display text-[9.5px] font-bold leading-none text-white">
-                    {pendingCount > 99 ? "99+" : pendingCount}
+                {badgeCount > 0 && (
+                  <span
+                    className={cn(
+                      "absolute -right-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 font-display text-[9.5px] font-bold leading-none text-white",
+                      href === "/betslip" ? "bg-betclic-red" : "bg-ink"
+                    )}
+                  >
+                    {badgeCount > 99 ? "99+" : badgeCount}
                   </span>
                 )}
               </span>
