@@ -20,6 +20,7 @@ import { publicUser } from "@/lib/auth";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
+import { getAdminMlOverview, retrainAllMlModels } from "@/lib/ml-engine";
 import {
   reopenSettledQuestion,
   round2,
@@ -134,8 +135,10 @@ export async function GET(req: NextRequest) {
   });
 
   const pendingDepCount = depRows.filter((d) => d.status === "pending_review").length;
+  const ml = await getAdminMlOverview();
 
   return NextResponse.json({
+    ml,
     stats: {
       totalUsers: totalUsers?.value ?? 0,
       totalBets:
@@ -921,6 +924,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Ce dépôt a déjà été traité" }, { status: 400 });
       }
       return NextResponse.json({ ok: true, deposit: rejected });
+    }
+
+    if (action === "retrainMl") {
+      await retrainAllMlModels();
+      const ml = await getAdminMlOverview();
+      return NextResponse.json({ ok: true, ml });
     }
 
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });

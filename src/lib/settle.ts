@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { appUser, bets, matches, type MatchRow } from "@/db/schema";
 import { settlePendingCombos } from "@/lib/combo";
 import { closingOddsFor, customMarketOdds, isKnownMarket, marketWin } from "@/lib/markets";
+import { recordSettledBetMl } from "@/lib/ml-engine";
 
 /**
  * Règlement déterministe d'un pari sportif depuis le score final du match.
@@ -77,6 +78,22 @@ async function settleRows(
         .update(appUser)
         .set({ balance: sql`${appUser.balance} + ${payout}` })
         .where(eq(appUser.id, bet.userId));
+    }
+
+    // Apprentissage en ligne ML (Modèle 1 Sharp SGD + Modèle 2 Calibration Bayésienne)
+    if (!voided) {
+      try {
+        await recordSettledBetMl({
+          userId: bet.userId,
+          market: bet.market,
+          odds: bet.odds,
+          stake: bet.stake,
+          won,
+          payout,
+        });
+      } catch (mlErr) {
+        console.error("[ml online bet update]", mlErr);
+      }
     }
   }
 }

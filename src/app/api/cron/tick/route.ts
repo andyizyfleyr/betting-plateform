@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { matches, predictionQuestions } from "@/db/schema";
+import { retrainAllMlModels } from "@/lib/ml-engine";
 import { syncPlatformStateThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
   try {
     await ensureSeeded();
     await syncPlatformStateThrottled(true);
+    const ml = await retrainAllMlModels();
 
     const [[liveRow], [upcomingCount], [openPreds]] = await Promise.all([
       db
@@ -55,6 +57,7 @@ export async function GET(req: NextRequest) {
       liveMatch: liveRow ?? null,
       upcomingCount: upcomingCount?.n ?? 0,
       openPredictions: openPreds?.n ?? 0,
+      mlVersion: ml.sharpMeta.version,
     });
   } catch (err) {
     console.error("[cron/tick] failed:", err);

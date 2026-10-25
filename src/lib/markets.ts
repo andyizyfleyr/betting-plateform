@@ -5,6 +5,7 @@ import {
   partitionOutcomeOdds,
   type LiveScoreModel,
 } from "@/db/fixtures";
+import { getCachedMarketCalibratorMultiplier } from "./ml-weights";
 import { marginOverround, type BetLike } from "./risk";
 
 export type MarketCategory = "main" | "goals" | "teams" | "scores";
@@ -81,17 +82,22 @@ function effectiveMargin(market: string, baseMargin = marginOverround("result"))
   return Math.round(baseMargin * (marginOverround(market) / marginOverround("result")) * 10000) / 10000;
 }
 
-/** Cotes fixes non mutualisées : les mises des autres joueurs ne déforment pas la cote. */
+/**
+ * Cotes fixes non mutualisées enrichies par l'auto-calibrateur bayésien ML :
+ * si un segment `(marché, tranche de cote)` dérive statistiquement au fil de
+ * l'historique réglé, le multiplicateur appris ajuste automatiquement la marge.
+ */
 function exposureAdjustedOdds(
-  _market: string,
+  market: string,
   _outcome: string,
   modelOdds: number,
   _bets?: BetLike[]
 ): number {
-  void _market;
   void _outcome;
   void _bets;
-  return modelOdds;
+  const calMult = getCachedMarketCalibratorMultiplier(market, modelOdds);
+  if (calMult === 1.0) return modelOdds;
+  return round2(Math.max(1.01, modelOdds / calMult));
 }
 
 const w = {

@@ -300,6 +300,23 @@ export const walletAdjustments = pgTable("wallet_adjustments", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+/**
+ * Persistance des modèles de Machine Learning auto-apprenants :
+ * - "sharp_detector"    : Régression logistique en ligne + Z-score ajusté de la chance
+ * - "market_calibrator" : Calibration bayésienne empirique & auto-correction de marge par segment
+ * - "glicko_clubs"      : Forces dynamiques Attaque / Défense / Volatilité (Glicko-2 Poisson)
+ * - "recommender_meta"  : Statistiques globales d'affinité & popularité pour la recommandation IA
+ */
+export const mlModels = pgTable("ml_models", {
+  modelKey: text("model_key").primaryKey(),
+  version: integer("version").notNull().default(1),
+  samplesCount: integer("samples_count").notNull().default(0),
+  brierScore: doublePrecision("brier_score").notNull().default(0.21),
+  logLoss: doublePrecision("log_loss").notNull().default(0.61),
+  state: jsonb("state").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type PredictionQuestionRow = typeof predictionQuestions.$inferSelect;
@@ -307,6 +324,7 @@ export type PredictionBetRow = typeof predictionBets.$inferSelect;
 export type ComboBetRow = typeof comboBets.$inferSelect;
 export type WithdrawalRow = typeof withdrawals.$inferSelect;
 export type WalletAdjustmentRow = typeof walletAdjustments.$inferSelect;
+export type MlModelRow = typeof mlModels.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
 export type DepositRow = typeof deposits.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;
