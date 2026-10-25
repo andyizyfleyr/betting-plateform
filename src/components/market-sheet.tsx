@@ -23,6 +23,16 @@ const CATEGORY_TABS: Array<{ key: SheetCategory; label: string }> = [
   { key: "scores", label: "Scores" },
 ];
 
+const TWO_COL_MARKETS = new Set([
+  "btts",
+  "odd_even",
+  "result_total",
+  "home_to_nil",
+  "away_to_nil",
+  "home_clean_sheet",
+  "away_clean_sheet",
+]);
+
 function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
   if (g.category) return g.category;
   if (["result", "double_chance", "total_ou", "btts", "result_total"].includes(g.key)) {
@@ -69,9 +79,14 @@ export function MarketSheet() {
   if (match && match.id !== prevMatchId) {
     setPrevMatchId(match.id);
     setCategory("all");
+    const groups = match.markets ?? [];
     const initialOpen: Record<string, boolean> = {};
-    for (const g of (match.markets ?? []).slice(0, 4)) {
-      initialOpen[g.key] = true;
+    // Ouvre par défaut Résultat + Total de buts (ou les 2 premiers marchés disponibles)
+    for (const key of ["result", "total_ou"]) {
+      if (groups.some((g) => g.key === key)) initialOpen[key] = true;
+    }
+    if (Object.keys(initialOpen).length === 0) {
+      for (const g of groups.slice(0, 2)) initialOpen[g.key] = true;
     }
     setOpenMap(initialOpen);
   } else if (!match && prevMatchId !== null) {
@@ -127,32 +142,35 @@ export function MarketSheet() {
             onDragEnd={(_, info) => {
               if (info.offset.y > 120 || info.velocity.y > 550) closeMarkets();
             }}
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] w-full max-w-[440px] flex-col overflow-hidden rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] w-full max-w-[440px] flex-col rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
           >
-            {/* En-tête du match */}
-            <div
-              onPointerDown={(e) => dragControls.start(e)}
-              className="shrink-0 cursor-grab border-b border-edge bg-surface px-4 pb-3 pt-2 active:cursor-grabbing"
-            >
-              <div className="mx-auto h-1 w-10 rounded-full bg-edge" />
-
-              <div className="mt-2.5 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-mist">
-                  <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
-                  <span className="truncate font-semibold">{match.league}</span>
+            {/* En-tête fixe de la feuille */}
+            <div className="shrink-0 rounded-t-3xl border-b border-edge bg-surface px-4 pb-2.5 pt-2">
+              {/* Zone de glissement vertical uniquement sur la barre supérieure */}
+              <div
+                onPointerDown={(e) => dragControls.start(e)}
+                className="touch-none cursor-grab pb-1 active:cursor-grabbing"
+              >
+                <div className="mx-auto h-1 w-10 rounded-full bg-edge" />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-mist">
+                    <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
+                    <span className="truncate font-semibold">{match.league}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={closeMarkets}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-mist active:scale-95"
+                    aria-label="Fermer"
+                  >
+                    <X className="h-4 w-4" strokeWidth={2.2} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeMarkets}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-mist active:scale-95"
-                  aria-label="Fermer"
-                >
-                  <X className="h-4 w-4" strokeWidth={2.2} />
-                </button>
               </div>
 
-              {/* Tableau d'affichage compact */}
-              <div className="mt-2 rounded-2xl border border-edge/80 bg-elev/55 p-3">
+              {/* Tableau de score compact */}
+              <div className="mt-1.5 rounded-2xl border border-edge/80 bg-elev/55 px-3 py-2.5">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" />
@@ -219,13 +237,13 @@ export function MarketSheet() {
               {suspended && (
                 <div className="mt-2 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-1.5 text-[11px] font-semibold text-amber-800">
                   <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-                  <span>Action en cours — réouverture automatique des cotes dans un instant…</span>
+                  <span>Action en cours — réouverture automatique des cotes…</span>
                 </div>
               )}
 
-              {/* Onglets de catégories */}
+              {/* Onglets de catégories horizontaux fluides */}
               {groups.length > 0 && (
-                <div className="no-scrollbar mt-2.5 flex gap-1.5 overflow-x-auto">
+                <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto py-0.5">
                   {CATEGORY_TABS.map((tab) => {
                     const count =
                       tab.key === "all"
@@ -239,13 +257,16 @@ export function MarketSheet() {
                         type="button"
                         onClick={() => setCategory(tab.key)}
                         className={cn(
-                          "h-7.5 shrink-0 rounded-full border px-3 font-display text-[11.5px] transition-colors",
+                          "flex h-7.5 shrink-0 items-center gap-1 rounded-full border px-2.5 font-display text-[11px] transition-colors",
                           active
                             ? "border-ink bg-ink font-bold text-white"
-                            : "border-edge bg-white font-medium text-mist active:bg-elev"
+                            : "border-edge bg-white font-semibold text-mist active:bg-elev"
                         )}
                       >
-                        {tab.label} ({count})
+                        <span>{tab.label}</span>
+                        <span className={cn("text-[10px]", active ? "text-white/75" : "text-dim")}>
+                          {count}
+                        </span>
                       </button>
                     );
                   })}
@@ -253,8 +274,8 @@ export function MarketSheet() {
               )}
             </div>
 
-            {/* Liste des marchés */}
-            <div className="no-scrollbar flex flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 pb-6 pb-safe pt-3">
+            {/* Zone scrollable en bloc standard : aucune compression verticale possible */}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pb-8 pt-3">
               {isFinished || filteredGroups.length === 0 ? (
                 <div className="py-10 text-center text-[13px] text-mist">
                   {isFinished
@@ -262,41 +283,45 @@ export function MarketSheet() {
                     : "Aucun marché ouvert dans cette catégorie pour le moment."}
                 </div>
               ) : (
-                filteredGroups.map((g) => {
-                  const isOpen = category !== "all" ? (openMap[g.key] ?? true) : Boolean(openMap[g.key]);
-                  return (
-                    <AccordionItem
-                      key={g.key}
-                      matchId={match.id}
-                      group={g}
-                      isLive={isLive}
-                      suspended={suspended}
-                      open={isOpen}
-                      oddsFormat={oddsFormat}
-                      selectedKey={
-                        target && target.match.id === match.id && target.market === g.key
-                          ? target.selection
-                          : null
-                      }
-                      onToggle={() =>
-                        setOpenMap((prev) => ({
-                          ...prev,
-                          [g.key]: !(category !== "all" ? (prev[g.key] ?? true) : Boolean(prev[g.key])),
-                        }))
-                      }
-                      onPick={(outcome) =>
-                        openBet({
-                          match,
-                          selection: outcome.key,
-                          odds: outcome.odds,
-                          label: outcome.label,
-                          market: g.key,
-                          marketLabel: g.label,
-                        })
-                      }
-                    />
-                  );
-                })
+                <div className="space-y-2.5 pb-safe">
+                  {filteredGroups.map((g) => {
+                    const isOpen =
+                      category !== "all" ? (openMap[g.key] ?? true) : Boolean(openMap[g.key]);
+                    return (
+                      <AccordionItem
+                        key={g.key}
+                        group={g}
+                        isLive={isLive}
+                        suspended={suspended}
+                        open={isOpen}
+                        oddsFormat={oddsFormat}
+                        selectedKey={
+                          target && target.match.id === match.id && target.market === g.key
+                            ? target.selection
+                            : null
+                        }
+                        onToggle={() =>
+                          setOpenMap((prev) => ({
+                            ...prev,
+                            [g.key]: !(category !== "all"
+                              ? (prev[g.key] ?? true)
+                              : Boolean(prev[g.key])),
+                          }))
+                        }
+                        onPick={(outcome) =>
+                          openBet({
+                            match,
+                            selection: outcome.key,
+                            odds: outcome.odds,
+                            label: outcome.label,
+                            market: g.key,
+                            marketLabel: g.label,
+                          })
+                        }
+                      />
+                    );
+                  })}
+                </div>
               )}
             </div>
           </motion.div>
@@ -316,7 +341,6 @@ function AccordionItem({
   onToggle,
   onPick,
 }: {
-  matchId: number;
   group: MarketGroup;
   isLive: boolean;
   suspended: boolean;
@@ -330,17 +354,22 @@ function AccordionItem({
   const twoCols =
     !group.rows &&
     !isScoreExact &&
-    (group.outcomes.length === 2 || group.outcomes.length === 4);
+    (TWO_COL_MARKETS.has(group.key) || group.outcomes.length <= 2);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-edge bg-white">
+    <div className="rounded-2xl border border-edge bg-white">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between bg-elev/45 px-3.5 py-2.5 text-left"
+        className={cn(
+          "flex min-h-[46px] w-full items-center justify-between bg-elev/40 px-3.5 py-2.5 text-left transition-colors active:bg-elev/80",
+          open ? "rounded-t-2xl" : "rounded-2xl"
+        )}
       >
-        <span className="font-display text-[12.5px] font-bold text-ink">{group.label}</span>
+        <span className="pr-2 font-display text-[13px] font-bold leading-snug text-ink">
+          {group.label}
+        </span>
         <ChevronDown
           className={cn(
             "h-4 w-4 shrink-0 text-dim transition-transform duration-200",
@@ -351,17 +380,17 @@ function AccordionItem({
       </button>
 
       {open && (
-        <div className="border-t border-edge/70 p-2.5">
+        <div className="rounded-b-2xl border-t border-edge/70 bg-white p-3">
           {group.rows ? (
-            <div className="flex flex-col gap-1.5">
-              <div className="grid grid-cols-[44px_1fr_1fr] items-center gap-1.5 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
+            <div className="space-y-2">
+              <div className="grid grid-cols-[46px_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
                 <span className="text-center">Seuil</span>
                 <span className="text-center">Plus de</span>
                 <span className="text-center">Moins de</span>
               </div>
               {group.rows.map((row) => (
-                <div key={row.label} className="grid grid-cols-[44px_1fr_1fr] items-center gap-1.5">
-                  <span className="flex h-10 items-center justify-center rounded-lg bg-elev font-display text-[11.5px] font-bold tabular-nums text-ink">
+                <div key={row.label} className="grid grid-cols-[46px_1fr_1fr] items-center gap-2">
+                  <span className="flex h-11 items-center justify-center rounded-xl bg-elev font-display text-[12px] font-bold tabular-nums text-ink">
                     {row.label}
                   </span>
                   {row.outcomes.map((o) => (
@@ -379,7 +408,7 @@ function AccordionItem({
               ))}
             </div>
           ) : isScoreExact ? (
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               {group.outcomes.map((o) => (
                 <OutcomeCell
                   key={o.key}
@@ -394,18 +423,27 @@ function AccordionItem({
               ))}
             </div>
           ) : (
-            <div className={cn("grid gap-1.5", twoCols ? "grid-cols-2" : "grid-cols-3")}>
-              {group.outcomes.map((o) => (
-                <OutcomeCell
-                  key={o.key}
-                  o={o}
-                  isLive={isLive}
-                  suspended={suspended}
-                  selected={selectedKey === o.key}
-                  oddsFormat={oddsFormat}
-                  onPick={() => onPick(o)}
-                />
-              ))}
+            <div className={cn("grid gap-2", twoCols ? "grid-cols-2" : "grid-cols-3")}>
+              {group.outcomes.map((o, idx) => {
+                // Si marché à 2 colonnes avec un nombre impair d'issues ouvertes (ex. 3 en live), la dernière prend toute la ligne
+                const spanFull =
+                  twoCols &&
+                  group.outcomes.length > 2 &&
+                  group.outcomes.length % 2 === 1 &&
+                  idx === group.outcomes.length - 1;
+                return (
+                  <OutcomeCell
+                    key={o.key}
+                    o={o}
+                    isLive={isLive}
+                    suspended={suspended}
+                    selected={selectedKey === o.key}
+                    oddsFormat={oddsFormat}
+                    className={spanFull ? "col-span-2" : undefined}
+                    onPick={() => onPick(o)}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -437,17 +475,17 @@ function OutcomeCell({
       onClick={suspended ? undefined : onPick}
       aria-disabled={suspended}
       className={cn(
-        "flex h-10.5 items-center justify-between gap-1.5 rounded-xl border px-2.5 transition-all active:scale-[0.98]",
+        "flex h-11 items-center justify-between gap-2 rounded-xl border px-3 transition-all active:scale-[0.98]",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
-          : "border-edge bg-elev/70 active:border-betclic-red/50 active:bg-betclic-red/8",
+          : "border-edge bg-elev/65 active:border-betclic-red/50 active:bg-betclic-red/8",
         suspended && "cursor-not-allowed opacity-50",
         className
       )}
     >
       <span
         className={cn(
-          "truncate text-[11.5px] font-semibold",
+          "truncate text-[12px] font-semibold",
           selected ? "text-white/90" : "text-mist"
         )}
       >
@@ -458,7 +496,7 @@ function OutcomeCell({
       ) : (
         <span
           className={cn(
-            "shrink-0 font-display text-[13px] font-bold tabular-nums",
+            "shrink-0 font-display text-[13.5px] font-bold tabular-nums",
             selected ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
           )}
         >

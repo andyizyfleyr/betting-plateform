@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { bets, matches } from "@/db/schema";
+import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { runLiveEngine } from "@/db/engine";
 import { buildLiveMarkets, buildMarkets, minuteNumber } from "@/lib/markets";
@@ -23,7 +23,6 @@ export async function GET() {
       desc(matches.id)
     );
 
-  // Conserve tous les matchs en direct / à venir + les 12 derniers terminés (pour l'onglet Résultats)
   const activeRows = allRows.filter((r) => r.status !== "finished");
   const finishedRows = allRows
     .filter((r) => r.status === "finished")
@@ -36,27 +35,8 @@ export async function GET() {
 
   const rows = [...activeRows, ...finishedRows];
 
-  const pending = await db
-    .select({
-      matchId: bets.matchId,
-      market: bets.market,
-      selection: bets.selection,
-      stake: bets.stake,
-      odds: bets.odds,
-    })
-    .from(bets)
-    .where(eq(bets.status, "pending"));
-
-  const pendingByMatch = new Map<number, typeof pending>();
-  for (const b of pending) {
-    if (b.matchId == null) continue;
-    const arr = pendingByMatch.get(b.matchId) ?? [];
-    arr.push(b);
-    pendingByMatch.set(b.matchId, arr);
-  }
-
+  // Cotes fixes bookmaker : basées uniquement sur le match (forces, score, minute), sans pool mutuel
   const withMarkets = rows.map((m) => {
-    const exposure = pendingByMatch.get(m.id) ?? [];
     const markets =
       m.status === "finished"
         ? []
@@ -74,12 +54,10 @@ export async function GET() {
                   awayForm: m.awayForm ?? 1,
                   redHome: m.redHome ?? 0,
                   redAway: m.redAway ?? 0,
-                },
-                exposure
+                }
               )
-            : buildMarkets(m.homeTeam, m.awayTeam, exposure);
+            : buildMarkets(m.homeTeam, m.awayTeam);
 
-    // Garantit une identité stricte à 0,00 près entre les boutons 1/N/2 de la carte et la feuille de marchés
     const resGroup = markets.find((g) => g.key === "result");
     const oddsHome =
       resGroup?.outcomes.find((o) => o.key === "home")?.odds ?? m.oddsHome;

@@ -103,7 +103,7 @@ export default function PredictionsPage() {
           <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
             Prédictions
           </h1>
-          <p className="text-[12px] text-mist">Marchés Oui / Non en pool mutuel</p>
+          <p className="text-[12px] text-mist">Marchés Oui / Non à cotes fixes</p>
         </div>
         {questions !== null && (
           <span className="rounded-full border border-edge bg-white px-2.5 py-1 font-display text-[11.5px] font-bold tabular-nums text-mist">
@@ -200,11 +200,7 @@ function QuestionCard({
   const { oddsFormat } = useApp();
   const expired = new Date(q.resolvesAt).getTime() <= nowMs;
 
-  const totalVotes = q.yesCount + q.noCount;
-  const pYes =
-    totalVotes > 0
-      ? Math.round((q.yesCount / totalVotes) * 100)
-      : Math.round(((1 / q.oddsYes) / (1 / q.oddsYes + 1 / q.oddsNo)) * 100);
+  const pYes = Math.round(((1 / q.oddsYes) / (1 / q.oddsYes + 1 / q.oddsNo)) * 100);
 
   return (
     <article
@@ -219,9 +215,7 @@ function QuestionCard({
           <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
             {q.category}
           </span>
-          {q.volume > 0 && (
-            <span className="truncate text-dim">Pool {eur(q.volume)}</span>
-          )}
+          <span className="truncate text-dim">Cote fixe</span>
         </div>
         <span className="flex shrink-0 items-center gap-1 font-medium text-dim">
           <Clock className="h-3 w-3" strokeWidth={2.2} />
