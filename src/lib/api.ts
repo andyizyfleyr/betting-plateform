@@ -254,11 +254,50 @@ export interface ClientWalletData {
   entries: ClientWalletEntry[];
 }
 
+let redirectingToAuth = false;
+
+export class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  const data = await res.json().catch(() => ({}));
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    code?: string;
+  };
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? "Une erreur est survenue");
+    if (
+      res.status === 401 &&
+      typeof window !== "undefined" &&
+      !url.startsWith("/api/auth/") &&
+      !window.location.pathname.startsWith("/auth") &&
+      !redirectingToAuth
+    ) {
+      redirectingToAuth = true;
+      void fetch("/api/auth/logout", { method: "POST" })
+        .catch(() => undefined)
+        .finally(() => {
+          window.location.replace("/auth");
+        });
+    }
+    const fallbackMsg =
+      res.status === 504
+        ? "Le serveur met trop de temps à répondre — veuillez réessayer."
+        : "Service temporairement indisponible — veuillez réessayer.";
+    throw new ApiRequestError(
+      data.error ?? fallbackMsg,
+      res.status,
+      data.code
+    );
   }
   return data as T;
 }

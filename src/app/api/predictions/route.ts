@@ -8,10 +8,12 @@ import {
   PRED_MIN_STAKE,
   round2,
 } from "@/lib/predictions";
+import { formatServerErrorResponse } from "@/lib/db-error";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const PRED_SELECTIONS = ["yes", "no"] as const;
 type PredSelection = (typeof PRED_SELECTIONS)[number];
@@ -21,10 +23,11 @@ const PRED_CATEGORIES = ["Sport", "Actus", "Crypto", "Culture"] as const;
 const BET_COOLDOWN_MS = 700;
 
 export async function GET(req: NextRequest) {
-  await ensureSeeded();
-  const auth = await requireUserId(req);
-  if (typeof auth !== "number") return auth;
-  const uid = auth;
+  try {
+    await ensureSeeded();
+    const auth = await requireUserId(req);
+    if (typeof auth !== "number") return auth;
+    const uid = auth;
 
   await syncAllSettlementsThrottled();
   const page = Math.max(1, Number(req.nextUrl.searchParams.get("page")) || 1);
@@ -117,6 +120,9 @@ export async function GET(req: NextRequest) {
     limit,
     hasMore: page * limit < total,
   });
+  } catch (err) {
+    return formatServerErrorResponse(err, "GET /api/predictions");
+  }
 }
 
 export async function POST(req: NextRequest) {

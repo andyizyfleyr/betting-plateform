@@ -15,15 +15,18 @@ import {
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
+import { formatServerErrorResponse } from "@/lib/db-error";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET() {
-  await ensureSeeded();
-  await ensureMlLoaded();
-  await syncLiveMatchesThrottled();
+  try {
+    await ensureSeeded();
+    await ensureMlLoaded();
+    await syncLiveMatchesThrottled();
 
   const now = Date.now();
   const allRows = await db
@@ -191,4 +194,7 @@ export async function GET() {
   });
 
   return NextResponse.json({ matches: withMarkets });
+  } catch (err) {
+    return formatServerErrorResponse(err, "GET /api/matches");
+  }
 }

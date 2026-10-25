@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
+import { settlePendingCombos } from "@/lib/combo";
 import { settleMatchBets } from "@/lib/settle";
 import { adminSettings, appUser, bets, comboBets, matches, type MatchRow } from "@/db/schema";
 import {
@@ -700,6 +701,10 @@ async function executeTick(now: number): Promise<void> {
   } else {
     await syncUpcomingQueue(upcomingMatches, activeLive, now, betsByMatch);
   }
+
+  if (lastCompletedEndMs > 0) {
+    await settlePendingCombos();
+  }
 }
 
 async function syncUpcomingQueue(
@@ -1287,7 +1292,7 @@ async function tickLiveMatch(
     } catch (mlErr) {
       console.error("[ml online match update]", mlErr);
     }
-    await settleMatchBets(m.id);
+    await settleMatchBets(m.id, { skipCombos: true });
   }
 
   return { finished: isOver, row: updated ?? m };

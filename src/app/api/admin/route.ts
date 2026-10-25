@@ -47,17 +47,22 @@ import {
   syncSingleRealMatchNow,
 } from "@/lib/real-sports-feed";
 import { STALE_LATENCY_MS } from "@/lib/risk";
-import { getAuthUserId } from "@/lib/session";
+import { clearAuthCookie, getAuthUserId } from "@/lib/session";
 import { settleFinishedBets, settleMatchBets, voidMatchBets } from "@/lib/settle";
 import { resetSyncThrottle, syncPlatformStateThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 async function requireAdmin(req: NextRequest): Promise<number | NextResponse> {
   await ensureSeeded();
   const uid = await getAuthUserId(req);
-  if (!uid) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  if (!uid) {
+    const res = NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+    clearAuthCookie(res);
+    return res;
+  }
   const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
   if (!user || (user.role ?? "user") !== "admin") {
     return NextResponse.json({ error: "Accès réservé à l'administrateur" }, { status: 403 });

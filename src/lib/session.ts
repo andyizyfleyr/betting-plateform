@@ -64,12 +64,17 @@ export async function getAuthUserId(req: NextRequest): Promise<number | null> {
 
 /**
  * Exige un utilisateur authentifié : renvoie l'`uid` ou une réponse HTTP 401 stricte
- * (aucun repli implicite sur l'utilisateur #1).
+ * en effaçant immédiatement le cookie obsolète pour éviter toute boucle avec `proxy.ts`.
  */
 export async function requireUserId(req: NextRequest): Promise<number | NextResponse> {
   const uid = await getAuthUserId(req);
   if (!uid) {
-    return NextResponse.json({ error: "Session expirée, veuillez vous reconnecter" }, { status: 401 });
+    const res = NextResponse.json(
+      { error: "Session expirée, veuillez vous reconnecter", code: "SESSION_EXPIRED" },
+      { status: 401 }
+    );
+    clearAuthCookie(res);
+    return res;
   }
   return uid;
 }

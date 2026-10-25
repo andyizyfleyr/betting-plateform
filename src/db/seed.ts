@@ -1,11 +1,25 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { appUser, matches, predictionBets, predictionQuestions } from "@/db/schema";
+import {
+  adminSettings,
+  appUser,
+  matches,
+  predictionBets,
+  predictionQuestions,
+} from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 
 let seededOnce = false;
 let seedPromise: Promise<void> | null = null;
+
+/**
+ * Marqueur persisté en base (`admin_settings`) une fois le schéma et les données
+ * initiales vérifiés : évite d'exécuter ~50 requêtes DDL (`ALTER TABLE`, `CREATE TABLE`)
+ * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
+ * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
+ */
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v5";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -13,9 +27,9 @@ function round2(n: number) {
 
 /**
  * Initialisation atomique et idempotente de la base :
+ * - Fast-path O(1) sur base déjà initialisée (évite les timeouts 504 au réveil serverless)
  * - Verrou mémoire `seedPromise` contre les requêtes concurrentes au démarrage
- * - Déduplication SQL automatique des questions en doublon + index UNIQUE
- * - Nettoyage des anciens matchs auto-générés bloqués sur le rythme de 55 min.
+ * - Déduplication SQL automatique des questions en doublon + index UNIQUE.
  */
 export async function ensureSeeded(): Promise<void> {
   if (seededOnce) return;
@@ -33,6 +47,30 @@ export async function ensureSeeded(): Promise<void> {
 }
 
 async function runSeedInternal(): Promise<void> {
+  // Fast-path serverless : si la migration `v5` a déjà abouti et qu'au moins un compte
+  // existe (dont l'admin), inutile de rejouer les 20+ DDL `ALTER TABLE` à chaque cold start.
+  try {
+    const [marker] = await db
+      .select({ key: adminSettings.settingKey })
+      .from(adminSettings)
+      .where(eq(adminSettings.settingKey, SCHEMA_SEED_MARKER_KEY))
+      .limit(1);
+    if (marker) {
+      const adminEmailFast = (process.env.ADMIN_EMAIL ?? "admin@pulse.app")
+        .trim()
+        .toLowerCase();
+      const [existingAdmin] = await db
+        .select({ id: appUser.id })
+        .from(appUser)
+        .where(eq(appUser.email, adminEmailFast))
+        .limit(1);
+      if (existingAdmin) {
+        return;
+      }
+    }
+  } catch {
+    // Table `admin_settings` ou colonne absente sur une base neuve : exécute la migration complète.
+  }
   await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
@@ -699,14 +737,16 @@ async function runSeedInternal(): Promise<void> {
     },
   ];
 
-  for (const q of questionsSeed) {
-    const [existing] = await db
-      .select({ id: predictionQuestions.id })
-      .from(predictionQuestions)
-      .where(sql`LOWER(TRIM(${predictionQuestions.question})) = LOWER(TRIM(${q.question}))`)
-      .limit(1);
+  const existingQuestionRows = await db
+    .select({ question: predictionQuestions.question })
+    .from(predictionQuestions);
+  const existingTitlesSet = new Set(
+    existingQuestionRows.map((r) => r.question.trim().toLowerCase())
+  );
 
-    if (!existing) {
+  for (const q of questionsSeed) {
+    const normTitle = q.question.trim().toLowerCase();
+    if (!existingTitlesSet.has(normTitle)) {
       const { question, category, status, seedValue, oddsYes, oddsNo, volume, yesCount, noCount, resolvesAt } = q;
       const options = "options" in q ? q.options : undefined;
       const resolution = "resolution" in q ? q.resolution : undefined;
@@ -730,6 +770,7 @@ async function runSeedInternal(): Promise<void> {
         })
         .onConflictDoNothing()
         .returning();
+      existingTitlesSet.add(normTitle);
 
       if (inserted && q.status === "resolved" && freshDb) {
         await db.insert(predictionBets).values([
@@ -802,4 +843,19 @@ async function runSeedInternal(): Promise<void> {
       role: "admin",
     });
   }
+
+  await db
+    .insert(adminSettings)
+    .values({
+      settingKey: SCHEMA_SEED_MARKER_KEY,
+      value: { ready: true, version: SCHEMA_SEED_MARKER_KEY },
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: adminSettings.settingKey,
+      set: {
+        value: { ready: true, version: SCHEMA_SEED_MARKER_KEY },
+        updatedAt: new Date(),
+      },
+    });
 }

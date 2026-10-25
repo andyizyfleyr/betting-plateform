@@ -12,14 +12,31 @@ import { settleFinishedBets } from "@/lib/settle";
  *   avec 0 visiteur rattrape séquentiellement tous les matchs écoulés, résout les
  *   questions arrivées à terme, règle tous les paris simples / combinés aux dates
  *   réelles de fin d'événement et maintient les files actives.
- * - Déduplique les appels concurrents (< 1,5 s) pour ménager le pool PostgreSQL.
+ * - Borne l'attente réseau externe (ESPN) à 2,5 s sur les lectures utilisateurs pour
+ *   qu'aucune lenteur d'API tierce ne bloque ni ne provoque de 504 sur Vercel Serverless.
  */
 const SYNC_THROTTLE_MS = 1_500;
 const HOUSEKEEPING_THROTTLE_MS = 60_000;
+const USER_READ_FEED_BUDGET_MS = 2_500;
 
 let lastFullSyncAt = 0;
 let inFlightFullSync: Promise<void> | null = null;
 let lastHousekeepingAt = 0;
+
+function withTimeoutBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T | "timed_out"> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve("timed_out"), budgetMs);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve("timed_out");
+      });
+  });
+}
 
 export async function syncPlatformStateThrottled(force = false): Promise<void> {
   const now = Date.now();
@@ -34,7 +51,29 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
 
   inFlightFullSync = (async () => {
     try {
-      await Promise.all([runLiveEngine(), syncRealMatchesThrottled(force)]);
+      const realFeedPromise = syncRealMatchesThrottled(force).catch((err) => {
+        console.error("[syncRealMatchesThrottled] non-fatal error:", err);
+        return null;
+      });
+
+      if (force) {
+        await Promise.all([runLiveEngine(), realFeedPromise]);
+      } else {
+        const [, feedStatus] = await Promise.all([
+          runLiveEngine(),
+          withTimeoutBudget(realFeedPromise, USER_READ_FEED_BUDGET_MS),
+        ]);
+        // Si le flux externe dépasse 2,5 s, laisse-le finir en tâche de fond et déclenche
+        // le règlement dès qu'il termine sans bloquer l'affichage utilisateur.
+        if (feedStatus === "timed_out") {
+          void realFeedPromise.then(async (res) => {
+            if (res && res.settledCount > 0) {
+              await settleFinishedBets().catch(() => undefined);
+            }
+          });
+        }
+      }
+
       await Promise.all([settleFinishedBets(), settleResolvedQuestions()]);
       await settlePendingCombos();
 

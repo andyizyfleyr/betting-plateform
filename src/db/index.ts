@@ -7,13 +7,22 @@ const globalForDb = globalThis as typeof globalThis & {
 
 function getDb(): typeof db {
   if (!globalForDb.__arenaNextJsPostgresqlPool) {
-    const databaseUrl = process.env.DATABASE_URL;
+    const databaseUrl = process.env.DATABASE_URL?.trim();
     if (!databaseUrl) {
       throw new Error("DATABASE_URL is required");
     }
-    globalForDb.__arenaNextJsPostgresqlPool = new Pool({
+    const pool = new Pool({
       connectionString: databaseUrl,
+      max: 5,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 20_000,
     });
+    // Empêche la fermeture d'une connexion inactive (ex. auto-suspend Neon après 5 min)
+    // de lever un événement `error` non intercepté qui tue l'instance serverless Node.
+    pool.on("error", (err) => {
+      console.error("[db pool idle client error]", err.message);
+    });
+    globalForDb.__arenaNextJsPostgresqlPool = pool;
   }
   return drizzle(globalForDb.__arenaNextJsPostgresqlPool);
 }
