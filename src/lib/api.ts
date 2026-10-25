@@ -174,7 +174,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ betId }),
     }),
-  predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=50"),
+  predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100"),
   placePredictionBet: (payload: {
     questionId: number;
     selection: "yes" | "no";

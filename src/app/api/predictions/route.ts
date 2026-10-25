@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   const uid = (await getAuthUserId(req)) ?? 1;
   const page = Math.max(1, Number(req.nextUrl.searchParams.get("page")) || 1);
-  const limit = Math.min(50, Math.max(1, Number(req.nextUrl.searchParams.get("limit")) || 10));
+  const limit = Math.min(100, Math.max(1, Number(req.nextUrl.searchParams.get("limit")) || 50));
   const status = req.nextUrl.searchParams.get("status");
   const category = req.nextUrl.searchParams.get("category");
 
