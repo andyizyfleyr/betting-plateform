@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import { BottomNav } from "@/components/bottom-nav";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <div className="mx-auto flex min-h-dvh w-full flex-col overflow-x-clip bg-deep max-lg:max-w-[480px] max-lg:sm:border-x max-lg:sm:border-edge max-lg:sm:shadow-sm">
             {children}
           </div>
+          <BottomNav />
         </Providers>
       </body>
     </html>
