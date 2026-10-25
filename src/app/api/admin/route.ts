@@ -2,11 +2,11 @@ import { and, count, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
-import { appUser, bets, deposits, matches, predictionBets, predictionQuestions } from "@/db/schema";
+import { appUser, bets, deposits, matches, predictionBets, predictionQuestions, type PredictionOption } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
 import { marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { getAuthUserId } from "@/lib/session";
-import { settleQuestion } from "@/lib/predictions";
+import { settleQuestion, slugifyOptionKey } from "@/lib/predictions";
 import { settleMatchBets } from "@/lib/settle";
 import { backdateStartsAtForMinute } from "@/db/engine";
 import { STALE_LATENCY_MS } from "@/lib/risk";
@@ -139,8 +139,8 @@ type Action =
   | { action: "startMatch"; matchId: number }
   | { action: "finishMatch"; matchId: number; homeScore?: number; awayScore?: number }
   | { action: "reopenMatch"; matchId: number }
-  | { action: "addQuestion"; question: string; category?: string; oddsYes?: number; oddsNo?: number; hours?: number }
-  | { action: "resolveQuestion"; questionId: number; resolution: "yes" | "no" }
+  | { action: "addQuestion"; question: string; category?: string; oddsYes?: number; oddsNo?: number; options?: unknown; hours?: number }
+  | { action: "resolveQuestion"; questionId: number; resolution: string }
   | { action: "deleteQuestion"; questionId: number }
   | { action: "selectAll"; from: string };
 
@@ -452,6 +452,15 @@ export async function POST(req: NextRequest) {
     const question = String(body.question ?? "").trim();
     if (!question) return NextResponse.json({ error: "La question est requise" }, { status: 400 });
     const category = String(body.category ?? "Sport").trim();
+    const isMultiMode = body.mode === "multi" || Array.isArray(body.options);
+    const parsedOptions = isMultiMode ? parseQuestionOptions(body.options) : null;
+    if (isMultiMode && (!parsedOptions || parsedOptions.length < 2)) {
+      return NextResponse.json(
+        { error: "Ajoutez au moins 2 choix avec un nom et une cote valide (> 1,01)" },
+        { status: 400 }
+      );
+    }
+
     const oddsYes = roundNumber(body.oddsYes) ?? 1.9;
     const oddsNo = roundNumber(body.oddsNo) ?? 1.8;
     const hours = Math.max(1, Number(body.resolvesAt) || 72);
@@ -476,6 +485,7 @@ export async function POST(req: NextRequest) {
         seedValue,
         oddsYes,
         oddsNo,
+        options: parsedOptions,
         volume: 0,
         yesCount: 0,
         noCount: 0,
@@ -491,6 +501,15 @@ export async function POST(req: NextRequest) {
     const category = String(body.category ?? "Sport").trim();
     const oddsYes = roundNumber(body.oddsYes) ?? 1.9;
     const oddsNo = roundNumber(body.oddsNo) ?? 1.8;
+    const hasOptionsField = Array.isArray(body.options);
+    const parsedOptions = hasOptionsField ? parseQuestionOptions(body.options) : undefined;
+    if (hasOptionsField && (!parsedOptions || parsedOptions.length < 2)) {
+      return NextResponse.json(
+        { error: "Une question à choix multiples doit comporter au moins 2 choix valides" },
+        { status: 400 }
+      );
+    }
+
     const [updated] = await db
       .update(predictionQuestions)
       .set({
@@ -498,6 +517,7 @@ export async function POST(req: NextRequest) {
         category,
         oddsYes,
         oddsNo,
+        ...(parsedOptions !== undefined ? { options: parsedOptions } : {}),
       })
       .where(eq(predictionQuestions.id, questionId))
       .returning();
@@ -507,12 +527,23 @@ export async function POST(req: NextRequest) {
 
   if (action === "resolveQuestion") {
     const questionId = Number(body.questionId);
-    const resolution = body.resolution === "yes" ? "yes" : "no";
+    const rawRes = String(body.resolution ?? "").trim();
     const [q] = await db
       .select()
       .from(predictionQuestions)
       .where(eq(predictionQuestions.id, questionId));
     if (!q) return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
+
+    let resolution: string;
+    if (Array.isArray(q.options) && q.options.length >= 2) {
+      const matched = q.options.find((o) => o.key === rawRes);
+      if (!matched) {
+        return NextResponse.json({ error: "Choix gagnant invalide" }, { status: 400 });
+      }
+      resolution = matched.key;
+    } else {
+      resolution = rawRes === "yes" ? "yes" : "no";
+    }
 
     await settleQuestion(questionId, resolution);
     return NextResponse.json({ ok: true });
@@ -541,6 +572,29 @@ export async function POST(req: NextRequest) {
 function roundNumber(v: unknown): number | null {
   const n = typeof v === "string" ? parseFloat(v.replace(",", ".")) : typeof v === "number" ? v : NaN;
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+function parseQuestionOptions(raw: unknown): PredictionOption[] | null {
+  if (!Array.isArray(raw)) return null;
+  const used = new Set<string>();
+  const out: PredictionOption[] = [];
+  raw.forEach((item, idx) => {
+    const obj = item as { key?: unknown; label?: unknown; odds?: unknown };
+    const label = String(obj?.label ?? "").trim();
+    const odds = roundNumber(obj?.odds);
+    if (!label || odds == null || odds <= 1.01) return;
+    let key =
+      typeof obj?.key === "string" && obj.key.trim()
+        ? slugifyOptionKey(obj.key, idx)
+        : slugifyOptionKey(label, idx);
+    let suffix = 2;
+    while (used.has(key)) {
+      key = `${slugifyOptionKey(label, idx)}_${suffix++}`;
+    }
+    used.add(key);
+    out.push({ key, label, odds });
+  });
+  return out.length >= 2 ? out : null;
 }
 
 /**

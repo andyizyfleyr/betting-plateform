@@ -84,15 +84,22 @@ export interface ClientBet {
   matchStartsAt: string | null;
 }
 
-/** Question de prédiction (marché Oui/Non). */
+export interface PredictionOptionClient {
+  key: string;
+  label: string;
+  odds: number;
+}
+
+/** Question de prédiction (marché Oui/Non ou Choix multiples à cotes fixes). */
 export interface ClientPrediction {
   id: number;
   question: string;
   category: string;
   status: "open" | "resolved";
-  resolution: "yes" | "no" | null;
+  resolution: string | null;
   oddsYes: number;
   oddsNo: number;
+  options?: PredictionOptionClient[] | null;
   volume: number;
   yesCount: number;
   noCount: number;
@@ -100,6 +107,7 @@ export interface ClientPrediction {
   resolvedAt: string | null;
   myBet?: {
     selection: string;
+    selectionLabel?: string;
     status: string;
     stake: number;
     potentialWin: number;
@@ -112,7 +120,7 @@ export interface ClientPredictionBet {
   questionId: number;
   question: string;
   category: string;
-  selection: "yes" | "no";
+  selection: string;
   selectionLabel: string;
   odds: number;
   stake: number;
@@ -177,7 +185,7 @@ export const api = {
   predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100"),
   placePredictionBet: (payload: {
     questionId: number;
-    selection: "yes" | "no";
+    selection: string;
     stake: number;
   }) =>
     request<{ bet: ClientPredictionBet; balance: number }>("/api/predictions", {

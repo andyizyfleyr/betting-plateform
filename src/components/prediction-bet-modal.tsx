@@ -13,8 +13,20 @@ const QUICK_STAKES = [5, 10, 25, 50];
 
 interface Props {
   question: ClientPrediction | null;
-  selection: "yes" | "no" | null;
+  selection: string | null;
   onClose: () => void;
+}
+
+function getSelectionMeta(question: ClientPrediction, selection: string) {
+  if (question.options && question.options.length >= 2) {
+    const opt = question.options.find((o) => o.key === selection);
+    if (opt) return { label: opt.label, odds: opt.odds };
+  }
+  const isYes = selection === "yes";
+  return {
+    label: isYes ? "Oui" : "Non",
+    odds: isYes ? question.oddsYes : question.oddsNo,
+  };
 }
 
 export function PredictionBetModal({ question, selection, onClose }: Props) {
@@ -47,7 +59,7 @@ function PredictionBetSheet({
   onClose,
 }: {
   question: ClientPrediction;
-  selection: "yes" | "no";
+  selection: string;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -65,6 +77,7 @@ function PredictionBetSheet({
     potentialWin: number;
     stake: number;
     odds: number;
+    selectionLabel: string;
   } | null>(null);
   const [liveOdds, setLiveOdds] = useState<number | null>(null);
 
@@ -77,7 +90,7 @@ function PredictionBetSheet({
         if (!active) return;
         const fresh = r.questions.find((q) => q.id === question.id);
         if (fresh) {
-          setLiveOdds(selection === "yes" ? fresh.oddsYes : fresh.oddsNo);
+          setLiveOdds(getSelectionMeta(fresh, selection).odds);
         }
       } catch {
         /* silencieux */
@@ -91,8 +104,8 @@ function PredictionBetSheet({
     };
   }, [question.id, selection]);
 
-  const baseOdds = selection === "yes" ? question.oddsYes : question.oddsNo;
-  const odds = liveOdds ?? baseOdds;
+  const initialMeta = getSelectionMeta(question, selection);
+  const odds = liveOdds ?? initialMeta.odds;
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
   const overBalance = stake > balance;
@@ -126,6 +139,7 @@ function PredictionBetSheet({
         potentialWin: res.bet.potentialWin,
         stake: res.bet.stake,
         odds: res.bet.odds,
+        selectionLabel: res.bet.selectionLabel,
       });
       setPhase("success");
     } catch (e) {
@@ -174,7 +188,7 @@ function PredictionBetSheet({
             stake={placed.stake}
             odds={placed.odds}
             question={question.question}
-            selection={selection}
+            selectionLabel={placed.selectionLabel}
             onGoToBets={goToBets}
             onContinue={onClose}
           />
@@ -210,12 +224,11 @@ function PredictionBetSheet({
               <p className="mt-2 font-display text-[14px] font-semibold leading-snug text-ink">
                 {question.question}
               </p>
-              <div className="mt-2.5 flex items-center justify-between rounded-xl border border-edge bg-white px-3 py-2">
-                <span className="text-[12.5px] font-semibold text-ink">
-                  Choix :{" "}
-                  <span className="text-betclic-red">{selection === "yes" ? "Oui" : "Non"}</span>
+              <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl border border-edge bg-white px-3 py-2">
+                <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink">
+                  Choix : <span className="text-betclic-red">{initialMeta.label}</span>
                 </span>
-                <span className="rounded-lg bg-betclic-red px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-white">
+                <span className="shrink-0 rounded-lg bg-betclic-red px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-white">
                   {formatOdds(odds, oddsFormat)}
                 </span>
               </div>
@@ -377,7 +390,7 @@ function SuccessView({
   stake,
   odds,
   question,
-  selection,
+  selectionLabel,
   onGoToBets,
   onContinue,
 }: {
@@ -386,7 +399,7 @@ function SuccessView({
   stake: number;
   odds: number;
   question: string;
-  selection: "yes" | "no";
+  selectionLabel: string;
   onGoToBets: () => void;
   onContinue: () => void;
 }) {
@@ -405,8 +418,7 @@ function SuccessView({
       <div className="mt-4 rounded-2xl border border-edge bg-elev/50 p-3.5">
         <p className="font-display text-[13.5px] font-semibold leading-snug text-ink">{question}</p>
         <p className="mt-1 text-[12px] font-medium text-mist">
-          Réponse choisie :{" "}
-          <strong className="text-ink">{selection === "yes" ? "Oui" : "Non"}</strong>
+          Réponse choisie : <strong className="text-ink">{selectionLabel}</strong>
         </p>
 
         <div className="mt-3 grid grid-cols-3 gap-2 border-t border-edge pt-3">

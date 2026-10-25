@@ -88,17 +88,40 @@ interface AdminMatch {
   source?: string | null;
 }
 
+interface AdminQuestionOption {
+  key: string;
+  label: string;
+  odds: number;
+}
+
 interface AdminQuestion {
   id: number;
   question: string;
   category: string;
   status: string;
-  resolution: "yes" | "no" | null;
+  resolution: string | null;
   oddsYes: number;
   oddsNo: number;
+  options?: AdminQuestionOption[] | null;
   volume: number;
   resolvesAt: string;
 }
+
+interface QuestionFormState {
+  mode: "binary" | "multi";
+  question: string;
+  category: string;
+  oddsYes: string;
+  oddsNo: string;
+  options: Array<{ label: string; odds: string }>;
+  hours: string;
+}
+
+const defaultQuestionOptions = () => [
+  { label: "", odds: "2.85" },
+  { label: "", odds: "3.25" },
+  { label: "", odds: "4.50" },
+];
 
 interface PanelData {
   stats: {
@@ -245,11 +268,13 @@ export default function AdminPage() {
     awayLogo: "",
     markets: emptyMarkets(),
   });
-  const [questionForm, setQuestionForm] = useState({
+  const [questionForm, setQuestionForm] = useState<QuestionFormState>({
+    mode: "binary",
     question: "",
     category: "Sport",
     oddsYes: "1.90",
     oddsNo: "1.80",
+    options: defaultQuestionOptions(),
     hours: "72",
   });
   const [balanceForm, setBalanceForm] = useState<Record<number, string>>({});
@@ -363,13 +388,22 @@ export default function AdminPage() {
 
   const onAddQuestion = async (e: FormEvent): Promise<boolean> => {
     e.preventDefault();
+    const isMulti = questionForm.mode === "multi";
+    const builtOptions = isMulti
+      ? questionForm.options
+          .map((o) => ({ label: o.label.trim(), odds: Number(o.odds.replace(",", ".")) }))
+          .filter((o) => o.label && o.odds > 1.01)
+      : undefined;
+
     const ok = await act(
       {
         action: "addQuestion",
+        mode: questionForm.mode,
         question: questionForm.question,
         category: questionForm.category,
-        oddsYes: Number(questionForm.oddsYes),
-        oddsNo: Number(questionForm.oddsNo),
+        oddsYes: Number(questionForm.oddsYes.replace(",", ".")),
+        oddsNo: Number(questionForm.oddsNo.replace(",", ".")),
+        ...(isMulti ? { options: builtOptions } : {}),
         resolvesAt: Number(questionForm.hours),
       },
       "add-q",
@@ -377,10 +411,12 @@ export default function AdminPage() {
     );
     if (ok) {
       setQuestionForm({
+        mode: questionForm.mode,
         question: "",
         category: "Sport",
         oddsYes: "1.90",
         oddsNo: "1.80",
+        options: defaultQuestionOptions(),
         hours: "72",
       });
     }
@@ -1094,26 +1130,37 @@ function QuestionsTab({
   questions: AdminQuestion[];
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
-  form: { question: string; category: string; oddsYes: string; oddsNo: string; hours: string };
-  setForm: (f: { question: string; category: string; oddsYes: string; oddsNo: string; hours: string }) => void;
+  form: QuestionFormState;
+  setForm: (f: QuestionFormState) => void;
   onAdd: (e: FormEvent) => Promise<boolean>;
 }) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    question: string;
+    category: string;
+    oddsYes: string;
+    oddsNo: string;
+    options: Array<{ key?: string; label: string; odds: string }> | null;
+  }>({
     question: "",
     category: "Sport",
     oddsYes: "1.90",
     oddsNo: "1.80",
+    options: null,
   });
 
   const startEdit = (q: AdminQuestion) => {
     setEditingId(q.id);
+    const hasMulti = Array.isArray(q.options) && q.options.length >= 2;
     setEditForm({
       question: q.question,
       category: q.category,
       oddsYes: String(q.oddsYes),
       oddsNo: String(q.oddsNo),
+      options: hasMulti && q.options
+        ? q.options.map((o) => ({ key: o.key, label: o.label, odds: String(o.odds) }))
+        : null,
     });
   };
 
@@ -1122,15 +1169,27 @@ function QuestionsTab({
       {
         action: "editQuestion",
         questionId: id,
-        ...editForm,
-        oddsYes: Number(editForm.oddsYes),
-        oddsNo: Number(editForm.oddsNo),
+        question: editForm.question,
+        category: editForm.category,
+        oddsYes: Number(editForm.oddsYes.replace(",", ".")),
+        oddsNo: Number(editForm.oddsNo.replace(",", ".")),
+        ...(editForm.options
+          ? {
+              options: editForm.options.map((o) => ({
+                ...(o.key ? { key: o.key } : {}),
+                label: o.label.trim(),
+                odds: Number(o.odds.replace(",", ".")),
+              })),
+            }
+          : {}),
       },
       `edit-q-${id}`,
       "Question mise à jour"
     );
     if (ok) setEditingId(null);
   };
+
+  const multiPlaceholders = ["Lamine Yamal", "Kylian Mbappé", "Harry Kane", "Vinícius Jr."];
 
   return (
     <div className="flex flex-col gap-3">
@@ -1142,7 +1201,7 @@ function QuestionsTab({
         >
           <span className="flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
             <Plus className="h-4 w-4 text-betclic-red" strokeWidth={2.5} />
-            Nouvelle question Oui / Non
+            Nouvelle question (Oui / Non ou Choix multiples)
           </span>
           <ChevronDown
             className={cn("h-4 w-4 text-dim transition-transform", formOpen && "rotate-180")}
@@ -1158,44 +1217,169 @@ function QuestionsTab({
             }}
             className="border-t border-edge p-3.5"
           >
+            {/* Format : Oui / Non vs Choix multiples */}
+            <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev/60 p-1">
+              {(
+                [
+                  { key: "binary", label: "Oui / Non" },
+                  { key: "multi", label: "Choix multiples" },
+                ] as const
+              ).map((m) => {
+                const active = form.mode === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setForm({ ...form, mode: m.key })}
+                    className={cn(
+                      "h-8 rounded-lg font-display text-[12px] transition-colors",
+                      active ? "bg-ink font-bold text-white" : "font-semibold text-mist"
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
             <AdminInput
               label="Intitulé de la question"
               value={form.question}
               onChange={(v) => setForm({ ...form, question: v })}
-              placeholder="Ex. Le PSG gagnera-t-il ce soir ?"
+              placeholder={
+                form.mode === "multi"
+                  ? "Ex. Qui va remporter le Ballon d'Or 2026 ?"
+                  : "Ex. Le PSG gagnera-t-il ce soir ?"
+              }
             />
-            <div className="mt-2.5 grid grid-cols-3 gap-2">
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
-                <select
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  aria-label="Catégorie"
-                  className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink outline-none focus:border-ink"
-                >
-                  <option value="Sport">Sport</option>
-                  <option value="Actus">Actus</option>
-                  <option value="Crypto">Crypto</option>
-                  <option value="Culture">Culture</option>
-                </select>
-              </label>
+
+            {form.mode === "binary" ? (
+              <div className="mt-2.5 grid grid-cols-3 gap-2">
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                  <select
+                    value={form.category}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                    aria-label="Catégorie"
+                    className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink outline-none focus:border-ink"
+                  >
+                    <option value="Sport">Sport</option>
+                    <option value="Actus">Actus</option>
+                    <option value="Crypto">Crypto</option>
+                    <option value="Culture">Culture</option>
+                  </select>
+                </label>
+                <AdminInput
+                  label="Cote Oui"
+                  value={form.oddsYes}
+                  onChange={(v) => setForm({ ...form, oddsYes: v })}
+                />
+                <AdminInput
+                  label="Cote Non"
+                  value={form.oddsNo}
+                  onChange={(v) => setForm({ ...form, oddsNo: v })}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="mt-2.5 grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                    <select
+                      value={form.category}
+                      onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      aria-label="Catégorie"
+                      className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink outline-none focus:border-ink"
+                    >
+                      <option value="Sport">Sport</option>
+                      <option value="Actus">Actus</option>
+                      <option value="Crypto">Crypto</option>
+                      <option value="Culture">Culture</option>
+                    </select>
+                  </label>
+                  <AdminInput
+                    label="Échéance (heures)"
+                    value={form.hours}
+                    onChange={(v) => setForm({ ...form, hours: v })}
+                  />
+                </div>
+
+                <div className="mt-3">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-mist">
+                      Choix & cotes fixes ({form.options.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          options: [...form.options, { label: "", odds: "5.00" }],
+                        })
+                      }
+                      className="inline-flex items-center gap-1 rounded-lg bg-elev px-2 py-1 font-display text-[11px] font-bold text-betclic-red"
+                    >
+                      <Plus className="h-3 w-3" strokeWidth={2.5} />
+                      Ajouter un choix
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {form.options.map((opt, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={opt.label}
+                          onChange={(e) => {
+                            const next = [...form.options];
+                            next[idx] = { ...next[idx], label: e.target.value };
+                            setForm({ ...form, options: next });
+                          }}
+                          placeholder={multiPlaceholders[idx] ?? `Choix #${idx + 1}`}
+                          className="h-10 min-w-0 flex-1 rounded-xl border border-edge bg-elev/60 px-3 text-[15px] font-medium text-ink outline-none focus:border-ink"
+                        />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={opt.odds}
+                          onChange={(e) => {
+                            const next = [...form.options];
+                            next[idx] = { ...next[idx], odds: e.target.value };
+                            setForm({ ...form, options: next });
+                          }}
+                          placeholder="Cote"
+                          className="h-10 w-20 shrink-0 rounded-xl border border-edge bg-elev/60 px-2.5 text-center font-display text-[15px] font-bold tabular-nums text-ink outline-none focus:border-ink"
+                        />
+                        {form.options.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                options: form.options.filter((_, i) => i !== idx),
+                              })
+                            }
+                            aria-label="Retirer ce choix"
+                            className="grid h-10 w-9 shrink-0 place-items-center rounded-xl bg-elev text-mist active:bg-edge"
+                          >
+                            <X className="h-4 w-4" strokeWidth={2.2} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {form.mode === "binary" && (
               <AdminInput
-                label="Cote Oui"
-                value={form.oddsYes}
-                onChange={(v) => setForm({ ...form, oddsYes: v })}
+                label="Échéance (heures)"
+                value={form.hours}
+                className="mt-2.5"
+                onChange={(v) => setForm({ ...form, hours: v })}
               />
-              <AdminInput
-                label="Cote Non"
-                value={form.oddsNo}
-                onChange={(v) => setForm({ ...form, oddsNo: v })}
-              />
-            </div>
-            <AdminInput
-              label="Échéance (heures)"
-              value={form.hours}
-              className="mt-2.5"
-              onChange={(v) => setForm({ ...form, hours: v })}
-            />
+            )}
+
             <button
               type="submit"
               disabled={!form.question || busy["add-q"]}
@@ -1212,6 +1396,14 @@ function QuestionsTab({
       <div className="flex flex-col gap-2.5">
         {questions.map((q) => {
           const isEditing = editingId === q.id;
+          const isMulti = Array.isArray(q.options) && q.options.length >= 2;
+          const resolvedLabel =
+            q.status === "open"
+              ? "Ouverte"
+              : isMulti && q.options
+                ? `Résolue · ${q.options.find((o) => o.key === q.resolution)?.label ?? q.resolution}`
+                : `Résolue · ${q.resolution === "yes" ? "Oui" : "Non"}`;
+
           return (
             <div key={q.id} className="glass-card rounded-2xl p-3.5">
               {isEditing ? (
@@ -1221,32 +1413,108 @@ function QuestionsTab({
                     value={editForm.question}
                     onChange={(v) => setEditForm({ ...editForm, question: v })}
                   />
-                  <div className="grid grid-cols-3 gap-2">
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
-                      <select
-                        value={editForm.category}
-                        onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                        aria-label="Catégorie"
-                        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink"
-                      >
-                        <option value="Sport">Sport</option>
-                        <option value="Actus">Actus</option>
-                        <option value="Crypto">Crypto</option>
-                        <option value="Culture">Culture</option>
-                      </select>
-                    </label>
-                    <AdminInput
-                      label="Oui"
-                      value={editForm.oddsYes}
-                      onChange={(v) => setEditForm({ ...editForm, oddsYes: v })}
-                    />
-                    <AdminInput
-                      label="Non"
-                      value={editForm.oddsNo}
-                      onChange={(v) => setEditForm({ ...editForm, oddsNo: v })}
-                    />
-                  </div>
+                  {editForm.options ? (
+                    <>
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                        <select
+                          value={editForm.category}
+                          onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                          aria-label="Catégorie"
+                          className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink"
+                        >
+                          <option value="Sport">Sport</option>
+                          <option value="Actus">Actus</option>
+                          <option value="Crypto">Crypto</option>
+                          <option value="Culture">Culture</option>
+                        </select>
+                      </label>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-mist">Choix & cotes</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm({
+                                ...editForm,
+                                options: [...(editForm.options ?? []), { label: "", odds: "4.00" }],
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg bg-elev px-2 py-0.5 font-display text-[11px] font-bold text-betclic-red"
+                          >
+                            <Plus className="h-3 w-3" /> Ajouter
+                          </button>
+                        </div>
+                        {editForm.options.map((opt, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={opt.label}
+                              onChange={(e) => {
+                                const next = [...(editForm.options ?? [])];
+                                next[idx] = { ...next[idx], label: e.target.value };
+                                setEditForm({ ...editForm, options: next });
+                              }}
+                              placeholder={`Choix #${idx + 1}`}
+                              className="h-9 min-w-0 flex-1 rounded-xl border border-edge bg-elev/60 px-2.5 text-[14px] font-medium text-ink"
+                            />
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={opt.odds}
+                              onChange={(e) => {
+                                const next = [...(editForm.options ?? [])];
+                                next[idx] = { ...next[idx], odds: e.target.value };
+                                setEditForm({ ...editForm, options: next });
+                              }}
+                              className="h-9 w-20 shrink-0 rounded-xl border border-edge bg-elev/60 px-2 text-center font-display text-[14px] font-bold tabular-nums text-ink"
+                            />
+                            {editForm.options && editForm.options.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditForm({
+                                    ...editForm,
+                                    options: (editForm.options ?? []).filter((_, i) => i !== idx),
+                                  })
+                                }
+                                className="grid h-9 w-8 shrink-0 place-items-center rounded-xl bg-elev text-mist"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="block">
+                        <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                        <select
+                          value={editForm.category}
+                          onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                          aria-label="Catégorie"
+                          className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink"
+                        >
+                          <option value="Sport">Sport</option>
+                          <option value="Actus">Actus</option>
+                          <option value="Crypto">Crypto</option>
+                          <option value="Culture">Culture</option>
+                        </select>
+                      </label>
+                      <AdminInput
+                        label="Oui"
+                        value={editForm.oddsYes}
+                        onChange={(v) => setEditForm({ ...editForm, oddsYes: v })}
+                      />
+                      <AdminInput
+                        label="Non"
+                        value={editForm.oddsNo}
+                        onChange={(v) => setEditForm({ ...editForm, oddsYes: editForm.oddsYes, oddsNo: v })}
+                      />
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -1279,45 +1547,74 @@ function QuestionsTab({
                           : "bg-elev text-mist"
                       )}
                     >
-                      {q.status === "open"
-                        ? "Ouverte"
-                        : `Résolue · ${q.resolution === "yes" ? "Oui" : "Non"}`}
+                      {resolvedLabel}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11.5px] text-dim">
-                    {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · Mises{" "}
-                    {eur(q.volume)}
-                  </p>
+
+                  {isMulti && q.options ? (
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-dim">
+                      {q.category} · {q.options.map((o) => `${o.label} (${formatOdds(o.odds)})`).join(" · ")} · Mises {eur(q.volume)}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11.5px] text-dim">
+                      {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · Mises{" "}
+                      {eur(q.volume)}
+                    </p>
+                  )}
+
+                  {q.status === "open" && isMulti && q.options && (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {q.options.map((opt) => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() =>
+                            act(
+                              { action: "resolveQuestion", questionId: q.id, resolution: opt.key },
+                              `ro-${q.id}-${opt.key}`,
+                              `Résolue : ${opt.label}`
+                            )
+                          }
+                          className="h-7 rounded-lg bg-win/12 px-2.5 font-display text-[11px] font-bold text-win active:opacity-80"
+                        >
+                          ✓ {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="mt-2.5 flex items-center gap-1.5">
                     {q.status === "open" ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            act(
-                              { action: "resolveQuestion", questionId: q.id, resolution: "yes" },
-                              `ry-${q.id}`,
-                              "Résolue : Oui"
-                            )
-                          }
-                          className="h-8 flex-1 rounded-lg bg-win/12 font-display text-[11.5px] font-bold text-win"
-                        >
-                          Oui gagne
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            act(
-                              { action: "resolveQuestion", questionId: q.id, resolution: "no" },
-                              `rn-${q.id}`,
-                              "Résolue : Non"
-                            )
-                          }
-                          className="h-8 flex-1 rounded-lg bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
-                        >
-                          Non gagne
-                        </button>
-                      </>
+                      !isMulti && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              act(
+                                { action: "resolveQuestion", questionId: q.id, resolution: "yes" },
+                                `ry-${q.id}`,
+                                "Résolue : Oui"
+                              )
+                            }
+                            className="h-8 flex-1 rounded-lg bg-win/12 font-display text-[11.5px] font-bold text-win"
+                          >
+                            Oui gagne
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              act(
+                                { action: "resolveQuestion", questionId: q.id, resolution: "no" },
+                                `rn-${q.id}`,
+                                "Résolue : Non"
+                              )
+                            }
+                            className="h-8 flex-1 rounded-lg bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
+                          >
+                            Non gagne
+                          </button>
+                        </>
+                      )
                     ) : (
                       <button
                         type="button"
@@ -1336,7 +1633,10 @@ function QuestionsTab({
                     <button
                       type="button"
                       onClick={() => startEdit(q)}
-                      className="h-8 rounded-lg bg-elev px-3 font-display text-[11.5px] font-semibold text-ink"
+                      className={cn(
+                        "h-8 rounded-lg bg-elev px-3 font-display text-[11.5px] font-semibold text-ink",
+                        q.status === "open" && isMulti && "flex-1"
+                      )}
                     >
                       Éditer
                     </button>

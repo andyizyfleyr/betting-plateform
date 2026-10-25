@@ -115,7 +115,8 @@ export async function POST(req: NextRequest) {
       resolvesAt: question.resolvesAt,
       currentOddsYes: question.oddsYes,
       currentOddsNo: question.oddsNo,
-      selection: bet.selection as "yes" | "no",
+      options: question.options ?? null,
+      selection: bet.selection,
     });
 
     await db

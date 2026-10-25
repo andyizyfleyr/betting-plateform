@@ -101,10 +101,16 @@ export const bets = pgTable("bets", {
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+export interface PredictionOption {
+  key: string;
+  label: string;
+  odds: number;
+}
+
 /**
- * Questions de prédiction (marchés Oui/Non, style Kalshi/Polymarket).
+ * Questions de prédiction (marchés Oui/Non ou Choix multiples à cotes fixes).
  * status: "open" | "resolved"
- * resolution: "yes" | "no" | null (null tant que non résolue)
+ * resolution: "yes" | "no" | clé d'option gagnante | null (null tant que non résolue)
  * seedValue: graine déterministe utilisée à la résolution (jamais exposée au client).
  */
 export const predictionQuestions = pgTable("prediction_questions", {
@@ -116,6 +122,8 @@ export const predictionQuestions = pgTable("prediction_questions", {
   seedValue: integer("seed_value").notNull().default(0),
   oddsYes: doublePrecision("odds_yes").notNull(),
   oddsNo: doublePrecision("odds_no").notNull(),
+  /** Options pour les questions à choix multiples (null = question binaire Oui/Non). */
+  options: jsonb("options").$type<PredictionOption[] | null>(),
   volume: doublePrecision("volume").notNull().default(0),
   yesCount: integer("yes_count").notNull().default(0),
   noCount: integer("no_count").notNull().default(0),

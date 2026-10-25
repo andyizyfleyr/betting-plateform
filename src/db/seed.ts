@@ -137,6 +137,7 @@ export async function ensureSeeded() {
       "seed_value" integer DEFAULT 0 NOT NULL,
       "odds_yes" double precision NOT NULL,
       "odds_no" double precision NOT NULL,
+      "options" jsonb,
       "volume" double precision DEFAULT 0 NOT NULL,
       "yes_count" integer DEFAULT 0 NOT NULL,
       "no_count" integer DEFAULT 0 NOT NULL,
@@ -144,6 +145,10 @@ export async function ensureSeeded() {
       "resolved_at" timestamp,
       "created_at" timestamp DEFAULT now() NOT NULL
     );
+  `);
+
+  await db.execute(sql`
+    ALTER TABLE "prediction_questions" ADD COLUMN IF NOT EXISTS "options" jsonb;
   `);
 
   await db.execute(sql`
@@ -191,6 +196,120 @@ export async function ensureSeeded() {
   endOfMonth.setHours(18, 0, 0, 0);
 
   const questionsSeed = [
+    {
+      question: "Qui va remporter le Ballon d'Or 2026 ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 501,
+      oddsYes: 2.0,
+      oddsNo: 2.0,
+      options: [
+        { key: "lamine_yamal", label: "Lamine Yamal", odds: 2.85 },
+        { key: "kylian_mbappe", label: "Kylian Mbappé", odds: 3.25 },
+        { key: "harry_kane", label: "Harry Kane", odds: 4.5 },
+        { key: "vinicius_jr", label: "Vinícius Jr.", odds: 6.0 },
+        { key: "mohamed_salah", label: "Mohamed Salah", odds: 7.5 },
+        { key: "ousmane_dembele", label: "Ousmane Dembélé", odds: 9.0 },
+      ],
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 12 * day),
+    },
+    {
+      question: "Quel club remportera la Ligue des Champions cette saison ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 502,
+      oddsYes: 2.0,
+      oddsNo: 2.0,
+      options: [
+        { key: "real_madrid", label: "Real Madrid", odds: 3.75 },
+        { key: "manchester_city", label: "Manchester City", odds: 4.2 },
+        { key: "fc_barcelone", label: "FC Barcelone", odds: 5.0 },
+        { key: "arsenal", label: "Arsenal", odds: 6.5 },
+        { key: "bayern_munich", label: "Bayern Munich", odds: 7.0 },
+        { key: "paris_sg", label: "Paris SG", odds: 8.5 },
+      ],
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 55 * day),
+    },
+    {
+      question: "Qui terminera meilleur buteur de Ligue 1 cette saison ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 503,
+      oddsYes: 2.0,
+      oddsNo: 2.0,
+      options: [
+        { key: "ousmane_dembele", label: "Ousmane Dembélé", odds: 2.6 },
+        { key: "bradley_barcola", label: "Bradley Barcola", odds: 3.4 },
+        { key: "jonathan_david", label: "Jonathan David", odds: 4.2 },
+        { key: "mason_greenwood", label: "Mason Greenwood", odds: 4.8 },
+        { key: "alexandre_lacazette", label: "Alexandre Lacazette", odds: 7.5 },
+      ],
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 140 * day),
+    },
+    {
+      question: "Quel pilote sera sacré champion du monde de Formule 1 ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 504,
+      oddsYes: 2.0,
+      oddsNo: 2.0,
+      options: [
+        { key: "max_verstappen", label: "Max Verstappen", odds: 2.1 },
+        { key: "lando_norris", label: "Lando Norris", odds: 2.75 },
+        { key: "charles_leclerc", label: "Charles Leclerc", odds: 5.5 },
+        { key: "lewis_hamilton", label: "Lewis Hamilton", odds: 9.0 },
+      ],
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 42 * day),
+    },
+    {
+      question: "Quelle franchise remportera le titre NBA cette saison ?",
+      category: "Sport",
+      status: "open" as const,
+      seedValue: 505,
+      oddsYes: 2.0,
+      oddsNo: 2.0,
+      options: [
+        { key: "boston_celtics", label: "Boston Celtics", odds: 3.4 },
+        { key: "oklahoma_city_thunder", label: "Oklahoma City Thunder", odds: 3.8 },
+        { key: "denver_nuggets", label: "Denver Nuggets", odds: 6.5 },
+        { key: "new_york_knicks", label: "New York Knicks", odds: 8.0 },
+        { key: "los_angeles_lakers", label: "Los Angeles Lakers", odds: 11.0 },
+      ],
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 175 * day),
+    },
+    {
+      question: "Quelle cryptomonnaie signera la meilleure performance ce trimestre ?",
+      category: "Crypto",
+      status: "open" as const,
+      seedValue: 506,
+      oddsYes: 2.0,
+      oddsNo: 2.0,
+      options: [
+        { key: "bitcoin", label: "Bitcoin (BTC)", odds: 2.4 },
+        { key: "solana", label: "Solana (SOL)", odds: 2.9 },
+        { key: "ethereum", label: "Ethereum (ETH)", odds: 3.5 },
+        { key: "ripple", label: "XRP", odds: 5.5 },
+      ],
+      volume: 0,
+      yesCount: 0,
+      noCount: 0,
+      resolvesAt: new Date(now + 50 * day),
+    },
     {
       question: "Le PSG remportera-t-il son prochain match de Ligue 1 ?",
       category: "Sport",
@@ -455,6 +574,7 @@ export async function ensureSeeded() {
 
     if (!existing) {
       const { question, category, status, seedValue, oddsYes, oddsNo, volume, yesCount, noCount, resolvesAt } = q;
+      const options = "options" in q ? q.options : undefined;
       const resolution = "resolution" in q ? q.resolution : undefined;
       const resolvedAt = "resolvedAt" in q ? q.resolvedAt : undefined;
       const [inserted] = await db
@@ -466,6 +586,7 @@ export async function ensureSeeded() {
           seedValue,
           oddsYes,
           oddsNo,
+          ...(options ? { options } : {}),
           volume,
           yesCount,
           noCount,

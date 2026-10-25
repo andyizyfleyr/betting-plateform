@@ -109,7 +109,8 @@ export async function GET(req: NextRequest) {
           resolvesAt: q.resolvesAt,
           currentOddsYes: q.oddsYes,
           currentOddsNo: q.oddsNo,
-          selection: pb.selection as "yes" | "no",
+          options: q.options ?? null,
+          selection: pb.selection,
         })
       : null;
 
@@ -123,7 +124,7 @@ export async function GET(req: NextRequest) {
       awayTeam: "",
       question: pb.question,
       questionId: pb.questionId,
-      market: "yesno",
+      market: q?.options && q.options.length >= 2 ? "multichoice" : "yesno",
       selection: pb.selection,
       selectionLabel: pb.selectionLabel,
       odds: pb.odds,
