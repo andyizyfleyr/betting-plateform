@@ -89,7 +89,8 @@ export function MatchCard({
         }
       }}
       className={cn(
-        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45",
+        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-4 transition-colors active:bg-elev/45 lg:p-3.5",
+        !isFinished && "max-lg:min-h-[194px]",
         className
       )}
     >
@@ -108,7 +109,7 @@ export function MatchCard({
       )}
 
       {/* En-tête : ligue + statut (compact sur mobile, sans bouton Stats mobile) */}
-      <div className="flex items-center justify-between gap-2 text-[11px]">
+      <div className="flex items-center justify-between gap-2 text-[11.5px]">
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
           <span
             className={cn(
@@ -120,7 +121,7 @@ export function MatchCard({
           >
             {isReal ? "Réel" : "Virtuel"}
           </span>
-          <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
+          <SportIcon sport={match.sport} className="h-4 w-4 shrink-0 text-dim lg:h-3.5 lg:w-3.5" />
           <span className="truncate font-semibold">{match.league}</span>
         </div>
 
@@ -196,8 +197,8 @@ export function MatchCard({
         </div>
       </div>
 
-      {/* Équipes & scores équilibrés */}
-      <div className="mt-2.5 flex flex-col gap-2 lg:mt-2.5 lg:gap-1.5">
+      {/* Équipes & scores aérés */}
+      <div className="mt-3.5 flex flex-col gap-2.5 lg:mt-2.5 lg:gap-1.5">
         <TeamRow
           name={match.homeTeam}
           logo={match.homeLogo}
@@ -240,7 +241,7 @@ export function MatchCard({
 
       {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés sur desktop */}
       {!isFinished && (
-        <div className="mt-auto pt-3">
+        <div className="mt-auto pt-3.5 lg:pt-3">
           <ResultOdds match={match} />
           {marketCount > 1 && (
             <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[11px] lg:flex">
@@ -277,10 +278,10 @@ function TeamRow({
   const isFinished = score != null && !isLive;
   return (
     <div className="flex items-center gap-2.5">
-      <TeamAvatar name={name} logo={logo} size="xs" />
+      <TeamAvatar name={name} logo={logo} size="sm" className="lg:h-7 lg:w-7" />
       <span
         className={cn(
-          "truncate font-display text-[13.5px] font-semibold leading-snug lg:text-[14px]",
+          "truncate font-display text-[14.5px] font-semibold leading-snug lg:text-[14px]",
           isFinished && !winner ? "text-mist" : "text-ink"
         )}
       >
@@ -301,7 +302,7 @@ function TeamRow({
       {score != null && (
         <span
           className={cn(
-            "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[14px] font-bold leading-none tabular-nums lg:text-[15px]",
+            "ml-auto min-w-[24px] rounded-md px-1.5 py-0.5 text-center font-display text-[15px] font-bold leading-none tabular-nums",
             isLive
               ? "bg-betclic-red/10 text-betclic-red"
               : isFinished && winner
@@ -474,7 +475,7 @@ function OddsCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "flex h-10.5 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
+        "flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98] lg:h-10.5",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
@@ -488,7 +489,7 @@ function OddsCell({
     >
       <span
         className={cn(
-          "font-display text-[10.5px] font-bold lg:text-[11px]",
+          "font-display text-[11px] font-bold",
           active ? "text-white/85" : "text-dim"
         )}
       >
@@ -500,7 +501,7 @@ function OddsCell({
         <span className="flex items-center gap-0.5">
           <span
             className={cn(
-              "font-display text-[13px] font-bold tabular-nums lg:text-[13.5px]",
+              "font-display text-[14px] font-bold tabular-nums lg:text-[13.5px]",
               active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
             )}
           >
