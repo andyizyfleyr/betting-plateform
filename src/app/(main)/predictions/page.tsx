@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, ChevronDown, Clock, ListChecks, Search, TrendingUp, X } from "lucide-react";
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
+import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { useApp } from "@/components/providers";
 import { cn, eur, formatOdds, formatPlacedAt } from "@/lib/format";
 
@@ -40,7 +41,6 @@ export default function PredictionsPage() {
   const [statusTab, setStatusTab] = useState<StatusTab>("open");
   const [category, setCategory] = useState<Category>("Tous");
   const [formatFilter, setFormatFilter] = useState<FormatFilter>("all");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<{
     question: ClientPrediction;
@@ -83,21 +83,33 @@ export default function PredictionsPage() {
     };
   }, []);
 
+  const searchedQuestions = useMemo(() => {
+    const all = questions ?? [];
+    const qTrim = query.trim().toLowerCase();
+    if (!qTrim) return all;
+    return all.filter(
+      (q) =>
+        q.question.toLowerCase().includes(qTrim) ||
+        q.category.toLowerCase().includes(qTrim) ||
+        (q.options ?? []).some((o) => o.label.toLowerCase().includes(qTrim))
+    );
+  }, [questions, query]);
+
   const openList = useMemo(
-    () => (questions ?? []).filter((q) => q.status === "open"),
-    [questions]
+    () => searchedQuestions.filter((q) => q.status === "open"),
+    [searchedQuestions]
   );
 
   const resolvedList = useMemo(
     () =>
-      (questions ?? [])
+      searchedQuestions
         .filter((q) => q.status === "resolved")
         .sort(
           (a, b) =>
             new Date(b.resolvedAt ?? b.resolvesAt).getTime() -
             new Date(a.resolvedAt ?? a.resolvesAt).getTime()
         ),
-    [questions]
+    [searchedQuestions]
   );
 
   const baseByStatus = statusTab === "open" ? openList : resolvedList;
@@ -135,28 +147,18 @@ export default function PredictionsPage() {
           ? categoryFiltered.filter((q) => !isMultiChoiceQuestion(q))
           : categoryFiltered;
 
-    const qTrim = query.trim().toLowerCase();
-    const searched = qTrim
-      ? byFormat.filter(
-          (q) =>
-            q.question.toLowerCase().includes(qTrim) ||
-            q.category.toLowerCase().includes(qTrim) ||
-            (q.options ?? []).some((o) => o.label.toLowerCase().includes(qTrim))
-        )
-      : byFormat;
-
-    if (statusTab === "resolved") return searched;
+    if (statusTab === "resolved") return byFormat;
 
     if (formatFilter === "all") {
-      return [...searched].sort((a, b) => {
+      return [...byFormat].sort((a, b) => {
         const am = isMultiChoiceQuestion(a) ? 0 : 1;
         const bm = isMultiChoiceQuestion(b) ? 0 : 1;
         if (am !== bm) return am - bm;
         return new Date(a.resolvesAt).getTime() - new Date(b.resolvesAt).getTime();
       });
     }
-    return searched;
-  }, [categoryFiltered, formatFilter, query, statusTab]);
+    return byFormat;
+  }, [categoryFiltered, formatFilter, statusTab]);
 
   const handleSelectOutcome = (
     q: ClientPrediction,
@@ -186,159 +188,116 @@ export default function PredictionsPage() {
 
   return (
     <div className="px-4 pb-8 pt-4">
-      {/* En-tête compact + Recherche */}
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
-            Prédictions
-          </h1>
-          <p className="text-[12px] text-mist">Choix multiples & Oui / Non à cotes fixes</p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setSearchOpen((s) => {
-              if (s) setQuery("");
-              return !s;
-            });
-          }}
-          aria-label="Rechercher une prédiction"
-          className={cn(
-            "grid h-8 w-8 shrink-0 place-items-center rounded-full border transition-colors active:scale-95",
-            searchOpen ? "border-ink bg-ink text-white" : "border-edge bg-white text-mist"
-          )}
-        >
-          {searchOpen ? <X className="h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />}
-        </button>
+      {/* En-tête compact */}
+      <div>
+        <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
+          Prédictions
+        </h1>
+        <p className="text-[12px] text-mist">Choix multiples & Oui / Non à cotes fixes</p>
       </div>
 
-      {searchOpen && (
-        <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
-          <Search className="h-4 w-4 shrink-0 text-dim" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher une question ou un candidat…"
-            autoFocus
-            className="w-full bg-transparent text-[13.5px] text-ink outline-none placeholder:text-dim"
-          />
-          {query && (
-            <button type="button" onClick={() => setQuery("")} className="text-dim">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Barre collante : Ouvertes / Résolues + Catégories + Formats */}
-      <div className="sticky top-[52px] z-30 -mx-4 mt-3 border-b border-edge/70 bg-deep/95 px-4 py-2 backdrop-blur-md">
-        <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-white p-1">
-          {(
-            [
-              { key: "open" as const, label: `Ouvertes (${openList.length})` },
-              { key: "resolved" as const, label: `Résolues (${resolvedList.length})` },
-            ] as const
-          ).map(({ key, label }) => {
-            const active = statusTab === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setStatusTab(key)}
-                className={cn(
-                  "h-8 rounded-lg font-display text-[11.5px] transition-colors",
-                  active ? "bg-ink font-bold text-white" : "font-medium text-mist"
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto">
-          {CATEGORIES.map((c) => {
-            const active = category === c;
-            const n = counts[c];
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCategory(c)}
-                className={cn(
-                  "flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 font-display text-[11.5px] transition-colors active:scale-95",
-                  active
-                    ? "border-betclic-red bg-betclic-red font-bold text-white"
-                    : "border-edge bg-white font-medium text-mist"
-                )}
-              >
-                <span>{c}</span>
-                {questions !== null && n > 0 && (
-                  <span
-                    className={cn(
-                      "text-[10px] tabular-nums",
-                      active ? "text-white/80" : "text-dim"
-                    )}
-                  >
-                    {n}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {statusTab === "open" && (
-          <div className="no-scrollbar mt-1.5 flex gap-1.5 overflow-x-auto">
-            {(
-              [
-                { key: "all", label: "Tous formats", count: categoryFiltered.length },
-                { key: "multi", label: "Choix multiples", count: multiCount },
-                { key: "binary", label: "Oui / Non", count: binaryCount },
-              ] as const
-            ).map(({ key, label, count }) => {
-              const active = formatFilter === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setFormatFilter(key)}
-                  className={cn(
-                    "flex h-6.5 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[11px] transition-colors active:scale-95",
-                    active
-                      ? "border-ink bg-ink font-semibold text-white"
-                      : "border-edge bg-white font-medium text-mist"
-                  )}
-                >
-                  <span>{label}</span>
-                  {questions !== null && (
-                    <span
-                      className={cn(
-                        "text-[9.5px] tabular-nums",
-                        active ? "text-white/80" : "text-dim"
-                      )}
-                    >
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+      {/* Barre de recherche (marge 16 px gauche/droite) */}
+      <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+        <Search className="h-4 w-4 shrink-0 text-dim" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Rechercher une question ou un candidat…"
+          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            aria-label="Effacer la recherche"
+            className="text-dim active:text-ink"
+          >
+            <X className="h-4 w-4" />
+          </button>
         )}
       </div>
 
+      {/* Rangée unique collante de 3 pastilles dropdown */}
+      <FilterDropdownRow
+        filters={[
+          {
+            id: "status",
+            placeholder: "Statut",
+            value: statusTab,
+            defaultValue: "open",
+            onChange: setStatusTab,
+            options: [
+              {
+                value: "open",
+                label: "Ouvertes",
+                count: questions !== null ? openList.length : undefined,
+              },
+              {
+                value: "resolved",
+                label: "Résolues",
+                count: questions !== null ? resolvedList.length : undefined,
+              },
+            ],
+          },
+          {
+            id: "category",
+            placeholder: "Catégorie",
+            value: category,
+            defaultValue: "Tous",
+            onChange: setCategory,
+            options: CATEGORIES.map((c) => ({
+              value: c,
+              label: c,
+              count: questions !== null ? counts[c] : undefined,
+            })),
+          },
+          {
+            id: "format",
+            placeholder: "Format",
+            value: formatFilter,
+            defaultValue: "all",
+            onChange: setFormatFilter,
+            options: [
+              {
+                value: "all",
+                label: "Tous formats",
+                count: questions !== null ? categoryFiltered.length : undefined,
+              },
+              {
+                value: "multi",
+                label: "Choix multiples",
+                count: questions !== null ? multiCount : undefined,
+              },
+              {
+                value: "binary",
+                label: "Oui / Non",
+                count: questions !== null ? binaryCount : undefined,
+              },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setStatusTab("open");
+          setCategory("Tous");
+          setFormatFilter("all");
+        }}
+        resultCountText={
+          questions !== null
+            ? `${visibleQuestions.length} prédiction${visibleQuestions.length > 1 ? "s" : ""}`
+            : null
+        }
+      />
+
       {/* Liste des questions */}
       {questions === null ? (
-        <div className="mt-3 flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
           {[0, 1, 2].map((i) => (
             <div key={i} className="shimmer h-[168px] rounded-2xl" />
           ))}
         </div>
       ) : visibleQuestions.length === 0 ? (
-        <div className="mt-14 flex flex-col items-center text-center">
+        <div className="mt-12 flex flex-col items-center text-center">
           <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
             <TrendingUp className="h-5 w-5" strokeWidth={1.9} />
           </div>
@@ -348,17 +307,17 @@ export default function PredictionsPage() {
               : "Aucune prédiction disponible"}
           </p>
           <p className="mt-1 text-[12.5px] text-dim">
-            Essayez une autre catégorie ou effacez la recherche.
+            Modifiez ou réinitialisez les filtres pour élargir les résultats.
           </p>
         </div>
       ) : statusTab === "resolved" ? (
-        <div className="mt-3 flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2.5">
           {visibleQuestions.map((q) => (
             <ResolvedQuestionCard key={q.id} q={q} />
           ))}
         </div>
       ) : (
-        <div className="mt-3 flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2.5">
           {visibleQuestions.map((q) =>
             isMultiChoiceQuestion(q) && q.options ? (
               <MultiChoiceQuestionCard

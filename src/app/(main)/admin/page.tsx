@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { useApp } from "@/components/providers";
+import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials, teamHue } from "@/lib/format";
@@ -773,15 +774,43 @@ function MatchesTab({
   const [openLogos, setOpenLogos] = useState(false);
   const [openMarkets, setOpenMarkets] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "live" | "upcoming" | "finished">("all");
+  const [leagueFilter, setLeagueFilter] = useState<string>("all");
+  const [matchQuery, setMatchQuery] = useState("");
 
   const activeLeague = findLeague(form.league);
   const clubOptions = (activeLeague?.clubs ?? []).map((c) => c.name);
   const activeMarkets = form.markets.filter((g) => g.outcomes.some((o) => Number(o.odds) > 1));
 
-  const filteredMatches =
+  const qMatch = matchQuery.trim().toLowerCase();
+  const searchedMatches = qMatch
+    ? matches.filter(
+        (m) =>
+          m.homeTeam.toLowerCase().includes(qMatch) ||
+          m.awayTeam.toLowerCase().includes(qMatch) ||
+          m.league.toLowerCase().includes(qMatch)
+      )
+    : matches;
+
+  const byMatchStatus =
     statusFilter === "all"
-      ? matches
-      : matches.filter((m) => m.status === statusFilter);
+      ? searchedMatches
+      : searchedMatches.filter((m) => m.status === statusFilter);
+
+  const matchLeagueOptions = Array.from(new Set(matches.map((m) => m.league))).map((lg) => ({
+    value: lg,
+    label: lg,
+    count: byMatchStatus.filter((m) => m.league === lg).length,
+  }));
+
+  const effectiveLeague =
+    leagueFilter === "all" || matchLeagueOptions.some((o) => o.value === leagueFilter)
+      ? leagueFilter
+      : "all";
+
+  const filteredMatches =
+    effectiveLeague === "all"
+      ? byMatchStatus
+      : byMatchStatus.filter((m) => m.league === effectiveLeague);
 
   return (
     <div className="flex flex-col gap-3">
@@ -1017,35 +1046,69 @@ function MatchesTab({
         )}
       </div>
 
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
-        {(
-          [
-            { key: "all", label: `Tous (${matches.length})` },
-            { key: "live", label: `En direct (${matches.filter((m) => m.status === "live").length})` },
-            { key: "upcoming", label: `À venir (${matches.filter((m) => m.status === "upcoming").length})` },
-            { key: "finished", label: `Terminés (${matches.filter((m) => m.status === "finished").length})` },
-          ] as const
-        ).map(({ key, label }) => {
-          const active = statusFilter === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setStatusFilter(key)}
-              className={cn(
-                "h-8 shrink-0 rounded-full border px-3 font-display text-[11.5px] transition-colors",
-                active
-                  ? "border-betclic-red bg-betclic-red font-bold text-white"
-                  : "border-edge bg-white font-medium text-mist"
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
+      <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+        <Search className="h-4 w-4 shrink-0 text-dim" />
+        <input
+          type="text"
+          value={matchQuery}
+          onChange={(e) => setMatchQuery(e.target.value)}
+          placeholder="Rechercher un club ou une ligue…"
+          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+        />
+        {matchQuery && (
+          <button type="button" onClick={() => setMatchQuery("")} className="text-dim">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      <AdminSectionTitle label="Matchs programmés" count={filteredMatches.length} />
+      <FilterDropdownRow
+        className="top-[105px] -my-3"
+        filters={[
+          {
+            id: "admin-match-status",
+            placeholder: "Statut",
+            value: statusFilter,
+            defaultValue: "all",
+            onChange: setStatusFilter,
+            options: [
+              { value: "all", label: "Tous", count: searchedMatches.length },
+              {
+                value: "live",
+                label: "En direct",
+                count: searchedMatches.filter((m) => m.status === "live").length,
+              },
+              {
+                value: "upcoming",
+                label: "À venir",
+                count: searchedMatches.filter((m) => m.status === "upcoming").length,
+              },
+              {
+                value: "finished",
+                label: "Terminés",
+                count: searchedMatches.filter((m) => m.status === "finished").length,
+              },
+            ],
+          },
+          {
+            id: "admin-match-league",
+            placeholder: "Ligue",
+            value: effectiveLeague,
+            defaultValue: "all",
+            onChange: setLeagueFilter,
+            options: [
+              { value: "all", label: "Toutes ligues", count: byMatchStatus.length },
+              ...matchLeagueOptions,
+            ],
+          },
+        ]}
+        onReset={() => {
+          setStatusFilter("all");
+          setLeagueFilter("all");
+        }}
+        resultCountText={`${filteredMatches.length} match${filteredMatches.length > 1 ? "s" : ""}`}
+      />
+
       <div className="flex flex-col gap-2.5">
         {filteredMatches.map((m) => (
           <AdminMatchCard key={m.id} m={m} busy={busy} act={act} />
@@ -1443,10 +1506,39 @@ function QuestionsTab({
     if (ok) setEditingId(null);
   };
 
-  const [qFilter, setQFilter] = useState<"all" | "open" | "resolved">("all");
+  const [qFilter, setQFilter] = useState<"open" | "resolved">("open");
+  const [qCategory, setQCategory] = useState<string>("Tous");
+  const [qFormat, setQFormat] = useState<"all" | "multi" | "binary">("all");
+  const [qQuery, setQQuery] = useState("");
   const multiPlaceholders = ["Lamine Yamal", "Kylian Mbappé", "Harry Kane", "Vinícius Jr."];
+
+  const isMultiQ = (q: AdminQuestion) => Array.isArray(q.options) && q.options.length >= 2;
+  const qTrim = qQuery.trim().toLowerCase();
+  const searchedQs = qTrim
+    ? questions.filter(
+        (q) =>
+          q.question.toLowerCase().includes(qTrim) ||
+          q.category.toLowerCase().includes(qTrim) ||
+          (q.options ?? []).some((o) => o.label.toLowerCase().includes(qTrim))
+      )
+    : questions;
+
+  const openQs = searchedQs.filter((q) => q.status === "open");
+  const resolvedQs = searchedQs.filter((q) => q.status === "resolved");
+  const baseQs = qFilter === "open" ? openQs : resolvedQs;
+
+  const adminCategories = ["Tous", "Sport", "Actus", "Crypto", "Culture"];
+  const byCatQs =
+    qCategory === "Tous" ? baseQs : baseQs.filter((q) => q.category === qCategory);
+  const multiQCount = byCatQs.filter(isMultiQ).length;
+  const binaryQCount = byCatQs.length - multiQCount;
+
   const visibleQuestions =
-    qFilter === "all" ? questions : questions.filter((q) => q.status === qFilter);
+    qFormat === "multi"
+      ? byCatQs.filter(isMultiQ)
+      : qFormat === "binary"
+        ? byCatQs.filter((q) => !isMultiQ(q))
+        : byCatQs;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1649,34 +1741,69 @@ function QuestionsTab({
         )}
       </div>
 
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
-        {(
-          [
-            { key: "all", label: `Toutes (${questions.length})` },
-            { key: "open", label: `Ouvertes (${questions.filter((q) => q.status === "open").length})` },
-            { key: "resolved", label: `Résolues (${questions.filter((q) => q.status === "resolved").length})` },
-          ] as const
-        ).map(({ key, label }) => {
-          const active = qFilter === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setQFilter(key)}
-              className={cn(
-                "h-8 shrink-0 rounded-full border px-3 font-display text-[11.5px] transition-colors",
-                active
-                  ? "border-betclic-red bg-betclic-red font-bold text-white"
-                  : "border-edge bg-white font-medium text-mist"
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
+      <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3">
+        <Search className="h-4 w-4 shrink-0 text-dim" />
+        <input
+          type="text"
+          value={qQuery}
+          onChange={(e) => setQQuery(e.target.value)}
+          placeholder="Rechercher une question ou un candidat…"
+          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+        />
+        {qQuery && (
+          <button type="button" onClick={() => setQQuery("")} className="text-dim">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      <AdminSectionTitle label="Questions" count={visibleQuestions.length} />
+      <FilterDropdownRow
+        className="top-[105px] -my-3"
+        filters={[
+          {
+            id: "admin-q-status",
+            placeholder: "Statut",
+            value: qFilter,
+            defaultValue: "open",
+            onChange: setQFilter,
+            options: [
+              { value: "open", label: "Ouvertes", count: openQs.length },
+              { value: "resolved", label: "Résolues", count: resolvedQs.length },
+            ],
+          },
+          {
+            id: "admin-q-cat",
+            placeholder: "Catégorie",
+            value: qCategory,
+            defaultValue: "Tous",
+            onChange: setQCategory,
+            options: adminCategories.map((c) => ({
+              value: c,
+              label: c,
+              count: c === "Tous" ? baseQs.length : baseQs.filter((q) => q.category === c).length,
+            })),
+          },
+          {
+            id: "admin-q-format",
+            placeholder: "Format",
+            value: qFormat,
+            defaultValue: "all",
+            onChange: setQFormat,
+            options: [
+              { value: "all", label: "Tous formats", count: byCatQs.length },
+              { value: "multi", label: "Choix multiples", count: multiQCount },
+              { value: "binary", label: "Oui / Non", count: binaryQCount },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setQFilter("open");
+          setQCategory("Tous");
+          setQFormat("all");
+        }}
+        resultCountText={`${visibleQuestions.length} prédiction${visibleQuestions.length > 1 ? "s" : ""}`}
+      />
+
       <div className="flex flex-col gap-2.5">
         {visibleQuestions.map((q) => {
           const isEditing = editingId === q.id;
@@ -1981,8 +2108,10 @@ function UsersTab({
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
   const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "player" | "admin">("all");
+  const [balFilter, setBalFilter] = useState<"all" | "positive" | "zero">("all");
   const q = query.trim().toLowerCase();
-  const filteredUsers = q
+  const searchedUsers = q
     ? users.filter(
         (u) =>
           u.name.toLowerCase().includes(q) ||
@@ -1990,6 +2119,20 @@ function UsersTab({
           String(u.id) === q.replace("#", "")
       )
     : users;
+
+  const byRoleUsers =
+    roleFilter === "all"
+      ? searchedUsers
+      : roleFilter === "admin"
+        ? searchedUsers.filter((u) => u.role === "admin")
+        : searchedUsers.filter((u) => u.role !== "admin");
+
+  const filteredUsers =
+    balFilter === "positive"
+      ? byRoleUsers.filter((u) => u.balance > 0)
+      : balFilter === "zero"
+        ? byRoleUsers.filter((u) => u.balance <= 0)
+        : byRoleUsers;
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -2000,16 +2143,67 @@ function UsersTab({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Rechercher par nom, e-mail ou #id…"
-          className="w-full bg-transparent text-[13.5px] text-ink outline-none placeholder:text-dim"
+          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
         />
         {query && (
           <button type="button" onClick={() => setQuery("")} className="text-dim">
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <AdminSectionTitle label="Comptes enregistrés" count={filteredUsers.length} />
+      <FilterDropdownRow
+        className="top-[105px] -my-2.5"
+        filters={[
+          {
+            id: "admin-user-role",
+            placeholder: "Rôle",
+            value: roleFilter,
+            defaultValue: "all",
+            onChange: setRoleFilter,
+            options: [
+              { value: "all", label: "Tous rôles", count: searchedUsers.length },
+              {
+                value: "player",
+                label: "Joueurs",
+                count: searchedUsers.filter((u) => u.role !== "admin").length,
+              },
+              {
+                value: "admin",
+                label: "Admins",
+                count: searchedUsers.filter((u) => u.role === "admin").length,
+              },
+            ],
+          },
+          {
+            id: "admin-user-balance",
+            placeholder: "Solde",
+            value: balFilter,
+            defaultValue: "all",
+            onChange: setBalFilter,
+            options: [
+              { value: "all", label: "Tous soldes", count: byRoleUsers.length },
+              {
+                value: "positive",
+                label: "Solde > 0 €",
+                pillLabel: "Solde actif",
+                count: byRoleUsers.filter((u) => u.balance > 0).length,
+              },
+              {
+                value: "zero",
+                label: "Solde à 0 €",
+                pillLabel: "Solde 0 €",
+                count: byRoleUsers.filter((u) => u.balance <= 0).length,
+              },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setRoleFilter("all");
+          setBalFilter("all");
+        }}
+        resultCountText={`${filteredUsers.length} joueur${filteredUsers.length > 1 ? "s" : ""}`}
+      />
       {filteredUsers.map((u) => (
         <div key={u.id} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-center justify-between gap-2">
@@ -2119,8 +2313,10 @@ function BetsTab({
   ].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
 
   const [query, setQuery] = useState("");
+  const [betStatusFilter, setBetStatusFilter] = useState<"all" | "pending" | "won" | "lost" | "cashed">("all");
+  const [betKindFilter, setBetKindFilter] = useState<"all" | "Sport" | "Préd." | "Combiné">("all");
   const q = query.trim().toLowerCase();
-  const filteredRows = q
+  const searchedRows = q
     ? rows.filter(
         (r) =>
           r.label.toLowerCase().includes(q) ||
@@ -2128,6 +2324,16 @@ function BetsTab({
           r.kind.toLowerCase().includes(q)
       )
     : rows;
+
+  const byBetStatus =
+    betStatusFilter === "all"
+      ? searchedRows
+      : searchedRows.filter((r) => r.status === betStatusFilter);
+
+  const filteredRows =
+    betKindFilter === "all"
+      ? byBetStatus
+      : byBetStatus.filter((r) => r.kind === betKindFilter);
 
   const riskLabel = (flag: string) =>
     flag === "stale_mark_goal"
@@ -2145,16 +2351,81 @@ function BetsTab({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filtrer par match, question, combiné…"
-          className="w-full bg-transparent text-[13.5px] text-ink outline-none placeholder:text-dim"
+          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
         />
         {query && (
           <button type="button" onClick={() => setQuery("")} className="text-dim">
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <AdminSectionTitle label="Historique global" count={filteredRows.length} />
+      <FilterDropdownRow
+        className="top-[105px] -my-2.5"
+        filters={[
+          {
+            id: "admin-bet-status",
+            placeholder: "Statut",
+            value: betStatusFilter,
+            defaultValue: "all",
+            onChange: setBetStatusFilter,
+            options: [
+              { value: "all", label: "Tous", count: searchedRows.length },
+              {
+                value: "pending",
+                label: "En cours",
+                count: searchedRows.filter((r) => r.status === "pending").length,
+              },
+              {
+                value: "won",
+                label: "Gagnés",
+                count: searchedRows.filter((r) => r.status === "won").length,
+              },
+              {
+                value: "lost",
+                label: "Perdus",
+                count: searchedRows.filter((r) => r.status === "lost").length,
+              },
+              {
+                value: "cashed",
+                label: "Cash-out",
+                count: searchedRows.filter((r) => r.status === "cashed").length,
+              },
+            ],
+          },
+          {
+            id: "admin-bet-kind",
+            placeholder: "Type",
+            value: betKindFilter,
+            defaultValue: "all",
+            onChange: setBetKindFilter,
+            options: [
+              { value: "all", label: "Tous types", count: byBetStatus.length },
+              {
+                value: "Sport",
+                label: "Sport",
+                count: byBetStatus.filter((r) => r.kind === "Sport").length,
+              },
+              {
+                value: "Préd.",
+                label: "Prédictions",
+                count: byBetStatus.filter((r) => r.kind === "Préd.").length,
+              },
+              {
+                value: "Combiné",
+                label: "Combinés",
+                count: byBetStatus.filter((r) => r.kind === "Combiné").length,
+              },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setBetStatusFilter("all");
+          setBetKindFilter("all");
+        }}
+        resultCountText={`${filteredRows.length} pari${filteredRows.length > 1 ? "s" : ""}`}
+      />
+
       {filteredRows.map((b) => (
         <div key={`${b.kind}-${b.id}`} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-start justify-between gap-2">
