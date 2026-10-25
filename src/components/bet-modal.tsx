@@ -294,48 +294,67 @@ function BetModalSheet({
               </button>
             </div>
 
-            {/* Résumé de la sélection */}
-            <div className="mt-3 flex items-center gap-3 rounded-2xl border border-edge bg-elev/60 p-3">
-              <div className="flex shrink-0 -space-x-2">
-                <TeamAvatar
-                  name={target.match.homeTeam}
-                  logo={target.match.homeLogo}
-                  size="sm"
-                  className="ring-2 ring-white"
-                />
-                <TeamAvatar
-                  name={target.match.awayTeam}
-                  logo={target.match.awayLogo}
-                  size="sm"
-                  className="ring-2 ring-white"
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="truncate font-display text-[13px] font-semibold text-ink">
-                    {target.match.homeTeam} – {target.match.awayTeam}
-                  </p>
+            {/* Résumé de la sélection (même disposition d'équipes & logos que la page Matchs) */}
+            <div className="mt-3 rounded-2xl border border-edge bg-elev/60 p-3">
+              {target.match.status === "live" && (
+                <div className="mb-2 flex items-center justify-between gap-2 text-[10.5px]">
+                  <span className="truncate font-semibold text-mist">{target.match.league}</span>
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display font-bold tabular-nums text-betclic-red">
+                    <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+                    {liveMinute ?? "LIVE"}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2.5">
+                  <TeamAvatar
+                    name={target.match.homeTeam}
+                    logo={target.match.homeLogo}
+                    size="xs"
+                  />
+                  <span className="truncate font-display text-[14px] font-semibold text-ink">
+                    {target.match.homeTeam}
+                  </span>
                   {target.match.status === "live" && liveHomeScore != null && (
-                    <span className="shrink-0 rounded-md bg-betclic-red/12 px-1.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red">
-                      {liveHomeScore}–{liveAwayScore ?? 0} · {liveMinute ?? "LIVE"}
+                    <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14.5px] font-bold tabular-nums text-betclic-red">
+                      {liveHomeScore}
                     </span>
                   )}
                 </div>
-                <p className="mt-0.5 truncate text-[11.5px] text-mist">
+                <div className="flex items-center gap-2.5">
+                  <TeamAvatar
+                    name={target.match.awayTeam}
+                    logo={target.match.awayLogo}
+                    size="xs"
+                  />
+                  <span className="truncate font-display text-[14px] font-semibold text-ink">
+                    {target.match.awayTeam}
+                  </span>
+                  {target.match.status === "live" && liveHomeScore != null && (
+                    <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14.5px] font-bold tabular-nums text-betclic-red">
+                      {liveAwayScore ?? 0}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2">
+                <p className="min-w-0 truncate text-[12px] text-mist">
                   <span className="font-semibold text-ink">{target.label}</span>
                   {target.market !== "result" && (
                     <span className="text-dim"> · {target.marketLabel}</span>
                   )}
                 </p>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-lg px-2.5 py-1 font-display text-[14px] font-bold tabular-nums text-white",
+                    marketSuspended || marketClosed ? "bg-dim" : "bg-betclic-red"
+                  )}
+                >
+                  {marketClosed ? "Fermé" : formatOdds(displayOdds, oddsFormat)}
+                </span>
               </div>
-              <span
-                className={cn(
-                  "shrink-0 rounded-xl px-2.5 py-1.5 font-display text-[15px] font-bold tabular-nums text-white",
-                  marketSuspended || marketClosed ? "bg-dim" : "bg-betclic-red"
-                )}
-              >
-                {marketClosed ? "Fermé" : formatOdds(displayOdds, oddsFormat)}
-              </span>
             </div>
 
             {(marketSuspended || marketClosed) && (

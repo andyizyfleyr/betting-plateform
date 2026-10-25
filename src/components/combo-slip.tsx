@@ -374,7 +374,7 @@ export function ComboSheet() {
                 </div>
 
                 {/* Liste des sélections */}
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 space-y-2.5">
                   {comboLegs.map((leg) => {
                     const splitTeams =
                       leg.kind === "sport" && (!leg.homeTeam || !leg.awayTeam) && leg.title.includes("–")
@@ -382,54 +382,77 @@ export function ComboSheet() {
                         : null;
                     const homeName = leg.homeTeam || splitTeams?.[0] || "";
                     const awayName = leg.awayTeam || splitTeams?.[1] || "";
+                    const hasSportTeams = leg.kind === "sport" && Boolean(homeName && awayName);
 
                     return (
                       <div
                         key={leg.uid}
-                        className="flex items-center justify-between gap-2.5 rounded-2xl border border-edge bg-white p-3"
+                        className="rounded-2xl border border-edge bg-white p-3"
                       >
-                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          {leg.kind === "sport" && homeName && awayName && (
-                            <div className="flex shrink-0 -space-x-2">
-                              <TeamAvatar
-                                name={homeName}
-                                logo={leg.homeLogo}
-                                size="sm"
-                                className="ring-2 ring-white"
-                              />
-                              <TeamAvatar
-                                name={awayName}
-                                logo={leg.awayLogo}
-                                size="sm"
-                                className="ring-2 ring-white"
-                              />
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-dim">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            {leg.kind === "sport" && leg.matchSource && (
+                              <span
+                                className={cn(
+                                  "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide",
+                                  leg.matchSource === "manual"
+                                    ? "bg-emerald-600/12 text-emerald-700"
+                                    : "bg-elev text-dim"
+                                )}
+                              >
+                                {leg.matchSource === "manual" ? "Réel" : "Virtuel"}
+                              </span>
+                            )}
+                            <p className="truncate text-[11px] font-semibold text-mist">
                               {leg.league}
                             </p>
-                            <p className="truncate font-display text-[13px] font-bold text-ink">
-                              {leg.title}
-                            </p>
-                            <p className="truncate text-[11.5px] font-medium text-mist">
-                              {leg.selectionLabel}
-                            </p>
                           </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span className="rounded-xl bg-betclic-red/10 px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
-                            {formatOdds(leg.odds, oddsFormat)}
-                          </span>
                           <button
                             type="button"
                             onClick={() => removeComboLeg(leg.uid)}
-                            className="grid h-7 w-7 place-items-center rounded-lg bg-elev text-mist active:bg-edge"
+                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge"
                             aria-label="Retirer"
                           >
                             <X className="h-3.5 w-3.5" strokeWidth={2.2} />
                           </button>
+                        </div>
+
+                        {hasSportTeams ? (
+                          <div className="mt-2 flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2.5">
+                              <TeamAvatar
+                                name={homeName}
+                                logo={leg.homeLogo}
+                                size="xs"
+                              />
+                              <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                                {homeName}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2.5">
+                              <TeamAvatar
+                                name={awayName}
+                                logo={leg.awayLogo}
+                                size="xs"
+                              />
+                              <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                                {awayName}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-1.5 font-display text-[13.5px] font-bold text-ink">
+                            {leg.title}
+                          </p>
+                        )}
+
+                        <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
+                          <span className="truncate pr-2 text-[12px] font-semibold text-ink">
+                            {leg.selectionLabel}
+                          </span>
+                          <span className="shrink-0 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
+                            {formatOdds(leg.odds, oddsFormat)}
+                          </span>
                         </div>
                       </div>
                     );

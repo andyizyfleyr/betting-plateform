@@ -482,114 +482,153 @@ export default function BetslipPage() {
           </div>
 
           {/* Liste des sélections */}
-          <div className="space-y-2">
-            {enrichedLegs.map((leg) => (
-              <div
-                key={leg.uid}
-                className={cn(
-                  "glass-card flex items-center justify-between gap-2.5 rounded-2xl p-3",
-                  leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (leg.kind === "sport" && leg.matchObj) {
-                      if (leg.matchObj.status === "finished") {
-                        router.push(`/resultats?match=${leg.matchObj.id}`);
-                      } else {
-                        openMarkets(leg.matchObj);
-                      }
-                    } else if (leg.kind === "sport" && leg.matchId) {
-                      router.push(`/resultats?match=${leg.matchId}`);
-                    } else {
-                      router.push("/predictions");
-                    }
-                  }}
-                  className="min-w-0 flex-1 text-left"
+          <div className="space-y-2.5">
+            {enrichedLegs.map((leg) => {
+              const splitTeams =
+                leg.kind === "sport" && (!leg.homeTeam || !leg.awayTeam) && leg.title.includes("–")
+                  ? leg.title.split("–").map((s) => s.trim())
+                  : null;
+              const hName = leg.matchObj?.homeTeam || leg.homeTeam || splitTeams?.[0] || "";
+              const aName = leg.matchObj?.awayTeam || leg.awayTeam || splitTeams?.[1] || "";
+              const hasSportTeams = leg.kind === "sport" && Boolean(hName && aName);
+              const showScores =
+                hasSportTeams &&
+                leg.matchObj != null &&
+                (leg.isLive || leg.matchObj.status === "finished") &&
+                leg.matchObj.homeScore != null &&
+                leg.matchObj.awayScore != null;
+
+              return (
+                <div
+                  key={leg.uid}
+                  className={cn(
+                    "glass-card rounded-2xl p-3.5",
+                    leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
+                  )}
                 >
-                  <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-dim">
-                    {leg.kind === "sport" && leg.resolvedSource && (
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide",
-                          leg.resolvedSource === "manual"
-                            ? "bg-emerald-600/12 text-emerald-700"
-                            : "bg-elev text-dim"
-                        )}
-                      >
-                        {leg.resolvedSource === "manual" ? "Réel" : "Virtuel"}
-                      </span>
-                    )}
-                    <span className="truncate">{leg.league}</span>
-                    {leg.isLive && (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold text-betclic-red">
-                        <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                        LIVE
-                      </span>
-                    )}
-                    {leg.closed && (
-                      <span className="shrink-0 rounded-full bg-betclic-red/15 px-1.5 py-0.5 font-display text-[9.5px] font-bold text-betclic-red">
-                        Clôturé
-                      </span>
-                    )}
-                    {leg.suspended && !leg.closed && (
-                      <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 font-display text-[9.5px] font-bold text-amber-700">
-                        Suspendu
-                      </span>
-                    )}
+                  {/* En-tête : type + ligue + statut + retrait */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-mist">
+                      {leg.kind === "sport" && leg.resolvedSource && (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
+                            leg.resolvedSource === "manual"
+                              ? "bg-emerald-600/12 text-emerald-700"
+                              : "bg-elev text-dim"
+                          )}
+                        >
+                          {leg.resolvedSource === "manual" ? "Réel" : "Virtuel"}
+                        </span>
+                      )}
+                      <span className="truncate font-semibold">{leg.league}</span>
+                      {leg.isLive && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
+                          <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+                          {leg.matchObj?.minute ?? "LIVE"}
+                        </span>
+                      )}
+                      {leg.closed && (
+                        <span className="shrink-0 rounded-full bg-betclic-red/15 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+                          Clôturé
+                        </span>
+                      )}
+                      {leg.suspended && !leg.closed && (
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10px] font-bold text-amber-700">
+                          Suspendu
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeComboLeg(leg.uid)}
+                      aria-label="Retirer cette sélection"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge active:text-ink"
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    </button>
                   </div>
-                  <div className="mt-1 flex items-center gap-2">
-                    {(() => {
-                      if (leg.kind !== "sport") return null;
-                      const splitTeams =
-                        (!leg.homeTeam || !leg.awayTeam) && leg.title.includes("–")
-                          ? leg.title.split("–").map((s) => s.trim())
-                          : null;
-                      const hName = leg.matchObj?.homeTeam || leg.homeTeam || splitTeams?.[0] || "";
-                      const aName = leg.matchObj?.awayTeam || leg.awayTeam || splitTeams?.[1] || "";
-                      if (!hName || !aName) return null;
-                      return (
-                        <div className="flex shrink-0 -space-x-2">
+
+                  {/* Équipes alignées exactement comme sur la page Matchs */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (leg.kind === "sport" && leg.matchObj) {
+                        if (leg.matchObj.status === "finished") {
+                          router.push(`/resultats?match=${leg.matchObj.id}`);
+                        } else {
+                          openMarkets(leg.matchObj);
+                        }
+                      } else if (leg.kind === "sport" && leg.matchId) {
+                        router.push(`/resultats?match=${leg.matchId}`);
+                      } else {
+                        router.push("/predictions");
+                      }
+                    }}
+                    className="mt-2.5 block w-full text-left"
+                  >
+                    {hasSportTeams ? (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2.5">
                           <TeamAvatar
                             name={hName}
                             logo={leg.matchObj?.homeLogo ?? leg.homeLogo}
                             size="xs"
-                            className="ring-1 ring-white"
                           />
+                          <span className="truncate font-display text-[14px] font-semibold text-ink">
+                            {hName}
+                          </span>
+                          {showScores && (
+                            <span
+                              className={cn(
+                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[15px] font-bold tabular-nums",
+                                leg.isLive ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-ink"
+                              )}
+                            >
+                              {leg.matchObj!.homeScore}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2.5">
                           <TeamAvatar
                             name={aName}
                             logo={leg.matchObj?.awayLogo ?? leg.awayLogo}
                             size="xs"
-                            className="ring-1 ring-white"
                           />
+                          <span className="truncate font-display text-[14px] font-semibold text-ink">
+                            {aName}
+                          </span>
+                          {showScores && (
+                            <span
+                              className={cn(
+                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[15px] font-bold tabular-nums",
+                                leg.isLive ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-ink"
+                              )}
+                            >
+                              {leg.matchObj!.awayScore}
+                            </span>
+                          )}
                         </div>
-                      );
-                    })()}
-                    <p className="truncate font-display text-[13.5px] font-bold text-ink">
-                      {leg.title}
-                    </p>
-                  </div>
-                  <p className="truncate text-[12px] font-semibold text-betclic-red">
-                    {leg.selectionLabel}
-                  </p>
-                </button>
+                      </div>
+                    ) : (
+                      <p className="font-display text-[14px] font-semibold leading-snug text-ink">
+                        {leg.title}
+                      </p>
+                    )}
 
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="rounded-xl bg-elev px-2.5 py-1.5 font-display text-[13.5px] font-bold tabular-nums text-ink">
-                    {formatOdds(leg.liveOdds, oddsFormat)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeComboLeg(leg.uid)}
-                    aria-label="Retirer cette sélection"
-                    className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:bg-edge active:text-ink"
-                  >
-                    <X className="h-4 w-4" strokeWidth={2.2} />
+                    <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
+                      <span className="truncate pr-2 text-[12.5px] font-semibold text-ink">
+                        {leg.selectionLabel}
+                      </span>
+                      <span className="shrink-0 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
+                        {formatOdds(leg.liveOdds, oddsFormat)}
+                      </span>
+                    </div>
                   </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Bouton ajouter d'autres sélections */}

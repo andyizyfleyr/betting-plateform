@@ -174,7 +174,9 @@ export default function MatchsPage() {
     return byLeague;
   }, [byLeague, oddsProfile]);
 
+  // Pour les matchs réels, tous les matchs s'affichent uniformément sous forme de cartes (aucun bloc vedette unique en haut)
   const showFeatured =
+    !isRealUniverse &&
     !query.trim() &&
     oddsProfile === "all" &&
     ((filter === "all" && effectiveLeague === "all" && visible.length >= 1) ||
@@ -451,10 +453,16 @@ export default function MatchsPage() {
       {/* Contenu */}
       {matches === null ? (
         <div className="flex flex-col gap-3">
-          <div className="shimmer h-[196px] rounded-2xl" />
+          {!isRealUniverse && <div className="shimmer h-[196px] rounded-2xl" />}
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             <div className="shimmer h-[136px] rounded-2xl" />
             <div className="shimmer h-[136px] rounded-2xl" />
+            {isRealUniverse && (
+              <>
+                <div className="shimmer h-[136px] rounded-2xl" />
+                <div className="shimmer h-[136px] rounded-2xl" />
+              </>
+            )}
           </div>
         </div>
       ) : visible.length === 0 ? (
