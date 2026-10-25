@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { ChevronDown, ChevronUp, LayoutGrid, Lock } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Lock } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
@@ -10,47 +9,57 @@ import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
 import { cn, formatOdds } from "@/lib/format";
 
-/** Carte de match V5 — scoreboard + cotes 1/N/2 rapides ; un tap ouvre les marchés. */
-export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: number }) {
+export function MatchCard({ match }: { match: ClientMatch; index?: number }) {
   const { openMarkets } = useApp();
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
+  const marketCount = match.markets?.length ?? 0;
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: Math.min(index * 0.05, 0.35), ease: [0.22, 1, 0.36, 1] }}
+    <article
       onClick={() => !isFinished && openMarkets(match)}
-      className="glass-card relative cursor-pointer overflow-hidden rounded-[18px] active:bg-elev"
+      className={cn(
+        "glass-card relative overflow-hidden rounded-2xl p-3.5 transition-colors",
+        !isFinished && "cursor-pointer active:bg-elev/50"
+      )}
     >
       {isLive && (
         <span
           aria-hidden
-          className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-live via-live/60 to-transparent"
+          className="absolute inset-y-0 left-0 w-[3px] bg-betclic-red"
         />
       )}
 
-      {/* En-tête */}
-      <div className="relative flex items-center gap-1.5 px-3 pt-2">
-        <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
-        <span className="truncate text-[10.5px] font-medium text-mist">{match.league}</span>
-        {isLive ? (
-          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 font-display text-[10px] font-black tracking-wide text-live">
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-live" />
-            LIVE {match.minute ?? ""}
-          </span>
-        ) : isFinished ? (
-          <span className="ml-auto shrink-0 font-display text-[10px] font-semibold tracking-[0.08em] text-mist">
-            TERMINÉ
-          </span>
-        ) : (
-          <KickoffCountdown startsAt={match.startsAt} className="ml-auto" />
-        )}
+      {/* En-tête : ligue + statut + nombre de marchés */}
+      <div className="flex items-center justify-between gap-2 text-[11.5px]">
+        <div className="flex min-w-0 items-center gap-1.5 text-mist">
+          <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
+          <span className="truncate font-medium">{match.league}</span>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {isLive ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10.5px] font-bold text-betclic-red">
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+              {match.minute ?? "LIVE"}
+            </span>
+          ) : isFinished ? (
+            <span className="text-[11px] font-medium text-dim">Terminé</span>
+          ) : (
+            <KickoffCountdown startsAt={match.startsAt} />
+          )}
+
+          {!isFinished && marketCount > 1 && (
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-semibold text-mist">
+              +{marketCount - 1}
+              <ChevronRight className="h-3 w-3 text-dim" strokeWidth={2.2} />
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Équipes */}
-      <div className="relative flex flex-col gap-1.5 px-3 pb-2.5 pt-2">
+      {/* Équipes & scores */}
+      <div className="mt-2.5 flex flex-col gap-1.5">
         <TeamRow
           name={match.homeTeam}
           logo={match.homeLogo}
@@ -67,20 +76,13 @@ export function MatchCard({ match, index = 0 }: { match: ClientMatch; index?: nu
         />
       </div>
 
-      {/* Cotes 1/N/2 rapides */}
-      {!isFinished && <ResultOdds match={match} />}
-
-      {/* Invite à ouvrir les marchés */}
+      {/* Cotes 1 / N / 2 */}
       {!isFinished && (
-        <div className="flex items-center justify-center gap-1.5 border-t border-edge bg-elev py-1.5">
-          <LayoutGrid className="h-3 w-3 text-betclic-red" strokeWidth={2.4} />
-          <span className="font-display text-[9px] font-bold tracking-[0.18em] text-dim">
-            TOUS LES MARCHÉS
-          </span>
-          <ChevronDown className="h-3 w-3 text-dim" strokeWidth={2.4} />
+        <div className="mt-3">
+          <ResultOdds match={match} />
         </div>
       )}
-    </motion.article>
+    </article>
   );
 }
 
@@ -98,46 +100,31 @@ function TeamRow({
   isLive: boolean;
 }) {
   const isFinished = score != null && !isLive;
-return (
+  return (
     <div className="flex items-center gap-2.5">
       <TeamAvatar name={name} logo={logo} size="xs" />
       <span
         className={cn(
-          "font-display text-[14px] font-semibold tracking-tight",
-          isFinished
-            ? winner
-              ? "text-ink"
-              : "text-mist"
-            : "text-ink"
+          "truncate font-display text-[14px] font-semibold",
+          isFinished && !winner ? "text-mist" : "text-ink"
         )}
       >
         {name}
       </span>
       {score != null && (
-        <motion.span
-          key={score}
-          initial={{ scale: 1.6, opacity: 0.25 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 420, damping: 17 }}
+        <span
           className={cn(
-            "ml-auto font-display text-[16px] font-bold tabular-nums",
-            isLive
-              ? "glow-betclic text-betclic-red"
-              : isFinished
-                ? winner
-                  ? "text-ink"
-                  : "text-mist"
-                : "text-ink"
+            "ml-auto font-display text-[15.5px] font-bold tabular-nums",
+            isLive ? "text-betclic-red" : isFinished && !winner ? "text-mist" : "text-ink"
           )}
         >
           {score}
-        </motion.span>
+        </span>
       )}
     </div>
   );
 }
 
-/** Flèche de tendance quand la cote évolue en direct. */
 function useOddsFlash(odds: number) {
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const prev = useRef(odds);
@@ -148,7 +135,7 @@ function useOddsFlash(odds: number) {
     setFlash(odds > prev.current ? "up" : "down");
     prev.current = odds;
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setFlash(null), 800);
+    timeoutRef.current = setTimeout(() => setFlash(null), 900);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
@@ -157,7 +144,6 @@ function useOddsFlash(odds: number) {
   return flash;
 }
 
-/** Rangée de cotes 1 / N / 2 (marché résultat) en pied de carte. */
 export function ResultOdds({ match }: { match: ClientMatch }) {
   const { openBet } = useApp();
 
@@ -170,20 +156,14 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
   ];
 
   return (
-    <div
-      className={cn(
-        "relative grid border-t border-edge bg-elev",
-        cells.length === 3 ? "grid-cols-3" : "grid-cols-2"
-      )}
-    >
-      {cells.map((c, i) => (
+    <div className={cn("grid gap-1.5", cells.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+      {cells.map((c) => (
         <OddsCell
           key={c.key}
           tag={c.tag}
           odds={c.odds}
           isLive={match.status === "live"}
           suspended={match.suspended}
-          borderLeft={i > 0}
           onPick={(e) => {
             e.stopPropagation();
             openBet({
@@ -206,54 +186,46 @@ function OddsCell({
   odds,
   isLive,
   suspended,
-  borderLeft,
   onPick,
 }: {
   tag: string;
   odds: number;
   isLive: boolean;
   suspended: boolean;
-  borderLeft: boolean;
   onPick: (e: React.MouseEvent) => void;
 }) {
   const { oddsFormat } = useApp();
   const flash = useOddsFlash(odds);
 
   return (
-    <motion.button
-      whileTap={suspended ? undefined : { scale: 0.96 }}
+    <button
+      type="button"
       onClick={suspended ? (e) => e.stopPropagation() : onPick}
       aria-disabled={suspended}
       className={cn(
-        "relative flex h-11 flex-col items-center justify-center transition-colors duration-500",
-        borderLeft && "border-l border-edge",
-        suspended && "cursor-not-allowed opacity-60 bg-elev/50",
-        flash === "up" && "bg-betclic-red/[0.13]",
-        flash === "down" && "bg-betclic-red/[0.13]"
+        "flex h-11 items-center justify-between rounded-xl border border-edge bg-elev/70 px-3 transition-colors active:scale-[0.98] active:border-betclic-red/50 active:bg-betclic-red/8",
+        suspended && "cursor-not-allowed opacity-55",
+        flash === "up" && "border-win/40 bg-win/8",
+        flash === "down" && "border-betclic-red/40 bg-betclic-red/8"
       )}
     >
-      <span className="text-[8.5px] font-semibold tracking-[0.2em] text-dim">{tag}</span>
+      <span className="font-display text-[11px] font-semibold text-dim">{tag}</span>
       {suspended ? (
-        <>
-          <Lock className="h-3 w-3 text-dim" strokeWidth={2.6} />
-          <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[7px] font-medium text-dim">
-            SUSPENDU
-          </span>
-        </>
+        <Lock className="h-3.5 w-3.5 text-dim" strokeWidth={2.3} />
       ) : (
-        <span className="flex items-center gap-1">
+        <span className="flex items-center gap-0.5">
           <span
             className={cn(
-              "font-display text-[14px] font-bold tabular-nums",
+              "font-display text-[13.5px] font-bold tabular-nums",
               isLive ? "text-betclic-red" : "text-ink"
             )}
           >
             {formatOdds(odds, oddsFormat)}
           </span>
-          {flash === "up" && <ChevronUp className="h-3 w-3 text-betclic-red" strokeWidth={3} />}
-          {flash === "down" && <ChevronDown className="h-3 w-3 text-betclic-red" strokeWidth={3} />}
+          {flash === "up" && <ChevronUp className="h-3 w-3 text-win" strokeWidth={2.8} />}
+          {flash === "down" && <ChevronDown className="h-3 w-3 text-betclic-red" strokeWidth={2.8} />}
         </span>
       )}
-    </motion.button>
+    </button>
   );
 }

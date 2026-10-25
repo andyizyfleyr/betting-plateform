@@ -1,67 +1,72 @@
 "use client";
 
 import Link from "next/link";
-import { Ticket, Zap } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Plus, ShieldCheck, Zap } from "lucide-react";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
-import { eur } from "@/lib/format";
+import { cn, eur } from "@/lib/format";
 
 export function AppHeader() {
-  const { balance, pendingCount, user } = useApp();
+  const pathname = usePathname();
+  const { balance, user, openRecharge } = useApp();
+  const isAdminActive = pathname === "/admin" || pathname.startsWith("/admin/");
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl">
-      <div className="flex h-12 items-center justify-between px-3.5">
-        <Link href="/predictions" className="group flex items-center gap-2">
-          <span className="relative grid h-7 w-7 rotate-45 place-items-center rounded-[7px] bg-betclic-red shadow-[0_6px_20px_-4px_rgba(225,0,20,0.55)] transition-transform duration-300 group-active:scale-90 group-active:rotate-[135deg]">
-            <Zap className="h-3.5 w-3.5 -rotate-45 fill-white text-white transition-transform duration-300 group-active:-rotate-[135deg]" strokeWidth={2.4} />
+    <header className="pt-safe sticky top-0 z-40 border-b border-edge bg-white/95 backdrop-blur-md">
+      <div className="flex h-[52px] items-center justify-between px-4">
+        <Link href="/predictions" className="flex items-center gap-2 active:opacity-80">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-betclic-red text-white">
+            <Zap className="h-4 w-4 fill-white" strokeWidth={2.2} />
           </span>
           <span className="font-display text-[17px] font-bold tracking-tight text-ink">
             PULSE
-            <span className="ml-1 align-middle font-display text-[8px] font-bold tracking-[0.3em] text-betclic-red">
-              V5
-            </span>
           </span>
         </Link>
 
-        <div className="flex items-center gap-1.5">
-          <Link
-            href="/paris"
-            className="glass-pill relative grid h-8 w-8 place-items-center rounded-lg transition-transform active:scale-90"
-            aria-label="Mes paris"
-          >
-            <Ticket className="h-4 w-4 text-mist" strokeWidth={2} />
-            {pendingCount > 0 && (
-              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-md bg-betclic-red px-1 font-display text-[9.5px] font-bold text-white">
-                {pendingCount}
-              </span>
-            )}
-          </Link>
+        <div className="flex items-center gap-2">
+          {user?.role === "admin" && (
+            <Link
+              href="/admin"
+              aria-label="Espace administrateur"
+              className={cn(
+                "flex h-9 items-center gap-1.5 rounded-full border px-2.5 text-[11.5px] font-semibold transition-colors",
+                isAdminActive
+                  ? "border-betclic-red bg-betclic-red text-white"
+                  : "border-edge bg-elev text-ink active:bg-edge/60"
+              )}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.2} />
+              <span className="hidden xs:inline">Admin</span>
+            </Link>
+          )}
 
           {user ? (
-            <Link
-              href="/parametres"
-              className="glass-pill flex h-8 items-center gap-2 rounded-lg px-2.5 transition-transform active:scale-95"
-              aria-label="Solde et réglages"
+            <button
+              type="button"
+              onClick={openRecharge}
+              aria-label="Solde et rechargement"
+              className="flex h-9 items-center gap-2 rounded-full border border-edge bg-elev pl-3 pr-1.5 transition-transform active:scale-[0.98]"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-betclic-red shadow-[0_0_8px_rgba(225,0,20,0.9)]" />
               <AnimatedNumber
                 value={balance}
                 format={eur}
-                className="font-display text-[12.5px] font-bold tabular-nums tracking-tight text-ink"
+                className="font-display text-[13px] font-bold tabular-nums text-ink"
               />
-            </Link>
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-betclic-red text-white">
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.8} />
+              </span>
+            </button>
           ) : (
             <Link
               href="/auth"
-              className="flex h-8 items-center rounded-lg bg-betclic-red px-3 font-display text-[12.5px] font-bold tracking-tight text-white transition-transform active:scale-95"
+              className="flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[12.5px] font-bold text-white active:opacity-90"
             >
               Connexion
             </Link>
           )}
         </div>
       </div>
-      <div className="h-px bg-gradient-to-r from-transparent via-ink/10 to-transparent" />
     </header>
   );
 }

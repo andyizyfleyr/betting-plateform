@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CircleHelp, Eye, EyeOff, Hand, Play, Trophy } from "lucide-react";
+import { ArrowLeft, CircleHelp, Eye, EyeOff, Hand, Play } from "lucide-react";
 import { NetworkBadge, OfflineBanner } from "@/components/network-badge";
 import { fetchWithTimeout, postJson } from "@/lib/network-manager";
 import s from "./accelerator-game.module.css";
@@ -12,6 +12,7 @@ const SYM = "$";
 const DEC = 2;
 const MIN_BET = 1;
 const MAX_BET = 50;
+const QUICK_BETS = [1, 5, 10, 25];
 const PING_PERIOD_MS = 500;
 const MIN_HOLD_MS = 350;
 
@@ -31,7 +32,7 @@ function fmt(n: number): string {
   );
 }
 
-// ---------------- Géométrie de la jauge (port de accelerator.php) ----------------
+// ---------------- Géométrie de la jauge ----------------
 
 const GX = 100;
 const GY = 100;
@@ -72,11 +73,9 @@ const RISK_SECTORS = [
 ];
 
 const MAJORS = [1.01, 1.5, 2];
-
 const EPS = 1e-6;
 const approxEq = (a: number, b: number) => Math.abs(a - b) < EPS;
 
-/** Graduations affichées : pas de ×0.10 de 1.01 à 2.00. */
 function graduationValues(): number[] {
   const out: number[] = [];
   for (let v = V_MIN; v < V_MAX - 1e-9; v += 0.1) {
@@ -86,7 +85,6 @@ function graduationValues(): number[] {
   return out;
 }
 
-/** Traits à l'extérieur de l'anneau coloré (le rail occupe r 65 → 79). */
 function endsFor(c: string) {
   if (c === "major") return { in: 78, out: 84.5 };
   return { in: 79.5, out: 84 };
@@ -98,20 +96,31 @@ function clsFor(v: number): string {
   return "micro";
 }
 
-// ---------------- Composant ----------------
+const emptySubscribe = () => () => {};
 
 export default function AcceleratorPage() {
-  const [mount, setMount] = useState(false);
+  const mount = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
   const [bal, setBal] = useState(0);
-  const [balanceHidden, setBalanceHidden] = useState(false);
+  const [balanceHidden, setBalanceHidden] = useState(() =>
+    typeof window !== "undefined" ? localStorage.getItem("acc_balance_hidden") === "true" : false
+  );
   const [balFlash, setBalFlash] = useState(false);
   const [stake, setStake] = useState("1.00");
-  const [sliderPct, setSliderPct] = useState(0);
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"start" | "hold">("start");
   const [crashShow, setCrashShow] = useState(false);
   const [crashMult, setCrashMult] = useState(1.01);
-  const [modal, setModal] = useState<{ show: boolean; win: boolean; title: string; amount: string; mult: string }>({
+  const [modal, setModal] = useState<{
+    show: boolean;
+    win: boolean;
+    title: string;
+    amount: string;
+    mult: string;
+  }>({
     show: false,
     win: true,
     title: "",
@@ -121,7 +130,6 @@ export default function AcceleratorPage() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [cashingOut, setCashingOut] = useState(false);
 
-  // Refs SVG
   const railRef = useRef<SVGPathElement | null>(null);
   const sectorsRef = useRef<SVGGElement | null>(null);
   const ticksRef = useRef<SVGGElement | null>(null);
@@ -133,7 +141,6 @@ export default function AcceleratorPage() {
   const payoutDispRef = useRef<HTMLSpanElement | null>(null);
   const gaugeCardRef = useRef<HTMLDivElement | null>(null);
 
-  // Refs jeu
   const displayVRef = useRef(V_MIN);
   const gBaseRef = useRef(0.02911764705882353);
   const mMaxRef = useRef(V_MAX);
@@ -144,7 +151,6 @@ export default function AcceleratorPage() {
   const isCashingOutRef = useRef(false);
   const releaseLockRef = useRef(false);
   const pingInFlightRef = useRef(false);
-  const lastPingAtRef = useRef(0);
   const animIdRef = useRef(0);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastFrameTsRef = useRef<number | null>(null);
@@ -160,7 +166,6 @@ export default function AcceleratorPage() {
   const animateLoopRef = useRef<(ts: number) => void>(() => {});
   const stopHoldLoopRef = useRef<(skip: boolean) => void>(() => {});
 
-  // ---------- Construction de la jauge (après montage du portal) ----------
   useEffect(() => {
     if (!mount) return;
 
@@ -176,14 +181,15 @@ export default function AcceleratorPage() {
       for (const seg of RISK_SECTORS) {
         const t1 = vToTheta(Math.max(V_MIN, seg.lo));
         const t2 = vToTheta(Math.min(V_MAX, seg.hi));
-        const p = el("path", {
-          d: arcPath(t1, t2, GR),
-          fill: "none",
-          stroke: seg.color,
-          "stroke-width": String(GSTROKE),
-          "stroke-linecap": "butt",
-        });
-        g.appendChild(p);
+        g.appendChild(
+          el("path", {
+            d: arcPath(t1, t2, GR),
+            fill: "none",
+            stroke: seg.color,
+            "stroke-width": String(GSTROKE),
+            "stroke-linecap": "butt",
+          })
+        );
       }
     }
 
@@ -227,13 +233,14 @@ export default function AcceleratorPage() {
           const th = vToTheta(v);
           const p = polar(th, G_LABEL_R);
           const major = MAJORS.some((m) => approxEq(m, v));
+          if (!major) continue; // N'afficher que les repères majeurs (×1.01, ×1.50, ×2.00) pour une lecture nette sur mobile
           const tx = el("text", {
             x: p.x.toFixed(2),
             y: p.y.toFixed(2),
-            fill: major ? "#ffffff" : "#94a3b8",
-            "font-size": major ? "9" : "6.5",
-            "font-weight": major ? "800" : "500",
-            "font-family": "Montserrat, sans-serif",
+            fill: "#f8fafc",
+            "font-size": "8.5",
+            "font-weight": "700",
+            "font-family": "system-ui, -apple-system, sans-serif",
             "text-anchor": "middle",
             "dominant-baseline": "middle",
           });
@@ -244,9 +251,12 @@ export default function AcceleratorPage() {
     }
 
     function buildNeedle() {
-      const baseHalf = 6;
+      const baseHalf = 5.5;
       const tipR = GR - 6;
-      needleShapeRef.current?.setAttribute("points", `${GX},${GY - baseHalf} ${GX},${GY + baseHalf} ${GX + tipR},${GY}`);
+      needleShapeRef.current?.setAttribute(
+        "points",
+        `${GX},${GY - baseHalf} ${GX},${GY + baseHalf} ${GX + tipR},${GY}`
+      );
       setNeedleAngle(vToTheta(V_MIN));
     }
 
@@ -280,7 +290,6 @@ export default function AcceleratorPage() {
     };
   }, [mount]);
 
-  // ---------- Sons ----------
   const unlockAudio = useCallback(async () => {
     if (audioUnlockedRef.current) return;
     try {
@@ -309,15 +318,13 @@ export default function AcceleratorPage() {
 
   const playHoldSound = useCallback(() => {
     try {
-      const c = sndCrashRef.current;
-      const w = sfxWinRef.current;
-      if (c) {
-        c.pause();
-        c.currentTime = 0;
+      if (sndCrashRef.current) {
+        sndCrashRef.current.pause();
+        sndCrashRef.current.currentTime = 0;
       }
-      if (w) {
-        w.pause();
-        w.currentTime = 0;
+      if (sfxWinRef.current) {
+        sfxWinRef.current.pause();
+        sfxWinRef.current.currentTime = 0;
       }
       const h = sndHoldRef.current;
       if (h) {
@@ -358,9 +365,6 @@ export default function AcceleratorPage() {
     }
   }, [stopHoldSound]);
 
-  // ---------- API ----------
-  // POST résilient : timeout (un réseau lent ne bloque jamais) + retries optionnels
-  // pour les actions critiques. Les erreurs réseau (status 0) sont remontées en douceur.
   const post = useCallback(
     async (body: Record<string, unknown>, opts?: { retries?: number; timeoutMs?: number }) => {
       const res = await postJson<Record<string, unknown>>("/api/accelerator", body, {
@@ -373,7 +377,6 @@ export default function AcceleratorPage() {
     []
   );
 
-  // ---------- UI helpers ----------
   const setBalFlashSoon = useCallback((n: number) => {
     setBal(n);
     setBalFlash(true);
@@ -393,16 +396,15 @@ export default function AcceleratorPage() {
       if (crashTimerRef.current) clearTimeout(crashTimerRef.current);
       crashTimerRef.current = setTimeout(() => setCrashShow(false), 2000);
       if (gaugeCardRef.current) {
-        gaugeCardRef.current.classList.remove("crashed");
+        gaugeCardRef.current.classList.remove(s.crashed);
         void gaugeCardRef.current.offsetWidth;
-        gaugeCardRef.current.classList.add("crashed");
+        gaugeCardRef.current.classList.add(s.crashed);
       }
       playCrashSound();
     },
     [playCrashSound]
   );
 
-  // ---------- Boucle de maintien ----------
   const cleanupGameLoop = useCallback(() => {
     holdingRef.current = false;
     stopHoldSound();
@@ -416,7 +418,6 @@ export default function AcceleratorPage() {
     }
   }, [stopHoldSound]);
 
-  // ---------- Fin de manche (cash ou crash) ----------
   const handleEnd = useCallback(
     (j: Record<string, unknown>) => {
       cleanupGameLoop();
@@ -437,7 +438,7 @@ export default function AcceleratorPage() {
         setModal({
           show: true,
           win: true,
-          title: jackpot ? "JACKPOT !" : "Gagné !",
+          title: jackpot ? "JACKPOT !" : "Encaissé !",
           amount: fmt(win),
           mult: `×${mult.toFixed(2)}`,
         });
@@ -450,14 +451,9 @@ export default function AcceleratorPage() {
     [cleanupGameLoop, playWinSound, resetPayoutLine, setBalFlashSoon, triggerCrashAnimation]
   );
 
-  endRef.current = handleEnd;
-
   const pingTap = useCallback(async () => {
-    if (!roundIdRef.current) return;
-    // Au plus un ping en vol : sur réseau lent, on évite l'empilement des requêtes.
-    if (pingInFlightRef.current) return;
+    if (!roundIdRef.current || pingInFlightRef.current) return;
     pingInFlightRef.current = true;
-    lastPingAtRef.current = Date.now();
     const j = await post({ action: "tap" }, { timeoutMs: 10000 });
     pingInFlightRef.current = false;
     if (!j) return;
@@ -503,15 +499,11 @@ export default function AcceleratorPage() {
     lastFrameTsRef.current = null;
     releaseLockRef.current = false;
 
-    // Le maintien est marqué actif immédiatement : si l'utilisateur relâche pendant
-    // la synchro réseau (audio/network), releaseHold() coupe la boucle proprement.
     await unlockAudio().catch(() => undefined);
     if (!holdingRef.current) return;
 
-    // Gèle le chrono serveur (la montée ne commence qu'au maintien, pas au
-    // placement de la mise) et resynchronise le multiplicateur autoritaire.
     const hs = await post({ action: "hold_start" }, { timeoutMs: 10000, retries: 1 });
-    if (!holdingRef.current) return; // relâché pendant la synchronisation
+    if (!holdingRef.current) return;
     if (hs && (hs.status === "crashed" || hs.status === "postcrashed")) {
       cleanupGameLoop();
       endRef.current(hs);
@@ -526,11 +518,8 @@ export default function AcceleratorPage() {
     animIdRef.current = requestAnimationFrame(animateLoopRef.current);
     if (pingTimerRef.current) clearInterval(pingTimerRef.current);
     pingTimerRef.current = setInterval(pingTap, PING_PERIOD_MS);
-  }, [cleanupGameLoop, endRef, pingTap, playHoldSound, post, unlockAudio]);
+  }, [cleanupGameLoop, pingTap, playHoldSound, post, unlockAudio]);
 
-  // Relâchement avec anti-clic : un simple tap (ou un relâche trop rapide) ne doit
-  // pas encaisser/crash instantanément — il faut maintenir réellement. La boucle
-  // est quand même coupée : un tap ne laisse pas la jauge monter sans personne.
   const releaseHold = useCallback(
     (force = false) => {
       if (!force && Date.now() - holdStartedAtRef.current < MIN_HOLD_MS) {
@@ -560,9 +549,6 @@ export default function AcceleratorPage() {
       cleanupGameLoop();
       setCashingOut(true);
       try {
-        // Cashout en une seule requête résiliente : timeout + retries (le serveur
-        // rejoue idempotemment si la réponse a été perdue) + compensation de latence
-        // (le multiplicateur affiché au relâchement est envoyé au serveur).
         const j = await post(
           { action: "cashout", client_multiplier: displayVRef.current },
           { retries: 4, timeoutMs: 10000 }
@@ -578,19 +564,15 @@ export default function AcceleratorPage() {
     [cleanupGameLoop, post]
   );
 
-  animateLoopRef.current = animateLoop;
-  stopHoldLoopRef.current = stopHoldLoop;
-
-  // ---------- Démarrage ----------
   const startGame = useCallback(async () => {
     if (isStartingRef.current) return;
     isStartingRef.current = true;
     setError("");
     setCrashShow(false);
-    gaugeCardRef.current?.classList.remove("crashed");
+    gaugeCardRef.current?.classList.remove(s.crashed);
     gaugeApi.current?.updateGauge(V_MIN);
     try {
-      const bet = parseFloat(stake);
+      const bet = parseFloat(stake.replace(",", "."));
       if (Number.isNaN(bet) || bet <= 0) {
         setError("Mise invalide");
         return;
@@ -599,15 +581,18 @@ export default function AcceleratorPage() {
       if (j.status === "success") {
         roundIdRef.current = typeof j.round_id === "number" ? j.round_id : null;
         setBalFlashSoon(Number(j.new_balance));
-        gBaseRef.current = typeof j.g_base === "number" && j.g_base > 0 ? j.g_base : gBaseRef.current;
-        mMaxRef.current = typeof j.m_max === "number" && j.m_max > 0 ? j.m_max : mMaxRef.current;
+        gBaseRef.current =
+          typeof j.g_base === "number" && j.g_base > 0 ? j.g_base : gBaseRef.current;
+        mMaxRef.current =
+          typeof j.m_max === "number" && j.m_max > 0 ? j.m_max : mMaxRef.current;
         displayVRef.current = typeof j.multiplier === "number" ? j.multiplier : V_MIN;
 
         const betNorm = Number(j.bet_amount_display ?? bet);
         setStake(betNorm.toFixed(DEC));
         baseBetRef.current = betNorm;
         if (stakeDispRef.current) stakeDispRef.current.textContent = fmt(betNorm);
-        if (payoutDispRef.current) payoutDispRef.current.textContent = fmt(betNorm * displayVRef.current);
+        if (payoutDispRef.current)
+          payoutDispRef.current.textContent = fmt(betNorm * displayVRef.current);
 
         setMode("hold");
         gaugeApi.current?.updateGauge(displayVRef.current);
@@ -615,48 +600,34 @@ export default function AcceleratorPage() {
         setError((j.message as string) || "Erreur");
       }
     } catch {
-      setError("Erreur réseau ou critique");
+      setError("Erreur réseau");
     } finally {
       isStartingRef.current = false;
     }
   }, [post, setBalFlashSoon, stake]);
 
-  // ---------- Slider / champ ----------
-  const onSlider = useCallback(
-    (pct: number) => {
-      const safe = Math.max(0, Math.min(100, pct));
-      const amount = MIN_BET + ((MAX_BET - MIN_BET) * safe) / 100;
-      setStake(amount.toFixed(DEC));
-      setSliderPct(safe);
-    },
-    []
-  );
-
-  const onStakeChange = useCallback(
-    (raw: string) => {
-      const val = parseFloat(raw);
-      setStake(raw);
-      if (Number.isNaN(val)) {
-        setSliderPct(0);
-        return;
-      }
-      const clamped = Math.min(MAX_BET, val);
-      setStake(clamped.toFixed(DEC));
-      setSliderPct(((clamped - MIN_BET) / (MAX_BET - MIN_BET)) * 100);
-    },
-    []
-  );
+  const setQuickStake = (val: number) => {
+    const clamped = Math.max(MIN_BET, Math.min(MAX_BET, val));
+    setStake(clamped.toFixed(DEC));
+    setError("");
+  };
 
   const onStakeBlur = useCallback(() => {
-    let val = parseFloat(stake);
-    if (Number.isNaN(val) || val < MIN_BET) {
-      val = MIN_BET;
-      setStake(val.toFixed(DEC));
-      setSliderPct(0);
-    }
+    let val = parseFloat(stake.replace(",", "."));
+    if (Number.isNaN(val) || val < MIN_BET) val = MIN_BET;
+    if (val > MAX_BET) val = MAX_BET;
+    setStake(val.toFixed(DEC));
   }, [stake]);
 
-  // ---------- Événements globaux ----------
+  const modeRef = useRef(mode);
+
+  useEffect(() => {
+    endRef.current = handleEnd;
+    animateLoopRef.current = animateLoop;
+    stopHoldLoopRef.current = stopHoldLoop;
+    modeRef.current = mode;
+  }, [animateLoop, handleEnd, mode, stopHoldLoop]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Enter" && modeRef.current === "start") {
@@ -696,20 +667,14 @@ export default function AcceleratorPage() {
     };
   }, [releaseHold, startGame, startHoldLoop, stopHoldLoop, stopHoldSound, unlockAudio]);
 
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
-
-  // ---------- Chargement initial ----------
   useEffect(() => {
-    setMount(true);
     fetchWithTimeout<Record<string, unknown>>(5000, "/api/accelerator").then((res) => {
       const d = res.data;
       if (res.ok && d && d.status === "success") {
         setBal(Number(d.balance));
-        setStake(Math.min(MIN_BET, Number(d.balance)).toFixed(DEC));
+        setStake(Math.max(MIN_BET, Math.min(MIN_BET, Number(d.balance))).toFixed(DEC));
       }
     });
-    setBalanceHidden(localStorage.getItem("acc_balance_hidden") === "true");
   }, []);
 
   const toggleBalance = () => {
@@ -719,7 +684,7 @@ export default function AcceleratorPage() {
     });
   };
 
-  const balText = balanceHidden ? "******" : fmt(bal).replace(SYM, "").trim();
+  const balText = balanceHidden ? "••••" : fmt(bal);
   const isHold = mode === "hold";
 
   const holdButtonProps = {
@@ -748,238 +713,210 @@ export default function AcceleratorPage() {
 
   return createPortal(
     <div className={s.acc}>
-      <header className={s.header}>
-        <div className={s.logo}>
-          Accelerator <span>Pro</span>
-        </div>
-        <div className={s.headerRight}>
-          <div className={s.balancePill}>
-            <span className={s.amountHl} style={{ color: balFlash ? "#22C55E" : undefined }}>
-              {balText}
-            </span>
-            <span>{SYM}</span>
-            <button className={s.balanceToggle} onClick={toggleBalance} aria-label="Masquer le solde">
-              {balanceHidden ? <EyeOff className="h-4 w-4" strokeWidth={2} /> : <Eye className="h-4 w-4" strokeWidth={2} />}
+      <div className={s.shell}>
+        <header className={s.header}>
+          <div className={s.headerLeft}>
+            <Link href="/predictions" className={s.btnIcon} aria-label="Retour">
+              <ArrowLeft className="h-4 w-4" strokeWidth={2.3} />
+            </Link>
+            <div className={s.logo}>
+              Accelerator <span>Pro</span>
+            </div>
+          </div>
+
+          <div className={s.headerRight}>
+            <NetworkBadge />
+            <button
+              type="button"
+              onClick={toggleBalance}
+              className={s.balancePill}
+              aria-label="Afficher ou masquer le solde"
+            >
+              <span className={s.amountHl} style={{ color: balFlash ? "#4ade80" : undefined }}>
+                {balText}
+              </span>
+              {balanceHidden ? (
+                <EyeOff className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+              ) : (
+                <Eye className="h-3.5 w-3.5 text-slate-400" strokeWidth={2} />
+              )}
+            </button>
+            <button
+              type="button"
+              className={s.btnIcon}
+              onClick={() => setRulesOpen(true)}
+              aria-label="Règles du jeu"
+            >
+              <CircleHelp className="h-4 w-4" strokeWidth={2.2} />
             </button>
           </div>
-          <NetworkBadge />
-          <button className={s.btnIcon} onClick={() => setRulesOpen(true)} aria-label="Règles du jeu">
-            <CircleHelp className="h-4 w-4" strokeWidth={2} />
-          </button>
-          <Link href="/predictions" className={s.btnIcon} title="Retour à l'accueil">
-            <Trophy className="h-4 w-4" strokeWidth={2} />
-          </Link>
-        </div>
-      </header>
+        </header>
 
-      <OfflineBanner />
+        <OfflineBanner />
 
-      <div className={s.layout}>
-        <div className={s.colCenter}>
-          <div className={s.pageGame}>
-            <div className={s.matchBox}>
-              <div className={s.gameCircleContainer}>
-                <div className={s.gaugeCard} ref={gaugeCardRef}>
-                  <div className={s.gbox}>
-                    <svg viewBox="0 0 200 120" preserveAspectRatio="xMidYMid meet">
-                      <defs>
-                        <linearGradient id="railGradient" x1="0%" y1="0%" x2="100%">
-                          <stop offset="0%" stopColor="#1e293b" />
-                          <stop offset="100%" stopColor="#0f172a" />
-                        </linearGradient>
-                        <linearGradient id="needleGradient" x1="0%" y1="0%" x2="100%">
-                          <stop offset="0%" stopColor="#f8fafc" />
-                          <stop offset="100%" stopColor="#cbd5e1" />
-                        </linearGradient>
-                      </defs>
-                      <path ref={railRef} fill="none" stroke="url(#railGradient)" strokeWidth={16} strokeLinecap="round" />
-                      <g ref={sectorsRef} />
-                      <g ref={ticksRef} />
-                      <g ref={labelsRef} />
-                      <g ref={needleRef}>
-                        <polygon ref={needleShapeRef} fill="url(#needleGradient)" />
-                        <circle cx={100} cy={100} r={5} fill="#0f172a" stroke="#cbd5e1" strokeWidth={1.5} />
-                        <circle cx={100} cy={100} r={3} fill="url(#needleGradient)" />
-                      </g>
-                    </svg>
-                  </div>
-                  <div className={s.value} ref={valRef}>
-                    1.01
-                  </div>
-                  <div className={s.payout}>
-                    <span ref={stakeDispRef}>—</span>
-                    <span>→</span>
-                    <span className={s.gain} ref={payoutDispRef}>
-                      —
-                    </span>
-                  </div>
-                  <div className={`${s.crashBadge} ${crashShow ? s.show : ""}`}>CRASH ×{crashMult.toFixed(2)}</div>
-                </div>
+        <main className={s.stage}>
+          <div className={s.gaugeCard} ref={gaugeCardRef}>
+            <div className={s.gbox}>
+              <svg viewBox="0 0 200 116" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <linearGradient id="railGradient" x1="0%" y1="0%" x2="100%">
+                    <stop offset="0%" stopColor="#1e293b" />
+                    <stop offset="100%" stopColor="#0f172a" />
+                  </linearGradient>
+                  <linearGradient id="needleGradient" x1="0%" y1="0%" x2="100%">
+                    <stop offset="0%" stopColor="#f8fafc" />
+                    <stop offset="100%" stopColor="#cbd5e1" />
+                  </linearGradient>
+                </defs>
+                <path
+                  ref={railRef}
+                  fill="none"
+                  stroke="url(#railGradient)"
+                  strokeWidth={16}
+                  strokeLinecap="round"
+                />
+                <g ref={sectorsRef} />
+                <g ref={ticksRef} />
+                <g ref={labelsRef} />
+                <g ref={needleRef}>
+                  <polygon ref={needleShapeRef} fill="url(#needleGradient)" />
+                  <circle cx={100} cy={100} r={5} fill="#0f172a" stroke="#cbd5e1" strokeWidth={1.5} />
+                  <circle cx={100} cy={100} r={2.5} fill="url(#needleGradient)" />
+                </g>
+              </svg>
+            </div>
+
+            <div className={s.valueRow}>
+              <span className={s.multPrefix}>×</span>
+              <div className={s.value} ref={valRef}>
+                1.01
               </div>
             </div>
 
-            <div className={s.mobileControlsPanel}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div className={s.inputGroup}>
-                  <input
-                    type="number"
-                    className={s.stakeIn}
-                    placeholder="Mise"
-                    min={MIN_BET}
-                    max={MAX_BET}
-                    step="0.01"
-                    value={stake}
-                    onChange={(e) => onStakeChange(e.target.value)}
-                    onBlur={onStakeBlur}
-                    disabled={isHold}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                  />
-                  <span className={s.currencyBadge}>{SYM}</span>
-                </div>
-                <div className={s.rangeWrapper}>
-                  <span className={s.rangeVal}>{Math.floor(sliderPct)}%</span>
-                  <input
-                    type="range"
-                    className={s.betRange}
-                    min={0}
-                    max={100}
-                    value={sliderPct}
-                    step={1}
-                    onChange={(e) => onSlider(parseFloat(e.target.value))}
-                    disabled={isHold}
-                    style={{ backgroundSize: `${sliderPct}% 100%` }}
-                  />
-                  <div className={s.rangeTicks}>
-                    <div className={s.tickUi} data-val="0" />
-                    <div className={s.tickUi} data-val="50" />
-                    <div className={s.tickUi} data-val="MAX" />
-                  </div>
-                </div>
-                <button
-                  className={`${s.btnPlace} ${isHold ? s.cashout : ""}`}
-                  onClick={() => {
-                    if (!isHold) {
-                      unlockAudio().then(() => startGame());
-                    }
-                  }}
-                  {...(isHold ? holdButtonProps : {})}
-                >
-                  {isHold ? (
-                    <>
-                      <Hand className="h-5 w-5" strokeWidth={2.4} /> {cashingOut ? "ENCAISSEMENT…" : "MAINTENIR"}
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-5 w-5" strokeWidth={2.4} /> MISER
-                    </>
-                  )}
-                </button>
-                <div className={s.errorMsg}>{error}</div>
-              </div>
+            <div className={s.payout}>
+              <span ref={stakeDispRef}>—</span>
+              <span className={s.arrow}>→</span>
+              <span className={s.gain} ref={payoutDispRef}>
+                —
+              </span>
+            </div>
+
+            <div className={`${s.crashBadge} ${crashShow ? s.show : ""}`}>
+              CRASH ×{crashMult.toFixed(2)}
             </div>
           </div>
-        </div>
 
-        <div className={s.colRight}>
-          <div className={s.slipHead}>CONTRÔLES</div>
-          <div className={s.slipBody}>
+          <p className={s.hint}>
+            {isHold
+              ? "Maintenez le bouton enfoncé puis relâchez pour encaisser"
+              : "Choisissez votre mise (1 $ à 50 $) puis lancez la manche"}
+          </p>
+        </main>
+
+        <section className={s.controls}>
+          <div className={s.inputRow}>
             <div className={s.inputGroup}>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 className={s.stakeIn}
-                placeholder="Montant"
-                min={MIN_BET}
-                max={MAX_BET}
-                step="0.01"
+                placeholder="Mise"
                 value={stake}
-                onChange={(e) => onStakeChange(e.target.value)}
+                onChange={(e) => setStake(e.target.value.replace(/[^0-9.,]/g, ""))}
                 onBlur={onStakeBlur}
                 disabled={isHold}
+                aria-label="Montant de la mise"
               />
               <span className={s.currencyBadge}>{SYM}</span>
             </div>
-            <div className={s.limitInfo}>
-              <span>
-                Min: {MIN_BET} {SYM}
-              </span>
-              <span>
-                Max: {MAX_BET} {SYM}
-              </span>
-            </div>
-            <div className={s.rangeWrapper}>
-              <span className={s.rangeVal}>{Math.floor(sliderPct)}%</span>
-              <input
-                type="range"
-                className={s.betRange}
-                min={0}
-                max={100}
-                value={sliderPct}
-                step={1}
-                onChange={(e) => onSlider(parseFloat(e.target.value))}
+          </div>
+
+          <div className={s.quickGrid}>
+            {QUICK_BETS.map((q) => (
+              <button
+                key={q}
+                type="button"
                 disabled={isHold}
-                style={{ backgroundSize: `${sliderPct}% 100%` }}
-              />
-              <div className={s.rangeTicks}>
-                <div className={s.tickUi} data-val="0" />
-                <div className={s.tickUi} data-val="50" />
-                <div className={s.tickUi} data-val="MAX" />
-              </div>
-            </div>
-          </div>
-          <div className={s.slipFoot}>
+                onClick={() => setQuickStake(q)}
+                className={s.quickBtn}
+              >
+                {q} {SYM}
+              </button>
+            ))}
             <button
-              className={`${s.btnPlace} ${isHold ? s.cashout : ""}`}
-              onClick={() => {
-                if (!isHold) {
-                  unlockAudio().then(() => startGame());
-                }
-              }}
-              {...(isHold ? holdButtonProps : {})}
+              type="button"
+              disabled={isHold}
+              onClick={() => setQuickStake(Math.min(MAX_BET, Math.max(MIN_BET, bal)))}
+              className={`${s.quickBtn} ${s.quickMax}`}
             >
-              {isHold ? (
-                <>
-                  <Hand className="h-5 w-5" strokeWidth={2.4} /> {cashingOut ? "ENCAISSEMENT…" : "MAINTENIR"}
-                </>
-              ) : (
-                <>
-                  <Play className="h-5 w-5" strokeWidth={2.4} /> MISER
-                </>
-              )}
+              MAX
             </button>
-            <div className={s.errorMsg}>{error}</div>
+          </div>
+
+          <button
+            type="button"
+            className={`${s.btnPlace} ${isHold ? s.cashout : ""}`}
+            onClick={() => {
+              if (!isHold) {
+                unlockAudio().then(() => startGame());
+              }
+            }}
+            {...(isHold ? holdButtonProps : {})}
+          >
+            {isHold ? (
+              <>
+                <Hand className="h-5 w-5" strokeWidth={2.4} />
+                {cashingOut ? "ENCAISSEMENT…" : "MAINTENIR POUR MONTER"}
+              </>
+            ) : (
+              <>
+                <Play className="h-5 w-5" strokeWidth={2.4} />
+                MISER
+              </>
+            )}
+          </button>
+
+          {error && <div className={s.errorMsg}>{error}</div>}
+        </section>
+
+        {/* Modale résultat */}
+        <div
+          className={`${s.modalOverlay} ${modal.show ? s.show : ""}`}
+          onClick={() => setModal((m) => ({ ...m, show: false }))}
+        >
+          <div
+            className={`${s.modalV2} ${modal.win ? s.win : s.lose}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={s.title}>{modal.title}</div>
+            <div className={s.amount}>{modal.amount}</div>
+            {modal.mult && <div className={s.multLabel}>Multiplicateur {modal.mult}</div>}
+            <button
+              type="button"
+              className={s.btnCloseModal}
+              onClick={() => setModal((m) => ({ ...m, show: false }))}
+            >
+              Continuer
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Modale résultat */}
-      <div className={`${s.modalOverlay} ${modal.show ? s.show : ""}`} onClick={() => setModal((m) => ({ ...m, show: false }))}>
-        <div className={`${s.modalV2} ${modal.win ? s.win : s.lose}`}>
-          <div className={s.title}>{modal.title}</div>
-          <div className={s.amount}>{modal.amount}</div>
-          {modal.mult && <div style={{ color: "var(--gray)", fontWeight: 700 }}>Multiplicateur {modal.mult}</div>}
-          <button className={s.btnCloseModal} onClick={() => setModal((m) => ({ ...m, show: false }))}>
-            Fermer
-          </button>
-        </div>
-      </div>
-
-      {/* Modale règles */}
-      <div className={`${s.modalOverlay} ${rulesOpen ? s.show : ""}`} onClick={() => setRulesOpen(false)}>
-        <div className={s.modalV2} style={{ maxWidth: 460, textAlign: "left" }}>
-          <div className={s.title} style={{ textAlign: "center" }}>
-            Règles du jeu
+        {/* Modale règles */}
+        <div
+          className={`${s.modalOverlay} ${rulesOpen ? s.show : ""}`}
+          onClick={() => setRulesOpen(false)}
+        >
+          <div className={s.modalV2} onClick={(e) => e.stopPropagation()}>
+            <div className={s.title}>Règles</div>
+            <ul className={s.rulesText}>
+              <li>Le multiplicateur progresse de ×1.01 jusqu&apos;à ×2.00.</li>
+              <li>Maintenez le bouton pour monter, relâchez pour encaisser.</li>
+              <li>Si le crash survient avant le relâchement, la mise est perdue.</li>
+            </ul>
+            <button type="button" className={s.btnCloseModal} onClick={() => setRulesOpen(false)}>
+              Compris
+            </button>
           </div>
-          <ul className={s.rulesText}>
-            <li>Le multiplicateur monte de ×1.01 à ×2.00.</li>
-            <li>Maintenez pour faire monter la jauge, relâchez pour encaisser.</li>
-            <li>Gain = Mise × Multiplicateur au moment du cashout.</li>
-            <li>Si le crash arrive avant, la mise est perdue.</li>
-            <li>Provably Fair : chaque round est vérifiable via SHA-256.</li>
-          </ul>
-          <button className={s.btnCloseModal} onClick={() => setRulesOpen(false)}>
-            Fermer
-          </button>
         </div>
       </div>
     </div>,

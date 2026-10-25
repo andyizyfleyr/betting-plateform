@@ -2,15 +2,12 @@
 
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Eye, EyeOff, Loader2, Mail, ShieldCheck, User, Zap } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, User, Zap } from "lucide-react";
 import { useApp } from "@/components/providers";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/format";
 
 type Mode = "login" | "register";
-
-const spring = { type: "spring", stiffness: 480, damping: 38 } as const;
 
 export default function AuthPage() {
   return (
@@ -32,6 +29,7 @@ function AuthInner() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -39,15 +37,23 @@ function AuthInner() {
     }
   }, [user, router]);
 
-  const switchMode = (m: Mode) => {
-    setMode(m);
-    setError(null);
-  };
+  const finishLogin = useCallback(
+    (loggedUser: Parameters<typeof applyUser>[0], created: boolean) => {
+      applyUser(loggedUser);
+      toast({
+        kind: "success",
+        title: created ? "Compte créé" : "Connexion réussie",
+      });
+      const from = params.get("from");
+      router.push(from && from.startsWith("/") ? from : "/predictions");
+    },
+    [applyUser, params, router, toast]
+  );
 
   const submit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-      if (loading) return;
+      if (loading || demoLoading) return;
       setError(null);
       setLoading(true);
       try {
@@ -55,252 +61,185 @@ function AuthInner() {
           mode === "register"
             ? await api.auth.register({ name, email, password })
             : await api.auth.login({ email, password });
-        applyUser(r.user);
-        toast({
-          kind: "success",
-          title: mode === "register" ? "Compte créé" : "Bienvenue sur PULSE",
-          description: "Vous êtes connecté",
-        });
-        const from = params.get("from");
-        router.push(from && from.startsWith("/") ? from : "/predictions");
+        finishLogin(r.user, mode === "register");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Une erreur est survenue");
       } finally {
         setLoading(false);
       }
     },
-    [loading, mode, name, email, password, params, router, applyUser, toast]
+    [loading, demoLoading, mode, name, email, password, finishLogin]
   );
 
+  const loginDemo = async () => {
+    if (loading || demoLoading) return;
+    setError(null);
+    setDemoLoading(true);
+    try {
+      const r = await api.auth.login({ email: "demo@pulse.app", password: "demo1234" });
+      finishLogin(r.user, false);
+    } catch (err) {
+      setMode("login");
+      setEmail("demo@pulse.app");
+      setPassword("demo1234");
+      setError(err instanceof Error ? err.message : "Impossible de charger le compte démo");
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
   return (
-    <main className="flex flex-1 flex-col px-5 pb-10 pt-8">
-      {/* Marque */}
-      <motion.div
-        initial={{ opacity: 0, y: -12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="flex items-center justify-between"
-      >
-        <div className="flex items-center gap-2">
-          <span className="relative grid h-8 w-8 rotate-45 place-items-center rounded-lg bg-betclic-red shadow-[0_6px_24px_-4px_rgba(225,0,20,0.55)]">
-            <Zap className="h-4 w-4 -rotate-45 fill-white text-white" strokeWidth={2.4} />
+    <main className="pt-safe pb-safe flex flex-1 flex-col justify-between px-5 py-6">
+      <div>
+        {/* En-tête sobre */}
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-betclic-red text-white">
+            <Zap className="h-5 w-5 fill-white" strokeWidth={2.2} />
           </span>
           <div>
-            <p className="font-display text-[17px] font-bold leading-none tracking-tight text-ink">
+            <p className="font-display text-[18px] font-bold leading-none tracking-tight text-ink">
               PULSE
             </p>
-            <p className="mt-0.5 font-display text-[8px] font-bold tracking-[0.3em] text-mist">
-              PARIS SPORTIFS
+            <p className="mt-0.5 text-[11px] font-medium text-dim">
+              Paris sportifs & prédictions
             </p>
           </div>
         </div>
-        <span className="glass-pill rounded-full px-2.5 py-1 font-display text-[9px] font-bold tracking-[0.2em] text-betclic-red">
-          JWT · SECURISÉ
-        </span>
-      </motion.div>
 
-      {/* Titre */}
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.06, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-8"
-      >
-        <p className="text-[10px] font-semibold tracking-[0.26em] text-betclic-red">
-          {mode === "login" ? "BIENVENUE" : "REJOINDRE LA PLATEFORME"}
-        </p>
-        <h1 className="mt-1.5 font-display text-[30px] font-bold leading-[1.05] tracking-tight">
-          {mode === "login" ? (
-            <>
-              Content de
-              <br />
-              te revoir
-            </>
-          ) : (
-            <>
-              Crée ton
-              <br />
-              compte PULSE
-            </>
-          )}
-        </h1>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-mist">
-          {mode === "login"
-            ? "Connecte-toi pour retrouver tes paris, ton solde et tes prédictions."
-            : "Reçois 250,00 € de bonus et mets en jeu tes premières prédictions."}
-        </p>
-      </motion.div>
+        {/* Titre concis */}
+        <div className="mt-6">
+          <h1 className="font-display text-[24px] font-bold leading-tight tracking-tight text-ink">
+            {mode === "login" ? "Bon retour" : "Créer un compte"}
+          </h1>
+          <p className="mt-1 text-[13px] text-mist">
+            {mode === "login"
+              ? "Accédez à vos prédictions, matchs en direct et paris."
+              : "250,00 € crédités dès l'inscription pour démarrer."}
+          </p>
+        </div>
 
-      {/* Onglets */}
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-        className="glass-card mt-7 grid grid-cols-2 gap-1 rounded-xl p-1"
-      >
-        {(["login", "register"] as Mode[]).map((m) => {
-          const active = mode === m;
-          return (
-            <button
-              key={m}
-              onClick={() => switchMode(m)}
-              className={cn(
-                "relative rounded-lg py-2.5 font-display text-[12.5px] font-semibold transition-colors",
-                active ? "text-white" : "text-mist"
-              )}
-            >
-              {active && (
-                <motion.span
-                  layoutId="auth-pill"
-                  transition={spring}
-                  className="absolute inset-0 rounded-lg bg-betclic-red shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
-                />
-              )}
-              <span className="relative z-10">
+        {/* Sélecteur Connexion / Inscription */}
+        <div className="mt-5 grid grid-cols-2 gap-1 rounded-2xl border border-edge bg-elev p-1">
+          {(["login", "register"] as const).map((m) => {
+            const active = mode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setError(null);
+                }}
+                className={cn(
+                  "h-10 rounded-xl font-display text-[13px] transition-colors",
+                  active
+                    ? "bg-white font-bold text-ink shadow-xs"
+                    : "font-medium text-mist"
+                )}
+              >
                 {m === "login" ? "Connexion" : "Inscription"}
-              </span>
-            </button>
-          );
-        })}
-      </motion.div>
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Formulaire */}
-      <motion.form
-        key={mode}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        onSubmit={submit}
-        className="mt-6 flex flex-col gap-3"
-        noValidate
-      >
-        {mode === "register" && (
-          <FieldWrap>
-            <FieldIcon>
-              <User className="h-[18px] w-[18px] text-betclic-red" strokeWidth={2.2} />
-            </FieldIcon>
+        {/* Formulaire (inputs en 16px pour éviter le zoom auto sur iOS) */}
+        <form onSubmit={submit} className="mt-4 flex flex-col gap-2.5" noValidate>
+          {mode === "register" && (
+            <label className="glass-card flex h-12 items-center gap-3 rounded-2xl px-3.5 focus-within:border-ink">
+              <User className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.1} />
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+                placeholder="Nom d'utilisateur"
+                required
+                className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+              />
+            </label>
+          )}
+
+          <label className="glass-card flex h-12 items-center gap-3 rounded-2xl px-3.5 focus-within:border-ink">
+            <Mail className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.1} />
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoComplete="name"
-              placeholder="Nom d'utilisateur"
-              className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-ink outline-none placeholder:text-dim"
-            />
-          </FieldWrap>
-        )}
-
-        <FieldWrap>
-          <FieldIcon>
-            <Mail className="h-[18px] w-[18px] text-betclic-red" strokeWidth={2.2} />
-          </FieldIcon>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
               placeholder="Adresse e-mail"
-              className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-ink outline-none placeholder:text-dim"
-          />
-        </FieldWrap>
+              required
+              className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+            />
+          </label>
 
-        <FieldWrap>
-          <FieldIcon>
-            <ShieldCheck className="h-[18px] w-[18px] text-betclic-red" strokeWidth={2.2} />
-          </FieldIcon>
-          <input
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type={showPw ? "text" : "password"}
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
+          <label className="glass-card flex h-12 items-center gap-3 rounded-2xl pl-3.5 pr-1.5 focus-within:border-ink">
+            <Lock className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.1} />
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type={showPw ? "text" : "password"}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
               placeholder="Mot de passe"
-              className="h-[52px] flex-1 bg-transparent pl-1 text-[14px] text-ink outline-none placeholder:text-dim"
-          />
+              required
+              className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw((s) => !s)}
+              aria-label={showPw ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-dim active:bg-elev"
+            >
+              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </label>
+
+          {error && (
+            <p className="rounded-xl bg-betclic-red/8 px-3 py-2 text-[12.5px] font-medium text-betclic-red">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || demoLoading}
+            className="mt-1.5 flex h-12 items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[14.5px] font-bold text-white transition-opacity active:opacity-90 disabled:opacity-60"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
+                Connexion…
+              </>
+            ) : (
+              <>
+                {mode === "register" ? "Créer mon compte" : "Se connecter"}
+                <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Accès rapide démo en 1 tap */}
+        <div className="mt-4">
           <button
             type="button"
-            onClick={() => setShowPw((s) => !s)}
-            aria-label={showPw ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-            className="grid h-9 w-9 place-items-center text-dim transition-colors hover:text-mist"
+            onClick={loginDemo}
+            disabled={loading || demoLoading}
+            className="glass-card flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[12.5px] font-semibold text-ink transition-colors active:bg-elev disabled:opacity-60"
           >
-            {showPw ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+            {demoLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-betclic-red" strokeWidth={2.4} />
+            ) : (
+              <Zap className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
+            )}
+            Accès rapide avec le compte démo
           </button>
-        </FieldWrap>
+        </div>
+      </div>
 
-        <AnimatePresence mode="wait">
-          {error && (
-            <motion.p
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden px-1 text-[12px] font-medium text-betclic-red"
-            >
-              {error}
-            </motion.p>
-          )}
-        </AnimatePresence>
-
-        <motion.button
-          type="submit"
-          whileTap={{ scale: 0.97 }}
-          disabled={loading}
-          className={cn(
-            "mt-1 flex h-[52px] items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] font-display text-[14px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_14px_30px_-12px_rgba(225,0,20,0.5)] transition-opacity disabled:opacity-60"
-          )}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
-              Veuillez patienter…
-            </>
-          ) : (
-            <>
-              {mode === "register" ? "Créer mon compte" : "Se connecter"}
-              <ArrowRight className="h-4 w-4" strokeWidth={2.6} />
-            </>
-          )}
-        </motion.button>
-      </motion.form>
-
-      {/* Compte démo */}
-      <motion.button
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.22 }}
-        onClick={() => {
-          setMode("login");
-          setEmail("demo@pulse.app");
-          setPassword("demo1234");
-          setError(null);
-        }}
-        className="mt-5 flex items-center justify-center gap-1.5 text-[12px] font-medium text-dim transition-colors hover:text-mist"
-      >
-        <Zap className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-        Essayer avec le compte démo : <span className="font-semibold text-mist">demo@pulse.app / demo1234</span>
-      </motion.button>
-
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.28 }}
-        className="mt-auto pt-10 text-center text-[10px] leading-relaxed text-dim"
-      >
-        Interdit aux mineurs. Jouer comporte des risques : endettement, isolement, dépendance.
-      </motion.p>
+      <p className="pt-6 text-center text-[10.5px] leading-relaxed text-dim">
+        18+ · Jouer comporte des risques : endettement, isolement, dépendance.
+      </p>
     </main>
-  );
-}
-
-function FieldWrap({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="glass-card flex items-center gap-3 rounded-xl py-0 pl-3 pr-2 focus-within:border-betclic-red/40">
-      {children}
-    </div>
-  );
-}
-
-function FieldIcon({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elev">
-      {children}
-    </span>
   );
 }

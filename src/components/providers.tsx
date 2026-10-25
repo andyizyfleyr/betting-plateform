@@ -10,13 +10,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { api, type ClientMatch, type ClientUser } from "@/lib/api";
 import { cn } from "@/lib/format";
 import { BetModal } from "./bet-modal";
 import { MarketSheet } from "./market-sheet";
-import { SplashScreen } from "./splash-screen";
+import { RechargeModal } from "./recharge-modal";
 
 export interface BetTarget {
   match: ClientMatch;
@@ -39,13 +40,16 @@ interface AppContextValue {
   balance: number;
   oddsFormat: "decimal" | "fractional";
   setBalance: (n: number) => void;
-  applyUser: (u: ClientUser) => void;
+  applyUser: (u: ClientUser | null) => void;
   target: BetTarget | null;
   openBet: (t: BetTarget) => void;
   closeBet: () => void;
   marketMatch: ClientMatch | null;
   openMarkets: (m: ClientMatch) => void;
   closeMarkets: () => void;
+  rechargeOpen: boolean;
+  openRecharge: () => void;
+  closeRecharge: () => void;
   toast: (t: Omit<Toast, "id">) => void;
   betsVersion: number;
   bumpBets: () => void;
@@ -61,54 +65,67 @@ export function useApp() {
 }
 
 let toastId = 0;
-
-/** Rafraîchissement global : solde + paris en cours, sur toutes les pages. */
 const POLL_INTERVAL = 5_000;
 
 export function Providers({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const isAuthRoute = pathname === "/auth" || pathname.startsWith("/auth/");
+
   const [user, setUser] = useState<ClientUser | null>(null);
   const [target, setTarget] = useState<BetTarget | null>(null);
   const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
+  const [rechargeOpen, setRechargeOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
-  const [splashVisible, setSplashVisible] = useState(true);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    if (isAuthRoute || user) return;
+    let active = true;
     api
       .settings()
       .then((r) => {
-        setUser(r.user);
-        // Petit délai minimal pour que le splash s'affiche élégamment avant de disparaître.
-        setTimeout(() => setSplashVisible(false), 600);
+        if (active) setUser(r.user);
       })
-      .catch(() => setSplashVisible(false));
-  }, []);
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [isAuthRoute, user]);
 
-  // Sync globale : le GET /api/bets fait tourner le moteur (buts, cotes, règlement)
-  // et renvoie le solde à jour. On l'interroge partout pour que tout se rafraîchisse.
-  const loggedIn = user !== null;
+  const loggedIn = user !== null && !isAuthRoute;
 
   useEffect(() => {
     if (!loggedIn) return;
     let active = true;
+
     const poll = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       api
         .bets("ongoing")
         .then((r) => {
           if (!active) return;
           setPendingCount(r.bets.length);
           const bal = r.balance;
-          if (typeof bal === "number") setUser((u) => (u ? { ...u, balance: bal } : u));
+          if (typeof bal === "number") {
+            setUser((u) => (u ? { ...u, balance: bal } : u));
+          }
         })
         .catch(() => undefined);
     };
+
     poll();
     const id = setInterval(poll, POLL_INTERVAL);
+    const onVisible = () => {
+      if (!document.hidden) poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       active = false;
       clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [loggedIn, betsVersion]);
 
@@ -116,10 +133,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
   const toast = useCallback((t: Omit<Toast, "id">) => {
     const id = ++toastId;
-    setToasts((prev) => [...prev.slice(-2), { ...t, id }]);
+    setToasts((prev) => [...prev.slice(-1), { ...t, id }]);
     const timer = setTimeout(
       () => setToasts((prev) => prev.filter((x) => x.id !== id)),
-      3200
+      2800
     );
     timers.current.set(id, timer);
   }, []);
@@ -137,62 +154,60 @@ export function Providers({ children }: { children: ReactNode }) {
       marketMatch,
       openMarkets: (m) => setMarketMatch(m),
       closeMarkets: () => setMarketMatch(null),
+      rechargeOpen,
+      openRecharge: () => setRechargeOpen(true),
+      closeRecharge: () => setRechargeOpen(false),
       toast,
       betsVersion,
       bumpBets: () => setBetsVersion((v) => v + 1),
       pendingCount,
     }),
-    [user, target, marketMatch, toast, betsVersion, pendingCount]
+    [user, target, marketMatch, rechargeOpen, toast, betsVersion, pendingCount]
   );
 
   return (
     <AppContext.Provider value={value}>
-      <SplashScreen visible={splashVisible} />
       {children}
       <MarketSheet />
       <BetModal />
+      <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
       <Toasts toasts={toasts} />
     </AppContext.Provider>
   );
 }
 
 const TOAST_STYLE = {
-  success: { Icon: CheckCircle2, cls: "text-betclic-red" },
-  error: { Icon: AlertTriangle, cls: "text-betclic-red" },
-  info: { Icon: Info, cls: "text-betclic-red" },
+  success: { Icon: CheckCircle2, cls: "text-win", bar: "bg-win" },
+  error: { Icon: AlertTriangle, cls: "text-betclic-red", bar: "bg-betclic-red" },
+  info: { Icon: Info, cls: "text-ink", bar: "bg-ink" },
 } as const;
 
 function Toasts({ toasts }: { toasts: Toast[] }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-[90] mx-auto flex w-full max-w-[26rem] flex-col items-center gap-2 px-3.5">
+    <div
+      className="pointer-events-none fixed inset-x-0 top-3 z-[90] mx-auto flex w-full max-w-[420px] flex-col items-center gap-2 px-3.5"
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+    >
       <AnimatePresence>
         {toasts.map((t) => {
-          const { Icon, cls } = TOAST_STYLE[t.kind];
+          const { Icon, cls, bar } = TOAST_STYLE[t.kind];
           return (
             <motion.div
               key={t.id}
-              layout
-              initial={{ opacity: 0, y: -24, scale: 0.92 }}
+              initial={{ opacity: 0, y: -16, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -18, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 500, damping: 32 }}
-              className="pointer-events-auto flex w-full items-center gap-3 overflow-hidden rounded-xl border border-edge bg-white/95 py-3 pl-0 pr-4 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.15)] backdrop-blur-xl"
+              exit={{ opacity: 0, y: -12, scale: 0.96 }}
+              transition={{ duration: 0.18 }}
+              className="pointer-events-auto flex w-full items-center gap-3 overflow-hidden rounded-xl border border-edge bg-white py-2.5 pl-0 pr-3.5 shadow-lg"
             >
-              <span
-                className={cn(
-                  "-ml-px h-full w-[3px] shrink-0 self-stretch",
-                  t.kind === "success" && "bg-betclic-red",
-                  t.kind === "error" && "bg-bittersweet",
-                  t.kind === "info" && "bg-betclic-red"
-                )}
-              />
-              <Icon className={`h-5 w-5 shrink-0 ${cls}`} strokeWidth={2.2} />
-              <div className="min-w-0">
+              <span className={cn("h-full w-1 shrink-0 self-stretch", bar)} />
+              <Icon className={cn("h-4 w-4 shrink-0", cls)} strokeWidth={2.3} />
+              <div className="min-w-0 flex-1">
                 <p className="truncate font-display text-[13px] font-semibold text-ink">
                   {t.title}
                 </p>
                 {t.description && (
-                  <p className="truncate text-xs text-mist">{t.description}</p>
+                  <p className="truncate text-[11.5px] text-mist">{t.description}</p>
                 )}
               </div>
             </motion.div>

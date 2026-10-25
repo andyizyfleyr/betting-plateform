@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   BarChart3,
   CalendarPlus,
@@ -19,8 +18,8 @@ import {
   ShieldCheck,
   Ticket,
   Trash2,
-  Trophy,
   TrendingUp,
+  Trophy,
   Users,
   X,
 } from "lucide-react";
@@ -142,8 +141,12 @@ const TABS: { key: TabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "deposits", label: "Dépôts", Icon: CircleDollarSign },
 ];
 
-/** Catalogue des marchés éditables (issues avec libellés) pour l'ajout manuel. */
-const MARKET_CATALOG: { key: string; label: string; short: string; outcomes: { key: string; label: string; short: string }[] }[] = [
+const MARKET_CATALOG: {
+  key: string;
+  label: string;
+  short: string;
+  outcomes: { key: string; label: string; short: string }[];
+}[] = [
   {
     key: "result",
     label: "Résultat du match",
@@ -169,12 +172,12 @@ const MARKET_CATALOG: { key: string; label: string; short: string; outcomes: { k
     label: "Total de buts (plus/moins)",
     short: "Plus/Moins",
     outcomes: [
-      { key: "ou_1_5_over", label: "Plus de 1,5 buts", short: "Plus 1,5" },
-      { key: "ou_1_5_under", label: "Moins de 1,5 buts", short: "Moins 1,5" },
-      { key: "ou_2_5_over", label: "Plus de 2,5 buts", short: "Plus 2,5" },
-      { key: "ou_2_5_under", label: "Moins de 2,5 buts", short: "Moins 2,5" },
-      { key: "ou_3_5_over", label: "Plus de 3,5 buts", short: "Plus 3,5" },
-      { key: "ou_3_5_under", label: "Moins de 3,5 buts", short: "Moins 3,5" },
+      { key: "ou_1_5_over", label: "Plus de 1,5 buts", short: "+1,5" },
+      { key: "ou_1_5_under", label: "Moins de 1,5 buts", short: "-1,5" },
+      { key: "ou_2_5_over", label: "Plus de 2,5 buts", short: "+2,5" },
+      { key: "ou_2_5_under", label: "Moins de 2,5 buts", short: "-2,5" },
+      { key: "ou_3_5_over", label: "Plus de 3,5 buts", short: "+3,5" },
+      { key: "ou_3_5_under", label: "Moins de 3,5 buts", short: "-3,5" },
     ],
   },
   {
@@ -212,7 +215,13 @@ const MARKET_CATALOG: { key: string; label: string; short: string; outcomes: { k
   },
 ];
 
-const fmtEur = (n: number) => eur(n);
+const emptyMarkets = () =>
+  MARKET_CATALOG.map((m) => ({
+    key: m.key,
+    label: m.label,
+    short: m.short,
+    outcomes: m.outcomes.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: "" })),
+  }));
 
 export default function AdminPage() {
   const { user } = useApp();
@@ -234,17 +243,19 @@ export default function AdminPage() {
     startsAt: "",
     homeLogo: "",
     awayLogo: "",
-    markets: MARKET_CATALOG.map((m) => ({
-      key: m.key,
-      label: m.label,
-      short: m.short,
-      outcomes: m.outcomes.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: "" })),
-    })),
+    markets: emptyMarkets(),
   });
-  const [questionForm, setQuestionForm] = useState({ question: "", category: "Sport", oddsYes: "1.90", oddsNo: "1.80", hours: "72" });
+  const [questionForm, setQuestionForm] = useState({
+    question: "",
+    category: "Sport",
+    oddsYes: "1.90",
+    oddsNo: "1.80",
+    hours: "72",
+  });
   const [balanceForm, setBalanceForm] = useState<Record<number, string>>({});
 
   const load = useCallback(async (isBackground = false) => {
+    if (isBackground && typeof document !== "undefined" && document.hidden) return;
     if (abortRef.current) abortRef.current.abort();
     abortRef.current = new AbortController();
     try {
@@ -254,7 +265,8 @@ export default function AdminPage() {
       setPanel(data);
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") return;
-      if (!isBackground) setNotice({ kind: "err", msg: "Impossible de charger le tableau de bord" });
+      if (!isBackground)
+        setNotice({ kind: "err", msg: "Impossible de charger le tableau de bord" });
     } finally {
       setLoading(false);
     }
@@ -263,13 +275,22 @@ export default function AdminPage() {
   useEffect(() => {
     load();
     const id = setInterval(() => load(true), POLL_INTERVAL);
+    const onVisible = () => {
+      if (!document.hidden) load(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
       if (abortRef.current) abortRef.current.abort();
     };
   }, [load]);
 
-  const act = async (payload: Record<string, unknown>, key: string, okMsg: string): Promise<boolean> => {
+  const act = async (
+    payload: Record<string, unknown>,
+    key: string,
+    okMsg: string
+  ): Promise<boolean> => {
     setBusy((b) => ({ ...b, [key]: true }));
     setNotice(null);
     try {
@@ -291,16 +312,19 @@ export default function AdminPage() {
     }
   };
 
-  const onAddMatch = async (e: FormEvent) => {
+  const onAddMatch = async (e: FormEvent): Promise<boolean> => {
     e.preventDefault();
     const builtMarkets = matchForm.markets
       .map((g) => {
         const outcomes = g.outcomes
           .map((o) => ({ ...o, odds: Number(o.odds) || 0 }))
           .filter((o) => o.odds > 1);
-        return outcomes.length > 0 ? { key: g.key, label: g.label, short: g.short, outcomes } : null;
+        return outcomes.length > 0
+          ? { key: g.key, label: g.label, short: g.short, outcomes }
+          : null;
       })
       .filter((g): g is NonNullable<typeof g> => g !== null);
+
     const ok = await act(
       {
         action: "addMatch",
@@ -321,14 +345,23 @@ export default function AdminPage() {
     );
     if (ok) {
       setMatchForm({
-        home: "", away: "", league: "Premier League", oddsHome: "1.90", oddsDraw: "3.30", oddsAway: "3.10",
-        status: "upcoming", startsAt: "", homeLogo: "", awayLogo: "",
-        markets: MARKET_CATALOG.map((m) => ({ key: m.key, label: m.label, short: m.short, outcomes: m.outcomes.map((o) => ({ key: o.key, label: o.label, short: o.short, odds: "" })) })),
+        home: "",
+        away: "",
+        league: "Premier League",
+        oddsHome: "1.90",
+        oddsDraw: "3.30",
+        oddsAway: "3.10",
+        status: "upcoming",
+        startsAt: "",
+        homeLogo: "",
+        awayLogo: "",
+        markets: emptyMarkets(),
       });
     }
+    return ok;
   };
 
-  const onAddQuestion = async (e: FormEvent) => {
+  const onAddQuestion = async (e: FormEvent): Promise<boolean> => {
     e.preventDefault();
     const ok = await act(
       {
@@ -342,77 +375,89 @@ export default function AdminPage() {
       "add-q",
       "Pronostic publié"
     );
-    if (ok) setQuestionForm({ question: "", category: "Sport", oddsYes: "1.90", oddsNo: "1.80", hours: "72" });
+    if (ok) {
+      setQuestionForm({
+        question: "",
+        category: "Sport",
+        oddsYes: "1.90",
+        oddsNo: "1.80",
+        hours: "72",
+      });
+    }
+    return ok;
   };
 
-  const stats = panel?.stats;
-
   return (
-    <div className="px-3 pb-24 pt-5">
-      <AnimatePresence>
-        {notice && (
-          <motion.div
-            initial={{ opacity: 0, y: -14 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className={cn(
-              "mb-3 flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] font-medium",
-              notice.kind === "ok"
-                ? "border-win/30 bg-win/10 text-win"
-                : "border-bittersweet/30 bg-bittersweet/10 text-bittersweet"
-            )}
-          >
-            {notice.kind === "ok" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <X className="h-4 w-4 shrink-0" />}
-            <span className="flex-1">{notice.msg}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="flex items-end justify-between">
+    <div className="px-4 pb-8 pt-4">
+      <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.24em] text-betclic-red">PULSE ADMIN</p>
-          <h1 className="mt-1 font-display text-[30px] font-bold leading-none tracking-tight">Espace admin</h1>
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink">
+            Administration
+          </h1>
+          <p className="text-[12px] text-mist">Pilotage des matchs, pronostics et joueurs</p>
         </div>
         <button
+          type="button"
           onClick={() => load()}
-          className="glass-card flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] font-semibold text-mist transition-transform active:scale-95"
+          className="glass-card flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold text-ink active:bg-elev"
         >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} strokeWidth={2.4} />
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} strokeWidth={2.3} />
           Actualiser
         </button>
       </div>
 
-      {user?.role !== "admin" && (
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-bittersweet/30 bg-bittersweet/10 px-3.5 py-3 text-[12.5px] text-bittersweet">
+      {notice && (
+        <div
+          className={cn(
+            "mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-[12.5px] font-medium",
+            notice.kind === "ok"
+              ? "border-win/30 bg-win/10 text-win"
+              : "border-betclic-red/30 bg-betclic-red/8 text-betclic-red"
+          )}
+        >
+          {notice.kind === "ok" ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+          ) : (
+            <X className="h-4 w-4 shrink-0" />
+          )}
+          <span className="flex-1">{notice.msg}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="text-current/70"
+            aria-label="Fermer"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {user && user.role !== "admin" && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-betclic-red/30 bg-betclic-red/8 px-3.5 py-2.5 text-[12.5px] text-betclic-red">
           <ShieldCheck className="h-4 w-4 shrink-0" strokeWidth={2.2} />
           Accès réservé au compte administrateur.
         </div>
       )}
 
-      {/* Onglets */}
-      <div className="sticky top-12 z-30 -mx-3 mt-5 overflow-x-auto bg-white/90 px-3 pb-0 pt-2 backdrop-blur-xl">
-        <div className="flex items-center gap-1">
+      {/* Onglets collants */}
+      <div className="sticky top-[52px] z-30 -mx-4 mt-3 border-b border-edge/70 bg-deep/95 px-4 py-2 backdrop-blur-md">
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
           {TABS.map(({ key, label, Icon }) => {
             const active = tab === key;
             return (
               <button
                 key={key}
+                type="button"
                 onClick={() => setTab(key)}
                 className={cn(
-                  "relative flex items-center gap-1.5 whitespace-nowrap px-3.5 pb-2.5 pt-1 transition-colors",
-                  active ? "text-foreground" : "text-mist hover:text-dim"
+                  "flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 font-display text-[12px] transition-colors",
+                  active
+                    ? "border-ink bg-ink font-bold text-white"
+                    : "border-edge bg-white font-medium text-mist"
                 )}
               >
-                <Icon className="h-3.5 w-3.5" strokeWidth={active ? 2.6 : 2.1} />
-                <span className={cn("font-display text-[11.5px]", active && "font-bold")}>{label}</span>
-                <motion.span
-                  layoutId="admin-tab-underline"
-                  transition={{ type: "spring", stiffness: 520, damping: 40 }}
-                  className={cn(
-                    "absolute inset-x-2 -bottom-0 h-[2.5px] rounded-full",
-                    active ? "bg-betclic-red" : "bg-transparent"
-                  )}
-                />
+                <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+                <span>{label}</span>
               </button>
             );
           })}
@@ -420,27 +465,47 @@ export default function AdminPage() {
       </div>
 
       {loading || !panel ? (
-        <Skeletons />
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="shimmer h-[92px] rounded-2xl" />
+          <div className="shimmer h-[92px] rounded-2xl" />
+          <div className="shimmer h-[180px] rounded-2xl" />
+        </div>
       ) : (
-        <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="mt-4">
-          {tab === "dashboard" && <Dashboard stats={stats!} />}
+        <div className="mt-3">
+          {tab === "dashboard" && <Dashboard stats={panel.stats} />}
           {tab === "matches" && (
-            <MatchesTab matches={panel.matches} busy={busy} act={act} form={matchForm} setForm={setMatchForm} onAdd={onAddMatch} />
+            <MatchesTab
+              matches={panel.matches}
+              busy={busy}
+              act={act}
+              form={matchForm}
+              setForm={setMatchForm}
+              onAdd={onAddMatch}
+            />
           )}
           {tab === "questions" && (
-            <QuestionsTab questions={panel.questions} busy={busy} act={act} form={questionForm} setForm={setQuestionForm} onAdd={onAddQuestion} />
+            <QuestionsTab
+              questions={panel.questions}
+              busy={busy}
+              act={act}
+              form={questionForm}
+              setForm={setQuestionForm}
+              onAdd={onAddQuestion}
+            />
           )}
           {tab === "users" && (
-            <UsersTab users={panel.users} balanceForm={balanceForm} setBalanceForm={setBalanceForm} busy={busy} act={act} />
+            <UsersTab
+              users={panel.users}
+              balanceForm={balanceForm}
+              setBalanceForm={setBalanceForm}
+              busy={busy}
+              act={act}
+            />
           )}
           {tab === "bets" && <BetsTab bets={panel.bets} predBets={panel.predictionBets} />}
           {tab === "deposits" && <DepositsTab deposits={panel.deposits} />}
-        </motion.div>
+        </div>
       )}
-
-      <p className="mt-8 text-center text-[10px] leading-relaxed text-dim">
-        Espace réservé au compte administrateur · PULSE BETS
-      </p>
     </div>
   );
 }
@@ -448,65 +513,80 @@ export default function AdminPage() {
 /* ---------------- Dashboard ---------------- */
 
 function Dashboard({ stats }: { stats: PanelData["stats"] }) {
-  const cards: { label: string; value: string; Icon: typeof Trophy; tint?: string }[] = [
-    { label: "Joueurs", value: String(stats.totalUsers), Icon: Users, tint: "text-betclic-red" },
-    { label: "Paris totaux", value: String(stats.totalBets), Icon: Ticket },
-    { label: "En direct", value: String(stats.liveMatches), Icon: Trophy, tint: "text-live" },
-    { label: "Pronostics ouverts", value: String(stats.openQuestions), Icon: HelpCircle },
-    { label: "Gains versés", value: fmtEur(stats.payouts), Icon: TrendingUp },
-    { label: "Volume misé", value: fmtEur(stats.stake), Icon: CircleDollarSign },
-  ];
   const revenue = stats.stake - stats.payouts;
+  const cards: { label: string; value: string; Icon: typeof Trophy; accent?: boolean }[] = [
+    { label: "Joueurs", value: String(stats.totalUsers), Icon: Users },
+    { label: "Matchs live", value: String(stats.liveMatches), Icon: Trophy, accent: stats.liveMatches > 0 },
+    { label: "Pronostics ouverts", value: String(stats.openQuestions), Icon: HelpCircle },
+    { label: "Tickets totaux", value: String(stats.totalBets), Icon: Ticket },
+    { label: "Volume misé", value: eur(stats.stake), Icon: CircleDollarSign },
+    { label: "Gains versés", value: eur(stats.payouts), Icon: TrendingUp },
+  ];
 
   return (
-    <div>
+    <div className="flex flex-col gap-3">
+      <section className="glass-card rounded-2xl p-4">
+        <p className="text-[11px] font-medium text-dim">Marge brute (mises − gains sport)</p>
+        <div className="mt-1 flex items-baseline justify-between gap-2">
+          <p className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
+            {eur(revenue)}
+          </p>
+          <span
+            className={cn(
+              "rounded-full px-2.5 py-0.5 font-display text-[11px] font-bold",
+              revenue >= 0 ? "bg-win/12 text-win" : "bg-betclic-red/10 text-betclic-red"
+            )}
+          >
+            {revenue >= 0 ? "+" : ""}
+            {revenue.toFixed(0)} €
+          </span>
+        </div>
+      </section>
+
       <div className="grid grid-cols-2 gap-2">
         {cards.map((c) => (
           <div key={c.label} className="glass-card rounded-2xl p-3.5">
-            <c.Icon className={cn("h-4 w-4", c.tint ?? "text-mist")} strokeWidth={2.2} />
-            <p className="mt-2 font-display text-[17px] font-bold tabular-nums">{c.value}</p>
-            <p className="mt-0.5 text-[10px] font-semibold tracking-[0.16em] text-dim">{c.label.toUpperCase()}</p>
+            <c.Icon
+              className={cn("h-4 w-4", c.accent ? "text-betclic-red" : "text-dim")}
+              strokeWidth={2.1}
+            />
+            <p className="mt-2 font-display text-[17px] font-bold tabular-nums text-ink">
+              {c.value}
+            </p>
+            <p className="text-[11px] font-medium text-dim">{c.label}</p>
           </div>
         ))}
       </div>
 
-      <section className="mt-3 overflow-hidden rounded-[22px] border border-betclic-red/20 bg-[linear-gradient(135deg,#fef2f2,#fff5f5_55%,#f5f5f5)] p-4">
-        <p className="text-[10px] font-semibold tracking-[0.26em] text-mist">SANTÉ DE LA PLATEFORME</p>
-        <div className="mt-3 flex items-end justify-between">
-          <div>
-            <p className="font-display text-[26px] font-bold leading-none tabular-nums">{fmtEur(revenue)}</p>
-            <p className="mt-1 text-[12px] text-mist">Marge brute (mises − gains)</p>
-          </div>
-          <span
-            className={cn(
-              "rounded-lg px-2.5 py-1.5 text-[11px] font-bold",
-              revenue >= 0 ? "bg-win/10 text-win" : "bg-bittersweet/10 text-bittersweet"
-            )}
-          >
-            {revenue >= 0 ? "+" : ""}{revenue.toFixed(0)} €
-          </span>
-        </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-elev">
-          <div
-            className="h-full rounded-full bg-betclic-red"
-            style={{ width: `${Math.min(100, Math.max(4, (stats.payouts / (stats.stake || 1)) * 100))}%` }}
-          />
-        </div>
-      </section>
-
-      <section className="mt-3">
-        <AdminSectionTitle label="Répartition" />
-        <div className="mt-2.5 flex gap-2">
-          <StatPill label="Paris sportifs" value={stats.sportsBets} />
-          <StatPill label="Pronostics" value={stats.predBets} />
-          <StatPill label="Dépôts" value={stats.deposits} />
-        </div>
-      </section>
+      <div className="grid grid-cols-3 gap-2">
+        <StatPill label="Sport" value={stats.sportsBets} />
+        <StatPill label="Pronostics" value={stats.predBets} />
+        <StatPill label="Dépôts" value={stats.deposits} />
+      </div>
     </div>
   );
 }
 
 /* ---------------- Matchs ---------------- */
+
+interface MatchFormState {
+  home: string;
+  away: string;
+  league: string;
+  oddsHome: string;
+  oddsDraw: string;
+  oddsAway: string;
+  status: string;
+  startsAt: string;
+  homeLogo: string;
+  awayLogo: string;
+  markets: Array<{
+    key: string;
+    label: string;
+    short: string;
+    outcomes: Array<{ key: string; label: string; short: string; odds: string }>;
+  }>;
+}
 
 function MatchesTab({
   matches,
@@ -519,266 +599,259 @@ function MatchesTab({
   matches: AdminMatch[];
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
-  form: {
-    home: string;
-    away: string;
-    league: string;
-    oddsHome: string;
-    oddsDraw: string;
-    oddsAway: string;
-    status: string;
-    startsAt: string;
-    homeLogo: string;
-    awayLogo: string;
-    markets: Array<{
-      key: string;
-      label: string;
-      short: string;
-      outcomes: Array<{ key: string; label: string; short: string; odds: string }>;
-    }>;
-  };
-  setForm: (f: typeof form) => void;
-  onAdd: (e: FormEvent) => void;
+  form: MatchFormState;
+  setForm: (f: MatchFormState) => void;
+  onAdd: (e: FormEvent) => Promise<boolean>;
 }) {
-  const activeLeague = findLeague(form.league);
-  const clubOptions = (activeLeague?.clubs ?? []).map((c) => c.name);
+  const [formOpen, setFormOpen] = useState(false);
   const [openLogos, setOpenLogos] = useState(false);
   const [openMarkets, setOpenMarkets] = useState(false);
+
+  const activeLeague = findLeague(form.league);
+  const clubOptions = (activeLeague?.clubs ?? []).map((c) => c.name);
   const activeMarkets = form.markets.filter((g) => g.outcomes.some((o) => Number(o.odds) > 1));
 
   return (
-    <div>
-      <form onSubmit={onAdd} className="glass-card rounded-[20px] p-3.5">
-        <p className="flex items-center gap-1.5 font-display text-[12.5px] font-semibold">
-          <Plus className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-          Ajouter un match réel manuellement
-        </p>
-
-        {/* Ligue (suggestions) */}
-        <div className="mt-3">
-          <ComboBox
-            label="Championnat"
-            placeholder="Choisir une ligue…"
-            value={form.league}
-            onChange={(v) => {
-              if (findLeague(v)) {
-                setForm({ ...form, league: v, home: "", away: "", homeLogo: "", awayLogo: "" });
-              } else {
-                setForm({ ...form, league: v });
-              }
-            }}
-            options={LEAGUES.map((l) => ({ label: l.name, hint: l.country }))}
-          />
-        </div>
-
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <ComboBox
-            placeholder="Équipe domicile"
-            value={form.home}
-            onChange={(v, logo) =>
-              setForm({
-                ...form,
-                home: v,
-                homeLogo: typeof logo === "string" && logo !== "" ? logo : form.homeLogo,
-              })
-            }
-            options={clubOptions.map((name) => ({ label: name, logo: activeLeague ? activeLeague.clubs.find((c) => c.name === name)?.logo ?? null : null }))}
-          />
-          <ComboBox
-            placeholder="Équipe extérieure"
-            value={form.away}
-            onChange={(v, logo) =>
-              setForm({
-                ...form,
-                away: v,
-                awayLogo: typeof logo === "string" && logo !== "" ? logo : form.awayLogo,
-              })
-            }
-            options={clubOptions.map((name) => ({ label: name, logo: activeLeague ? activeLeague.clubs.find((c) => c.name === name)?.logo ?? null : null }))}
-          />
-        </div>
-
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <AdminInput label="Date & heure de coup d'envoi" type="datetime-local" value={form.startsAt} onChange={(v) => setForm({ ...form, startsAt: v })} />
-          <div className="flex flex-col">
-            <span className="mb-1 block text-[10px] font-semibold tracking-[0.14em] text-dim">STATUT</span>
-            <div className="grid flex-1 grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
-              {[
-                { v: "upcoming", label: "À venir" },
-                { v: "live", label: "En direct" },
-              ].map(({ v, label }) => {
-                const active = form.status === v;
-                return (
-                  <button
-                    type="button"
-                    key={v}
-                    onClick={() => setForm({ ...form, status: v })}
-                    className={cn(
-                      "relative rounded-lg py-1.5 font-display text-[11px] transition-colors",
-                      active ? "font-bold text-white" : "font-medium text-mist"
-                    )}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="add-match-status"
-                        transition={{ type: "spring", stiffness: 480, damping: 38 }}
-                        className="absolute inset-0 rounded-lg bg-betclic-red"
-                      />
-                    )}
-                    <span className="relative z-10">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <AdminInput label="Cote domicile" value={form.oddsHome} onChange={(v) => setForm({ ...form, oddsHome: v })} />
-          <AdminInput label="Cote nul" value={form.oddsDraw} onChange={(v) => setForm({ ...form, oddsDraw: v })} />
-          <AdminInput label="Cote ext." value={form.oddsAway} onChange={(v) => setForm({ ...form, oddsAway: v })} />
-        </div>
-
-        {/* Logos (URL) */}
-        <div className="mt-2 overflow-hidden rounded-xl border border-edge bg-elev/40">
-          <button
-            type="button"
-            onClick={() => setOpenLogos((s) => !s)}
-            className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
-          >
-            <span className="flex-1 text-[10.5px] font-semibold tracking-[0.14em] text-dim">LOGOS DES ÉQUIPES (URL)</span>
-            <span className="text-[10px] text-dim">Auto selon le club</span>
-            <motion.span animate={{ rotate: openLogos ? 180 : 0 }} transition={{ duration: 0.18 }} className="text-mist">
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.4} />
-            </motion.span>
-          </button>
-          <AnimatePresence initial={false}>
-            {openLogos && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                className="overflow-hidden"
-              >
-                <div className="grid grid-cols-2 gap-2 px-2.5 pb-2.5">
-                  <AdminInput label="Logo domicile" placeholder="https://…" value={form.homeLogo} onChange={(v) => setForm({ ...form, homeLogo: v })} />
-                  <AdminInput label="Logo extérieur" placeholder="https://…" value={form.awayLogo} onChange={(v) => setForm({ ...form, awayLogo: v })} />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Marchés avec cotes libres */}
-        <div className="mt-2 overflow-hidden rounded-xl border bg-elev/40 transition-colors">
-          <button
-            type="button"
-            onClick={() => setOpenMarkets((s) => !s)}
-            className={cn("flex w-full items-center gap-2 px-2.5 py-2 text-left", activeMarkets.length > 0 && "border-b border-edge bg-white/50")}
-          >
-            <span className="flex-1 text-[10.5px] font-semibold tracking-[0.14em] text-dim">MARCHÉS & COTES LIBRES</span>
-            {activeMarkets.length > 0 && (
-              <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-[9.5px] font-bold text-betclic-red">
-                {activeMarkets.length} marché{activeMarkets.length > 1 ? "s" : ""} rempli{activeMarkets.length > 1 ? "s" : ""}
-              </span>
-            )}
-            <span className="text-[10px] text-dim">Optionnel</span>
-            <motion.span animate={{ rotate: openMarkets ? 180 : 0 }} transition={{ duration: 0.18 }} className="text-mist">
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.4} />
-            </motion.span>
-          </button>
-          <AnimatePresence initial={false}>
-            {openMarkets && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.18 }}
-                className="overflow-hidden"
-              >
-                <div className="px-2.5 pb-2.5 pt-2">
-                  <p className="mb-2 text-[10px] text-dim">Laisse une cote vide pour masquer le marché</p>
-                  <div className="flex flex-col gap-1.5">
-                    {form.markets.map((g, gi) => {
-                      const anyOdds = g.outcomes.some((o) => Number(o.odds) > 1);
-                      return (
-                        <div
-                          key={g.key}
-                          className={cn(
-                            "rounded-xl border border-edge bg-elev/60 p-2 transition-colors",
-                            anyOdds && "border-betclic-red/30 bg-elev"
-                          )}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-[11.5px] font-semibold">{g.label}</span>
-                            <span className="ml-auto shrink-0 rounded-md bg-edge px-1.5 py-0.5 text-[9px] font-bold text-mist">{g.short}</span>
-                          </div>
-                          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                            {g.outcomes.map((o, oi) => {
-                              const filled = Number(o.odds) > 1;
-                              return (
-                                <label key={o.key} className="block">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="1.01"
-                                    placeholder={o.short}
-                                    value={o.odds}
-                                    onChange={(e) =>
-                                      setForm({
-                                        ...form,
-                                        markets: form.markets.map((mg, mgi) =>
-                                          mgi === gi
-                                            ? { ...mg, outcomes: mg.outcomes.map((mo, moi) => (moi === oi ? { ...mo, odds: e.target.value } : mo)) }
-                                            : mg
-                                        ),
-                                      })
-                                    }
-                                    className={cn(
-                                      "w-full rounded-lg border border-edge bg-white px-1.5 py-1.5 text-center text-[11px] font-semibold tabular-nums text-ink outline-none transition-colors placeholder:text-dim focus:border-betclic-red/50",
-                                      filled && "border-betclic-red/40"
-                                    )}
-                                  />
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
+    <div className="flex flex-col gap-3">
+      {/* Tiroir repliable pour ne pas encombrer l'écran mobile */}
+      <div className="glass-card overflow-hidden rounded-2xl">
         <button
-          type="submit"
-          disabled={!form.home || !form.away || busy["add-match"]}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] py-2.5 font-display text-[12.5px] font-bold text-white disabled:opacity-60"
+          type="button"
+          onClick={() => setFormOpen((s) => !s)}
+          className="flex w-full items-center justify-between px-4 py-3.5 text-left"
         >
-          {busy["add-match"] ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} /> : <CalendarPlus className="h-4 w-4" strokeWidth={2.4} />}
-          Ajouter
+          <span className="flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
+            <Plus className="h-4 w-4 text-betclic-red" strokeWidth={2.5} />
+            Ajouter un match
+          </span>
+          <ChevronDown
+            className={cn("h-4 w-4 text-dim transition-transform", formOpen && "rotate-180")}
+            strokeWidth={2.2}
+          />
         </button>
-      </form>
 
-      <section className="mt-4">
-        <AdminSectionTitle label="Matchs" count={matches.length} />
-        <div className="mt-2.5 flex flex-col gap-2">
-          {matches.map((m) => (
-            <MatchCard key={m.id} m={m} busy={busy} act={act} />
-          ))}
-        </div>
-      </section>
+        {formOpen && (
+          <form
+            onSubmit={async (e) => {
+              const ok = await onAdd(e);
+              if (ok) setFormOpen(false);
+            }}
+            className="border-t border-edge p-3.5"
+          >
+            <ComboBox
+              label="Championnat"
+              placeholder="Choisir une ligue…"
+              value={form.league}
+              onChange={(v) => {
+                if (findLeague(v)) {
+                  setForm({ ...form, league: v, home: "", away: "", homeLogo: "", awayLogo: "" });
+                } else {
+                  setForm({ ...form, league: v });
+                }
+              }}
+              options={LEAGUES.map((l) => ({ label: l.name, hint: l.country }))}
+            />
+
+            <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <ComboBox
+                label="Domicile"
+                placeholder="Équipe domicile"
+                value={form.home}
+                onChange={(v, logo) =>
+                  setForm({
+                    ...form,
+                    home: v,
+                    homeLogo: typeof logo === "string" && logo !== "" ? logo : form.homeLogo,
+                  })
+                }
+                options={clubOptions.map((name) => ({
+                  label: name,
+                  logo: activeLeague
+                    ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
+                    : null,
+                }))}
+              />
+              <ComboBox
+                label="Extérieur"
+                placeholder="Équipe extérieure"
+                value={form.away}
+                onChange={(v, logo) =>
+                  setForm({
+                    ...form,
+                    away: v,
+                    awayLogo: typeof logo === "string" && logo !== "" ? logo : form.awayLogo,
+                  })
+                }
+                options={clubOptions.map((name) => ({
+                  label: name,
+                  logo: activeLeague
+                    ? (activeLeague.clubs.find((c) => c.name === name)?.logo ?? null)
+                    : null,
+                }))}
+              />
+            </div>
+
+            <div className="mt-2.5 grid grid-cols-1 gap-2">
+              <AdminInput
+                label="Coup d'envoi"
+                type="datetime-local"
+                value={form.startsAt}
+                onChange={(v) => setForm({ ...form, startsAt: v })}
+              />
+              <div>
+                <span className="mb-1 block text-[11px] font-semibold text-mist">Statut initial</span>
+                <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
+                  {[
+                    { v: "upcoming", label: "À venir" },
+                    { v: "live", label: "En direct" },
+                  ].map(({ v, label }) => {
+                    const active = form.status === v;
+                    return (
+                      <button
+                        type="button"
+                        key={v}
+                        onClick={() => setForm({ ...form, status: v })}
+                        className={cn(
+                          "h-9 rounded-lg font-display text-[12px] transition-colors",
+                          active ? "bg-ink font-bold text-white" : "font-medium text-mist"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-2.5 grid grid-cols-3 gap-2">
+              <AdminInput
+                label="Cote 1"
+                value={form.oddsHome}
+                onChange={(v) => setForm({ ...form, oddsHome: v })}
+              />
+              <AdminInput
+                label="Cote N"
+                value={form.oddsDraw}
+                onChange={(v) => setForm({ ...form, oddsDraw: v })}
+              />
+              <AdminInput
+                label="Cote 2"
+                value={form.oddsAway}
+                onChange={(v) => setForm({ ...form, oddsAway: v })}
+              />
+            </div>
+
+            {/* Logos optionnels */}
+            <div className="mt-2.5 overflow-hidden rounded-xl border border-edge bg-elev/40">
+              <button
+                type="button"
+                onClick={() => setOpenLogos((s) => !s)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[11.5px] font-semibold text-mist"
+              >
+                <span>Logos personnalisés (optionnel)</span>
+                <ChevronDown
+                  className={cn("h-3.5 w-3.5 transition-transform", openLogos && "rotate-180")}
+                />
+              </button>
+              {openLogos && (
+                <div className="grid grid-cols-1 gap-2 border-t border-edge p-2.5">
+                  <AdminInput
+                    label="URL logo domicile"
+                    placeholder="https://…"
+                    value={form.homeLogo}
+                    onChange={(v) => setForm({ ...form, homeLogo: v })}
+                  />
+                  <AdminInput
+                    label="URL logo extérieur"
+                    placeholder="https://…"
+                    value={form.awayLogo}
+                    onChange={(v) => setForm({ ...form, awayLogo: v })}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Marchés optionnels */}
+            <div className="mt-2 overflow-hidden rounded-xl border border-edge bg-elev/40">
+              <button
+                type="button"
+                onClick={() => setOpenMarkets((s) => !s)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[11.5px] font-semibold text-mist"
+              >
+                <span>
+                  Marchés libres{" "}
+                  {activeMarkets.length > 0 && `(${activeMarkets.length} actifs)`}
+                </span>
+                <ChevronDown
+                  className={cn("h-3.5 w-3.5 transition-transform", openMarkets && "rotate-180")}
+                />
+              </button>
+              {openMarkets && (
+                <div className="flex flex-col gap-2 border-t border-edge p-2.5">
+                  {form.markets.map((g, gi) => (
+                    <div key={g.key} className="rounded-xl border border-edge bg-white p-2.5">
+                      <p className="text-[11.5px] font-semibold text-ink">{g.label}</p>
+                      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                        {g.outcomes.map((o, oi) => (
+                          <input
+                            key={o.key}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder={o.short}
+                            value={o.odds}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                markets: form.markets.map((mg, mgi) =>
+                                  mgi === gi
+                                    ? {
+                                        ...mg,
+                                        outcomes: mg.outcomes.map((mo, moi) =>
+                                          moi === oi ? { ...mo, odds: e.target.value } : mo
+                                        ),
+                                      }
+                                    : mg
+                                ),
+                              })
+                            }
+                            className="h-10 w-full rounded-lg border border-edge bg-elev/60 px-2 text-center text-[16px] font-semibold tabular-nums text-ink outline-none focus:border-ink"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={!form.home || !form.away || busy["add-match"]}
+              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red font-display text-[13.5px] font-bold text-white disabled:opacity-55"
+            >
+              {busy["add-match"] ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CalendarPlus className="h-4 w-4" strokeWidth={2.2} />
+              )}
+              Publier le match
+            </button>
+          </form>
+        )}
+      </div>
+
+      <AdminSectionTitle label="Matchs programmés" count={matches.length} />
+      <div className="flex flex-col gap-2.5">
+        {matches.map((m) => (
+          <AdminMatchCard key={m.id} m={m} busy={busy} act={act} />
+        ))}
+      </div>
     </div>
   );
 }
 
-/* ---------------- Carte match (score manuel / lifecycle) ---------------- */
-
-function MatchCard({
+function AdminMatchCard({
   m,
   busy,
   act,
@@ -790,51 +863,60 @@ function MatchCard({
   const isManual = m.source === "manual";
 
   return (
-    <div className={cn("glass-card rounded-2xl px-3.5 py-3", m.suspended && "opacity-60")}>
-      <div className="flex items-center gap-3">
+    <div className={cn("glass-card rounded-2xl p-3.5", m.suspended && "opacity-70")}>
+      <div className="flex items-center gap-2.5">
         <div className="flex shrink-0 -space-x-2">
-          <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} size="sm" />
-          <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} size="sm" />
+          <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} />
+          <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-[13px] font-semibold">
-            {m.homeTeam} · {m.awayTeam}
+          <p className="truncate font-display text-[13.5px] font-bold text-ink">
+            {m.homeTeam} – {m.awayTeam}
           </p>
-          <p className="truncate text-[11px] text-dim">
-            {m.league}
-            {m.status === "live" ? ` · LIVE · ${m.minute ?? ""}` : m.status === "finished" ? " · Terminé" : ` · ${formatKickoff(new Date(m.startsAt))}`}
-            {m.homeScore != null && ` · ${m.homeScore}–${m.awayScore}`}
+          <p className="truncate text-[11.5px] text-mist">
+            {m.league} ·{" "}
+            {m.status === "live"
+              ? `Direct ${m.minute ?? ""}`
+              : m.status === "finished"
+                ? "Terminé"
+                : formatKickoff(new Date(m.startsAt))}
+            {m.homeScore != null && ` · ${m.homeScore}-${m.awayScore}`}
           </p>
-          {isManual && (
-            <span
-              className={cn(
-                "mt-1 inline-block rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-[0.12em]",
-                m.status === "live" ? "bg-betclic-red/10 text-betclic-red" : m.status === "finished" ? "bg-elev text-mist" : "bg-elev/70 text-dim"
-              )}
-            >
-              RÉEL
-            </span>
-          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Toggle
             checked={!m.suspended}
             onChange={(v) =>
-              act({ action: "toggleMatch", matchId: m.id, suspended: !v }, `tg-${m.id}`, v ? "Match réactivé" : "Match suspendu")
+              act(
+                { action: "toggleMatch", matchId: m.id, suspended: !v },
+                `tg-${m.id}`,
+                v ? "Match réactivé" : "Match suspendu"
+              )
             }
           />
           <button
+            type="button"
             onClick={() => act({ action: "deleteMatch", matchId: m.id }, `del-${m.id}`, "Match supprimé")}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-bittersweet/10 text-bittersweet transition-transform active:scale-90"
+            className="grid h-9 w-9 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red active:scale-95"
             aria-label="Supprimer"
           >
-            {busy[`del-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
+            {busy[`del-${m.id}`] ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" strokeWidth={2.1} />
+            )}
           </button>
         </div>
       </div>
 
-      {/* Commandes score / cycle de vie (uniquement matchs réels) */}
-      {isManual && <MatchControls m={m} busy={busy} act={act} />}
+      {isManual && (
+        <MatchControls
+          key={`${m.id}-${m.homeScore ?? 0}-${m.awayScore ?? 0}`}
+          m={m}
+          busy={busy}
+          act={act}
+        />
+      )}
     </div>
   );
 }
@@ -851,123 +933,147 @@ function MatchControls({
   const [home, setHome] = useState(String(m.homeScore ?? 0));
   const [away, setAway] = useState(String(m.awayScore ?? 0));
   const [mp, setMp] = useState("");
-  const settled = m.status === "finished" && (m.homeScore ?? 0) + (m.awayScore ?? 0) >= 0;
-
-  const go = (p: Record<string, unknown>, key: string, msg: string) => act(p, key, msg);
 
   if (m.status === "upcoming") {
     return (
-      <div className="mt-3 flex items-center gap-2 rounded-xl border border-edge bg-elev/40 p-2">
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-edge pt-2.5">
+        <span className="text-[11px] text-dim">Démarrage auto à l&apos;heure prévue</span>
         <button
-          onClick={() => go({ action: "startMatch", matchId: m.id }, `start-${m.id}`, "Match passé en direct")}
+          type="button"
+          onClick={() =>
+            act({ action: "startMatch", matchId: m.id }, `start-${m.id}`, "Match passé en direct")
+          }
           disabled={busy[`start-${m.id}`]}
-          className="flex items-center gap-1.5 rounded-lg bg-betclic-red px-3 py-1.5 text-[10.5px] font-bold text-white disabled:opacity-60"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60"
         >
-          {busy[`start-${m.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" strokeWidth={2.4} />}
-          Passer en direct
+          {busy[`start-${m.id}`] ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Play className="h-3.5 w-3.5" strokeWidth={2.4} />
+          )}
+          Lancer en direct
         </button>
-        <span className="text-[10px] text-mist">Le match débutera automatiquement si vous ignorez.</span>
       </div>
     );
   }
 
   if (m.status === "finished") {
     return (
-      <div className="mt-3 flex items-center gap-2 rounded-xl border border-edge bg-elev/40 p-2">
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-edge pt-2.5">
+        <span className="text-[11.5px] text-mist">
+          Score final : <strong>{m.homeScore}–{m.awayScore}</strong>
+        </span>
         <button
-          onClick={() => go({ action: "reopenMatch", matchId: m.id }, `reopen-${m.id}`, "Match rouvert")}
+          type="button"
+          onClick={() =>
+            act({ action: "reopenMatch", matchId: m.id }, `reopen-${m.id}`, "Match rouvert")
+          }
           disabled={busy[`reopen-${m.id}`]}
-          className="flex items-center gap-1.5 rounded-lg bg-elev px-3 py-1.5 text-[10.5px] font-bold text-dim disabled:opacity-60"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-elev px-3 font-display text-[11.5px] font-semibold text-ink disabled:opacity-60"
         >
-          {busy[`reopen-${m.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" strokeWidth={2.4} />}
+          {busy[`reopen-${m.id}`] ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RotateCcw className="h-3.5 w-3.5" strokeWidth={2.2} />
+          )}
           Rouvrir
         </button>
-        <span className="text-[10px] text-mist">Paris réglés : {settled ? "oui" : "non"} · résultat final {m.homeScore}–{m.awayScore}</span>
       </div>
     );
   }
 
-  // live
   return (
-    <div className="mt-3 rounded-xl border border-edge bg-elev/40 p-2">
+    <div className="mt-3 rounded-xl bg-elev/60 p-2.5">
       <div className="flex items-center justify-between gap-2">
-        {/* But domicile */}
-        <div className="flex flex-1 flex-col items-center gap-1">
-          <button
-            onClick={() => go({ action: "markGoal", matchId: m.id, team: "home" }, `gh-${m.id}`, "But domicile ajouté")}
-            disabled={busy[`gh-${m.id}`]}
-            className="flex w-full items-center justify-center gap-1 rounded-lg border border-win/30 bg-win/10 py-1.5 text-[11px] font-bold text-win disabled:opacity-60 active:scale-95"
-          >
-            {busy[`gh-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" strokeWidth={2.4} />}
-            + BUT
-          </button>
-          <span className="text-[9.5px] text-mist">{m.homeTeam}</span>
-        </div>
+        <button
+          type="button"
+          onClick={() =>
+            act({ action: "markGoal", matchId: m.id, team: "home" }, `gh-${m.id}`, "But domicile")
+          }
+          disabled={busy[`gh-${m.id}`]}
+          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-win/30 bg-white text-[11.5px] font-bold text-win active:scale-95 disabled:opacity-60"
+        >
+          {busy[`gh-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" />}
+          +1 Dom.
+        </button>
 
-        {/* Score */}
         <div className="flex items-center gap-1">
           <input
             inputMode="numeric"
             value={home}
             onChange={(e) => setHome(e.target.value.replace(/[^\d]/g, ""))}
-            className="h-9 w-9 rounded-lg border border-edge bg-white/70 text-center font-display text-[15px] font-bold outline-none focus:border-win"
+            className="h-9 w-10 rounded-lg border border-edge bg-white text-center font-display text-[16px] font-bold text-ink outline-none focus:border-ink"
           />
-          <span className="font-display text-[13px] text-dim">–</span>
+          <span className="text-dim">–</span>
           <input
             inputMode="numeric"
             value={away}
             onChange={(e) => setAway(e.target.value.replace(/[^\d]/g, ""))}
-            className="h-9 w-9 rounded-lg border border-edge bg-white/70 text-center font-display text-[15px] font-bold outline-none focus:border-win"
+            className="h-9 w-10 rounded-lg border border-edge bg-white text-center font-display text-[16px] font-bold text-ink outline-none focus:border-ink"
           />
         </div>
 
-        {/* But extérieur */}
-        <div className="flex flex-1 flex-col items-center gap-1">
-          <button
-            onClick={() => go({ action: "markGoal", matchId: m.id, team: "away" }, `ga-${m.id}`, "But extérieur ajouté")}
-            disabled={busy[`ga-${m.id}`]}
-            className="flex w-full items-center justify-center gap-1 rounded-lg border border-win/30 bg-win/10 py-1.5 text-[11px] font-bold text-win disabled:opacity-60 active:scale-95"
-          >
-            {busy[`ga-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" strokeWidth={2.4} />}
-            + BUT
-          </button>
-          <span className="text-[9.5px] text-mist">{m.awayTeam}</span>
-        </div>
+        <button
+          type="button"
+          onClick={() =>
+            act({ action: "markGoal", matchId: m.id, team: "away" }, `ga-${m.id}`, "But extérieur")
+          }
+          disabled={busy[`ga-${m.id}`]}
+          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-win/30 bg-white text-[11.5px] font-bold text-win active:scale-95 disabled:opacity-60"
+        >
+          {busy[`ga-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" />}
+          +1 Ext.
+        </button>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mt-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-mist">Min</span>
+          <span className="text-[11px] font-medium text-mist">Min.</span>
           <input
             inputMode="numeric"
             value={mp}
             onChange={(e) => setMp(e.target.value.replace(/[^\d]/g, ""))}
-            placeholder={m.minute ?? "0"}
-            className="h-7 w-12 rounded-lg border border-edge bg-white/70 px-1.5 text-center text-[11px] font-semibold outline-none focus:border-win"
+            placeholder={m.minute ?? "45"}
+            className="h-8 w-14 rounded-lg border border-edge bg-white px-2 text-center text-[16px] font-semibold text-ink outline-none focus:border-ink"
           />
           <button
-            onClick={() => go({ action: "setMinute", matchId: m.id, minute: `${mp || "0"}'` }, `min-${m.id}`, `Minute ${mp}' enregistrée`)}
+            type="button"
+            onClick={() =>
+              act(
+                { action: "setMinute", matchId: m.id, minute: `${mp || "0"}'` },
+                `min-${m.id}`,
+                `Minute ${mp}' enregistrée`
+              )
+            }
             disabled={busy[`min-${m.id}`] || !mp}
-            className="rounded-lg bg-elev px-2.5 py-1.5 text-[10px] font-bold text-dim disabled:opacity-50"
+            className="h-8 rounded-lg bg-white px-2.5 text-[11.5px] font-bold text-ink border border-edge disabled:opacity-50"
           >
             OK
           </button>
         </div>
 
-        <div className="flex-1" />
-
         <button
+          type="button"
           onClick={() =>
-            go(
-              { action: "finishMatch", matchId: m.id, homeScore: Number(home) || 0, awayScore: Number(away) || 0 },
+            act(
+              {
+                action: "finishMatch",
+                matchId: m.id,
+                homeScore: Number(home) || 0,
+                awayScore: Number(away) || 0,
+              },
               `fin-${m.id}`,
-              "Match terminé, paris réglés"
+              "Match terminé et paris réglés"
             )
           }
           disabled={busy[`fin-${m.id}`]}
-          className="flex items-center gap-1.5 rounded-lg border border-betclic-red/40 bg-betclic-red/10 px-3 py-1.5 text-[10.5px] font-bold text-betclic-red disabled:opacity-60 active:scale-95"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60"
         >
-          {busy[`fin-${m.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" strokeWidth={2.4} />}
+          {busy[`fin-${m.id}`] ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Flag className="h-3.5 w-3.5" strokeWidth={2.2} />
+          )}
           Terminer
         </button>
       </div>
@@ -990,19 +1096,36 @@ function QuestionsTab({
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
   form: { question: string; category: string; oddsYes: string; oddsNo: string; hours: string };
   setForm: (f: { question: string; category: string; oddsYes: string; oddsNo: string; hours: string }) => void;
-  onAdd: (e: FormEvent) => void;
+  onAdd: (e: FormEvent) => Promise<boolean>;
 }) {
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ question: "", category: "Sport", oddsYes: "1.90", oddsNo: "1.80" });
+  const [editForm, setEditForm] = useState({
+    question: "",
+    category: "Sport",
+    oddsYes: "1.90",
+    oddsNo: "1.80",
+  });
 
   const startEdit = (q: AdminQuestion) => {
     setEditingId(q.id);
-    setEditForm({ question: q.question, category: q.category, oddsYes: String(q.oddsYes), oddsNo: String(q.oddsNo) });
+    setEditForm({
+      question: q.question,
+      category: q.category,
+      oddsYes: String(q.oddsYes),
+      oddsNo: String(q.oddsNo),
+    });
   };
 
   const saveEdit = async (id: number) => {
     const ok = await act(
-      { action: "editQuestion", questionId: id, ...editForm, oddsYes: Number(editForm.oddsYes), oddsNo: Number(editForm.oddsNo) },
+      {
+        action: "editQuestion",
+        questionId: id,
+        ...editForm,
+        oddsYes: Number(editForm.oddsYes),
+        oddsNo: Number(editForm.oddsNo),
+      },
       `edit-q-${id}`,
       "Question mise à jour"
     );
@@ -1010,144 +1133,238 @@ function QuestionsTab({
   };
 
   return (
-    <div>
-      <form onSubmit={onAdd} className="glass-card rounded-[20px] p-3.5">
-        <p className="flex items-center gap-1.5 font-display text-[12.5px] font-semibold">
-          <HelpCircle className="h-4 w-4 text-betclic-red" strokeWidth={2.4} />
-          Ajouter une question de pronostic
-        </p>
-        <AdminInput label="Question (Oui/Non)" value={form.question} className="mt-2" onChange={(v) => setForm({ ...form, question: v })} />
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-dim">Catégorie</label>
-            <select
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              aria-label="Catégorie"
-              className="mt-1 w-full rounded-xl border border-edge bg-elev px-3 py-2 text-[12px] font-medium text-ink focus:border-betclic-red focus:outline-none"
-            >
-              <option value="Sport">Sport</option>
-              <option value="Actus">Actus</option>
-              <option value="Crypto">Crypto</option>
-              <option value="Culture">Culture</option>
-            </select>
-          </div>
-          <AdminInput label="Cote Oui" value={form.oddsYes} onChange={(v) => setForm({ ...form, oddsYes: v })} />
-          <AdminInput label="Cote Non" value={form.oddsNo} onChange={(v) => setForm({ ...form, oddsNo: v })} />
-        </div>
-        <AdminInput label="Échéance (heures)" value={form.hours} className="mt-2" onChange={(v) => setForm({ ...form, hours: v })} />
+    <div className="flex flex-col gap-3">
+      <div className="glass-card overflow-hidden rounded-2xl">
         <button
-          type="submit"
-          disabled={!form.question || busy["add-q"]}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#E10014,#FB6962)] py-2.5 font-display text-[12.5px] font-bold text-white disabled:opacity-60"
+          type="button"
+          onClick={() => setFormOpen((s) => !s)}
+          className="flex w-full items-center justify-between px-4 py-3.5 text-left"
         >
-          {busy["add-q"] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" strokeWidth={2.4} />}
-          Publier
+          <span className="flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
+            <Plus className="h-4 w-4 text-betclic-red" strokeWidth={2.5} />
+            Nouvelle question Oui / Non
+          </span>
+          <ChevronDown
+            className={cn("h-4 w-4 text-dim transition-transform", formOpen && "rotate-180")}
+            strokeWidth={2.2}
+          />
         </button>
-      </form>
 
-      <section className="mt-4">
-        <AdminSectionTitle label="Questions" count={questions.length} />
-        <div className="mt-2.5 flex flex-col gap-2">
-          {questions.map((q) => {
-            const isEditing = editingId === q.id;
-            return (
-              <div key={q.id} className="glass-card rounded-2xl px-3.5 py-3">
-                {isEditing ? (
-                  <div className="flex flex-col gap-2">
-                    <AdminInput label="Question" value={editForm.question} onChange={(v) => setEditForm({ ...editForm, question: v })} />
-                    <div className="grid grid-cols-3 gap-2">
+        {formOpen && (
+          <form
+            onSubmit={async (e) => {
+              const ok = await onAdd(e);
+              if (ok) setFormOpen(false);
+            }}
+            className="border-t border-edge p-3.5"
+          >
+            <AdminInput
+              label="Intitulé de la question"
+              value={form.question}
+              onChange={(v) => setForm({ ...form, question: v })}
+              placeholder="Ex. Le PSG gagnera-t-il ce soir ?"
+            />
+            <div className="mt-2.5 grid grid-cols-3 gap-2">
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  aria-label="Catégorie"
+                  className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink outline-none focus:border-ink"
+                >
+                  <option value="Sport">Sport</option>
+                  <option value="Actus">Actus</option>
+                  <option value="Crypto">Crypto</option>
+                  <option value="Culture">Culture</option>
+                </select>
+              </label>
+              <AdminInput
+                label="Cote Oui"
+                value={form.oddsYes}
+                onChange={(v) => setForm({ ...form, oddsYes: v })}
+              />
+              <AdminInput
+                label="Cote Non"
+                value={form.oddsNo}
+                onChange={(v) => setForm({ ...form, oddsNo: v })}
+              />
+            </div>
+            <AdminInput
+              label="Échéance (heures)"
+              value={form.hours}
+              className="mt-2.5"
+              onChange={(v) => setForm({ ...form, hours: v })}
+            />
+            <button
+              type="submit"
+              disabled={!form.question || busy["add-q"]}
+              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red font-display text-[13.5px] font-bold text-white disabled:opacity-55"
+            >
+              {busy["add-q"] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Publier
+            </button>
+          </form>
+        )}
+      </div>
+
+      <AdminSectionTitle label="Questions" count={questions.length} />
+      <div className="flex flex-col gap-2.5">
+        {questions.map((q) => {
+          const isEditing = editingId === q.id;
+          return (
+            <div key={q.id} className="glass-card rounded-2xl p-3.5">
+              {isEditing ? (
+                <div className="flex flex-col gap-2.5">
+                  <AdminInput
+                    label="Question"
+                    value={editForm.question}
+                    onChange={(v) => setEditForm({ ...editForm, question: v })}
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
                       <select
                         value={editForm.category}
                         onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
                         aria-label="Catégorie"
-                        className="rounded-xl border border-edge bg-elev px-3 py-2 text-[12px] font-medium text-ink"
+                        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink"
                       >
                         <option value="Sport">Sport</option>
                         <option value="Actus">Actus</option>
                         <option value="Crypto">Crypto</option>
                         <option value="Culture">Culture</option>
                       </select>
-                      <AdminInput label="Oui" value={editForm.oddsYes} onChange={(v) => setEditForm({ ...editForm, oddsYes: v })} />
-                      <AdminInput label="Non" value={editForm.oddsNo} onChange={(v) => setEditForm({ ...editForm, oddsNo: v })} />
-                    </div>
-                    <div className="flex gap-2 mt-1">
-                      <button
-                        onClick={() => saveEdit(q.id)}
-                        disabled={busy[`edit-q-${q.id}`]}
-                        className="flex-1 rounded-lg bg-betclic-red py-1.5 text-[11px] font-bold text-white"
-                      >
-                        Enregistrer
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="rounded-lg bg-elev px-3 py-1.5 text-[11px] font-bold text-mist"
-                      >
-                        Annuler
-                      </button>
-                    </div>
+                    </label>
+                    <AdminInput
+                      label="Oui"
+                      value={editForm.oddsYes}
+                      onChange={(v) => setEditForm({ ...editForm, oddsYes: v })}
+                    />
+                    <AdminInput
+                      label="Non"
+                      value={editForm.oddsNo}
+                      onChange={(v) => setEditForm({ ...editForm, oddsNo: v })}
+                    />
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-[13px] font-medium leading-snug">{q.question}</p>
-                      <span
-                        className={cn(
-                          "shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold",
-                          q.status === "open" ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-mist"
-                        )}
-                      >
-                        {q.status === "open" ? "En cours" : `Résolue · ${q.resolution === "yes" ? "Oui" : "Non"}`}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-dim">
-                      {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · {fmtEur(q.volume)} misés
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(q.id)}
+                      disabled={busy[`edit-q-${q.id}`]}
+                      className="h-9 flex-1 rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white"
+                    >
+                      Enregistrer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="h-9 rounded-xl bg-elev px-4 font-display text-[12px] font-semibold text-mist"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-display text-[13.5px] font-semibold leading-snug text-ink">
+                      {q.question}
                     </p>
-                    <div className="mt-2.5 flex items-center gap-2">
-                      {q.status === "open" ? (
-                        <>
-                          <button
-                            onClick={() => act({ action: "resolveQuestion", questionId: q.id, resolution: "yes" }, `ry-${q.id}`, "Résolu : Oui")}
-                            className="flex-1 rounded-lg bg-win/10 py-1.5 text-[11px] font-bold text-win"
-                          >
-                            Résoudre Oui
-                          </button>
-                          <button
-                            onClick={() => act({ action: "resolveQuestion", questionId: q.id, resolution: "no" }, `rn-${q.id}`, "Résolu : Non")}
-                            className="flex-1 rounded-lg bg-bittersweet/10 py-1.5 text-[11px] font-bold text-bittersweet"
-                          >
-                            Résoudre Non
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => act({ action: "reopenQuestion", questionId: q.id }, `reopen-${q.id}`, "Question réouverte")}
-                          className="flex-1 rounded-lg bg-sky-500/10 py-1.5 text-[11px] font-bold text-sky-600"
-                        >
-                          Réouvrir
-                        </button>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2.5 py-0.5 font-display text-[10px] font-bold",
+                        q.status === "open"
+                          ? "bg-betclic-red/10 text-betclic-red"
+                          : "bg-elev text-mist"
                       )}
+                    >
+                      {q.status === "open"
+                        ? "Ouverte"
+                        : `Résolue · ${q.resolution === "yes" ? "Oui" : "Non"}`}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11.5px] text-dim">
+                    {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · Pool{" "}
+                    {eur(q.volume)}
+                  </p>
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    {q.status === "open" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            act(
+                              { action: "resolveQuestion", questionId: q.id, resolution: "yes" },
+                              `ry-${q.id}`,
+                              "Résolue : Oui"
+                            )
+                          }
+                          className="h-8 flex-1 rounded-lg bg-win/12 font-display text-[11.5px] font-bold text-win"
+                        >
+                          Oui gagne
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            act(
+                              { action: "resolveQuestion", questionId: q.id, resolution: "no" },
+                              `rn-${q.id}`,
+                              "Résolue : Non"
+                            )
+                          }
+                          className="h-8 flex-1 rounded-lg bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
+                        >
+                          Non gagne
+                        </button>
+                      </>
+                    ) : (
                       <button
-                        onClick={() => startEdit(q)}
-                        className="rounded-lg bg-elev px-3 py-1.5 text-[11px] font-bold text-mist"
+                        type="button"
+                        onClick={() =>
+                          act(
+                            { action: "reopenQuestion", questionId: q.id },
+                            `reopen-${q.id}`,
+                            "Question réouverte"
+                          )
+                        }
+                        className="h-8 flex-1 rounded-lg bg-sky-500/12 font-display text-[11.5px] font-bold text-sky-700"
                       >
-                        Éditer
+                        Réouvrir
                       </button>
-                      <button
-                        onClick={() => act({ action: "deleteQuestion", questionId: q.id }, `dq-${q.id}`, "Question supprimée")}
-                        className="grid h-7 w-7 place-items-center rounded-md bg-elev text-mist"
-                        aria-label="Supprimer"
-                      >
-                        {busy[`dq-${q.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.2} />}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => startEdit(q)}
+                      className="h-8 rounded-lg bg-elev px-3 font-display text-[11.5px] font-semibold text-ink"
+                    >
+                      Éditer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        act(
+                          { action: "deleteQuestion", questionId: q.id },
+                          `dq-${q.id}`,
+                          "Question supprimée"
+                        )
+                      }
+                      className="grid h-8 w-8 place-items-center rounded-lg bg-elev text-mist"
+                      aria-label="Supprimer"
+                    >
+                      {busy[`dq-${q.id}`] ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1168,50 +1385,62 @@ function UsersTab({
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
   return (
-    <div>
-      <AdminSectionTitle label="Joueurs" count={users.length} />
-      <div className="mt-2.5 flex flex-col gap-2">
-        {users.map((u) => (
-          <div key={u.id} className="glass-card rounded-2xl px-3.5 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 font-display text-[12px] font-bold text-betclic-red">
-                  {initials(u.name)}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate font-display text-[13px] font-semibold">
-                    {u.name}
-                    {u.role === "admin" && <ShieldCheck className="ml-1 inline h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />}
-                  </p>
-                  <p className="truncate text-[11px] text-dim">{u.email ?? "—"}</p>
-                </div>
+    <div className="flex flex-col gap-2.5">
+      <AdminSectionTitle label="Comptes enregistrés" count={users.length} />
+      {users.map((u) => (
+        <div key={u.id} className="glass-card rounded-2xl p-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev font-display text-[12px] font-bold text-ink">
+                {initials(u.name)}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate font-display text-[13.5px] font-bold text-ink">
+                  {u.name}
+                  {u.role === "admin" && (
+                    <ShieldCheck
+                      className="ml-1 inline h-3.5 w-3.5 text-betclic-red"
+                      strokeWidth={2.2}
+                    />
+                  )}
+                </p>
+                <p className="truncate text-[11.5px] text-dim">{u.email ?? "—"}</p>
               </div>
-              <p className="shrink-0 font-display text-[15px] font-bold tabular-nums text-betclic-red">{fmtEur(u.balance)}</p>
             </div>
-            <div className="mt-2.5 flex gap-2">
-              <AdminInput
-                placeholder="Nouveau solde"
-                type="number"
-                value={balanceForm[u.id] ?? ""}
-                onChange={(v) => setBalanceForm({ ...balanceForm, [u.id]: v })}
-              />
-              <button
-                onClick={() => {
-                  const amt = parseFloat(balanceForm[u.id]);
-                  if (Number.isFinite(amt)) {
-                    act({ action: "setBalance", userId: u.id, amount: amt }, `bal-${u.id}`, "Solde mis à jour");
-                    setBalanceForm({ ...balanceForm, [u.id]: "" });
-                  }
-                }}
-                disabled={busy[`bal-${u.id}`] || !balanceForm[u.id]}
-                className="shrink-0 rounded-xl bg-betclic-red px-4 font-display text-[12px] font-bold text-white disabled:opacity-50"
-              >
-                {busy[`bal-${u.id}`] ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fixer"}
-              </button>
-            </div>
+            <p className="shrink-0 font-display text-[15px] font-bold tabular-nums text-ink">
+              {eur(u.balance)}
+            </p>
           </div>
-        ))}
-      </div>
+          <div className="mt-2.5 flex gap-2">
+            <AdminInput
+              placeholder="Nouveau solde (€)"
+              type="text"
+              inputMode="decimal"
+              className="flex-1"
+              value={balanceForm[u.id] ?? ""}
+              onChange={(v) => setBalanceForm({ ...balanceForm, [u.id]: v })}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const amt = parseFloat((balanceForm[u.id] ?? "").replace(",", "."));
+                if (Number.isFinite(amt)) {
+                  act(
+                    { action: "setBalance", userId: u.id, amount: amt },
+                    `bal-${u.id}`,
+                    "Solde mis à jour"
+                  );
+                  setBalanceForm({ ...balanceForm, [u.id]: "" });
+                }
+              }}
+              disabled={busy[`bal-${u.id}`] || !balanceForm[u.id]}
+              className="h-11 shrink-0 rounded-xl bg-ink px-4 font-display text-[12.5px] font-bold text-white disabled:opacity-50"
+            >
+              {busy[`bal-${u.id}`] ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fixer"}
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1225,7 +1454,7 @@ function BetsTab({
   bets: AdminBet[];
   predBets: PanelData["predictionBets"];
 }) {
-  const rows: Array<{ id: number; kind: string; label: string; detail: string; stake: number; win: number; status: string; riskFlag: string | null; clv: number | null; placedAt: string }> = [
+  const rows = [
     ...bets.map((b) => ({
       id: b.id,
       kind: "Sport",
@@ -1257,49 +1486,48 @@ function BetsTab({
       ? "Latence but"
       : flag === "stale_near_decided"
         ? "Quasi décidé"
-        : flag ?? "";
+        : flag;
 
   return (
-    <div>
-      <AdminSectionTitle label="Tous les paris" count={rows.length} />
-      <div className="mt-2.5 flex flex-col gap-2">
-        {rows.map((b) => (
-          <div key={`${b.kind}-${b.id}`} className="glass-card rounded-2xl px-3.5 py-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate font-display text-[13px] font-semibold">{b.label}</p>
-                <p className="mt-0.5 truncate text-[11px] text-dim">
-                  {b.detail} · {formatPlacedAt(b.placedAt)}
-                </p>
-                {(b.riskFlag || b.clv != null) && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {b.riskFlag && (
-                      <span className="rounded-md bg-betclic-red/15 px-1.5 py-0.5 text-[10px] font-semibold text-betclic-red">
-                        {riskLabel(b.riskFlag)}
-                      </span>
-                    )}
-                    {b.clv != null && (
-                      <span
-                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                          b.clv >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-white/5 text-dim"
-                        }`}
-                      >
-                        CLV {b.clv >= 0 ? "+" : ""}
-                        {(b.clv * 100).toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <StatusBadge status={b.status} />
+    <div className="flex flex-col gap-2.5">
+      <AdminSectionTitle label="Historique global" count={rows.length} />
+      {rows.map((b) => (
+        <div key={`${b.kind}-${b.id}`} className="glass-card rounded-2xl p-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-display text-[13.5px] font-semibold text-ink">{b.label}</p>
+              <p className="mt-0.5 truncate text-[11.5px] text-dim">
+                {b.kind} · {b.detail} · {formatPlacedAt(b.placedAt)}
+              </p>
+              {(b.riskFlag || b.clv != null) && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {b.riskFlag && (
+                    <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-[10px] font-semibold text-betclic-red">
+                      {riskLabel(b.riskFlag)}
+                    </span>
+                  )}
+                  {b.clv != null && (
+                    <span
+                      className={cn(
+                        "rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                        b.clv >= 0 ? "bg-win/12 text-win" : "bg-elev text-mist"
+                      )}
+                    >
+                      CLV {b.clv >= 0 ? "+" : ""}
+                      {(b.clv * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="mt-2.5 flex items-center justify-between text-[11px]">
-              <span className="text-dim">Mise {fmtEur(b.stake)}</span>
-              <span className="font-display text-[12.5px] font-bold text-betclic-red">→ {fmtEur(b.win)}</span>
-            </div>
+            <StatusBadge status={b.status} />
           </div>
-        ))}
-      </div>
+          <div className="mt-2 flex items-center justify-between border-t border-edge pt-2 text-[11.5px]">
+            <span className="text-mist">Mise {eur(b.stake)}</span>
+            <span className="font-display font-bold tabular-nums text-ink">→ {eur(b.win)}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1307,30 +1535,39 @@ function BetsTab({
 /* ---------------- Dépôts ---------------- */
 
 function DepositsTab({ deposits }: { deposits: AdminDeposit[] }) {
-  const total = deposits.filter((d) => d.status === "credited").reduce((s, d) => s + d.amount, 0);
+  const total = deposits
+    .filter((d) => d.status === "credited")
+    .reduce((s, d) => s + d.amount, 0);
+
   return (
-    <div>
-      <div className="glass-card mb-3 rounded-2xl p-4 text-center">
-        <p className="text-[10px] font-semibold tracking-[0.2em] text-dim">TOTAL CRÉDITÉ</p>
-        <p className="mt-1 font-display text-[22px] font-bold tabular-nums text-betclic-red">{fmtEur(total)}</p>
+    <div className="flex flex-col gap-3">
+      <div className="glass-card rounded-2xl p-4 text-center">
+        <p className="text-[11px] font-medium text-dim">Total crédité</p>
+        <p className="mt-0.5 font-display text-[24px] font-bold tabular-nums text-ink">
+          {eur(total)}
+        </p>
       </div>
-      <AdminSectionTitle label="Dépôts" count={deposits.length} />
-      <div className="mt-2.5 flex flex-col gap-2">
-        {deposits.map((d) => (
-          <div key={d.id} className="glass-card flex items-center gap-3 rounded-2xl px-3.5 py-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
-              <CircleDollarSign className="h-4 w-4" strokeWidth={2.2} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-[13px] font-semibold">
-                {d.provider} · {fmtEur(d.amount)}
-              </p>
-              <p className="text-[11px] text-dim">{formatPlacedAt(d.createdAt)}</p>
+      <AdminSectionTitle label="Transactions" count={deposits.length} />
+      {deposits.length === 0 ? (
+        <p className="py-8 text-center text-[12.5px] text-dim">Aucun dépôt enregistré.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {deposits.map((d) => (
+            <div key={d.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev text-ink">
+                <CircleDollarSign className="h-4 w-4" strokeWidth={2.1} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[13.5px] font-semibold capitalize text-ink">
+                  {d.provider} · {eur(d.amount)}
+                </p>
+                <p className="text-[11.5px] text-dim">{formatPlacedAt(d.createdAt)}</p>
+              </div>
+              <StatusBadge status={d.status} />
             </div>
-            <StatusBadge status={d.status} />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1339,26 +1576,28 @@ function DepositsTab({ deposits }: { deposits: AdminDeposit[] }) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    pending: { label: "En cours", cls: "bg-betclic-red/10 text-betclic-red" },
-    won: { label: "Gagné", cls: "bg-win/10 text-win" },
-    lost: { label: "Perdu", cls: "bg-elev text-mist" },
-    cashed: { label: "Encaissé", cls: "bg-sky-500/10 text-sky-600" },
-    paid: { label: "Payé", cls: "bg-win/10 text-win" },
-    credited: { label: "Crédité", cls: "bg-win/10 text-win" },
-    failed: { label: "Échec", cls: "bg-bittersweet/10 text-bittersweet" },
-    expired: { label: "Expiré", cls: "bg-elev text-mist" },
+    pending: { label: "En cours", cls: "bg-elev text-ink" },
+    won: { label: "Gagné", cls: "bg-win/12 text-win" },
+    lost: { label: "Perdu", cls: "bg-elev text-dim" },
+    cashed: { label: "Cash-out", cls: "bg-sky-500/12 text-sky-700" },
+    paid: { label: "Payé", cls: "bg-win/12 text-win" },
+    credited: { label: "Crédité", cls: "bg-win/12 text-win" },
+    failed: { label: "Échec", cls: "bg-betclic-red/10 text-betclic-red" },
+    expired: { label: "Expiré", cls: "bg-elev text-dim" },
   };
   const s = map[status] ?? { label: status, cls: "bg-elev text-mist" };
-  return <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold", s.cls)}>{s.label}</span>;
+  return (
+    <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 font-display text-[10px] font-bold", s.cls)}>
+      {s.label}
+    </span>
+  );
 }
 
-/** Logo du club (URL) avec repli avatar initiales. */
-function LogoOrAvatar({ logo, name, size }: { logo?: string | null; name: string; size?: "sm" | "md" }) {
+function LogoOrAvatar({ logo, name }: { logo?: string | null; name: string }) {
   const hue = teamHue(name);
-  const dim = size === "sm" ? "h-8 w-8 text-[10px]" : "h-10 w-10 text-[12px]";
   if (logo) {
     return (
-      <span className={cn("grid shrink-0 place-items-center overflow-hidden rounded-xl bg-white ring-2 ring-card", dim)}>
+      <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-xl bg-white ring-2 ring-white border border-edge">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={logo} alt="" loading="lazy" className="h-full w-full object-contain p-1" />
       </span>
@@ -1366,9 +1605,9 @@ function LogoOrAvatar({ logo, name, size }: { logo?: string | null; name: string
   }
   return (
     <span
-      className={cn("grid shrink-0 place-items-center rounded-xl font-display font-bold text-white/95", dim)}
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl font-display text-[10px] font-bold text-white ring-2 ring-white"
       style={{
-        background: `linear-gradient(140deg, hsl(${hue} 62% 46% / 0.9), hsl(${(hue + 40) % 360} 70% 30% / 0.95))`,
+        background: `linear-gradient(140deg, hsl(${hue} 62% 46%), hsl(${(hue + 40) % 360} 70% 30%))`,
       }}
     >
       {initials(name)}
@@ -1382,6 +1621,7 @@ function AdminInput({
   onChange,
   placeholder,
   type = "text",
+  inputMode,
   className,
 }: {
   label?: string;
@@ -1389,17 +1629,19 @@ function AdminInput({
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
+  inputMode?: "text" | "decimal" | "numeric";
   className?: string;
 }) {
   return (
     <label className={cn("block", className)}>
-      {label && <span className="mb-1 block text-[10px] font-semibold tracking-[0.14em] text-dim">{label.toUpperCase()}</span>}
+      {label && <span className="mb-1 block text-[11px] font-semibold text-mist">{label}</span>}
       <input
         type={type}
+        inputMode={inputMode}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-edge bg-elev/50 px-3 py-2.5 text-[13px] text-ink outline-none transition-colors placeholder:text-dim focus:border-betclic-red/50 focus:bg-white"
+        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[16px] text-ink outline-none transition-colors placeholder:text-dim focus:border-ink focus:bg-white"
       />
     </label>
   );
@@ -1407,23 +1649,15 @@ function AdminInput({
 
 function AdminSectionTitle({ label, count }: { label: string; count?: number }) {
   return (
-    <div className="flex items-center gap-2 px-1">
-      <span className="h-2 w-2 rounded-full bg-betclic-red/70" />
-      <h2 className="font-display text-[12px] font-bold uppercase tracking-[0.18em] text-ink">{label}</h2>
-      <span className="h-px flex-1 bg-elev" />
-      {count != null && (
-        <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold text-mist">{count}</span>
-      )}
+    <div className="flex items-center justify-between px-0.5">
+      <h2 className="font-display text-[12px] font-bold uppercase tracking-wider text-mist">
+        {label}
+      </h2>
+      {count != null && <span className="text-[11.5px] font-semibold text-dim">{count}</span>}
     </div>
   );
 }
 
-/**
- * Champ avec autocomplétion façon combobox :
- * - tape pour filtrer les options (ligues ou clubs) ;
- * - affiche le logo quand il est fourni ;
- * - `onChange(valeur, logo?)` est appelé à la saisie ET à la sélection.
- */
 function ComboBox({
   label,
   value,
@@ -1440,7 +1674,6 @@ function ComboBox({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -1450,107 +1683,90 @@ function ComboBox({
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  useEffect(() => {
-    if (open) setQuery(value);
-  }, [open, value]);
-
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? options.filter((o) => o.label.toLowerCase().includes(q) || (o.hint ?? "").toLowerCase().includes(q))
+    ? options.filter(
+        (o) => o.label.toLowerCase().includes(q) || (o.hint ?? "").toLowerCase().includes(q)
+      )
     : options;
   const highlighted = filtered[0];
 
   return (
     <div className="relative" ref={boxRef}>
-      {label && <span className="mb-1 block text-[10px] font-semibold tracking-[0.14em] text-dim">{label.toUpperCase()}</span>}
-      <div className="relative">
-        <input
-          ref={inputRef}
-          value={open ? query : value}
-          placeholder={placeholder}
-          onFocus={() => setOpen(true)}
-          onChange={(e) => {
-            const v = e.target.value;
-            setQuery(v);
-            onChange(v);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown" && filtered[0]) {
-              e.preventDefault();
-              onChange(filtered[0].label, highlighted?.logo);
-              setQuery(filtered[0].label);
-            }
-            if (e.key === "Enter" && highlighted) {
-              e.preventDefault();
-              onChange(highlighted.label, highlighted.logo);
-              setOpen(false);
-            }
-            if (e.key === "Escape") setOpen(false);
-          }}
-          className="w-full rounded-xl border border-edge bg-elev/50 px-3 py-2.5 text-[13px] text-ink outline-none transition-colors placeholder:text-dim focus:border-betclic-red/50 focus:bg-white"
-        />
-      </div>
+      {label && <span className="mb-1 block text-[11px] font-semibold text-mist">{label}</span>}
+      <input
+        value={open ? query : value}
+        placeholder={placeholder}
+        onFocus={() => {
+          setQuery(value);
+          setOpen(true);
+        }}
+        onChange={(e) => {
+          const v = e.target.value;
+          setQuery(v);
+          onChange(v);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" && filtered[0]) {
+            e.preventDefault();
+            onChange(filtered[0].label, highlighted?.logo);
+            setQuery(filtered[0].label);
+          }
+          if (e.key === "Enter" && highlighted) {
+            e.preventDefault();
+            onChange(highlighted.label, highlighted.logo);
+            setOpen(false);
+          }
+          if (e.key === "Escape") setOpen(false);
+        }}
+        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[16px] text-ink outline-none transition-colors placeholder:text-dim focus:border-ink focus:bg-white"
+      />
 
-      <AnimatePresence>
-        {open && options.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-            transition={{ duration: 0.16 }}
-            className="absolute z-40 mt-1.5 max-h-64 w-full overflow-y-auto rounded-xl border border-edge bg-white p-1 shadow-lg"
-          >
-            {filtered.length === 0 && (
-              <p className="px-2.5 py-2 text-[11.5px] text-dim">Aucun résultat</p>
-            )}
-            {filtered.map((o) => (
-              <button
-                key={o.label}
-                type="button"
-                onClick={() => {
-                  onChange(o.label, o.logo);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-elev active:bg-elev"
-              >
-                {o.logo != null && (
-                  <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-md bg-white ring-1 ring-edge">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={o.logo} alt="" loading="lazy" className="h-full w-full object-contain p-0.5" />
-                  </span>
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-display text-[12.5px] font-semibold text-ink">{o.label}</span>
-                  {o.hint && <span className="block text-[10.5px] text-dim">{o.hint}</span>}
+      {open && options.length > 0 && (
+        <div className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-edge bg-white p-1 shadow-lg">
+          {filtered.length === 0 && (
+            <p className="px-2.5 py-2 text-[12px] text-dim">Aucun résultat</p>
+          )}
+          {filtered.map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              onClick={() => {
+                onChange(o.label, o.logo);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left active:bg-elev"
+            >
+              {o.logo != null && (
+                <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-md bg-white ring-1 ring-edge">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={o.logo}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-contain p-0.5"
+                  />
                 </span>
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-display text-[13px] font-semibold text-ink">
+                  {o.label}
+                </span>
+                {o.hint && <span className="block text-[11px] text-dim">{o.hint}</span>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
-
-function AdminRow({ label, count }: { label: string; count?: number }) {
-  return <AdminSectionTitle label={label} count={count} />;
 }
 
 function StatPill({ label, value }: { label: string; value: number }) {
   return (
-    <div className="glass-card flex-1 rounded-2xl px-3 py-3 text-center">
-      <p className="font-display text-[16px] font-bold tabular-nums">{value}</p>
-      <p className="mt-0.5 text-[9px] font-semibold tracking-[0.14em] text-dim">{label.toUpperCase()}</p>
-    </div>
-  );
-}
-
-function Skeletons() {
-  return (
-    <div className="mt-4 flex flex-col gap-2.5">
-      <div className="shimmer h-[96px] rounded-[20px]" />
-      <div className="shimmer h-[96px] rounded-[20px]" />
-      <div className="shimmer h-[220px] rounded-[20px]" />
+    <div className="glass-card rounded-2xl p-3 text-center">
+      <p className="font-display text-[16px] font-bold tabular-nums text-ink">{value}</p>
+      <p className="text-[10.5px] font-medium text-dim">{label}</p>
     </div>
   );
 }

@@ -14,12 +14,19 @@ interface Props {
   onClose: () => void;
 }
 
-/** Recharge du solde — choix du montant puis du prestataire (Stripe/PayPal). */
 export function RechargeModal({ open, onClose }: Props) {
-  const { toast } = useApp();
+  return (
+    <AnimatePresence>
+      {open && <RechargeSheet onClose={onClose} />}
+    </AnimatePresence>
+  );
+}
+
+function RechargeSheet({ onClose }: { onClose: () => void }) {
+  const { toast, balance } = useApp();
   const dragControls = useDragControls();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
-  const [amount, setAmount] = useState(25);
+  const [amountText, setAmountText] = useState("25");
   const [provider, setProvider] = useState<"stripe" | "paypal">("stripe");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,30 +34,29 @@ export function RechargeModal({ open, onClose }: Props) {
   const enabled = providers.filter((p) => p.enabled);
 
   useEffect(() => {
-    if (open) {
-      setAmount(25);
-      setLoading(false);
-      setError(null);
-      api.payments.providers().then((r) => {
-          setProviders(r.providers);
-          const fallback = r.providers.find((p) => p.enabled);
-          if (fallback) setProvider(fallback.id);
-        })
-        .catch(() => setProviders([]));
-    }
-  }, [open]);
-
-  useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
+    let active = true;
+    api.payments
+      .providers()
+      .then((r) => {
+        if (!active) return;
+        setProviders(r.providers);
+        const fallback = r.providers.find((p) => p.enabled);
+        if (fallback) setProvider(fallback.id);
+      })
+      .catch(() => {
+        if (active) setProviders([]);
+      });
     return () => {
-      document.body.style.overflow = "";
+      active = false;
     };
-  }, [open]);
+  }, []);
 
+  const parsed = Number(amountText.replace(",", "."));
+  const amount = Number.isFinite(parsed) ? parsed : 0;
   const valid = amount >= 5 && amount <= 2000;
 
   const submit = async () => {
-    if (loading || !valid || !provider) return;
+    if (loading || !valid || enabled.length === 0) return;
     setLoading(true);
     setError(null);
     try {
@@ -66,175 +72,153 @@ export function RechargeModal({ open, onClose }: Props) {
   const selected = (id: "stripe" | "paypal") => providers.find((p) => p.id === id);
 
   return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-[70]">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            onClick={loading ? undefined : onClose}
-            className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+    <div className="fixed inset-0 z-[80]">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={loading ? undefined : onClose}
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+      />
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", stiffness: 380, damping: 36 }}
+        drag={loading ? false : "y"}
+        dragListener={false}
+        dragControls={dragControls}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.5 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.y > 120 || info.velocity.y > 550) onClose();
+        }}
+        className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] w-full max-w-[440px] flex-col overflow-hidden rounded-t-3xl border-t border-edge bg-surface shadow-2xl"
+      >
+        <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-2">
+          <div
+            onPointerDown={(e) => dragControls.start(e)}
+            className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing"
           />
-          <motion.div
-            initial={{ y: "102%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "102%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 34 }}
-            drag={loading ? false : "y"}
-            dragListener={false}
-            dragControls={dragControls}
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.55 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 130 || info.velocity.y > 600) onClose();
-            }}
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[92dvh] w-full max-w-[27.5rem] flex-col overflow-hidden rounded-t-[24px] border-t border-edge bg-surface shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.3)]"
-          >
-            <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-betclic-red/70 to-transparent" />
 
-            <div className="no-scrollbar overflow-y-auto px-4 pb-4 pb-safe">
-              <div
-                onPointerDown={(e) => dragControls.start(e)}
-                className="mx-auto mt-2 h-1 w-10 cursor-grab rounded-full bg-elev active:cursor-grabbing"
-              />
-
-              <div className="flex items-center justify-between pt-2.5">
-                <h2 className="font-display text-base font-bold tracking-tight">Recharger le solde</h2>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={onClose}
-                  className="glass-pill grid h-8 w-8 place-items-center rounded-full text-mist"
-                  aria-label="Fermer"
-                >
-                  <X className="h-4 w-4" strokeWidth={2.2} />
-                </motion.button>
-              </div>
-
-              {/* Montant */}
-              <div className="mt-3 flex items-end justify-between px-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[9.5px] font-semibold tracking-[0.24em] text-dim">MONTANT</span>
-                  <input
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setAmount(Number.isFinite(v) ? v : 0);
-                    }}
-                    className={cn(
-                      "w-24 bg-transparent font-display text-[32px] font-bold leading-none tracking-tight tabular-nums outline-none",
-                      valid ? "text-ink" : "text-live"
-                    )}
-                    aria-label="Montant à recharger"
-                  />
-                  <span className="font-display text-[20px] font-bold text-dim">€</span>
-                </div>
-              </div>
-
-              <div className="mt-2.5 grid grid-cols-5 gap-1.5">
-                {QUICK.map((q) => (
-                  <motion.button
-                    key={q}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => setAmount(q)}
-                    className={cn(
-                      "glass-pill rounded-lg py-1.5 font-display text-[12px] font-bold transition-colors",
-                      amount === q
-                        ? "text-betclic-red"
-                        : "text-ink active:border-betclic-red/50 active:text-betclic-red"
-                    )}
-                  >
-                    {q}€
-                  </motion.button>
-                ))}
-              </div>
-
-              {(!valid || amount < 5 || amount > 2000) && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-1.5 px-1 text-[11px] font-semibold text-live"
-                >
-                  Montant valide : 5 € à 2000 €
-                </motion.p>
-              )}
-
-              {/* Prestataires */}
-              <div className="mt-3 px-1">
-                <p className="text-[9.5px] font-semibold tracking-[0.24em] text-dim">MOYEN DE PAIEMENT</p>
-              </div>
-
-              {enabled.length === 0 && (
-                <div className="glass-card mt-2 rounded-2xl px-3.5 py-4 text-[12px] text-mist">
-                  Aucun moyen de paiement configuré pour le moment.
-                </div>
-              )}
-
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <ProviderCard
-                    provider={selected("stripe")}
-                    label="Carte bancaire"
-                    sub="Stripe Checkout"
-                    Icon={CreditCard}
-                    active={provider === "stripe"}
-                    onClick={() => provider && setProvider("stripe")}
-                  />
-                  <ProviderCard
-                    provider={selected("paypal")}
-                    label="PayPal"
-                    sub="Compte PayPal"
-                    Icon={Wallet}
-                    active={provider === "paypal"}
-                    onClick={() => setProvider("paypal")}
-                  />
-              </div>
-
-              {error && (
-                <motion.p
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-2 text-center text-[11px] font-semibold text-live"
-                >
-                  {error}
-                </motion.p>
-              )}
-
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                disabled={!valid || loading}
-                onClick={submit}
-                className={cn(
-                  "mt-3 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl font-display text-[14.5px] font-bold transition-opacity",
-                  valid && !loading
-                    ? "bg-[linear-gradient(135deg,#E10014,#FB6962)] text-white shadow-[0_14px_38px_-10px_rgba(225,0,20,0.6),inset_0_1px_0_rgba(255,255,255,0.4)]"
-                    : "bg-elev text-dim"
-                )}
-              >
-                {loading ? (
-                  <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.4} />
-                ) : (
-                  <>
-                    Recharger {eur(amount)}
-                    <span className="opacity-60">·</span>
-                    {selected(provider)?.name ?? "Paiement"}
-                  </>
-                )}
-              </motion.button>
-
-              <p className="mt-2 flex items-center justify-center gap-1 text-[9.5px] text-dim">
-                <Lock className="h-3 w-3" strokeWidth={2.2} />
-                Paiement sécurisé, crédit immédiat sur votre solde.
-              </p>
-              <p className="mt-1 text-center text-[9px] text-mist">
-                18+ · Jouer comporte des risques : endettement, isolement, dépendance.
-              </p>
+          <div className="mt-3 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-[17px] font-bold tracking-tight text-ink">
+                Recharger mon solde
+              </h2>
+              <p className="text-[11.5px] text-dim">Actuel : {eur(balance)}</p>
             </div>
-          </motion.div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
+              aria-label="Fermer"
+            >
+              <X className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+          </div>
+
+          <div className="mt-3.5">
+            <label htmlFor="recharge-amount" className="text-[11.5px] font-semibold text-mist">
+              Montant du dépôt (5 € à 2 000 €)
+            </label>
+            <div
+              className={cn(
+                "mt-1.5 flex h-13 items-center rounded-2xl border bg-white px-3.5",
+                valid ? "border-edge focus-within:border-ink" : "border-betclic-red"
+              )}
+            >
+              <input
+                id="recharge-amount"
+                type="text"
+                inputMode="decimal"
+                value={amountText}
+                onChange={(e) => setAmountText(e.target.value.replace(/[^0-9.,]/g, ""))}
+                className="w-full bg-transparent font-display text-[22px] font-bold tabular-nums text-ink outline-none"
+                aria-label="Montant à recharger"
+              />
+              <span className="font-display text-[18px] font-bold text-dim">€</span>
+            </div>
+
+            <div className="mt-2 grid grid-cols-5 gap-1.5">
+              {QUICK.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setAmountText(String(q))}
+                  className={cn(
+                    "h-9 rounded-xl border font-display text-[12.5px] font-bold transition-colors active:scale-95",
+                    amount === q
+                      ? "border-ink bg-ink text-white"
+                      : "border-edge bg-elev text-ink"
+                  )}
+                >
+                  {q} €
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <p className="text-[11.5px] font-semibold text-mist">Moyen de paiement</p>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              <ProviderCard
+                provider={selected("stripe")}
+                label="Carte bancaire"
+                sub="Stripe"
+                Icon={CreditCard}
+                active={provider === "stripe"}
+                onClick={() => setProvider("stripe")}
+              />
+              <ProviderCard
+                provider={selected("paypal")}
+                label="PayPal"
+                sub="Compte PayPal"
+                Icon={Wallet}
+                active={provider === "paypal"}
+                onClick={() => setProvider("paypal")}
+              />
+            </div>
+          </div>
+
+          {enabled.length === 0 && (
+            <p className="mt-3 rounded-xl bg-elev px-3 py-2.5 text-[12px] text-mist">
+              Aucun prestataire de paiement n&apos;est actif sur cet environnement.
+            </p>
+          )}
+
+          {error && (
+            <p className="mt-3 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="button"
+            disabled={!valid || loading || enabled.length === 0}
+            onClick={submit}
+            className={cn(
+              "mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
+              valid && !loading && enabled.length > 0
+                ? "bg-betclic-red text-white shadow-sm"
+                : "bg-elev text-dim"
+            )}
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
+            ) : (
+              <>Continuer · {eur(valid ? amount : 0)}</>
+            )}
+          </button>
+
+          <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[11px] text-dim">
+            <Lock className="h-3 w-3" strokeWidth={2.2} />
+            Transaction chiffrée · crédit immédiat
+          </p>
         </div>
-      )}
-    </AnimatePresence>
+      </motion.div>
+    </div>
   );
 }
 
@@ -257,39 +241,41 @@ function ProviderCard({
   const live = provider?.live ?? false;
 
   return (
-    <motion.button
-      whileTap={enabled ? { scale: 0.97 } : undefined}
+    <button
+      type="button"
       onClick={enabled ? onClick : undefined}
       disabled={!enabled}
       className={cn(
-        "relative flex flex-col items-start gap-2 rounded-2xl border p-3.5 text-left transition-colors",
+        "relative flex flex-col items-start rounded-2xl border p-3 text-left transition-colors",
         !enabled
-          ? "cursor-not-allowed border-edge bg-elev/40 opacity-50"
+          ? "cursor-not-allowed border-edge bg-elev/50 opacity-55"
           : active
-            ? "border-betclic-red/40 bg-betclic-red/5"
-            : "border-edge bg-white"
+            ? "border-betclic-red bg-betclic-red/5"
+            : "border-edge bg-white active:bg-elev"
       )}
     >
-      <span
-        className={cn(
-          "grid h-9 w-9 place-items-center rounded-xl",
-          active ? "bg-betclic-red text-white" : "bg-betclic-red/10 text-betclic-red"
-        )}
-      >
-        <Icon className="h-4.5 w-4.5" strokeWidth={2.2} />
-      </span>
-      <span className="mt-1.5 font-display text-[13px] font-bold leading-tight">{label}</span>
-      <span className="text-[10px] text-mist">{enabled ? sub : "Non configuré"}</span>
-      {enabled && (
+      <div className="flex w-full items-center justify-between">
         <span
           className={cn(
-            "absolute right-2 top-2 rounded border px-1 py-0.5 font-display text-[8px] font-bold tracking-[0.14em]",
-            live ? "border-win/40 text-win" : "border-amber-500/60 text-amber-500"
+            "grid h-8 w-8 place-items-center rounded-xl",
+            active && enabled ? "bg-betclic-red text-white" : "bg-elev text-ink"
           )}
         >
-          {live ? "LIVE" : "SANDBOX"}
+          <Icon className="h-4 w-4" strokeWidth={2.2} />
         </span>
-      )}
-    </motion.button>
+        {enabled && (
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 font-display text-[9px] font-bold uppercase",
+              live ? "bg-win/10 text-win" : "bg-amber-500/15 text-amber-700"
+            )}
+          >
+            {live ? "Live" : "Test"}
+          </span>
+        )}
+      </div>
+      <span className="mt-2 font-display text-[13px] font-bold text-ink">{label}</span>
+      <span className="text-[11px] text-dim">{enabled ? sub : "Indisponible"}</span>
+    </button>
   );
 }
