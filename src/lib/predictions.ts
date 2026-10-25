@@ -118,11 +118,19 @@ export function resolveQuestion(
  * Chaque ticket gagnant touche exactement son gain garanti `mise × cote`
  * verrouillé au moment de la validation du pari.
  */
-export async function settleQuestion(questionId: number, resolution: string) {
+export async function settleQuestion(
+  questionId: number,
+  resolution: string,
+  effectiveAt?: Date
+) {
+  const nowMs = Date.now();
+  const resolvedAt =
+    effectiveAt && effectiveAt.getTime() <= nowMs ? effectiveAt : new Date(nowMs);
+
   await db.transaction(async (tx) => {
     await tx
       .update(predictionQuestions)
-      .set({ status: "resolved", resolution, resolvedAt: new Date() })
+      .set({ status: "resolved", resolution, resolvedAt })
       .where(eq(predictionQuestions.id, questionId));
 
     const pending = await tx
@@ -136,12 +144,16 @@ export async function settleQuestion(questionId: number, resolution: string) {
       );
 
     for (const b of pending) {
+      const minSettledMs = b.placedAt ? b.placedAt.getTime() + 1_000 : 0;
+      const settledAt = new Date(
+        Math.min(nowMs, Math.max(minSettledMs, resolvedAt.getTime()))
+      );
       const won = b.selection === resolution;
       if (won) {
         const payout = round2(b.stake * b.odds);
         await tx
           .update(predictionBets)
-          .set({ status: "won", potentialWin: payout, settledAt: new Date() })
+          .set({ status: "won", potentialWin: payout, settledAt })
           .where(eq(predictionBets.id, b.id));
         await tx
           .update(appUser)
@@ -150,7 +162,7 @@ export async function settleQuestion(questionId: number, resolution: string) {
       } else {
         await tx
           .update(predictionBets)
-          .set({ status: "lost", settledAt: new Date() })
+          .set({ status: "lost", settledAt })
           .where(eq(predictionBets.id, b.id));
       }
     }
@@ -263,6 +275,115 @@ export async function settleResolvedQuestions() {
 
   for (const q of due) {
     const resolution = resolveQuestion(q, byQ.get(q.id) ?? [], health.tightness);
-    await settleQuestion(q.id, resolution);
+    await settleQuestion(q.id, resolution, q.resolvesAt);
+  }
+}
+
+const MIN_OPEN_PREDICTIONS = 12;
+
+const ROLLING_PREDICTION_TEMPLATES: Array<{
+  category: string;
+  buildTitle: (label: string) => string;
+  oddsYes: number;
+  oddsNo: number;
+  hoursAhead: number;
+  options?: PredictionOption[];
+}> = [
+  {
+    category: "Sport",
+    buildTitle: (lbl) => `Quel championnat produira le plus de buts lors de la session ${lbl} ?`,
+    oddsYes: 2.0,
+    oddsNo: 2.0,
+    hoursAhead: 36,
+    options: [
+      { key: "premier_league", label: "Premier League", odds: 2.65 },
+      { key: "bundesliga", label: "Bundesliga", odds: 2.9 },
+      { key: "liga", label: "Liga", odds: 4.1 },
+      { key: "ligue_1", label: "Ligue 1", odds: 4.8 },
+    ],
+  },
+  {
+    category: "Crypto",
+    buildTitle: (lbl) => `Le Bitcoin clôturera-t-il en hausse sur la fenêtre ${lbl} ?`,
+    oddsYes: 1.86,
+    oddsNo: 1.96,
+    hoursAhead: 24,
+  },
+  {
+    category: "Sport",
+    buildTitle: (lbl) => `Un club outsider (cote > 3,20) s'imposera-t-il sur la série ${lbl} ?`,
+    oddsYes: 1.78,
+    oddsNo: 2.05,
+    hoursAhead: 18,
+  },
+  {
+    category: "Actus",
+    buildTitle: (lbl) => `Quel secteur dominera les marchés tech sur l'échéance ${lbl} ?`,
+    oddsYes: 2.0,
+    oddsNo: 2.0,
+    hoursAhead: 48,
+    options: [
+      { key: "ia_cloud", label: "IA & Cloud", odds: 2.15 },
+      { key: "semiconducteurs", label: "Semi-conducteurs", odds: 2.85 },
+      { key: "cybersecurite", label: "Cybersécurité", odds: 4.4 },
+      { key: "robotique", label: "Robotique", odds: 5.8 },
+    ],
+  },
+  {
+    category: "Culture",
+    buildTitle: (lbl) => `Une sortie streaming dépassera-t-elle 25 M de vues sur la période ${lbl} ?`,
+    oddsYes: 1.74,
+    oddsNo: 2.1,
+    hoursAhead: 60,
+  },
+];
+
+/**
+ * Maintient automatiquement un vivier actif de questions ouvertes même si
+ * personne ne visite le site ou l'interface admin pendant plusieurs jours.
+ */
+export async function ensureOpenPredictions(now = Date.now()): Promise<void> {
+  const [{ openCount }] = await db
+    .select({ openCount: sql<number>`count(*)::int` })
+    .from(predictionQuestions)
+    .where(
+      and(
+        eq(predictionQuestions.status, "open"),
+        sql`${predictionQuestions.resolvesAt} > now()`
+      )
+    );
+
+  if (openCount >= MIN_OPEN_PREDICTIONS) return;
+
+  const needed = Math.min(5, MIN_OPEN_PREDICTIONS - openCount);
+  const slotId = Math.floor(now / (12 * 3_600_000));
+  const dateObj = new Date(now);
+  const label = `${String(dateObj.getUTCDate()).padStart(2, "0")}/${String(
+    dateObj.getUTCMonth() + 1
+  ).padStart(2, "0")} #${slotId % 100}`;
+
+  for (let i = 0; i < needed; i++) {
+    const tpl =
+      ROLLING_PREDICTION_TEMPLATES[(slotId + i) % ROLLING_PREDICTION_TEMPLATES.length];
+    const title = tpl.buildTitle(label);
+    const seedValue = ((slotId * 7919 + i * 104729) >>> 0) % 1_000_000 + 1000;
+    const resolvesAt = new Date(now + tpl.hoursAhead * 3_600_000 + i * 3_600_000);
+
+    await db
+      .insert(predictionQuestions)
+      .values({
+        question: title,
+        category: tpl.category,
+        status: "open",
+        seedValue,
+        oddsYes: tpl.oddsYes,
+        oddsNo: tpl.oddsNo,
+        options: tpl.options ?? null,
+        volume: 0,
+        yesCount: 0,
+        noCount: 0,
+        resolvesAt,
+      })
+      .onConflictDoNothing();
   }
 }

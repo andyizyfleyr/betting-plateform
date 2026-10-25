@@ -110,17 +110,46 @@ export async function settlePendingCombos(): Promise<void> {
     const hasLost = nextLegs.some((l) => l.status === "lost");
     const allSettled = nextLegs.length > 0 && nextLegs.every((l) => l.status !== "pending");
 
+    const legResolvedMs = (leg: ComboLeg): number | null => {
+      if (leg.kind === "sport" && leg.matchId) {
+        const m = matchMap.get(leg.matchId);
+        return m?.finishedAt ? m.finishedAt.getTime() : null;
+      }
+      if (leg.kind === "prediction" && leg.questionId) {
+        const q = questionMap.get(leg.questionId);
+        const dt = q?.resolvedAt ?? q?.resolvesAt ?? null;
+        return dt ? dt.getTime() : null;
+      }
+      return null;
+    };
+
+    const nowMs = Date.now();
+    const minSettledMs = cb.placedAt ? cb.placedAt.getTime() + 1_000 : 0;
+
     if (hasLost) {
       settledAny = true;
+      const lostTimes = nextLegs
+        .filter((l) => l.status === "lost")
+        .map(legResolvedMs)
+        .filter((t): t is number => t != null);
+      const rawLostMs = lostTimes.length > 0 ? Math.min(...lostTimes) : nowMs;
+      const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawLostMs)));
+
       await db
         .update(comboBets)
-        .set({ legs: nextLegs, status: "lost", settledAt: new Date() })
+        .set({ legs: nextLegs, status: "lost", settledAt })
         .where(eq(comboBets.id, cb.id));
       continue;
     }
 
     if (allSettled) {
       settledAny = true;
+      const allTimes = nextLegs
+        .map(legResolvedMs)
+        .filter((t): t is number => t != null);
+      const rawWonMs = allTimes.length > 0 ? Math.max(...allTimes) : nowMs;
+      const settledAt = new Date(Math.min(nowMs, Math.max(minSettledMs, rawWonMs)));
+
       const wonOdds = nextLegs.filter((l) => l.status === "won").map((l) => l.odds);
       const quote =
         wonOdds.length === 0
@@ -138,7 +167,7 @@ export async function settlePendingCombos(): Promise<void> {
             legs: nextLegs,
             status: "won",
             potentialWin: payout,
-            settledAt: new Date(),
+            settledAt,
           })
           .where(sql`${comboBets.id} = ${cb.id} AND ${comboBets.status} = 'pending'`)
           .returning({ id: comboBets.id });

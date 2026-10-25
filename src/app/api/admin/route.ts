@@ -30,7 +30,7 @@ import {
 import { STALE_LATENCY_MS } from "@/lib/risk";
 import { getAuthUserId } from "@/lib/session";
 import { settleFinishedBets, settleMatchBets } from "@/lib/settle";
-import { resetSyncThrottle } from "@/lib/sync-throttle";
+import { resetSyncThrottle, syncPlatformStateThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
@@ -52,10 +52,7 @@ export async function GET(req: NextRequest) {
   if (typeof auth !== "number") return auth;
 
   // Synchronise le moteur live et les règlements pour afficher l'état exact en temps réel
-  await runLiveEngine();
-  await settleFinishedBets();
-  await settleResolvedQuestions();
-  await settlePendingCombos();
+  await syncPlatformStateThrottled(true);
 
   const [
     [totalUsers],

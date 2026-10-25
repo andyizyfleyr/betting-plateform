@@ -1,8 +1,8 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { settleMatchBets } from "@/lib/settle";
-import { appUser, bets, matches, type MatchRow } from "@/db/schema";
+import { appUser, bets, comboBets, matches, type MatchRow } from "@/db/schema";
 import {
   expectedGoals,
   hashString,
@@ -121,7 +121,7 @@ interface ClockState {
   phase: "1H" | "1H_STOPPAGE" | "HT" | "2H" | "2H_STOPPAGE" | "FT";
 }
 
-function computeClockState(startsAtMs: number, now: number, stepMs: number): ClockState {
+export function computeClockState(startsAtMs: number, now: number, stepMs: number): ClockState {
   const elapsedMs = Math.max(0, now - startsAtMs);
   const step = Math.floor(elapsedMs / stepMs) + 1;
 
@@ -344,7 +344,8 @@ async function executeTick(now: number): Promise<void> {
   if (openMatches.length === 0) return;
 
   const openIds = openMatches.map((m) => m.id);
-  const [pendingBets, houseHealth] = await Promise.all([
+  const openIdSet = new Set(openIds);
+  const [pendingBets, pendingCombos, houseHealth] = await Promise.all([
     db
       .select({
         matchId: bets.matchId,
@@ -355,6 +356,14 @@ async function executeTick(now: number): Promise<void> {
       })
       .from(bets)
       .where(and(inArray(bets.matchId, openIds), eq(bets.status, "pending"))),
+    db
+      .select({
+        stake: comboBets.stake,
+        baseOdds: comboBets.baseOdds,
+        legs: comboBets.legs,
+      })
+      .from(comboBets)
+      .where(eq(comboBets.status, "pending")),
     getGlobalHouseHealth(),
   ]);
 
@@ -368,6 +377,25 @@ async function executeTick(now: number): Promise<void> {
     arr.push(b);
     betsByMatch.set(b.matchId, arr);
   }
+  // Intègre aussi l'exposition des combinés en cours sur chaque match ouvert
+  for (const cb of pendingCombos) {
+    for (const leg of cb.legs ?? []) {
+      if (leg.kind !== "sport" || !leg.matchId || leg.status !== "pending") continue;
+      if (!openIdSet.has(leg.matchId)) continue;
+      const arr = betsByMatch.get(leg.matchId) ?? [];
+      const effectiveOdds = Math.min(
+        25,
+        leg.odds * Math.pow(Math.max(1, cb.baseOdds / Math.max(1.01, leg.odds)), 0.3)
+      );
+      arr.push({
+        market: leg.market,
+        selection: leg.selection,
+        stake: cb.stake,
+        odds: effectiveOdds,
+      });
+      betsByMatch.set(leg.matchId, arr);
+    }
+  }
 
   const pressureFor = (m: MatchRow): MatchBookPressure =>
     m.source === "virtual"
@@ -376,13 +404,16 @@ async function executeTick(now: number): Promise<void> {
 
   const liveMatches = openMatches.filter((m) => m.status === "live");
   const upcomingMatches = openMatches.filter((m) => m.status === "upcoming");
+  let lastCompletedEndMs = 0;
 
   // 1. Clôture d'abord tout match live dont le temps réglementaire est déjà écoulé
   const stillLive: MatchRow[] = [];
   for (const m of liveMatches) {
+    const dur = matchDurationMs(m.id, m.source);
     const clock = computeClockState(m.startsAt.getTime(), now, stepMsForMatch(m.id, m.source));
     if (clock.phase === "FT") {
       await tickLiveMatch(m, now, pressureFor(m));
+      lastCompletedEndMs = Math.max(lastCompletedEndMs, m.startsAt.getTime() + dur);
     } else {
       stillLive.push(m);
     }
@@ -411,32 +442,109 @@ async function executeTick(now: number): Promise<void> {
 
   // 3. Fait avancer l'unique match en live (s'il existe)
   if (activeLive) {
-    const finished = await tickLiveMatch(activeLive, now, pressureFor(activeLive));
-    if (finished) {
+    const dur = matchDurationMs(activeLive.id, activeLive.source);
+    const res = await tickLiveMatch(activeLive, now, pressureFor(activeLive));
+    if (res.finished) {
+      lastCompletedEndMs = Math.max(lastCompletedEndMs, activeLive.startsAt.getTime() + dur);
       activeLive = null;
+    } else {
+      activeLive = res.row;
     }
   }
 
-  // 4. Si aucun match n'est en live, lance UN SEUL match suivant (passage de témoin à tour de rôle)
+  // 4. Rattrapage séquentiel (« Time-Continuum ») de la file d'attente même avec 0 visiteur :
+  //    tous les matchs dont le créneau est passé se déroulent à tour de rôle et règlent leurs paris,
+  //    et celui dont le créneau couvre `now` est repris exactement à sa minute de jeu réelle.
   if (!activeLive && upcomingMatches.length > 0) {
-    const dueManual = upcomingMatches
-      .filter((m) => m.source === "manual" && now >= m.startsAt.getTime())
-      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
+    // 4a. Matchs manuels arrivés à échéance
+    const dueManuals = upcomingMatches
+      .filter((m) => m.source === "manual" && m.startsAt.getTime() <= now)
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
 
-    const nextVirtual = upcomingMatches
-      .filter((m) => m.source === "virtual")
-      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
-
-    const nextMatch = dueManual ?? nextVirtual ?? null;
-    if (nextMatch) {
-      const idx = upcomingMatches.findIndex((u) => u.id === nextMatch.id);
+    for (const mm of dueManuals) {
+      const idx = upcomingMatches.findIndex((u) => u.id === mm.id);
       if (idx >= 0) upcomingMatches.splice(idx, 1);
-      activeLive = await kickOffAndSimulateMatch(nextMatch, now, pressureFor(nextMatch));
+      const liveOrDone = await kickOffAtSchedule(mm, mm.startsAt.getTime(), now, pressureFor(mm));
+      if (liveOrDone) {
+        activeLive = liveOrDone;
+        break;
+      }
+      lastCompletedEndMs = Math.max(
+        lastCompletedEndMs,
+        mm.startsAt.getTime() + matchDurationMs(mm.id, "manual")
+      );
+    }
+
+    // 4b. File séquentielle des matchs virtuels
+    if (!activeLive) {
+      const virtualOrdered = upcomingMatches
+        .filter((m) => m.source === "virtual")
+        .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
+
+      let seqCursor = lastCompletedEndMs > 0 ? lastCompletedEndMs + INTER_MATCH_GAP_MS : 0;
+
+      for (const vm of virtualOrdered) {
+        const effStartMs =
+          seqCursor > 0 ? Math.max(vm.startsAt.getTime(), seqCursor) : vm.startsAt.getTime();
+
+        if (effStartMs > now) {
+          break;
+        }
+
+        const idx = upcomingMatches.findIndex((u) => u.id === vm.id);
+        if (idx >= 0) upcomingMatches.splice(idx, 1);
+
+        const liveOrDone = await kickOffAtSchedule(vm, effStartMs, now, pressureFor(vm));
+        if (liveOrDone) {
+          activeLive = liveOrDone;
+          break;
+        }
+
+        const dur = matchDurationMs(vm.id, "virtual");
+        lastCompletedEndMs = Math.max(lastCompletedEndMs, effStartMs + dur);
+        seqCursor = lastCompletedEndMs + INTER_MATCH_GAP_MS;
+      }
+
+      // Si le match live vient tout juste de se terminer et que la file virtuelle contient déjà
+      // le prochain match programmé dans quelques secondes, passe-lui immédiatement le témoin
+      // au lieu d'insérer un match intercalaire.
+      if (!activeLive) {
+        const nextQueuedVirtual = upcomingMatches
+          .filter((m) => m.source === "virtual")
+          .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
+
+        if (nextQueuedVirtual) {
+          const idx = upcomingMatches.findIndex((u) => u.id === nextQueuedVirtual.id);
+          if (idx >= 0) upcomingMatches.splice(idx, 1);
+          activeLive = await kickOffAtSchedule(
+            nextQueuedVirtual,
+            now,
+            now,
+            pressureFor(nextQueuedVirtual)
+          );
+        }
+      }
     }
   }
 
-  // 5. Aligne séquentiellement la file d'attente des matchs virtuels à venir l'un après l'autre
-  await syncUpcomingQueue(upcomingMatches, activeLive, now);
+  // 5. Pont de continuité après une longue absence (ex. plusieurs heures sans visiteur) :
+  //    toute l'ancienne file a été jouée et réglée ; on génère les derniers résultats récents
+  //    + 1 match déjà en cours à sa minute naturelle pour qu'il n'y ait jamais d'effet « réveil à 1' ».
+  if (!activeLive) {
+    activeLive = await bridgeIdleGapAndStartLive(now, lastCompletedEndMs);
+  }
+
+  // 6. Regarnit la file d'attente si le rattrapage a consommé des matchs, puis aligne les coups d'envoi
+  if (upcomingMatches.filter((m) => m.source === "virtual").length < MIN_ACTIVE_VIRTUAL) {
+    await ensureActiveSchedule(now);
+    const refreshedUpcoming = await db
+      .select()
+      .from(matches)
+      .where(eq(matches.status, "upcoming"));
+    await syncUpcomingQueue(refreshedUpcoming, activeLive, now);
+  } else {
+    await syncUpcomingQueue(upcomingMatches, activeLive, now);
+  }
 }
 
 async function syncUpcomingQueue(
@@ -602,13 +710,13 @@ async function ensureActiveSchedule(now: number): Promise<void> {
   }
 }
 
-async function kickOffAndSimulateMatch(
+async function kickOffAtSchedule(
   m: MatchRow,
+  scheduledStartsAtMs: number,
   now: number,
   pressure: MatchBookPressure
 ): Promise<MatchRow | null> {
-  // Démarre toujours proprement à la 1re minute lorsque son tour arrive
-  const kickoffDate = new Date(now);
+  const kickoffDate = new Date(scheduledStartsAtMs);
   const liveDraft: MatchRow = {
     ...m,
     status: "live",
@@ -620,19 +728,176 @@ async function kickOffAndSimulateMatch(
     awayLogo: teamLogo(m.awayTeam) || m.awayLogo,
   };
 
-  const finished = await tickLiveMatch(liveDraft, now, pressure, true);
-  return finished ? null : liveDraft;
+  const res = await tickLiveMatch(liveDraft, now, pressure, true);
+  return res.finished ? null : res.row;
 }
 
 /**
- * Fait progresser un match live et retourne `true` si le match vient de se terminer (`FT`).
+ * Après une absence prolongée où tous les anciens matchs programmés ont déjà fini,
+ * reconstruit sans couture la fenêtre récente (2 matchs récemment terminés + 1 match
+ * en direct déjà au cœur de l'action) pour que le site paraisse habité 24h/24.
+ */
+async function bridgeIdleGapAndStartLive(
+  now: number,
+  lastCompletedEndMs: number
+): Promise<MatchRow | null> {
+  const [recentFin] = await db
+    .select({ finishedAt: matches.finishedAt })
+    .from(matches)
+    .where(eq(matches.status, "finished"))
+    .orderBy(desc(matches.finishedAt))
+    .limit(1);
+
+  const latestEnd = Math.max(
+    lastCompletedEndMs,
+    recentFin?.finishedAt ? recentFin.finishedAt.getTime() : 0
+  );
+
+  const openNow = await db
+    .select({ homeTeam: matches.homeTeam, awayTeam: matches.awayTeam })
+    .from(matches)
+    .where(inArray(matches.status, ["upcoming", "live"]));
+  const busy = new Set<string>();
+  for (const r of openNow) {
+    busy.add(r.homeTeam);
+    busy.add(r.awayTeam);
+  }
+
+  const slot = Math.floor(now / 150_000);
+  const picked: FixtureTemplate[] = [];
+  for (let i = 0; i < FIXTURE_POOL.length && picked.length < 3; i++) {
+    const fx = FIXTURE_POOL[(slot + i * 7) % FIXTURE_POOL.length];
+    if (busy.has(fx.home) || busy.has(fx.away)) continue;
+    busy.add(fx.home);
+    busy.add(fx.away);
+    picked.push(fx);
+  }
+  if (picked.length === 0) return null;
+
+  const avgDur = 160_000;
+  // Détermine une minute de jeu naturelle (entre ~16' et ~72') pour le match actuellement en direct
+  const liveFrac = 0.18 + ((hashString(`idle-live-frac|${slot}`) % 55) / 100);
+  const targetLiveStart =
+    now - latestEnd > 6 * 60_000
+      ? now - Math.round(avgDur * liveFrac)
+      : Math.min(now, Math.max(now - 20_000, latestEnd + INTER_MATCH_GAP_MS));
+
+  // Si un long silence (> 6 min) s'est écoulé, génère 2 matchs récemment terminés juste avant le live
+  if (now - latestEnd > 6 * 60_000 && picked.length >= 3) {
+    let backCursor = targetLiveStart - INTER_MATCH_GAP_MS;
+    const pastFixtures = [picked[0], picked[1]];
+    for (let i = pastFixtures.length - 1; i >= 0; i--) {
+      const fx = pastFixtures[i];
+      const rng = mulberry32(hashString(`bridge-past|${slot}|${i}`));
+      const regime = MATCH_REGIMES[Math.floor(rng() * MATCH_REGIMES.length)];
+      const homeForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+      const awayForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+      const preOdds = oddsFor(fx.home, fx.away, { homeForm, awayForm });
+      const approxStart = backCursor - avgDur;
+
+      const [inserted] = await db
+        .insert(matches)
+        .values({
+          sport: "football",
+          league: fx.league,
+          homeTeam: fx.home,
+          awayTeam: fx.away,
+          homeLogo: teamLogo(fx.home),
+          awayLogo: teamLogo(fx.away),
+          homeScore: 0,
+          awayScore: 0,
+          status: "live",
+          minute: "1'",
+          startsAt: new Date(approxStart),
+          oddsHome: preOdds.oddsHome,
+          oddsDraw: preOdds.oddsDraw,
+          oddsAway: preOdds.oddsAway,
+          suspended: false,
+          redHome: 0,
+          redAway: 0,
+          events: [],
+          tickHistory: [],
+          regime,
+          homeForm,
+          awayForm,
+          markets: null,
+          source: "virtual",
+        })
+        .returning();
+
+      if (inserted) {
+        const exactDur = matchDurationMs(inserted.id, "virtual");
+        const exactStart = backCursor - exactDur;
+        await kickOffAtSchedule(
+          inserted,
+          exactStart,
+          now,
+          { homeTilt: 1, awayTilt: 1, tempoTilt: 1 }
+        );
+        backCursor = exactStart - INTER_MATCH_GAP_MS;
+      }
+    }
+  }
+
+  const liveFx = picked[picked.length - 1];
+  const rng = mulberry32(hashString(`bridge-live|${slot}|${liveFx.home}`));
+  const regime = MATCH_REGIMES[Math.floor(rng() * MATCH_REGIMES.length)];
+  const homeForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+  const awayForm = Math.round((0.92 + rng() * 0.18) * 100) / 100;
+  const preOdds = oddsFor(liveFx.home, liveFx.away, { homeForm, awayForm });
+
+  const [liveInserted] = await db
+    .insert(matches)
+    .values({
+      sport: "football",
+      league: liveFx.league,
+      homeTeam: liveFx.home,
+      awayTeam: liveFx.away,
+      homeLogo: teamLogo(liveFx.home),
+      awayLogo: teamLogo(liveFx.away),
+      homeScore: 0,
+      awayScore: 0,
+      status: "live",
+      minute: "1'",
+      startsAt: new Date(targetLiveStart),
+      oddsHome: preOdds.oddsHome,
+      oddsDraw: preOdds.oddsDraw,
+      oddsAway: preOdds.oddsAway,
+      suspended: false,
+      redHome: 0,
+      redAway: 0,
+      events: [],
+      tickHistory: [],
+      regime,
+      homeForm,
+      awayForm,
+      markets: null,
+      source: "virtual",
+    })
+    .returning();
+
+  if (!liveInserted) return null;
+
+  // Garantit que targetLiveStart reste bien dans la fenêtre active du match inséré
+  const exactDur = matchDurationMs(liveInserted.id, "virtual");
+  const safeLiveStart = Math.max(now - Math.round(exactDur * 0.82), targetLiveStart);
+  return kickOffAtSchedule(
+    liveInserted,
+    safeLiveStart,
+    now,
+    { homeTilt: 1, awayTilt: 1, tempoTilt: 1 }
+  );
+}
+
+/**
+ * Fait progresser un match live et retourne `{ finished, row }`.
  */
 async function tickLiveMatch(
   m: MatchRow,
   now: number,
   pressure: MatchBookPressure,
   forceWrite = false
-): Promise<boolean> {
+): Promise<{ finished: boolean; row: MatchRow }> {
   const stepMs = stepMsForMatch(m.id, m.source);
   const clock = computeClockState(m.startsAt.getTime(), now, stepMs);
   const isOver = clock.phase === "FT";
@@ -823,11 +1088,11 @@ async function tickLiveMatch(
     events.length !== (m.events ?? []).length ||
     targetSimMin !== prevSimMin;
 
-  if (!changed) return isOver;
+  if (!changed) return { finished: isOver, row: m };
 
   const naturalEndMs = m.startsAt.getTime() + matchDurationMs(m.id, m.source);
 
-  await db
+  const [updated] = await db
     .update(matches)
     .set({
       homeScore: home,
@@ -849,11 +1114,12 @@ async function tickLiveMatch(
       startsAt: m.startsAt,
       ...(isOver ? { finishedAt: new Date(Math.min(now, naturalEndMs)) } : {}),
     })
-    .where(eq(matches.id, m.id));
+    .where(eq(matches.id, m.id))
+    .returning();
 
   if (isOver) {
     await settleMatchBets(m.id);
   }
 
-  return isOver;
+  return { finished: isOver, row: updated ?? m };
 }

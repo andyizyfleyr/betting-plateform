@@ -283,3 +283,16 @@ export async function getDepositStatus(providerRef: string) {
   if (!dep) return { status: "unknown" as DepositStatus, credited: false };
   return { status: dep.status as DepositStatus, credited: dep.status === "credited" };
 }
+
+/**
+ * Expire proprement les sessions Stripe / PayPal abandonnées après 24h
+ * (ne touche jamais aux demandes manuelles `pending_review` Mobile Money / SEPA).
+ */
+export async function expireStaleGatewayDeposits(): Promise<void> {
+  await db
+    .update(deposits)
+    .set({ status: "expired", updatedAt: new Date() })
+    .where(
+      sql`${deposits.status} = 'pending' AND ${deposits.provider} IN ('stripe', 'paypal') AND ${deposits.createdAt} < now() - interval '24 hours'`
+    );
+}

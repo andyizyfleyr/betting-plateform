@@ -1,70 +1,70 @@
 import { runLiveEngine } from "@/db/engine";
+import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
 import { settlePendingCombos } from "@/lib/combo";
-import { settleResolvedQuestions } from "@/lib/predictions";
+import { expireStaleGatewayDeposits } from "@/lib/payments";
+import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
 import { settleFinishedBets } from "@/lib/settle";
 
-const ENGINE_THROTTLE_MS = 1_500;
-const SETTLE_THROTTLE_MS = 1_500;
-
-let lastEngineAt = 0;
-let inFlightEngine: Promise<void> | null = null;
-
-let lastSettleAt = 0;
-let inFlightSettle: Promise<void> | null = null;
-
 /**
- * Exécute le moteur live et le règlement des paris sportifs avec déduplication
- * des requêtes concurrentes et cadence max d'une fois toutes les 1,5 s.
+ * Orchestrateur unifié « Time-Continuum » :
+ * - Garantit que n'importe quelle requête réveillant le serveur après une période
+ *   avec 0 visiteur rattrape séquentiellement tous les matchs écoulés, résout les
+ *   questions arrivées à terme, règle tous les paris simples / combinés aux dates
+ *   réelles de fin d'événement et maintient les files actives.
+ * - Déduplique les appels concurrents (< 1,5 s) pour ménager le pool PostgreSQL.
  */
-export async function syncLiveMatchesThrottled(force = false): Promise<void> {
+const SYNC_THROTTLE_MS = 1_500;
+const HOUSEKEEPING_THROTTLE_MS = 60_000;
+
+let lastFullSyncAt = 0;
+let inFlightFullSync: Promise<void> | null = null;
+let lastHousekeepingAt = 0;
+
+export async function syncPlatformStateThrottled(force = false): Promise<void> {
   const now = Date.now();
-  if (!force && now - lastEngineAt < ENGINE_THROTTLE_MS) {
-    if (inFlightEngine) await inFlightEngine;
+  if (!force && now - lastFullSyncAt < SYNC_THROTTLE_MS) {
+    if (inFlightFullSync) await inFlightFullSync;
     return;
   }
-  if (inFlightEngine) {
-    await inFlightEngine;
+  if (inFlightFullSync) {
+    await inFlightFullSync;
     return;
   }
-  inFlightEngine = (async () => {
+
+  inFlightFullSync = (async () => {
     try {
       await runLiveEngine();
-      await settleFinishedBets();
-      await settlePendingCombos();
-      lastEngineAt = Date.now();
-    } finally {
-      inFlightEngine = null;
-    }
-  })();
-  await inFlightEngine;
-}
-
-/**
- * Règle les matchs terminés, les prédictions échues et les combinés avec cadence 1,5 s.
- */
-export async function syncAllSettlementsThrottled(force = false): Promise<void> {
-  const now = Date.now();
-  if (!force && now - lastSettleAt < SETTLE_THROTTLE_MS) {
-    if (inFlightSettle) await inFlightSettle;
-    return;
-  }
-  if (inFlightSettle) {
-    await inFlightSettle;
-    return;
-  }
-  inFlightSettle = (async () => {
-    try {
       await Promise.all([settleFinishedBets(), settleResolvedQuestions()]);
       await settlePendingCombos();
-      lastSettleAt = Date.now();
+
+      const hkNow = Date.now();
+      if (force || hkNow - lastHousekeepingAt >= HOUSEKEEPING_THROTTLE_MS) {
+        await Promise.all([
+          ensureOpenPredictions(hkNow),
+          expireStaleAcceleratorRounds(hkNow),
+          expireStaleGatewayDeposits(),
+        ]);
+        lastHousekeepingAt = Date.now();
+      }
+
+      lastFullSyncAt = Date.now();
     } finally {
-      inFlightSettle = null;
+      inFlightFullSync = null;
     }
   })();
-  await inFlightSettle;
+
+  await inFlightFullSync;
+}
+
+export async function syncLiveMatchesThrottled(force = false): Promise<void> {
+  await syncPlatformStateThrottled(force);
+}
+
+export async function syncAllSettlementsThrottled(force = false): Promise<void> {
+  await syncPlatformStateThrottled(force);
 }
 
 export function resetSyncThrottle(): void {
-  lastEngineAt = 0;
-  lastSettleAt = 0;
+  lastFullSyncAt = 0;
+  lastHousekeepingAt = 0;
 }

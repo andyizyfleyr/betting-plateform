@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { createHash, createHmac, randomBytes } from "crypto";
 import { db } from "@/db";
 import { acceleratorRounds, appUser, type AcceleratorRoundRow } from "@/db/schema";
@@ -356,4 +356,28 @@ export async function getActiveRound(uid: number): Promise<AcceleratorRoundRow |
   const latest = await getLatestRound(uid);
   if (latest && latest.status === "active") return latest;
   return null;
+}
+
+/**
+ * Clôture automatiquement toute manche Accelerator abandonnée (onglet fermé ou
+ * perte réseau au-delà de TTL_MS) afin que l'historique du portefeuille reste
+ * exact même si le joueur ne rouvre jamais la page /accelerator.
+ */
+export async function expireStaleAcceleratorRounds(now = nowMs()): Promise<void> {
+  const cutoff = now - ACCEL_CONFIG.TTL_MS;
+  const res = await db
+    .update(acceleratorRounds)
+    .set({
+      status: "crashed",
+      endedAt: sql`to_timestamp((${acceleratorRounds.lastMs} + ${ACCEL_CONFIG.TTL_MS}) / 1000.0)`,
+    })
+    .where(
+      and(
+        eq(acceleratorRounds.status, "active"),
+        sql`${acceleratorRounds.lastMs} < ${cutoff}`
+      )
+    );
+  if ((res.rowCount ?? 0) > 0) {
+    invalidateHouseHealthCache();
+  }
 }
