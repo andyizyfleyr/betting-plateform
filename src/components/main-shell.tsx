@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
-import { BottomNav } from "@/components/bottom-nav";
 import { DesktopBetslipSidebar } from "@/components/desktop-betslip-sidebar";
 import { DesktopLeaguesSidebar } from "@/components/desktop-leagues-sidebar";
 import { DesktopSidebar } from "@/components/desktop-sidebar";
@@ -55,15 +54,13 @@ export function MainShell({ children }: { children: ReactNode }) {
           className={cn(
             "min-w-0 flex-1",
             !isFullscreenGame &&
-              "pb-[calc(64px+env(safe-area-inset-bottom,0px))] lg:pb-0"
+              "pb-[calc(68px+env(safe-area-inset-bottom,0px))] lg:pb-0"
           )}
         >
           {children}
         </main>
         {!isBetslipRoute && <DesktopBetslipSidebar />}
       </div>
-
-      <BottomNav />
     </div>
   );
 }

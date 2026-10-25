@@ -89,7 +89,7 @@ export function MatchCard({
         }
       }}
       className={cn(
-        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl px-3 py-2.5 transition-colors active:bg-elev/45 lg:p-3",
+        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-3.5 transition-colors active:bg-elev/45",
         className
       )}
     >
@@ -196,8 +196,8 @@ export function MatchCard({
         </div>
       </div>
 
-      {/* Équipes & scores resserrés */}
-      <div className="mt-1.5 flex flex-col gap-1 lg:mt-2 lg:gap-1.5">
+      {/* Équipes & scores équilibrés */}
+      <div className="mt-2.5 flex flex-col gap-2 lg:mt-2.5 lg:gap-1.5">
         <TeamRow
           name={match.homeTeam}
           logo={match.homeLogo}
@@ -219,7 +219,7 @@ export function MatchCard({
       {/* Tracker 2D virtuel ou statistiques officielles (desktop uniquement) */}
       {!isReal && isLive && showTracker && (
         <div className="hidden lg:block">
-          <LiveMatchTracker match={match} className="mt-2" />
+          <LiveMatchTracker match={match} className="mt-2.5" />
         </div>
       )}
       {isReal && isLive && showTracker && realStatsAvailable && (
@@ -233,14 +233,14 @@ export function MatchCard({
             htHomeScore={match.htHomeScore}
             htAwayScore={match.htAwayScore}
             compact
-            className="mt-2"
+            className="mt-2.5"
           />
         </div>
       )}
 
       {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés sur desktop */}
       {!isFinished && (
-        <div className="mt-auto pt-2 lg:pt-2.5">
+        <div className="mt-auto pt-3">
           <ResultOdds match={match} />
           {marketCount > 1 && (
             <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[11px] lg:flex">
@@ -276,11 +276,11 @@ function TeamRow({
 }) {
   const isFinished = score != null && !isLive;
   return (
-    <div className="flex items-center gap-2">
-      <TeamAvatar name={name} logo={logo} size="2xs" />
+    <div className="flex items-center gap-2.5">
+      <TeamAvatar name={name} logo={logo} size="xs" />
       <span
         className={cn(
-          "truncate font-display text-[13px] font-semibold leading-tight lg:text-[13.5px]",
+          "truncate font-display text-[13.5px] font-semibold leading-snug lg:text-[14px]",
           isFinished && !winner ? "text-mist" : "text-ink"
         )}
       >
@@ -292,7 +292,7 @@ function TeamRow({
           {Array.from({ length: redCards }).map((_, i) => (
             <span
               key={i}
-              className="inline-block h-2.5 w-1.5 rounded-[2px] bg-betclic-red shadow-xs"
+              className="inline-block h-3 w-2 rounded-[2px] bg-betclic-red shadow-xs"
             />
           ))}
         </span>
@@ -301,7 +301,7 @@ function TeamRow({
       {score != null && (
         <span
           className={cn(
-            "ml-auto min-w-[20px] rounded-md px-1.5 py-0.5 text-center font-display text-[13.5px] font-bold leading-none tabular-nums lg:text-[14.5px]",
+            "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[14px] font-bold leading-none tabular-nums lg:text-[15px]",
             isLive
               ? "bg-betclic-red/10 text-betclic-red"
               : isFinished && winner
@@ -474,7 +474,7 @@ function OddsCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "flex h-9 items-center justify-between rounded-lg border px-2.5 transition-all active:scale-[0.98] lg:h-10 lg:rounded-xl lg:px-3",
+        "flex h-10.5 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
