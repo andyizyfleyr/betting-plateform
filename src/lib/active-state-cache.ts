@@ -332,7 +332,7 @@ export function removeCachedMatch(matchId: number): void {
   invalidatePublicApiCaches();
 }
 
-export function invalidateAllActiveCaches(): void {
+export function invalidateAllActiveCaches(purgeEdge = true): void {
   const st = getState();
   st.matchesHydratedAt = 0;
   st.manualRefreshedAt = 0;
@@ -342,7 +342,7 @@ export function invalidateAllActiveCaches(): void {
   st.nextQuestionResolveAtMs = 0;
   st.userPulseCache.clear();
   st.userBetsCache.clear();
-  invalidatePublicApiCaches();
+  invalidatePublicApiCaches(purgeEdge);
 }
 
 /* ============================================================================

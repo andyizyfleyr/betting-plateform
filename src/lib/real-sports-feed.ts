@@ -29,8 +29,21 @@ const LIVE_FEED_SYNC_MS = 15_000;
 const IDLE_FEED_SYNC_MS = 180_000;
 /** Fréquence maximale d'interrogation du résumé détaillé (`boxscore` stats) par match live. */
 const SUMMARY_FETCH_INTERVAL_MS = 25_000;
-/** Fenêtre de confirmation anti-VAR après détection du coup de sifflet final (90 secondes). */
-export const REAL_FT_CONFIRM_DELAY_MS = 90_000;
+/**
+ * Fenêtre courte de confirmation anti-VAR (25 s) appliquée UNIQUEMENT lorsqu'un match réel
+ * était activement suivi en direct jusqu'au coup de sifflet final.
+ */
+export const REAL_FT_CONFIRM_DELAY_MS = 25_000;
+/**
+ * Seuil d'absence de synchronisation (2 min 30 s) au-delà duquel une fin officielle détectée
+ * au réveil du site est clôturée immédiatement sans sas anti-VAR différé.
+ */
+const ABSENCE_SYNC_GAP_MS = 150_000;
+/**
+ * Durée depuis le coup d'envoi (2h10) au-delà de laquelle le temps réglementaire (90 min)
+ * est terminé depuis assez longtemps pour clôturer immédiatement sans sas anti-VAR.
+ */
+const REAL_MATCH_ENDED_LONG_AGO_MS = 130 * 60_000;
 /** Délai d'acceptation anti « pari tardif » sur un pari ou cash-out en direct (3 secondes). */
 const LIVE_ACCEPTANCE_BUFFER_MS = 3_000;
 /** Verrouillage préventif des paris live si le flux automatique d'un match live ne répond plus (> 90 s). */
@@ -1361,11 +1374,22 @@ export async function applyFeedUpdateToRealMatch(
   const firstFtAt = m.feedFinishedAt ?? now;
   const scoreChangedAtFt =
     m.feedFinishedAt != null && (nextHome !== prevHome || nextAway !== prevAway);
-  // Si un but VAR tardif a rectifié le score pendant la fenêtre de confirmation, on repart pour 90s
+  // Si un but VAR tardif a rectifié le score pendant la fenêtre de confirmation, on repart pour 25s
   const effectiveFtStart = scoreChangedAtFt ? now : firstFtAt;
-  const endedLongAgo = nowMs - m.startsAt.getTime() > 3.5 * 3600_000;
+  // Si le match s'est terminé pendant une absence de visiteurs (match resté en `upcoming` en base
+  // ou aucune synchro serveur dans les 2 min 30 précédant la découverte de la fin), inutile d'ouvrir
+  // un sas anti-VAR à retardement au réveil du site : on clôture et règle immédiatement.
+  const finishedDuringAbsence =
+    m.feedFinishedAt == null &&
+    (m.status !== "live" ||
+      !m.feedSyncedAt ||
+      nowMs - m.feedSyncedAt.getTime() > ABSENCE_SYNC_GAP_MS);
+  const endedLongAgo =
+    nowMs - m.startsAt.getTime() > REAL_MATCH_ENDED_LONG_AGO_MS;
   const confirmationReady =
-    endedLongAgo || nowMs - effectiveFtStart.getTime() >= REAL_FT_CONFIRM_DELAY_MS;
+    finishedDuringAbsence ||
+    endedLongAgo ||
+    nowMs - effectiveFtStart.getTime() >= REAL_FT_CONFIRM_DELAY_MS;
 
   if (settlementMode === "confirm") {
     // Mode validation 1-clic admin : scores, stats et suspension automatiques, règlement au clic admin
@@ -1461,6 +1485,22 @@ export async function applyFeedUpdateToRealMatch(
 let lastRealSyncAt = 0;
 let inFlightRealSync: Promise<RealSyncSummary> | null = null;
 
+export function isRealFeedSyncInFlight(): boolean {
+  return inFlightRealSync !== null;
+}
+
+export async function hasOverdueRealMatches(nowMs = Date.now()): Promise<boolean> {
+  await ensureMatchStoreHydrated();
+  const cachedManual = getCachedOpenManualMatches().filter((m) => m.autoSync);
+  return cachedManual.some(
+    (m) =>
+      m.feedFinishedAt != null ||
+      (m.status !== "finished" &&
+        nowMs - m.startsAt.getTime() >= 110 * 60_000 &&
+        (!m.feedSyncedAt || nowMs - m.feedSyncedAt.getTime() > 45_000))
+  );
+}
+
 const EMPTY_SYNC_SUMMARY: RealSyncSummary = {
   activeCount: 0,
   syncedCount: 0,
@@ -1476,7 +1516,15 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
   }
 
   const nowMs = Date.now();
-  if (!force && nowMs - lastRealSyncAt < LIVE_FEED_SYNC_MS) {
+  await ensureMatchStoreHydrated();
+  const precheckManual = getCachedOpenManualMatches().filter((m) => m.autoSync);
+  const ftConfirmationDueNow = precheckManual.some(
+    (m) =>
+      m.feedFinishedAt != null &&
+      nowMs - m.feedFinishedAt.getTime() >= REAL_FT_CONFIRM_DELAY_MS
+  );
+
+  if (!force && !ftConfirmationDueNow && nowMs - lastRealSyncAt < LIVE_FEED_SYNC_MS) {
     return EMPTY_SYNC_SUMMARY;
   }
 
@@ -1654,7 +1702,14 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
             summaryPriority = 2;
           } else if (
             feedMatch?.status === "finished" &&
-            (m.realStats == null || m.htHomeScore == null) &&
+            feedMatch.htHomeScore == null &&
+            m.htHomeScore == null
+          ) {
+            summaryPriority = 3;
+          } else if (
+            feedMatch?.status === "finished" &&
+            feedMatch.realStats == null &&
+            m.realStats == null &&
             (force || nowMs - lastSum >= SUMMARY_FETCH_INTERVAL_MS)
           ) {
             summaryPriority = 1;

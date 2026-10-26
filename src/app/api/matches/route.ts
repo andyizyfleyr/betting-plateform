@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ensureSeeded } from "@/db/seed";
 import {
   ensureMatchStoreHydrated,
@@ -15,8 +15,12 @@ import {
 } from "@/lib/markets";
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
-import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
 import {
+  isRealFeedSyncInFlight,
+  isRealMatchFeedStale,
+} from "@/lib/real-sports-feed";
+import {
+  computeWeakEtag,
   EDGE_CACHE_TAGS,
   getMatchesPayloadCache,
   publicJsonWithEdgeCache,
@@ -46,20 +50,25 @@ export async function GET(req: NextRequest) {
       return rejectUnexpectedQueryParams();
     }
 
-    const stored = await runSingleflight("api:matches", async () => {
-      await ensureSeeded();
-      await ensureMlLoaded();
-      await syncLiveMatchesThrottled();
+    const { entry: stored, catchingUp } = await runSingleflight(
+      "api:matches",
+      async () => {
+        await ensureSeeded();
+        await ensureMlLoaded();
+        await syncLiveMatchesThrottled();
 
-      const freshCached = getMatchesPayloadCache();
-      if (freshCached) {
-        return freshCached;
-      }
+        const feedInFlight = isRealFeedSyncInFlight();
+        if (!feedInFlight) {
+          const freshCached = getMatchesPayloadCache();
+          if (freshCached) {
+            return { entry: freshCached, catchingUp: false };
+          }
+        }
 
-      await ensureMatchStoreHydrated();
-      const now = Date.now();
-      // 0 requête SQL à chaud : lit directement le store mémoire synchronisé (matchs réels + virtuels)
-      const rows = getCachedAllMatchesForFeed();
+        await ensureMatchStoreHydrated();
+        const now = Date.now();
+        // 0 requête SQL à chaud : lit directement le store mémoire synchronisé (matchs réels + virtuels)
+        const rows = getCachedAllMatchesForFeed();
 
       const withMarkets = rows.map((rawRow) => {
     const cleanEvents = sanitizeMatchEvents(
@@ -194,12 +203,34 @@ export async function GET(req: NextRequest) {
     };
   });
 
-      const payload = {
-        matches: withMarkets,
-        serverTime: new Date(now).toISOString(),
-      };
-      return setMatchesPayloadCache(payload);
-    });
+        const payload = {
+          matches: withMarkets,
+          serverTime: new Date(now).toISOString(),
+        };
+        if (feedInFlight) {
+          const json = JSON.stringify(payload);
+          return {
+            entry: { json, etag: computeWeakEtag(json), at: Date.now() },
+            catchingUp: true,
+          };
+        }
+        return { entry: setMatchesPayloadCache(payload), catchingUp: false };
+      }
+    );
+
+    if (catchingUp) {
+      return new NextResponse(stored.json, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          ETag: stored.etag,
+          "Cache-Control": "no-store, max-age=0",
+          "CDN-Cache-Control": "no-store",
+          "Vercel-CDN-Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
 
     return publicJsonWithEdgeCache(req, null, stored, MATCHES_EDGE_POLICY);
   } catch (err) {
