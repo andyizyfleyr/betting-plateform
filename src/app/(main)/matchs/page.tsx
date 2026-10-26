@@ -419,34 +419,12 @@ export default function MatchsPage() {
           </div>
         </div>
 
-        {/* Barre de recherche mobile placée en haut du slide Hero */}
-        <div className="mb-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:hidden">
-          <Search className="h-4 w-4 shrink-0 text-dim" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un match, un club ou une ligue…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Effacer la recherche"
-              className="text-dim active:text-ink"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-
         {/* Hero publicitaire mobile */}
         <MobileHeroCarousel onAction={handleHeroAction} />
 
-        {/* Sélecteur d'univers + Barre de recherche (desktop >= lg uniquement) */}
-        <div className="hidden lg:mt-3 lg:block xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
-          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+        {/* Sélecteur d'univers (desktop uniquement) + Barre de recherche */}
+        <div className="mb-3.5 lg:mb-0 lg:mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
+          <div className="hidden grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1 lg:grid">
             <button
               type="button"
               onClick={() => switchUniverse("real")}
@@ -512,16 +490,18 @@ export default function MatchsPage() {
             </button>
           </div>
 
-          <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 xl:mt-0 xl:h-12 xl:rounded-2xl xl:px-3.5">
+          <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:mt-2.5 xl:mt-0 xl:h-12 xl:rounded-2xl xl:px-3.5">
             <Search className="h-4 w-4 shrink-0 text-dim" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={
-                isRealUniverse
-                  ? "Rechercher un match réel ou une compétition…"
-                  : "Rechercher un club ou une ligue virtuelle…"
+                isMobileViewport
+                  ? "Rechercher un match, un club ou une ligue…"
+                  : isRealUniverse
+                    ? "Rechercher un match réel ou une compétition…"
+                    : "Rechercher un club ou une ligue virtuelle…"
               }
               className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
             />
@@ -530,7 +510,7 @@ export default function MatchsPage() {
                 type="button"
                 onClick={() => setQuery("")}
                 aria-label="Effacer la recherche"
-                className="text-dim hover:text-ink"
+                className="text-dim hover:text-ink active:text-ink"
               >
                 <X className="h-4 w-4" />
               </button>
