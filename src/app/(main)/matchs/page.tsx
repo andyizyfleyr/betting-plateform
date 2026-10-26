@@ -17,7 +17,6 @@ import {
   ChevronRight,
   Cpu,
   History,
-  List,
   RefreshCw,
   Search,
   Trophy,
@@ -647,55 +646,6 @@ export default function MatchsPage() {
                       trailingLabel="Voir tout"
                       emptyMessage="Aucun match en avant-match dans cette sélection"
                     />
-
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-edge bg-white px-3.5 py-2.5 shadow-2xs">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
-                          <List className="h-4 w-4" strokeWidth={2.3} />
-                        </span>
-                        <p className="min-w-0 text-[12px] font-medium leading-snug text-mist">
-                          Parcourir tous les matchs alignés{" "}
-                          <strong className="font-semibold text-ink">
-                            en liste verticale
-                          </strong>{" "}
-                          au pouce
-                        </p>
-                      </div>
-                      <Link
-                        href={
-                          mobileRows.upcomingRowUsesVirtual
-                            ? "/matchs/virtuels"
-                            : "/matchs/tous"
-                        }
-                        className="inline-flex h-8.5 shrink-0 items-center gap-1 rounded-full bg-betclic-red px-3 font-display text-[12px] font-bold text-white shadow-2xs transition-transform active:scale-95"
-                      >
-                        Voir tout
-                        <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-                      </Link>
-                    </div>
-
-                    {/* Accès rapides mobiles : Matchs virtuels 24/7 & Historique des résultats */}
-                    <div className="grid grid-cols-2 gap-2 pt-0.5">
-                      <Link
-                        href="/matchs/virtuels"
-                        className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
-                      >
-                        <Cpu className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-                        <span>Virtuels 24h/24</span>
-                        {virtualLiveTotal > 0 && (
-                          <span className="rounded-full bg-betclic-red/12 px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums text-betclic-red">
-                            {virtualLiveTotal}
-                          </span>
-                        )}
-                      </Link>
-                      <Link
-                        href="/resultats"
-                        className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
-                      >
-                        <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-                        <span>Résultats</span>
-                      </Link>
-                    </div>
                   </div>
                 )}
               </div>
