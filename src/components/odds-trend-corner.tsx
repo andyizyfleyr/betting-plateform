@@ -6,9 +6,26 @@ import { cn } from "@/lib/format";
 export type OddsTrend = "up" | "down" | null;
 
 /**
- * Détecte toute variation réelle d'une cote (>= 0,015) et maintient
- * un micro-indicateur directionnel pendant quelques secondes sans faire
- * clignoter toute la carte.
+ * Classe couleur de texte des cotes selon leur variation :
+ * - Hausse : vert (`text-win`)
+ * - Baisse : rouge (`text-betclic-red`)
+ * - Stable : noir (`text-ink`)
+ */
+export function oddsTrendTextClass(trend: OddsTrend, active = false): string {
+  if (active) {
+    if (trend === "up") return "text-emerald-300";
+    if (trend === "down") return "text-rose-200";
+    return "text-white";
+  }
+  if (trend === "up") return "text-win";
+  if (trend === "down") return "text-betclic-red";
+  return "text-ink";
+}
+
+/**
+ * Détecte toute variation visible d'une cote (>= 0,01 affichée) et maintient
+ * la couleur directionnelle + micro-indicateur pendant quelques secondes avant
+ * de revenir à l'état stable (noir).
  */
 export function useOddsTrend(odds: number, durationMs = 4200): OddsTrend {
   const [trend, setTrend] = useState<OddsTrend>(null);
@@ -17,14 +34,19 @@ export function useOddsTrend(odds: number, durationMs = 4200): OddsTrend {
 
   useEffect(() => {
     const prev = prevRef.current;
-    const delta = odds - prev;
     prevRef.current = odds;
 
-    if (!Number.isFinite(odds) || !Number.isFinite(prev) || Math.abs(delta) < 0.015) {
+    if (!Number.isFinite(odds) || !Number.isFinite(prev)) {
       return;
     }
 
-    const dir: Exclude<OddsTrend, null> = delta > 0 ? "up" : "down";
+    const centsNow = Math.round(odds * 100);
+    const centsPrev = Math.round(prev * 100);
+    if (centsNow === centsPrev) {
+      return;
+    }
+
+    const dir: Exclude<OddsTrend, null> = centsNow > centsPrev ? "up" : "down";
     const micro = setTimeout(() => {
       setTrend(dir);
     }, 0);
@@ -50,9 +72,8 @@ export function useOddsTrend(odds: number, durationMs = 4200): OddsTrend {
 
 /**
  * Minuscule triangle directionnel épinglé en coin supérieur droit d'un bouton de cote :
- * - ▲ vert émeraude quand la cote monte
- * - ▼ rouge 1xBet quand la cote baisse
- * Zéro décalage de mise en page, zéro flash agressif sur la carte entière.
+ * - ▲ vert quand la cote monte
+ * - ▼ rouge quand la cote baisse
  */
 export function OddsTrendCorner({
   trend,
@@ -76,7 +97,7 @@ export function OddsTrendCorner({
             ? "text-emerald-300"
             : "text-win"
           : inverted
-            ? "text-amber-300"
+            ? "text-rose-200"
             : "text-betclic-red",
         className
       )}

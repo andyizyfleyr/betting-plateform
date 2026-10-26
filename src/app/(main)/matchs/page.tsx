@@ -888,23 +888,6 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
           <h2 className="truncate font-display text-[13.5px] font-bold tracking-tight text-ink">
             {label}
           </h2>
-          {virtualFallback && items.length > 0 && (
-            <span className="shrink-0 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
-              Virtuels
-            </span>
-          )}
-          <span
-            className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums",
-              live && items.length > 0
-                ? virtualFallback
-                  ? "bg-betclic-red/12 text-betclic-red"
-                  : "bg-emerald-600/12 text-emerald-700"
-                : "bg-elev text-dim"
-            )}
-          >
-            {items.length}
-          </span>
         </div>
 
         {trailingHref && trailingLabel && (

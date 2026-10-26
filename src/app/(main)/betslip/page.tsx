@@ -39,7 +39,11 @@ import {
 import { AnimatedNumber } from "@/components/animated-number";
 import { CouponCodeBox } from "@/components/coupon-code-box";
 import { OddsLockControls } from "@/components/odds-lock-controls";
-import { OddsTrendCorner, useOddsTrend } from "@/components/odds-trend-corner";
+import {
+  OddsTrendCorner,
+  oddsTrendTextClass,
+  useOddsTrend,
+} from "@/components/odds-trend-corner";
 import { TeamAvatar } from "@/components/team-avatar";
 import { TouchStakePad } from "@/components/touch-stake-pad";
 import { useApp } from "@/components/providers";
@@ -54,7 +58,12 @@ function LegLiveOddsBadge({
 }) {
   const trend = useOddsTrend(odds);
   return (
-    <span className="relative shrink-0 rounded-lg bg-white px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-betclic-red shadow-2xs">
+    <span
+      className={cn(
+        "relative shrink-0 rounded-lg bg-white px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums shadow-2xs transition-colors duration-200",
+        oddsTrendTextClass(trend)
+      )}
+    >
       <OddsTrendCorner trend={trend} />
       {formatOdds(odds, oddsFormat)}
     </span>

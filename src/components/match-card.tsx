@@ -6,7 +6,11 @@ import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
-import { OddsTrendCorner, useOddsTrend } from "./odds-trend-corner";
+import {
+  OddsTrendCorner,
+  oddsTrendTextClass,
+  useOddsTrend,
+} from "./odds-trend-corner";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
@@ -98,16 +102,11 @@ function MatchCardInner({
       {/* En-tête : ligue + statut (compact sur mobile, sans bouton Stats mobile) */}
       <div className="flex items-center justify-between gap-2 text-[11.5px]">
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
-          <span
-            className={cn(
-              "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
-              isReal
-                ? "hidden bg-emerald-600/12 text-emerald-700 lg:inline-block"
-                : "inline-block bg-betclic-red/10 text-betclic-red lg:bg-elev lg:text-dim"
-            )}
-          >
-            {isReal ? "Réel" : "Virtuel"}
-          </span>
+          {isReal && (
+            <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-emerald-700 lg:inline-block">
+              Réel
+            </span>
+          )}
           <SportIcon sport={match.sport} className="h-4 w-4 shrink-0 text-dim lg:h-3.5 lg:w-3.5" />
           <span className="truncate font-semibold">{match.league}</span>
         </div>
@@ -406,7 +405,6 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
             key={c.key}
             tag={c.tag}
             odds={c.odds}
-            isLive={match.status === "live"}
             suspended={locked}
             selected={isSelected}
             inCombo={inCombo}
@@ -444,7 +442,6 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
 function OddsCell({
   tag,
   odds,
-  isLive,
   suspended,
   selected,
   inCombo,
@@ -453,7 +450,6 @@ function OddsCell({
 }: {
   tag: string;
   odds: number;
-  isLive: boolean;
   suspended: boolean;
   selected?: boolean;
   inCombo?: boolean;
@@ -500,8 +496,8 @@ function OddsCell({
       ) : (
         <span
           className={cn(
-            "font-display text-[14px] font-bold tabular-nums lg:text-[13.5px]",
-            active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
+            "font-display text-[14px] font-bold tabular-nums transition-colors duration-200 lg:text-[13.5px]",
+            oddsTrendTextClass(trend, active)
           )}
         >
           {formatOdds(odds, oddsFormat)}

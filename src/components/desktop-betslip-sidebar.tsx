@@ -16,7 +16,11 @@ import {
 import { AnimatedNumber } from "@/components/animated-number";
 import { CouponCodeBox } from "@/components/coupon-code-box";
 import { OddsLockControls } from "@/components/odds-lock-controls";
-import { OddsTrendCorner, useOddsTrend } from "@/components/odds-trend-corner";
+import {
+  OddsTrendCorner,
+  oddsTrendTextClass,
+  useOddsTrend,
+} from "@/components/odds-trend-corner";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
 import {
@@ -50,8 +54,13 @@ function DesktopLegLiveOddsBadge({
 }) {
   const trend = useOddsTrend(odds);
   return (
-    <span className="relative overflow-hidden rounded-lg bg-betclic-red px-2 py-0.5 font-display text-[12px] font-extrabold tabular-nums text-white">
-      <OddsTrendCorner trend={trend} inverted />
+    <span
+      className={cn(
+        "relative overflow-hidden rounded-lg border border-edge bg-white px-2 py-0.5 font-display text-[12px] font-extrabold tabular-nums transition-colors duration-200",
+        oddsTrendTextClass(trend)
+      )}
+    >
+      <OddsTrendCorner trend={trend} />
       {formatOdds(odds, oddsFormat)}
     </span>
   );

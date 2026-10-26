@@ -7,6 +7,11 @@ import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import type { ComboSelection } from "@/components/combo-slip";
+import {
+  OddsTrendCorner,
+  oddsTrendTextClass,
+  useOddsTrend,
+} from "@/components/odds-trend-corner";
 import { useApp } from "@/components/providers";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
@@ -790,6 +795,7 @@ function MultiOptionButton({
   comboSelection: ComboSelection;
   onSelect: () => void;
 }) {
+  const trend = useOddsTrend(opt.odds);
   const { pressing, handlers, style } = useLongPressOdds({
     disabled: expired,
     comboSelection,
@@ -851,12 +857,16 @@ function MultiOptionButton({
         </span>
         <span
           className={cn(
-            "min-w-[52px] rounded-lg px-2.5 py-1 text-center font-display text-[13px] font-bold tabular-nums",
+            "relative min-w-[52px] rounded-lg px-2.5 py-1 text-center font-display text-[13px] font-bold tabular-nums transition-colors duration-200",
             selected || inCombo
-              ? "bg-betclic-red text-white"
-              : "bg-white text-betclic-red shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-edge"
+              ? cn("bg-betclic-red", oddsTrendTextClass(trend, true))
+              : cn(
+                  "bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-edge",
+                  oddsTrendTextClass(trend)
+                )
           )}
         >
+          {!expired && <OddsTrendCorner trend={trend} inverted={selected || inCombo} />}
           {formatOdds(opt.odds, oddsFormat)}
         </span>
       </span>
@@ -884,6 +894,7 @@ function SideButton({
   comboSelection: ComboSelection;
 }) {
   const active = selected || inCombo;
+  const trend = useOddsTrend(odds);
   const { pressing, handlers, style } = useLongPressOdds({
     disabled: Boolean(disabled),
     comboSelection,
@@ -897,7 +908,7 @@ function SideButton({
       {...handlers}
       style={style}
       className={cn(
-        "flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
+        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
         selected
           ? "border-betclic-red bg-betclic-red text-white"
           : inCombo
@@ -907,6 +918,7 @@ function SideButton({
         disabled && "cursor-not-allowed"
       )}
     >
+      {!disabled && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
           "text-[12.5px] font-semibold",
@@ -917,8 +929,8 @@ function SideButton({
       </span>
       <span
         className={cn(
-          "font-display text-[14px] font-bold tabular-nums",
-          active ? "text-white" : "text-betclic-red"
+          "font-display text-[14px] font-bold tabular-nums transition-colors duration-200",
+          oddsTrendTextClass(trend, active)
         )}
       >
         {formatOdds(odds, oddsFormat)}
