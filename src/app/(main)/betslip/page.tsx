@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -30,6 +30,7 @@ import {
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
+  generateBetIdempotencyKey,
   ODDS_CHANGED_CODE,
   roundOdds2,
   type OddsChangedDetails,
@@ -99,6 +100,8 @@ export default function BetslipPage() {
     byUid: Record<string, number>;
   } | null>(null);
   const [receipt, setReceipt] = useState<PlacedReceipt | null>(null);
+  const inFlightRef = useRef(false);
+  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
   const hasPredLegs = comboLegs.some((l) => l.kind === "prediction");
 
@@ -269,7 +272,17 @@ export default function BetslipPage() {
     !overBalance;
 
   const submitSlip = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || inFlightRef.current) return;
+    inFlightRef.current = true;
+    const legsSig = enrichedLegs
+      .map((l) => `${l.uid}:${l.market}:${l.selection}:${l.liveOdds}`)
+      .join("|");
+    const sig = `${legsSig}::${stake}::${quote.totalOdds}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = { key: generateBetIdempotencyKey(), sig };
+    }
+    const idempotencyKey = idempotencySlotRef.current.key;
+
     setSubmitting(true);
     setError(null);
 
@@ -284,7 +297,9 @@ export default function BetslipPage() {
             stake,
             expectedOdds: single.liveOdds,
             oddsPolicy,
+            idempotencyKey,
           });
+          idempotencySlotRef.current = null;
           setOddsChanged(null);
           setLegOverrides(null);
           setBalance(res.balance);
@@ -307,7 +322,9 @@ export default function BetslipPage() {
             stake,
             expectedOdds: single.liveOdds,
             oddsPolicy,
+            idempotencyKey,
           });
+          idempotencySlotRef.current = null;
           setOddsChanged(null);
           setLegOverrides(null);
           setBalance(res.balance);
@@ -337,7 +354,9 @@ export default function BetslipPage() {
           stake,
           expectedTotalOdds: quote.totalOdds,
           oddsPolicy,
+          idempotencyKey,
         });
+        idempotencySlotRef.current = null;
         setOddsChanged(null);
         setLegOverrides(null);
         setBalance(res.balance);
@@ -355,6 +374,9 @@ export default function BetslipPage() {
         clearCombo();
       }
     } catch (e) {
+      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
+        idempotencySlotRef.current = null;
+      }
       if (
         e instanceof ApiRequestError &&
         e.status === 409 &&
@@ -399,6 +421,7 @@ export default function BetslipPage() {
       setError(msg);
       toast({ kind: "error", title: "Coupon refusé", description: msg });
     } finally {
+      inFlightRef.current = false;
       setSubmitting(false);
     }
   };

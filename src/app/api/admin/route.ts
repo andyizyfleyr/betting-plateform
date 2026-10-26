@@ -30,7 +30,11 @@ import { publicUser } from "@/lib/auth";
 import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
-import { invalidatePublicApiCaches } from "@/lib/response-cache";
+import {
+  EDGE_CACHE_TAGS,
+  invalidatePublicApiCaches,
+  purgeEdgeCacheTagsWithReport,
+} from "@/lib/response-cache";
 import { isKnownMarket, marketLabelFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { getAdminMlOverview, retrainAllMlModels } from "@/lib/ml-engine";
@@ -301,7 +305,25 @@ export async function POST(req: NextRequest) {
   }
 
   const action = String(body.action ?? "");
+  const res = await handleAdminPost(body, action);
 
+  // Toute mutation admin invalide immédiatement les caches RAM ET purge les tags CDN Edge Vercel
+  // (`Vercel-Cache-Tag`), puis expose le statut réel de purge via `X-Edge-Tag-Purge` pour audit DevTools.
+  invalidateAllActiveCaches();
+  invalidatePublicApiCaches(false);
+  const purgeStatus = await purgeEdgeCacheTagsWithReport([
+    EDGE_CACHE_TAGS.matches,
+    EDGE_CACHE_TAGS.history,
+    EDGE_CACHE_TAGS.predictionsCatalog,
+  ]);
+  res.headers.set("X-Edge-Tag-Purge", purgeStatus);
+  return res;
+}
+
+async function handleAdminPost(
+  body: Record<string, unknown>,
+  action: string
+): Promise<NextResponse> {
   try {
     resetSyncThrottle();
     if (action === "setBalance") {
@@ -1463,11 +1485,6 @@ export async function POST(req: NextRequest) {
     console.error("[admin API error]", err);
     const msg = err instanceof Error ? err.message : "Erreur interne lors de l'opération";
     return NextResponse.json({ error: msg }, { status: 500 });
-  } finally {
-    // Toute mutation admin invalide immédiatement les caches RAM ET purge les tags CDN Edge Vercel
-    // (`Vercel-Cache-Tag`) lorsque le plan actif l'autorise.
-    invalidateAllActiveCaches();
-    invalidatePublicApiCaches(true);
   }
 }
 

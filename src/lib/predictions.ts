@@ -191,16 +191,19 @@ export async function settleQuestion(
  */
 export async function reopenSettledQuestion(questionId: number): Promise<boolean> {
   const res = await db.execute(sql`
-    WITH target_q AS (
-      SELECT
-        "id",
-        CASE
-          WHEN "resolves_at" <= now() + interval '1 minute'
+    WITH q_reopened AS (
+      UPDATE "prediction_questions" AS pq
+      SET
+        "status" = 'open',
+        "resolution" = NULL,
+        "resolved_at" = NULL,
+        "resolves_at" = CASE
+          WHEN pq."resolves_at" <= now() + interval '1 minute'
             THEN now() + interval '24 hours'
-          ELSE "resolves_at"
-        END AS next_resolves_at
-      FROM "prediction_questions"
-      WHERE "id" = ${questionId}
+          ELSE pq."resolves_at"
+        END
+      WHERE pq."id" = ${questionId}
+      RETURNING pq."id"
     ),
     reopened_bets AS (
       UPDATE "prediction_bets" AS pb
@@ -208,8 +211,8 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
         "status" = 'pending',
         "potential_win" = ROUND((pb."stake" * pb."odds" * 100)::numeric)::float8 / 100.0,
         "settled_at" = NULL
-      FROM target_q
-      WHERE pb."question_id" = target_q."id"
+      FROM q_reopened
+      WHERE pb."question_id" = q_reopened."id"
         AND pb."status" IN ('won', 'lost')
       RETURNING
         pb."user_id",
@@ -226,17 +229,6 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
       ) AS agg
       WHERE u."id" = agg."user_id"
       RETURNING u."id"
-    ),
-    q_reopened AS (
-      UPDATE "prediction_questions" AS pq
-      SET
-        "status" = 'open',
-        "resolution" = NULL,
-        "resolved_at" = NULL,
-        "resolves_at" = target_q.next_resolves_at
-      FROM target_q
-      WHERE pq."id" = target_q."id"
-      RETURNING pq."id"
     )
     SELECT "id" FROM q_reopened
   `);

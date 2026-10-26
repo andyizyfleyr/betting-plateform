@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Flame, Layers, Loader2, Plus, Trash2, X, Zap } from "lucide-react";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
+  generateBetIdempotencyKey,
   ODDS_CHANGED_CODE,
   roundOdds2,
   type OddsChangedDetails,
@@ -173,6 +174,8 @@ export function ComboSheet() {
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
+  const inFlightRef = useRef(false);
+  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
   const [placedInfo, setPlacedInfo] = useState<{
     id: number;
     totalOdds: number;
@@ -203,7 +206,17 @@ export function ComboSheet() {
     !overBalance;
 
   const submitCombo = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || inFlightRef.current) return;
+    inFlightRef.current = true;
+    const legsSig = comboLegs
+      .map((l) => `${l.uid}:${l.market}:${l.selection}:${roundOdds2(l.odds)}`)
+      .join("|");
+    const sig = `${legsSig}::${stake}::${quote.totalOdds}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = { key: generateBetIdempotencyKey(), sig };
+    }
+    const idempotencyKey = idempotencySlotRef.current.key;
+
     setPhase("loading");
     setError(null);
     try {
@@ -219,7 +232,9 @@ export function ComboSheet() {
         stake,
         expectedTotalOdds: quote.totalOdds,
         oddsPolicy,
+        idempotencyKey,
       });
+      idempotencySlotRef.current = null;
       setOddsChanged(null);
       setBalance(res.balance);
       bumpBets();
@@ -230,6 +245,9 @@ export function ComboSheet() {
       setPhase("success");
     } catch (e) {
       setPhase("input");
+      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
+        idempotencySlotRef.current = null;
+      }
       if (
         e instanceof ApiRequestError &&
         e.status === 409 &&
@@ -247,6 +265,8 @@ export function ComboSheet() {
       const msg = e instanceof Error ? e.message : "Validation impossible";
       setError(msg);
       toast({ kind: "error", title: "Combiné refusé", description: msg });
+    } finally {
+      inFlightRef.current = false;
     }
   };
 

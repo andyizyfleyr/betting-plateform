@@ -33,8 +33,8 @@ export const maxDuration = 60;
 
 const MATCHES_EDGE_POLICY = {
   maxAge: 1,
-  sMaxAge: 3,
-  staleWhileRevalidate: 5,
+  sMaxAge: 5,
+  staleWhileRevalidate: 8,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 

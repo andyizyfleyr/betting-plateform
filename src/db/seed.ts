@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v8";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v9";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -165,6 +165,7 @@ async function runSeedInternal(): Promise<void> {
       "stake_returned" double precision DEFAULT 0 NOT NULL,
       "closing_odds" double precision,
       "risk_flag" text,
+      "idempotency_key" text,
       "placed_at" timestamp DEFAULT now() NOT NULL,
       "settled_at" timestamp
     );
@@ -366,13 +367,16 @@ async function runSeedInternal(): Promise<void> {
       "potential_win" double precision NOT NULL,
       "status" text DEFAULT 'pending' NOT NULL,
       "cash_out_amount" double precision,
+      "idempotency_key" text,
       "placed_at" timestamp DEFAULT now() NOT NULL
     );
   `);
 
   await db.execute(sql`
+    ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+    ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
   `);
 
   await db.execute(sql`
@@ -387,10 +391,12 @@ async function runSeedInternal(): Promise<void> {
       "potential_win" double precision NOT NULL,
       "status" text DEFAULT 'pending' NOT NULL,
       "cash_out_amount" double precision,
+      "idempotency_key" text,
       "placed_at" timestamp DEFAULT now() NOT NULL,
       "settled_at" timestamp
     );
     ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+    ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
   `);
 
   await db.execute(sql`
@@ -539,6 +545,9 @@ async function runSeedInternal(): Promise<void> {
       ON "bets" ("user_id", "id" DESC);
     CREATE INDEX IF NOT EXISTS "bets_placed_at_idx"
       ON "bets" ("placed_at" DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS "bets_user_idem_uniq"
+      ON "bets" ("user_id", "idempotency_key")
+      WHERE "idempotency_key" IS NOT NULL;
 
     -- Questions & paris de prédictions (questions ouvertes/échues, règlements partiels, parieur, 24h)
     CREATE INDEX IF NOT EXISTS "pred_questions_status_resolves_idx"
@@ -554,6 +563,9 @@ async function runSeedInternal(): Promise<void> {
       ON "prediction_bets" ("user_id", "status", "settled_at" DESC NULLS LAST, "placed_at" DESC);
     CREATE INDEX IF NOT EXISTS "pred_bets_placed_at_idx"
       ON "prediction_bets" ("placed_at" DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS "pred_bets_user_idem_uniq"
+      ON "prediction_bets" ("user_id", "idempotency_key")
+      WHERE "idempotency_key" IS NOT NULL;
 
     -- Paris combinés (index partiel sur les tickets ayant encore >= 1 sélection ouverte, parieur, 24h)
     CREATE INDEX IF NOT EXISTS "combo_bets_open_legs_idx"
@@ -566,6 +578,9 @@ async function runSeedInternal(): Promise<void> {
       ON "combo_bets" ("user_id", "status", "settled_at" DESC NULLS LAST, "placed_at" DESC);
     CREATE INDEX IF NOT EXISTS "combo_bets_placed_at_idx"
       ON "combo_bets" ("placed_at" DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS "combo_bets_user_idem_uniq"
+      ON "combo_bets" ("user_id", "idempotency_key")
+      WHERE "idempotency_key" IS NOT NULL;
 
     -- Portefeuille, dépôts, retraits, jeux & ajustements (historiques paginés + agrégation House Brain 24h)
     CREATE INDEX IF NOT EXISTS "deposits_user_created_idx"
