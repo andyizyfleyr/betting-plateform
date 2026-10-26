@@ -10,6 +10,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CalendarClock,
@@ -24,6 +25,10 @@ import {
 } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
+import {
+  MobileHeroCarousel,
+  type HeroPromoAction,
+} from "@/components/mobile-hero-carousel";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { useApp } from "@/components/providers";
 import { resolveEspnSlugForLeague } from "@/lib/real-leagues";
@@ -249,7 +254,10 @@ function getServerFalse(): boolean {
 }
 
 export default function MatchsPage() {
+  const router = useRouter();
   const {
+    user,
+    openRecharge,
     setFeedMatches,
     sportUniverse: selectedUniverse,
     setSportUniverse: setSelectedUniverse,
@@ -264,11 +272,47 @@ export default function MatchsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const lastMatchesRef = useRef<ClientMatch[] | null>(null);
+  const matchesAnchorRef = useRef<HTMLDivElement | null>(null);
   const isClient = useSyncExternalStore(subscribeNoop, getClientTrue, getServerFalse);
   const isMobileViewport = useSyncExternalStore(
     subscribeMobileViewport,
     getMobileViewportSnapshot,
     getServerFalse
+  );
+
+  const handleHeroAction = useCallback(
+    (action: HeroPromoAction) => {
+      const scrollToMatches = () => {
+        matchesAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+      switch (action) {
+        case "focus_matches":
+          setFilter("all");
+          setOddsProfile("all");
+          scrollToMatches();
+          break;
+        case "open_live":
+          setFilter("live");
+          scrollToMatches();
+          break;
+        case "open_combo":
+          router.push("/betslip");
+          break;
+        case "filter_favorites":
+          setFilter("all");
+          setOddsProfile("favorite");
+          scrollToMatches();
+          break;
+        case "open_recharge":
+          if (user) {
+            openRecharge();
+          } else {
+            router.push("/auth");
+          }
+          break;
+      }
+    },
+    [openRecharge, router, setFilter, user]
   );
 
   useEffect(() => {
@@ -665,6 +709,9 @@ export default function MatchsPage() {
         </div>
       </div>
 
+      {/* Hero publicitaire mobile (5 slides compacts au-dessus de la barre de recherche) */}
+      <MobileHeroCarousel onAction={handleHeroAction} />
+
       {/* Sélecteur d'univers (desktop uniquement) + Barre de recherche */}
       <div className="lg:mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
         <div className="hidden grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1 lg:grid">
@@ -913,6 +960,7 @@ export default function MatchsPage() {
       />
 
       {/* Contenu */}
+      <div ref={matchesAnchorRef} className="scroll-mt-28" />
       {matches === null ? (
         <>
           {/* Squelette mobile constant sur 2 lignes carrousel (zéro saut de mise en page CLS) */}
