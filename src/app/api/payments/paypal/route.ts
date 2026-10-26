@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -11,7 +12,12 @@ import {
   saveIdempotencyRecord,
 } from "@/lib/idempotency";
 import { extractIdempotencyKey } from "@/lib/odds-lock";
-import { createPayPalOrder, findProvider, storePendingDeposit } from "@/lib/payments";
+import {
+  buildGatewayIdempotencyHeader,
+  createPayPalOrder,
+  findProvider,
+  storePendingDeposit,
+} from "@/lib/payments";
 import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -74,45 +80,17 @@ export async function POST(req: NextRequest) {
     }
 
     const origin = new URL(req.url).origin;
+    const gatewayKey = buildGatewayIdempotencyHeader(uid, "paypal", idempotencyKey);
+
+    let order: { id: string; approveUrl: string | null };
     try {
-      const order = await createPayPalOrder({
+      order = await createPayPalOrder({
         amount: amount.toFixed(2),
         currency: "EUR",
         returnUrl: `${origin}/parametres?deposit=paypal`,
         cancelUrl: `${origin}/parametres?deposit=cancelled`,
-        idempotencyKey,
+        idempotencyKey: gatewayKey,
       });
-
-      if (!order.approveUrl) {
-        await releaseExternalIdempotencyClaim({
-          userId: uid,
-          scope: "deposit:paypal",
-          idempotencyKey,
-        });
-        return NextResponse.json(
-          { error: "Impossible d'initier le paiement" },
-          { status: 502 }
-        );
-      }
-
-      await storePendingDeposit(
-        "paypal",
-        order.id,
-        uid,
-        amount,
-        "EUR",
-        idempotencyKey
-      );
-      await saveIdempotencyRecord(db, {
-        userId: uid,
-        scope: "deposit:paypal",
-        idempotencyKey,
-        requestHash,
-        statusCode: 200,
-        responseBody: { url: order.approveUrl },
-      });
-
-      return NextResponse.json({ url: order.approveUrl });
     } catch {
       await releaseExternalIdempotencyClaim({
         userId: uid,
@@ -124,6 +102,41 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
+
+    if (!order.approveUrl) {
+      await releaseExternalIdempotencyClaim({
+        userId: uid,
+        scope: "deposit:paypal",
+        idempotencyKey,
+      });
+      return NextResponse.json(
+        { error: "Impossible d'initier le paiement" },
+        { status: 502 }
+      );
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+      await storePendingDeposit(
+        "paypal",
+        order.id,
+        uid,
+        amount,
+        "EUR",
+        idempotencyKey,
+        tx
+      );
+      await saveIdempotencyRecord(tx, {
+        userId: uid,
+        scope: "deposit:paypal",
+        idempotencyKey,
+        requestHash,
+        statusCode: 200,
+        responseBody: { url: order.approveUrl },
+      });
+    });
+
+    return NextResponse.json({ url: order.approveUrl });
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/payments/paypal");
   }

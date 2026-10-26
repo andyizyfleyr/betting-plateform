@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v10";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v11";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -446,10 +446,42 @@ async function runSeedInternal(): Promise<void> {
       "scope" text NOT NULL,
       "idempotency_key" text NOT NULL,
       "request_hash" text NOT NULL,
+      "status" text DEFAULT 'completed' NOT NULL,
       "status_code" integer DEFAULT 200 NOT NULL,
       "response_body" jsonb NOT NULL,
+      "expires_at" timestamp DEFAULT (now() + interval '24 hours') NOT NULL,
       "created_at" timestamp DEFAULT now() NOT NULL,
+      "updated_at" timestamp DEFAULT now() NOT NULL,
       CONSTRAINT "idempotency_keys_pk" PRIMARY KEY ("user_id", "scope", "idempotency_key")
+    );
+    ALTER TABLE "idempotency_keys"
+      ADD COLUMN IF NOT EXISTS "status" text DEFAULT 'completed' NOT NULL;
+    ALTER TABLE "idempotency_keys"
+      ADD COLUMN IF NOT EXISTS "expires_at" timestamp DEFAULT (now() + interval '24 hours') NOT NULL;
+    ALTER TABLE "idempotency_keys"
+      ADD COLUMN IF NOT EXISTS "updated_at" timestamp DEFAULT now() NOT NULL;
+    UPDATE "idempotency_keys"
+      SET "status" = 'processing',
+          "expires_at" = "created_at" + interval '45 seconds'
+      WHERE ("response_body"->>'__pending') = 'true' AND "status" <> 'processing';
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'idempotency_keys_status_chk'
+      ) THEN
+        ALTER TABLE "idempotency_keys"
+          ADD CONSTRAINT "idempotency_keys_status_chk"
+          CHECK ("status" IN ('processing', 'completed'));
+      END IF;
+    END $$;
+
+    CREATE TABLE IF NOT EXISTS "webhook_events" (
+      "provider" text NOT NULL,
+      "event_id" text NOT NULL,
+      "event_type" text NOT NULL,
+      "object_id" text,
+      "processed_at" timestamp DEFAULT now() NOT NULL,
+      CONSTRAINT "webhook_events_pk" PRIMARY KEY ("provider", "event_id")
     );
   `);
 
@@ -640,6 +672,22 @@ async function runSeedInternal(): Promise<void> {
       ON "deposits" ("status", "created_at" DESC);
     CREATE INDEX IF NOT EXISTS "deposits_provider_ref_idx"
       ON "deposits" ("provider_ref");
+    DELETE FROM "deposits"
+    WHERE "id" IN (
+      SELECT "id"
+      FROM (
+        SELECT
+          "id",
+          ROW_NUMBER() OVER (
+            PARTITION BY "provider", "provider_ref"
+            ORDER BY CASE WHEN "status" = 'credited' THEN 0 ELSE 1 END, "id" ASC
+          ) AS rn
+        FROM "deposits"
+      ) ranked
+      WHERE ranked.rn > 1
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS "deposits_provider_ref_uniq"
+      ON "deposits" ("provider", "provider_ref");
     CREATE UNIQUE INDEX IF NOT EXISTS "deposits_user_idem_uniq"
       ON "deposits" ("user_id", "idempotency_key")
       WHERE "idempotency_key" IS NOT NULL;
@@ -653,6 +701,10 @@ async function runSeedInternal(): Promise<void> {
       WHERE "idempotency_key" IS NOT NULL;
     CREATE INDEX IF NOT EXISTS "idempotency_keys_created_idx"
       ON "idempotency_keys" ("created_at");
+    CREATE INDEX IF NOT EXISTS "idempotency_keys_expires_idx"
+      ON "idempotency_keys" ("expires_at");
+    CREATE INDEX IF NOT EXISTS "webhook_events_processed_idx"
+      ON "webhook_events" ("processed_at" DESC);
     CREATE INDEX IF NOT EXISTS "wallet_adj_user_created_idx"
       ON "wallet_adjustments" ("user_id", "created_at" DESC);
     CREATE INDEX IF NOT EXISTS "tap_history_user_created_idx"

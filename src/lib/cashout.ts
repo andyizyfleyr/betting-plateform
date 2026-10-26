@@ -2,12 +2,121 @@ import { livePricingMinute } from "@/db/fixtures";
 import {
   isFirstHalfCompleted,
   isKnownMarket,
+  isRealMatchPostIncidentSuspended,
   liveOutcomeProbability,
   minuteNumber,
   realMatchLiveProbability,
   tryEarlyLiveSettle,
   type CustomMarketGroup,
 } from "@/lib/markets";
+
+export interface LiveIncidentSnapshot {
+  homeScore: number;
+  awayScore: number;
+  redHome: number;
+  redAway: number;
+}
+
+const STALE_LIVE_FEED_MAX_MS = 90_000;
+
+/**
+ * Vérifie en mémoire (sans I/O) si un match en direct viole les garde-fous anti-but / anti-carton rouge
+ * ou si un but / carton rouge est survenu depuis la prise d'empreinte `initialSnap`.
+ */
+export function checkLiveMatchCashOutGuard(
+  effectiveMatch: {
+    status: string;
+    source?: string | null;
+    suspended?: boolean | null;
+    lastGoalAt?: Date | string | null;
+    externalId?: string | null;
+    autoSync?: boolean | null;
+    feedSyncedAt?: Date | string | null;
+    minute?: string | null;
+    homeTeam: string;
+    awayTeam: string;
+    homeScore?: number | null;
+    awayScore?: number | null;
+    redHome?: number | null;
+    redAway?: number | null;
+  },
+  nowMs: number,
+  initialSnap?: LiveIncidentSnapshot
+): { ok: true } | { ok: false; status: 400 | 409; error: string } {
+  if (effectiveMatch.status === "finished") {
+    return {
+      ok: false,
+      status: 409,
+      error: `Le match ${effectiveMatch.homeTeam} – ${effectiveMatch.awayTeam} vient de se terminer — règlement imminent`,
+    };
+  }
+  if (effectiveMatch.status !== "live") {
+    return { ok: true };
+  }
+
+  const isManual = effectiveMatch.source === "manual";
+  if (
+    effectiveMatch.suspended ||
+    (isManual &&
+      isRealMatchPostIncidentSuspended(
+        { status: "live", lastGoalAt: effectiveMatch.lastGoalAt ?? null },
+        nowMs
+      ))
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      error:
+        "Cash Out momentanément suspendu suite à une action décisive (but ou carton rouge)",
+    };
+  }
+
+  if (
+    isManual &&
+    effectiveMatch.externalId &&
+    effectiveMatch.autoSync &&
+    effectiveMatch.feedSyncedAt
+  ) {
+    const syncedMs =
+      typeof effectiveMatch.feedSyncedAt === "string"
+        ? new Date(effectiveMatch.feedSyncedAt).getTime()
+        : effectiveMatch.feedSyncedAt.getTime();
+    if (Number.isFinite(syncedMs) && nowMs - syncedMs > STALE_LIVE_FEED_MAX_MS) {
+      return {
+        ok: false,
+        status: 409,
+        error:
+          "Flux direct en cours de resynchronisation — réessayez dans quelques secondes",
+      };
+    }
+  }
+
+  const min = minuteNumber(effectiveMatch.minute ?? null);
+  if (min >= (isManual ? 88 : 85)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `Fin de match imminente sur ${effectiveMatch.homeTeam} – ${effectiveMatch.awayTeam} — Cash Out verrouillé`,
+    };
+  }
+
+  if (
+    initialSnap &&
+    ((effectiveMatch.homeScore ?? 0) !== initialSnap.homeScore ||
+      (effectiveMatch.awayScore ?? 0) !== initialSnap.awayScore ||
+      (effectiveMatch.redHome ?? 0) !== initialSnap.redHome ||
+      (effectiveMatch.redAway ?? 0) !== initialSnap.redAway)
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      error:
+        "Action décisive détectée pendant la validation (but ou carton rouge) — Cash Out suspendu",
+    };
+  }
+
+  return { ok: true };
+}
 
 const CASHOUT_BASE_FACTOR = 0.9;
 
@@ -74,7 +183,8 @@ export function computeCashOut(params: {
   const market = params.market ?? "result";
   const potential = stake * odds;
   const min = minuteNumber(params.minute);
-  if (min >= 88) return null;
+  const isManual = params.source === "manual";
+  if (min >= (isManual ? 88 : 85)) return null;
   if (
     (market === "ht_result" || market === "ht_total_ou") &&
     isFirstHalfCompleted(params.minute, "live")
@@ -84,7 +194,6 @@ export function computeCashOut(params: {
 
   const h = params.homeScore ?? 0;
   const a = params.awayScore ?? 0;
-  const isManual = params.source === "manual";
   const typedEvents =
     (params.events as Array<{
       type: "goal" | "red";

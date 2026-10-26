@@ -1005,6 +1005,8 @@ async function handleAdminPost(
       }
       const homeScore = Math.max(0, Math.round(roundNumber(body.homeScore) ?? m.homeScore ?? 0));
       const awayScore = Math.max(0, Math.round(roundNumber(body.awayScore) ?? m.awayScore ?? 0));
+      const scoreChanged =
+        homeScore !== (m.homeScore ?? 0) || awayScore !== (m.awayScore ?? 0);
       const [updated] = await db
         .update(matches)
         .set({
@@ -1012,6 +1014,7 @@ async function handleAdminPost(
           awayScore,
           status: "live",
           minute: m.minute ?? "1'",
+          ...(scoreChanged ? { lastGoalAt: new Date() } : {}),
         })
         .where(eq(matches.id, matchId))
         .returning();

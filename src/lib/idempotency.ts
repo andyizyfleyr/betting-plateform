@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, lte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { idempotencyKeys } from "@/db/schema";
@@ -16,6 +16,13 @@ export type IdempotencyScope =
   | "deposit:stripe"
   | "deposit:paypal"
   | "deposit:paypal_capture";
+
+export type IdempotencyStatus = "processing" | "completed";
+
+/** Bail court pendant un appel HTTP externe (Stripe / PayPal) : auto-récupérable après crash. */
+export const IDEMPOTENCY_PROCESSING_TTL_MS = 45_000;
+/** Rétention standard d'une clé complétée (alignée sur la fenêtre 24 h de Stripe). */
+export const IDEMPOTENCY_COMPLETED_TTL_MS = 24 * 60 * 60_000;
 
 type TxOrDb = Pick<typeof db, "select" | "insert" | "update" | "delete" | "execute">;
 
@@ -61,8 +68,6 @@ export type IdempotencyLookupResult =
       responseBody: Record<string, unknown>;
     };
 
-const STALE_IN_PROGRESS_MS = 30_000;
-
 export async function lookupIdempotencyRecord(
   executor: TxOrDb,
   userId: number,
@@ -70,6 +75,7 @@ export async function lookupIdempotencyRecord(
   idempotencyKey: string,
   requestHash: string
 ): Promise<IdempotencyLookupResult> {
+  const now = new Date();
   const [row] = await executor
     .select()
     .from(idempotencyKeys)
@@ -83,14 +89,9 @@ export async function lookupIdempotencyRecord(
     .limit(1);
 
   if (!row) return { kind: "miss" };
-  if (row.requestHash !== requestHash) return { kind: "conflict" };
 
-  if (row.statusCode === 0) {
-    const ageMs = Date.now() - row.createdAt.getTime();
-    if (ageMs < STALE_IN_PROGRESS_MS) {
-      return { kind: "in_progress" };
-    }
-    // Verrou externe abandonné (> 30 s) : nettoyage pour autoriser un réessai propre
+  // Clé complétée dont le TTL (24 h) est expiré : purgée et traitée comme nouvelle clé
+  if (row.status === "completed" && row.expiresAt.getTime() <= now.getTime()) {
     await executor
       .delete(idempotencyKeys)
       .where(
@@ -98,9 +99,20 @@ export async function lookupIdempotencyRecord(
           eq(idempotencyKeys.userId, userId),
           eq(idempotencyKeys.scope, scope),
           eq(idempotencyKeys.idempotencyKey, idempotencyKey),
-          eq(idempotencyKeys.statusCode, 0)
+          eq(idempotencyKeys.status, "completed"),
+          lte(idempotencyKeys.expiresAt, now)
         )
       );
+    return { kind: "miss" };
+  }
+
+  // Toute réutilisation d'une clé active avec un payload différent est rejetée en 409
+  if (row.requestHash !== requestHash) return { kind: "conflict" };
+
+  if (row.status === "processing") {
+    if (row.expiresAt.getTime() > now.getTime()) {
+      return { kind: "in_progress" };
+    }
     return { kind: "miss" };
   }
 
@@ -120,8 +132,13 @@ export async function saveIdempotencyRecord(
     requestHash: string;
     statusCode?: number;
     responseBody: Record<string, unknown>;
+    ttlMs?: number;
   }
 ): Promise<void> {
+  const now = new Date();
+  const expiresAt = new Date(
+    now.getTime() + (params.ttlMs ?? IDEMPOTENCY_COMPLETED_TTL_MS)
+  );
   await executor
     .insert(idempotencyKeys)
     .values({
@@ -129,8 +146,11 @@ export async function saveIdempotencyRecord(
       scope: params.scope,
       idempotencyKey: params.idempotencyKey,
       requestHash: params.requestHash,
+      status: "completed",
       statusCode: params.statusCode ?? 200,
       responseBody: params.responseBody,
+      expiresAt,
+      updatedAt: now,
     })
     .onConflictDoUpdate({
       target: [
@@ -139,32 +159,50 @@ export async function saveIdempotencyRecord(
         idempotencyKeys.idempotencyKey,
       ],
       set: {
+        status: "completed",
         statusCode: params.statusCode ?? 200,
         responseBody: params.responseBody,
+        expiresAt,
+        updatedAt: now,
       },
       setWhere: eq(idempotencyKeys.requestHash, params.requestHash),
     });
 }
 
 /**
- * Réservation atomique en 2 étapes pour les routes appelant un prestataire externe (Stripe / PayPal)
- * afin de ne JAMAIS garder de transaction PostgreSQL ouverte pendant un appel HTTP externe.
+ * Réservation atomique en 2 étapes avec `status = 'processing'` et bail `expires_at`
+ * pour les routes appelant un prestataire externe (Stripe / PayPal) :
+ * - Aucune transaction PostgreSQL ne reste ouverte pendant l'appel réseau externe ;
+ * - Si l'instance serverless crashe entre la réservation (`processing`) et la finalisation
+ *   (`completed`), le bail expire au bout de 45 s (`expires_at <= now()`) et un unique
+ *   réessai avec le même `request_hash` reprend atomiquement le bail par `UPDATE ... RETURNING`.
  */
 export async function claimExternalIdempotency(params: {
   userId: number;
   scope: IdempotencyScope;
   idempotencyKey: string;
   requestHash: string;
+  processingTtlMs?: number;
 }): Promise<IdempotencyLookupResult | { kind: "claimed" }> {
-  const existing = await lookupIdempotencyRecord(
-    db,
-    params.userId,
-    params.scope,
-    params.idempotencyKey,
-    params.requestHash
+  const now = new Date();
+  const leaseExpiresAt = new Date(
+    now.getTime() + (params.processingTtlMs ?? IDEMPOTENCY_PROCESSING_TTL_MS)
   );
-  if (existing.kind !== "miss") return existing;
 
+  // Nettoie au préalable une éventuelle clé `completed` déjà expirée (> 24 h)
+  await db
+    .delete(idempotencyKeys)
+    .where(
+      and(
+        eq(idempotencyKeys.userId, params.userId),
+        eq(idempotencyKeys.scope, params.scope),
+        eq(idempotencyKeys.idempotencyKey, params.idempotencyKey),
+        eq(idempotencyKeys.status, "completed"),
+        lte(idempotencyKeys.expiresAt, now)
+      )
+    );
+
+  // 1) Tentative d'insertion initiale en `status = 'processing'`
   const inserted = await db
     .insert(idempotencyKeys)
     .values({
@@ -172,8 +210,11 @@ export async function claimExternalIdempotency(params: {
       scope: params.scope,
       idempotencyKey: params.idempotencyKey,
       requestHash: params.requestHash,
+      status: "processing",
       statusCode: 0,
-      responseBody: { inProgress: true },
+      responseBody: { status: "processing" },
+      expiresAt: leaseExpiresAt,
+      updatedAt: now,
     })
     .onConflictDoNothing()
     .returning({ key: idempotencyKeys.idempotencyKey });
@@ -182,13 +223,85 @@ export async function claimExternalIdempotency(params: {
     return { kind: "claimed" };
   }
 
-  return lookupIdempotencyRecord(
-    db,
-    params.userId,
-    params.scope,
-    params.idempotencyKey,
-    params.requestHash
-  );
+  // 2) La clé existe déjà : inspecte son empreinte, son statut et son expiration
+  const [row] = await db
+    .select()
+    .from(idempotencyKeys)
+    .where(
+      and(
+        eq(idempotencyKeys.userId, params.userId),
+        eq(idempotencyKeys.scope, params.scope),
+        eq(idempotencyKeys.idempotencyKey, params.idempotencyKey)
+      )
+    )
+    .limit(1);
+
+  if (!row) {
+    return { kind: "in_progress" };
+  }
+  if (row.requestHash !== params.requestHash) {
+    return { kind: "conflict" };
+  }
+  if (row.status === "completed") {
+    return {
+      kind: "hit",
+      statusCode: row.statusCode,
+      responseBody: row.responseBody,
+    };
+  }
+  if (row.expiresAt.getTime() > now.getTime()) {
+    return { kind: "in_progress" };
+  }
+
+  // 3) Reprise atomique sur crash (`status = 'processing'` ET `expires_at <= now`) :
+  //    un seul worker concurrent peut gagner l'UPDATE conditionnel.
+  const reclaimed = await db
+    .update(idempotencyKeys)
+    .set({
+      expiresAt: leaseExpiresAt,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(idempotencyKeys.userId, params.userId),
+        eq(idempotencyKeys.scope, params.scope),
+        eq(idempotencyKeys.idempotencyKey, params.idempotencyKey),
+        eq(idempotencyKeys.requestHash, params.requestHash),
+        eq(idempotencyKeys.status, "processing"),
+        lte(idempotencyKeys.expiresAt, now)
+      )
+    )
+    .returning({ key: idempotencyKeys.idempotencyKey });
+
+  if (reclaimed.length > 0) {
+    return { kind: "claimed" };
+  }
+
+  // Un autre réessai concurrent vient de reprendre ou de finaliser la clé
+  const [afterRace] = await db
+    .select()
+    .from(idempotencyKeys)
+    .where(
+      and(
+        eq(idempotencyKeys.userId, params.userId),
+        eq(idempotencyKeys.scope, params.scope),
+        eq(idempotencyKeys.idempotencyKey, params.idempotencyKey),
+        gt(idempotencyKeys.expiresAt, now)
+      )
+    )
+    .limit(1);
+
+  if (afterRace && afterRace.requestHash !== params.requestHash) {
+    return { kind: "conflict" };
+  }
+  if (afterRace && afterRace.status === "completed") {
+    return {
+      kind: "hit",
+      statusCode: afterRace.statusCode,
+      responseBody: afterRace.responseBody,
+    };
+  }
+  return { kind: "in_progress" };
 }
 
 export async function releaseExternalIdempotencyClaim(params: {
@@ -203,7 +316,7 @@ export async function releaseExternalIdempotencyClaim(params: {
         eq(idempotencyKeys.userId, params.userId),
         eq(idempotencyKeys.scope, params.scope),
         eq(idempotencyKeys.idempotencyKey, params.idempotencyKey),
-        eq(idempotencyKeys.statusCode, 0)
+        eq(idempotencyKeys.status, "processing")
       )
     )
     .catch(() => undefined);
@@ -212,7 +325,7 @@ export async function releaseExternalIdempotencyClaim(params: {
 export async function pruneExpiredIdempotencyKeys(): Promise<void> {
   await db
     .execute(
-      sql`DELETE FROM "idempotency_keys" WHERE "created_at" < now() - interval '7 days'`
+      sql`DELETE FROM "idempotency_keys" WHERE "expires_at" <= now()`
     )
     .catch(() => undefined);
 }

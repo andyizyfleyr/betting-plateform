@@ -1,11 +1,14 @@
 import { timingSafeEqual } from "crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { appUser, deposits } from "@/db/schema";
+import { appUser, deposits, webhookEvents } from "@/db/schema";
 import { invalidateUserCaches } from "@/lib/active-state-cache";
 
 export type PaymentProviderId = "stripe" | "paypal";
 export type DepositStatus = "pending" | "paid" | "credited" | "failed" | "expired";
+
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type TxOrDb = Pick<typeof db, "select" | "insert" | "update" | "delete" | "execute">;
 
 const STRIPE_BASE = "https://api.stripe.com";
 const PAYPAL_MODE = process.env.PAYPAL_MODE === "live" ? "live" : "sandbox";
@@ -42,6 +45,15 @@ export function findProvider(id: PaymentProviderId): ProviderInfo | undefined {
   return paymentProviders().find((p) => p.id === id);
 }
 
+/** Clé d'idempotence déterministe côté prestataire externe, isolée par utilisateur et flux. */
+export function buildGatewayIdempotencyHeader(
+  userId: number,
+  flow: "stripe" | "paypal" | "paypal_capture",
+  idempotencyKey: string
+): string {
+  return `pulse_${userId}_${flow}_${idempotencyKey}`.slice(0, 108);
+}
+
 /* ------------------------------- Stripe (Checkout) ------------------------------- */
 
 function stripeHeaders(idempotencyKey?: string): HeadersInit {
@@ -55,6 +67,13 @@ function stripeHeaders(idempotencyKey?: string): HeadersInit {
 export interface StripeCheckout {
   id: string;
   url: string | null;
+}
+
+export interface VerifiedStripeWebhookEvent {
+  id: string;
+  type: string;
+  objectId?: string;
+  paymentStatus?: string;
 }
 
 /** Crée une session Stripe Checkout hébergée (avec propagation de `Idempotency-Key`). */
@@ -92,29 +111,43 @@ export async function createStripeCheckout(opts: {
   return { id: body.id, url: body.url };
 }
 
-/** Vérifie la signature Stripe (HMAC SHA-256) et renvoie l'événement si valide. */
+/**
+ * Vérifie la signature Stripe (HMAC SHA-256, tolérance anti-replay 300 s, support de la
+ * rotation de clés `v1=` multiples, comparaison en temps constant `timingSafeEqual`)
+ * et renvoie l'événement typé avec son `id` (`evt_...`) si valide.
+ */
 export async function verifyStripeWebhook(
   rawBody: string,
-  signature: string
-): Promise<{ id: string; type: string; objectId?: string; paymentStatus?: string } | null> {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) return null;
+  signature: string,
+  secretOverride?: string
+): Promise<VerifiedStripeWebhookEvent | null> {
+  const secret = secretOverride ?? process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret || !signature) return null;
 
-  const pairs = new Map(
-    signature.split(",").map((pair) => {
-      const [k, v] = pair.split("=", 2);
-      return [k, v] as const;
-    })
-  );
-  const t = pairs.get("t");
-  const v1 = pairs.get("v1");
-  if (!t || !v1) return null;
+  let timestampRaw: string | null = null;
+  const v1Candidates: string[] = [];
 
-  const age = Math.abs(Date.now() / 1000 - Number(t));
+  for (const rawPart of signature.split(",")) {
+    const eqIdx = rawPart.indexOf("=");
+    if (eqIdx <= 0) continue;
+    const k = rawPart.slice(0, eqIdx).trim();
+    const v = rawPart.slice(eqIdx + 1).trim();
+    if (k === "t" && !timestampRaw) {
+      timestampRaw = v;
+    } else if (k === "v1" && /^[0-9a-f]{64}$/i.test(v)) {
+      v1Candidates.push(v);
+    }
+  }
+
+  if (!timestampRaw || v1Candidates.length === 0) return null;
+  const tsSeconds = Number(timestampRaw);
+  if (!Number.isFinite(tsSeconds)) return null;
+
+  const age = Math.abs(Date.now() / 1000 - tsSeconds);
   if (age > 300) return null;
 
   const key = new TextEncoder().encode(secret);
-  const data = new TextEncoder().encode(`${t}.${rawBody}`);
+  const data = new TextEncoder().encode(`${timestampRaw}.${rawBody}`);
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
     key,
@@ -123,21 +156,38 @@ export async function verifyStripeWebhook(
     ["sign"]
   );
   const mac = await crypto.subtle.sign("HMAC", cryptoKey, data);
-  const expected = Buffer.from(new Uint8Array(mac)).toString("hex");
-  const a = Buffer.from(v1, "hex");
-  const b = Buffer.from(expected, "hex");
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  const expectedBuf = Buffer.from(new Uint8Array(mac));
 
-  const event = JSON.parse(rawBody) as {
-    id: string;
-    type: string;
+  let matched = false;
+  for (const candHex of v1Candidates) {
+    const candBuf = Buffer.from(candHex, "hex");
+    if (candBuf.length === expectedBuf.length && timingSafeEqual(candBuf, expectedBuf)) {
+      matched = true;
+      break;
+    }
+  }
+  if (!matched) return null;
+
+  let parsed: {
+    id?: unknown;
+    type?: unknown;
     data?: { object?: { id?: string; payment_status?: string } };
   };
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return null;
+  }
+
+  const eventId = typeof parsed?.id === "string" ? parsed.id.trim() : "";
+  const eventType = typeof parsed?.type === "string" ? parsed.type.trim() : "";
+  if (!eventId || !eventType) return null;
+
   return {
-    id: event.id,
-    type: event.type,
-    objectId: event.data?.object?.id,
-    paymentStatus: event.data?.object?.payment_status,
+    id: eventId,
+    type: eventType,
+    objectId: parsed.data?.object?.id,
+    paymentStatus: parsed.data?.object?.payment_status,
   };
 }
 
@@ -209,14 +259,20 @@ export async function createPayPalOrder(opts: {
   return { id: body.id, approveUrl: approve?.href ?? null };
 }
 
-/** Capture une commande PayPal approuvée. */
+/**
+ * Capture une commande PayPal approuvée.
+ * Résilient aux pannes post-capture : si PayPal répond `422 ORDER_ALREADY_CAPTURED`
+ * lors d'un réessai après crash serveur, on relit `GET /v2/checkout/orders/{id}` pour
+ * vérifier que le statut officiel est bien `COMPLETED` afin de finaliser le crédit local.
+ */
 export async function capturePayPalOrder(
   orderId: string,
   idempotencyKey?: string
 ): Promise<boolean> {
   const token = await paypalToken();
+  const encodedId = encodeURIComponent(orderId);
   const res = await fetch(
-    `${PAYPAL_BASE}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`,
+    `${PAYPAL_BASE}/v2/checkout/orders/${encodedId}/capture`,
     {
       method: "POST",
       headers: {
@@ -226,9 +282,21 @@ export async function capturePayPalOrder(
       },
     }
   );
-  if (!res.ok) return false;
-  const body = (await res.json()) as { status: string };
-  return body.status === "COMPLETED";
+  if (res.ok) {
+    const body = (await res.json()) as { status?: string };
+    return body.status === "COMPLETED";
+  }
+
+  if (res.status === 422) {
+    const orderRes = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${encodedId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (orderRes.ok) {
+      const orderBody = (await orderRes.json()) as { status?: string };
+      return orderBody.status === "COMPLETED";
+    }
+  }
+  return false;
 }
 
 /* --------------------------- Enregistrement / crédit --------------------------- */
@@ -240,9 +308,10 @@ export async function storePendingDeposit(
   userId: number,
   amount: number,
   currency: string,
-  idempotencyKey?: string
+  idempotencyKey?: string,
+  executor: TxOrDb = db
 ) {
-  await db
+  await executor
     .insert(deposits)
     .values({
       userId,
@@ -254,6 +323,64 @@ export async function storePendingDeposit(
       ...(idempotencyKey ? { idempotencyKey } : {}),
     })
     .onConflictDoNothing();
+}
+
+/**
+ * Exécute le crédit atomique d'un dépôt à l'intérieur d'une transaction existante
+ * en respectant le DAG global de verrous : `deposits FOR UPDATE` -> `app_user FOR UPDATE`.
+ */
+export async function creditDepositInTx(
+  tx: DbTx,
+  provider: PaymentProviderId,
+  providerRef: string,
+  fallbackUserId = 1
+): Promise<{ creditedNow: boolean; userId: number }> {
+  const [lockedDep] = await tx
+    .select()
+    .from(deposits)
+    .where(and(eq(deposits.provider, provider), eq(deposits.providerRef, providerRef)))
+    .for("update");
+
+  if (lockedDep && lockedDep.status === "credited") {
+    return { creditedNow: false, userId: lockedDep.userId };
+  }
+
+  const uid = lockedDep?.userId ?? fallbackUserId;
+  const amount = lockedDep ? Math.round(lockedDep.amount * 100) / 100 : 0;
+
+  await tx
+    .select({ id: appUser.id })
+    .from(appUser)
+    .where(eq(appUser.id, uid))
+    .for("update");
+
+  if (lockedDep) {
+    await tx
+      .update(deposits)
+      .set({ status: "credited", updatedAt: new Date() })
+      .where(eq(deposits.id, lockedDep.id));
+  } else {
+    await tx.insert(deposits).values({
+      userId: uid,
+      provider,
+      providerRef,
+      amount,
+      currency: "EUR",
+      status: "credited",
+    });
+  }
+
+  if (amount > 0) {
+    await tx
+      .update(appUser)
+      .set({
+        balance: sql`ROUND((${appUser.balance} + ${amount})::numeric, 2)::float8`,
+      })
+      .where(eq(appUser.id, uid));
+    return { creditedNow: true, userId: uid };
+  }
+
+  return { creditedNow: false, userId: uid };
 }
 
 /**
@@ -270,50 +397,9 @@ export async function creditDeposit(
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
-
-    const [lockedDep] = await tx
-      .select()
-      .from(deposits)
-      .where(eq(deposits.providerRef, providerRef))
-      .for("update");
-
-    if (lockedDep && lockedDep.status === "credited") {
-      return;
-    }
-
-    const uid = lockedDep?.userId ?? fallbackUserId;
-    const amount = lockedDep ? Math.round(lockedDep.amount * 100) / 100 : 0;
-
-    await tx
-      .select({ id: appUser.id })
-      .from(appUser)
-      .where(eq(appUser.id, uid))
-      .for("update");
-
-    if (lockedDep) {
-      await tx
-        .update(deposits)
-        .set({ status: "credited", updatedAt: new Date() })
-        .where(eq(deposits.id, lockedDep.id));
-    } else {
-      await tx.insert(deposits).values({
-        userId: uid,
-        provider,
-        providerRef,
-        amount,
-        currency: "EUR",
-        status: "credited",
-      });
-    }
-
-    if (amount > 0) {
-      await tx
-        .update(appUser)
-        .set({
-          balance: sql`ROUND((${appUser.balance} + ${amount})::numeric, 2)::float8`,
-        })
-        .where(eq(appUser.id, uid));
-      creditedUserId = uid;
+    const res = await creditDepositInTx(tx, provider, providerRef, fallbackUserId);
+    if (res.creditedNow) {
+      creditedUserId = res.userId;
     }
   });
 
@@ -321,6 +407,58 @@ export async function creditDeposit(
     invalidateUserCaches([creditedUserId]);
   }
   return true;
+}
+
+/**
+ * Dédoublonne atomiquement un événement webhook Stripe par `("stripe", event.id)` dans `webhook_events`
+ * ET exécute le crédit éventuel dans la MÊME transaction PostgreSQL :
+ * - Rejeu d'un `event.id` déjà traité -> `ON CONFLICT DO NOTHING` renvoie 0 ligne -> ignoré immédiatement ;
+ * - Erreur base/verrou transitoire -> rollback intégral (y compris `webhook_events`) pour permettre le retry Stripe.
+ */
+export async function processStripeWebhookEvent(
+  event: VerifiedStripeWebhookEvent
+): Promise<{ deduplicated: boolean; credited: boolean }> {
+  let creditedUserId: number | null = null;
+
+  const outcome = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+
+    const insertedEvent = await tx
+      .insert(webhookEvents)
+      .values({
+        provider: "stripe",
+        eventId: event.id,
+        eventType: event.type,
+        objectId: event.objectId ?? null,
+      })
+      .onConflictDoNothing({
+        target: [webhookEvents.provider, webhookEvents.eventId],
+      })
+      .returning({ eventId: webhookEvents.eventId });
+
+    if (insertedEvent.length === 0) {
+      return { deduplicated: true, credited: false };
+    }
+
+    if (
+      event.type === "checkout.session.completed" &&
+      event.paymentStatus === "paid" &&
+      event.objectId
+    ) {
+      const creditRes = await creditDepositInTx(tx, "stripe", event.objectId);
+      if (creditRes.creditedNow) {
+        creditedUserId = creditRes.userId;
+      }
+      return { deduplicated: false, credited: creditRes.creditedNow };
+    }
+
+    return { deduplicated: false, credited: false };
+  });
+
+  if (creditedUserId != null) {
+    invalidateUserCaches([creditedUserId]);
+  }
+  return outcome;
 }
 
 export async function getDepositStatus(providerRef: string) {

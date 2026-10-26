@@ -1804,6 +1804,9 @@ function simulateMatchRange(
         if (ev.team === "home") redHome += 1;
         else redAway += 1;
         events.push({ ...ev });
+        if (ev.minute >= toMinInclusive - 1 && toMinInclusive - fromMinExclusive <= 4) {
+          justScoredNow = true;
+        }
       }
     }
     return { home, away, redHome, redAway, events, justScoredNow };
@@ -1908,6 +1911,9 @@ function simulateMatchRange(
       if (side === "home") redHome += 1;
       else redAway += 1;
       events.push({ type: "red_card", team: side, minute: min });
+      if (min >= toMinInclusive - 1 && toMinInclusive - fromMinExclusive <= 4) {
+        justScoredNow = true;
+      }
     }
   }
 

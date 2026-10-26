@@ -3,9 +3,10 @@ import { Pool } from "pg";
 
 type Db = ReturnType<typeof drizzle>;
 
-interface CandidateDbEnv {
+export interface CandidateDbEnv {
   envName: string;
   url: string;
+  usesPooler: boolean;
 }
 
 const PRIORITY_ENV_KEYS = [
@@ -18,9 +19,33 @@ const PRIORITY_ENV_KEYS = [
   "POSTGRES_URL_NON_POOLING",
 ] as const;
 
+/**
+ * Taille stricte du pool TCP `pg` par instance Vercel Serverless (1 à 2 connexions max).
+ * Évite toute saturation des connexions PostgreSQL lors des pics de concurrence multi-instances,
+ * tout en s'appuyant sur PgBouncer (`-pooler`) côté Neon.
+ */
+const parsedPoolMax = Number(process.env.PG_POOL_MAX ?? "2");
+export const PG_SERVERLESS_POOL_MAX =
+  Number.isInteger(parsedPoolMax) && parsedPoolMax >= 1 && parsedPoolMax <= 2
+    ? parsedPoolMax
+    : 2;
+
+export function isPooledDatabaseUrl(connectionString: string): boolean {
+  try {
+    const u = new URL(connectionString);
+    return (
+      /-pooler\./i.test(u.hostname) ||
+      /\.pooler\./i.test(u.hostname) ||
+      u.searchParams.get("pgbouncer") === "true"
+    );
+  } catch {
+    return /-pooler\.|\.pooler\.|pgbouncer=true/i.test(connectionString);
+  }
+}
+
 export function getCandidateDatabaseUrls(): CandidateDbEnv[] {
   const seen = new Set<string>();
-  const out: CandidateDbEnv[] = [];
+  const rawList: CandidateDbEnv[] = [];
 
   const pushIfValid = (envName: string, raw: string | undefined) => {
     const val = raw?.trim();
@@ -28,7 +53,11 @@ export function getCandidateDatabaseUrls(): CandidateDbEnv[] {
     if (!/^postgres(?:ql)?:\/\//i.test(val)) return;
     if (seen.has(val)) return;
     seen.add(val);
-    out.push({ envName, url: val });
+    rawList.push({
+      envName,
+      url: val,
+      usesPooler: isPooledDatabaseUrl(val),
+    });
   };
 
   for (const key of PRIORITY_ENV_KEYS) {
@@ -45,7 +74,11 @@ export function getCandidateDatabaseUrls(): CandidateDbEnv[] {
     }
   }
 
-  return out;
+  // Priorise systématiquement les URL `-pooler` (PgBouncer Neon) devant les URL directes
+  // afin de mutualiser les connexions TCP entre toutes les fonctions Vercel Serverless.
+  const pooled = rawList.filter((c) => c.usesPooler);
+  const direct = rawList.filter((c) => !c.usesPooler);
+  return [...pooled, ...direct];
 }
 
 function createPoolForUrl(connectionString: string): Pool {
@@ -55,9 +88,10 @@ function createPoolForUrl(connectionString: string): Pool {
 
   const pool = new Pool({
     connectionString,
-    max: 5,
-    connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 20_000,
+    max: PG_SERVERLESS_POOL_MAX,
+    connectionTimeoutMillis: 8_000,
+    idleTimeoutMillis: 15_000,
+    allowExitOnIdle: true,
     ...(needsPermissiveSsl ? { ssl: { rejectUnauthorized: false } } : {}),
   });
 
@@ -73,6 +107,7 @@ function createPoolForUrl(connectionString: string): Pool {
 const globalForDb = globalThis as typeof globalThis & {
   __arenaNextJsPostgresqlPool?: Pool;
   __arenaNextJsPostgresqlActiveUrl?: string;
+  __arenaNextJsPostgresqlActiveEnv?: string;
   __arenaNextJsPostgresqlVerified?: boolean;
 };
 
@@ -87,8 +122,28 @@ function getDb(): Db {
     const primary = candidates[0];
     globalForDb.__arenaNextJsPostgresqlPool = createPoolForUrl(primary.url);
     globalForDb.__arenaNextJsPostgresqlActiveUrl = primary.url;
+    globalForDb.__arenaNextJsPostgresqlActiveEnv = primary.envName;
   }
   return drizzle(globalForDb.__arenaNextJsPostgresqlPool);
+}
+
+export function getActiveDbPoolInfo(): {
+  activeEnvKey: string | null;
+  usesPooler: boolean;
+  poolMax: number;
+} {
+  const candidates = getCandidateDatabaseUrls();
+  const activeUrl =
+    globalForDb.__arenaNextJsPostgresqlActiveUrl ?? candidates[0]?.url ?? "";
+  const activeEnvKey =
+    globalForDb.__arenaNextJsPostgresqlActiveEnv ??
+    candidates[0]?.envName ??
+    null;
+  return {
+    activeEnvKey,
+    usesPooler: activeUrl ? isPooledDatabaseUrl(activeUrl) : false,
+    poolMax: PG_SERVERLESS_POOL_MAX,
+  };
 }
 
 /**
@@ -130,6 +185,7 @@ export async function ensureHealthyDbConnection(): Promise<void> {
         const oldPool = globalForDb.__arenaNextJsPostgresqlPool;
         globalForDb.__arenaNextJsPostgresqlPool = altPool;
         globalForDb.__arenaNextJsPostgresqlActiveUrl = cand.url;
+        globalForDb.__arenaNextJsPostgresqlActiveEnv = cand.envName;
         globalForDb.__arenaNextJsPostgresqlVerified = true;
         dbInstance = drizzle(altPool);
         if (oldPool) {

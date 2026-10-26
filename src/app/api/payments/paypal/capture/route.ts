@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { appUser } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import { invalidateUserCaches } from "@/lib/active-state-cache";
 import { publicUser } from "@/lib/auth";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import {
@@ -14,7 +15,11 @@ import {
   saveIdempotencyRecord,
 } from "@/lib/idempotency";
 import { extractIdempotencyKey } from "@/lib/odds-lock";
-import { capturePayPalOrder, creditDeposit } from "@/lib/payments";
+import {
+  buildGatewayIdempotencyHeader,
+  capturePayPalOrder,
+  creditDepositInTx,
+} from "@/lib/payments";
 import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +71,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const captured = await capturePayPalOrder(orderId, idempotencyKey);
+    const gatewayKey = buildGatewayIdempotencyHeader(
+      uid,
+      "paypal_capture",
+      idempotencyKey
+    );
+
+    let captured = false;
+    try {
+      captured = await capturePayPalOrder(orderId, gatewayKey);
+    } catch {
+      await releaseExternalIdempotencyClaim({
+        userId: uid,
+        scope: "deposit:paypal_capture",
+        idempotencyKey,
+      });
+      return NextResponse.json(
+        { error: "PayPal indisponible pour le moment" },
+        { status: 502 }
+      );
+    }
+
     if (!captured) {
       await releaseExternalIdempotencyClaim({
         userId: uid,
@@ -79,19 +104,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await creditDeposit("paypal", orderId, uid);
+    let creditedNow = false;
+    const pub = await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+      const creditRes = await creditDepositInTx(tx, "paypal", orderId, uid);
+      creditedNow = creditRes.creditedNow;
+      const [user] = await tx.select().from(appUser).where(eq(appUser.id, uid));
+      const publicProfile = user ? publicUser(user) : null;
 
-    const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
-    const pub = user ? publicUser(user) : null;
+      await saveIdempotencyRecord(tx, {
+        userId: uid,
+        scope: "deposit:paypal_capture",
+        idempotencyKey,
+        requestHash,
+        statusCode: 200,
+        responseBody: { user: publicProfile },
+      });
 
-    await saveIdempotencyRecord(db, {
-      userId: uid,
-      scope: "deposit:paypal_capture",
-      idempotencyKey,
-      requestHash,
-      statusCode: 200,
-      responseBody: { user: pub },
+      return publicProfile;
     });
+
+    if (creditedNow) {
+      invalidateUserCaches([uid]);
+    }
 
     return NextResponse.json({ user: pub });
   } catch (err) {
