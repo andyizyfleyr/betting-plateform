@@ -1,18 +1,46 @@
-import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { NextRequest } from "next/server";
+import { and, desc, eq, getTableColumns, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { matches, type MatchRow } from "@/db/schema";
 import { extractMatchTimelineStats, hasVerifiedGoalTimeline } from "@/db/fixtures";
 import { ensureSeeded } from "@/db/seed";
+import {
+  ensureMatchStoreHydrated,
+  getCachedMatchById,
+} from "@/lib/active-state-cache";
+import { formatServerErrorResponse } from "@/lib/db-error";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { ensureMlLoaded } from "@/lib/ml-engine";
+import {
+  getHistoryBaseCache,
+  publicJsonWithEdgeCache,
+  runSingleflight,
+  setHistoryBaseCache,
+} from "@/lib/response-cache";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
-import { settlePendingCombos } from "@/lib/combo";
 import type { ClientMatchHistoryItem } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
+
+const HISTORY_EDGE_POLICY = {
+  maxAge: 2,
+  sMaxAge: 12,
+  staleWhileRevalidate: 30,
+} as const;
+
+// Projection SQL légère : omet les colonnes JSONB volumineuses ou strictement serveur
+// (`markets` ~20 Ko/match, `scripted_events`, `tick_history`) lors du chargement de l'historique.
+const {
+  markets: _omitMarkets,
+  scriptedEvents: _omitScriptedEvents,
+  tickHistory: _omitTickHistory,
+  ...historyMatchColumns
+} = getTableColumns(matches);
+void _omitMarkets;
+void _omitScriptedEvents;
+void _omitTickHistory;
 
 function toIso(v: Date | string | null | undefined): string | null {
   if (!v) return null;
@@ -78,7 +106,6 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
           ? "X"
           : "V2";
 
-  // La télémétrie simulée est réservée aux matchs virtuels ; les matchs réels exposent `realStats`
   const telemetry =
     !isReal && (m.status === "finished" || m.status === "live")
       ? computeMatchTelemetry(m)
@@ -116,56 +143,96 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
   };
 }
 
-export async function GET(req: NextRequest) {
-  await ensureSeeded();
-  await ensureMlLoaded();
-  await syncLiveMatchesThrottled();
-  await settlePendingCombos();
+async function getOrBuildBaseHistory(): Promise<{
+  payload: ReturnType<typeof setHistoryBaseCache>;
+  items: ClientMatchHistoryItem[];
+}> {
+  const hit = getHistoryBaseCache<ClientMatchHistoryItem>();
+  if (hit) return hit;
 
-  const matchIdParam = req.nextUrl.searchParams.get("matchId");
-  const requestedMatchId = matchIdParam ? Number(matchIdParam) : NaN;
+  return runSingleflight("api:matches:history:base", async () => {
+    const doubleCheck = getHistoryBaseCache<ClientMatchHistoryItem>();
+    if (doubleCheck) return doubleCheck;
 
-  // Quotas séparés pour que les matchs virtuels (toutes les 2-3 min) n'effacent jamais l'historique réel
-  const [manualFinished, virtualFinished] = await Promise.all([
-    db
-      .select()
-      .from(matches)
-      .where(and(eq(matches.status, "finished"), eq(matches.source, "manual")))
-      .orderBy(desc(matches.finishedAt), desc(matches.id))
-      .limit(120),
-    db
-      .select()
-      .from(matches)
-      .where(and(eq(matches.status, "finished"), ne(matches.source, "manual")))
-      .orderBy(desc(matches.finishedAt), desc(matches.id))
-      .limit(120),
-  ]);
+    await ensureSeeded();
+    await ensureMlLoaded();
+    await syncLiveMatchesThrottled();
 
-  const sortedFinished = [...manualFinished, ...virtualFinished].sort((a, b) => {
-    const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
-    const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
-    return tb - ta || b.id - a.id;
-  });
-
-  const mapped = sortedFinished.map(mapHistoryItem);
-
-  let focusedMatch: ClientMatchHistoryItem | null = null;
-  if (Number.isInteger(requestedMatchId) && requestedMatchId > 0) {
-    focusedMatch = mapped.find((m) => m.id === requestedMatchId) ?? null;
-    if (!focusedMatch) {
-      const [row] = await db
-        .select()
+    const [manualFinished, virtualFinished] = await Promise.all([
+      db
+        .select(historyMatchColumns)
         .from(matches)
-        .where(eq(matches.id, requestedMatchId))
-        .limit(1);
-      if (row) {
-        focusedMatch = mapHistoryItem(row);
+        .where(and(eq(matches.status, "finished"), eq(matches.source, "manual")))
+        .orderBy(desc(matches.finishedAt), desc(matches.id))
+        .limit(120),
+      db
+        .select(historyMatchColumns)
+        .from(matches)
+        .where(and(eq(matches.status, "finished"), ne(matches.source, "manual")))
+        .orderBy(desc(matches.finishedAt), desc(matches.id))
+        .limit(120),
+    ]);
+
+    const sortedFinished = [...manualFinished, ...virtualFinished]
+      .map((r) => ({ ...r, markets: null, scriptedEvents: null, tickHistory: [] }) as MatchRow)
+      .sort((a, b) => {
+        const ta = a.finishedAt ? a.finishedAt.getTime() : a.startsAt.getTime();
+        const tb = b.finishedAt ? b.finishedAt.getTime() : b.startsAt.getTime();
+        return tb - ta || b.id - a.id;
+      });
+
+    const mapped = sortedFinished.map(mapHistoryItem);
+    const payload = setHistoryBaseCache(mapped);
+    return { payload, items: mapped };
+  });
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const matchIdParam = req.nextUrl.searchParams.get("matchId");
+    const parsedId = matchIdParam ? Number(matchIdParam) : NaN;
+    const hasValidFocusId =
+      Number.isInteger(parsedId) && parsedId > 0 && parsedId <= 2_147_483_647;
+
+    const base = await getOrBuildBaseHistory();
+
+    // Cas majoritaire (95 %+) : `/api/matches/history` sans `matchId` -> sert directement le tampon pré-sérialisé
+    if (!hasValidFocusId) {
+      return publicJsonWithEdgeCache(req, null, base.payload, HISTORY_EDGE_POLICY);
+    }
+
+    let focusedMatch: ClientMatchHistoryItem | null =
+      base.items.find((m) => m.id === parsedId) ?? null;
+
+    if (!focusedMatch) {
+      await ensureMatchStoreHydrated();
+      const ramMatch = getCachedMatchById(parsedId);
+      if (ramMatch) {
+        focusedMatch = mapHistoryItem(ramMatch);
+      } else {
+        const [raw] = await db
+          .select(historyMatchColumns)
+          .from(matches)
+          .where(eq(matches.id, parsedId))
+          .limit(1);
+        if (raw) {
+          focusedMatch = mapHistoryItem({
+            ...raw,
+            markets: null,
+            scriptedEvents: null,
+            tickHistory: [],
+          } as MatchRow);
+        }
       }
     }
-  }
 
-  return NextResponse.json({
-    matches: mapped,
-    focusedMatch,
-  });
+    return publicJsonWithEdgeCache(
+      req,
+      { matches: base.items, focusedMatch },
+      undefined,
+      HISTORY_EDGE_POLICY
+    );
+  } catch (err) {
+    return formatServerErrorResponse(err, "GET /api/matches/history");
+  }
 }

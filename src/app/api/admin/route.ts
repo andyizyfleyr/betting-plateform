@@ -27,6 +27,7 @@ import {
   type RealMatchStats,
 } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
+import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { isKnownMarket, marketLabelFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
@@ -54,6 +55,14 @@ import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+const ADMIN_NO_STORE_HEADERS = {
+  "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+  "CDN-Cache-Control": "private, no-store",
+  "Vercel-CDN-Cache-Control": "private, no-store",
+  Vary: "Cookie, Accept-Encoding",
+  "X-Content-Type-Options": "nosniff",
+} as const;
 
 async function requireAdmin(req: NextRequest): Promise<number | NextResponse> {
   await ensureSeeded();
@@ -276,7 +285,7 @@ export async function GET(req: NextRequest) {
       resolvesAt: q.resolvesAt.toISOString(),
       resolvedAt: q.resolvedAt ? q.resolvedAt.toISOString() : null,
     })),
-  });
+  }, { headers: ADMIN_NO_STORE_HEADERS });
 }
 
 export async function POST(req: NextRequest) {
@@ -1453,6 +1462,10 @@ export async function POST(req: NextRequest) {
     console.error("[admin API error]", err);
     const msg = err instanceof Error ? err.message : "Erreur interne lors de l'opération";
     return NextResponse.json({ error: msg }, { status: 500 });
+  } finally {
+    // Toute mutation admin invalide immédiatement les caches RAM (matchs, historique,
+    // catalogue de prédictions, soldes et paris utilisateurs) pour une cohérence instantanée.
+    invalidateAllActiveCaches();
   }
 }
 

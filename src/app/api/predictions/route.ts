@@ -10,7 +10,10 @@ import {
   round2,
 } from "@/lib/predictions";
 import { formatServerErrorResponse } from "@/lib/db-error";
-import { jsonWithEtag } from "@/lib/response-cache";
+import {
+  invalidatePredictionsCatalogCache,
+  jsonWithEtag,
+} from "@/lib/response-cache";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 
@@ -261,6 +264,7 @@ export async function POST(req: NextRequest) {
     return { bet, balance: updatedUser.balance };
   });
 
+  invalidatePredictionsCatalogCache();
   notifyNewBetPlaced({ userId: uid, kind: "prediction" });
   return NextResponse.json({
     bet: {

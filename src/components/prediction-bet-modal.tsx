@@ -96,7 +96,7 @@ function PredictionBetSheet({
     const poll = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
       try {
-        const r = await api.predictions();
+        const r = await api.predictionsCatalog();
         if (!active) return;
         const fresh = r.questions.find((q) => q.id === question.id);
         if (fresh) {
@@ -107,7 +107,7 @@ function PredictionBetSheet({
       }
     };
     poll();
-    const id = setInterval(poll, 5000);
+    const id = setInterval(poll, 12_000);
     return () => {
       active = false;
       clearInterval(id);

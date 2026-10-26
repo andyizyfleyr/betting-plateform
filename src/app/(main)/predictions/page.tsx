@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, ListChecks, RefreshCw, Search, TrendingUp, X } from "lucide-react";
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import type { ComboSelection } from "@/components/combo-slip";
 import { useApp } from "@/components/providers";
+import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import { cn, eur, formatOdds, formatPlacedAt } from "@/lib/format";
 
-const POLL_INTERVAL = 5_000;
+const POLL_INTERVAL = 20_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 
@@ -37,8 +39,14 @@ function formatResolves(iso: string, nowMs: number) {
 }
 
 export default function PredictionsPage() {
-  const { comboQuickMode, toggleComboLeg, toast } = useApp();
-  const [questions, setQuestions] = useState<ClientPrediction[] | null>(null);
+  const { user, betsVersion, comboQuickMode, toggleComboLeg, toast } = useApp();
+  const { isOffline, isConstrained } = useNetworkQuality();
+  const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
+
+  const [catalogQuestions, setCatalogQuestions] = useState<ClientPrediction[] | null>(null);
+  const [myBetsMap, setMyBetsMap] = useState<
+    Record<number, NonNullable<ClientPrediction["myBet"]>>
+  >({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -51,16 +59,35 @@ export default function PredictionsPage() {
     selection: string;
   } | null>(null);
 
+  const handlePullRefresh = useCallback(async () => {
+    try {
+      const [catRes, mineRes] = await Promise.all([
+        api.predictionsCatalog(),
+        user ? api.myPredictionBets().catch(() => null) : Promise.resolve(null),
+      ]);
+      setCatalogQuestions(catRes.questions);
+      if (mineRes) setMyBetsMap(mineRes.myBets);
+      setLoadError(null);
+      setNowMs(Date.now());
+    } catch {
+      /* conserve la liste en cours si le réseau mobile coupe */
+    }
+  }, [user]);
+
+  // 1) Catalogue public mutualisé au CDN Edge (aucun cookie, partagé entre tous les visiteurs)
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchQuestions(isBackground = false) {
+    async function fetchCatalog(isBackground = false) {
       if (isBackground && typeof document !== "undefined" && document.hidden) return;
+      if (isBackground && typeof navigator !== "undefined" && navigator.onLine === false) {
+        return;
+      }
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const r = await api.predictions();
+          const r = await api.predictionsCatalog();
           if (cancelled) return;
-          setQuestions(r.questions);
+          setCatalogQuestions(r.questions);
           setLoadError(null);
           setNowMs(Date.now());
           return;
@@ -76,24 +103,50 @@ export default function PredictionsPage() {
                 ? err.message
                 : "Impossible de charger les prédictions pour le moment."
             );
-            setQuestions((prev) => prev ?? []);
+            setCatalogQuestions((prev) => prev ?? []);
           }
         }
       }
     }
 
-    void fetchQuestions(false);
-    const id = setInterval(() => void fetchQuestions(true), POLL_INTERVAL);
+    void fetchCatalog(false);
+    const id = setInterval(() => void fetchCatalog(true), pollIntervalMs);
     const onVisible = () => {
-      if (!document.hidden) void fetchQuestions(true);
+      if (!document.hidden) void fetchCatalog(true);
     };
+    const onOnline = () => void fetchCatalog(true);
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
     return () => {
       cancelled = true;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
-  }, [reloadNonce]);
+  }, [reloadNonce, pollIntervalMs, isOffline]);
+
+  // 2) Calque privé joueur (~100 octets, zéro polling périodique : chargé au montage et sur action `betsVersion`)
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    api
+      .myPredictionBets()
+      .then((res) => {
+        if (active) setMyBetsMap(res.myBets);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [user, betsVersion, reloadNonce]);
+
+  const questions = useMemo(() => {
+    if (!catalogQuestions) return null;
+    return catalogQuestions.map((q) => ({
+      ...q,
+      myBet: myBetsMap[q.id] ?? null,
+    }));
+  }, [catalogQuestions, myBetsMap]);
 
   const searchedQuestions = useMemo(() => {
     const all = questions ?? [];
@@ -201,6 +254,7 @@ export default function PredictionsPage() {
   };
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
     <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
       {/* En-tête compact + Barre de recherche en ligne sur desktop */}
       <div className="lg:flex lg:items-center lg:justify-between lg:gap-4">
@@ -328,7 +382,7 @@ export default function PredictionsPage() {
           <button
             type="button"
             onClick={() => {
-              setQuestions(null);
+              setCatalogQuestions(null);
               setLoadError(null);
               setReloadNonce((n) => n + 1);
             }}
@@ -396,6 +450,7 @@ export default function PredictionsPage() {
         onClose={() => setTarget(null)}
       />
     </div>
+    </PullToRefresh>
   );
 }
 
