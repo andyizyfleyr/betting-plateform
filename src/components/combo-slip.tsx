@@ -4,7 +4,7 @@ import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Flame, Layers, Loader2, Plus, Trash2, X, Zap } from "lucide-react";
-import { api } from "@/lib/api";
+import { ApiRequestError, api } from "@/lib/api";
 import {
   computeComboQuote,
   MAX_COMBO_LEGS,
@@ -12,7 +12,13 @@ import {
   nextComboBoostTier,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import {
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 import { AnimatedNumber } from "./animated-number";
+import { OddsLockControls } from "./odds-lock-controls";
 import { TeamAvatar } from "./team-avatar";
 import { TouchStakePad } from "./touch-stake-pad";
 import { useApp } from "./providers";
@@ -151,6 +157,9 @@ export function ComboSheet() {
     closeCombo,
     removeComboLeg,
     clearCombo,
+    applyComboOddsUpdates,
+    oddsPolicy,
+    setOddsPolicy,
     balance,
     setBalance,
     bumpBets,
@@ -163,6 +172,7 @@ export function ComboSheet() {
   const [stakeText, setStakeText] = useState("10");
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
+  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
   const [placedInfo, setPlacedInfo] = useState<{
     id: number;
     totalOdds: number;
@@ -204,9 +214,13 @@ export function ComboSheet() {
           ...(l.questionId ? { questionId: l.questionId } : {}),
           market: l.market,
           selection: l.selection,
+          expectedOdds: roundOdds2(l.odds),
         })),
         stake,
+        expectedTotalOdds: quote.totalOdds,
+        oddsPolicy,
       });
+      setOddsChanged(null);
       setBalance(res.balance);
       bumpBets();
       playUiSound(user?.sound, "bet");
@@ -216,6 +230,20 @@ export function ComboSheet() {
       setPhase("success");
     } catch (e) {
       setPhase("input");
+      if (
+        e instanceof ApiRequestError &&
+        e.status === 409 &&
+        e.code === ODDS_CHANGED_CODE &&
+        e.details
+      ) {
+        setOddsChanged(e.details);
+        if (e.details.updatedLegs && e.details.updatedLegs.length > 0) {
+          applyComboOddsUpdates(e.details.updatedLegs);
+        }
+        triggerHaptic(user?.haptics, [12, 20]);
+        return;
+      }
+      setOddsChanged(null);
       const msg = e instanceof Error ? e.message : "Validation impossible";
       setError(msg);
       toast({ kind: "error", title: "Combiné refusé", description: msg });
@@ -226,6 +254,7 @@ export function ComboSheet() {
     setPhase("input");
     setPlacedInfo(null);
     setError(null);
+    setOddsChanged(null);
     closeCombo();
     if (goBets) router.push("/paris");
   };
@@ -526,6 +555,18 @@ export function ComboSheet() {
                   </div>
                 </div>
 
+                <OddsLockControls
+                  feedKind={
+                    comboLegs.every((l) => l.kind === "prediction")
+                      ? "predictions"
+                      : "matches"
+                  }
+                  oddsFormat={oddsFormat}
+                  oddsPolicy={oddsPolicy}
+                  onChangePolicy={setOddsPolicy}
+                  oddsChanged={oddsChanged}
+                />
+
                 <button
                   type="button"
                   disabled={!canSubmit}
@@ -539,6 +580,11 @@ export function ComboSheet() {
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
                       Validation du coupon…
+                    </>
+                  ) : oddsChanged ? (
+                    <>
+                      Accepter la nouvelle cote ({formatOdds(quote.totalOdds, oddsFormat)})
+                      <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
                     </>
                   ) : (
                     <>

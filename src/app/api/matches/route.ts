@@ -17,8 +17,10 @@ import { ensureMlLoaded } from "@/lib/ml-engine";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
 import {
+  EDGE_CACHE_TAGS,
   getMatchesPayloadCache,
   publicJsonWithEdgeCache,
+  rejectUnexpectedQueryParams,
   runSingleflight,
   setMatchesPayloadCache,
 } from "@/lib/response-cache";
@@ -31,19 +33,17 @@ export const maxDuration = 60;
 
 const MATCHES_EDGE_POLICY = {
   maxAge: 1,
-  sMaxAge: 4,
-  staleWhileRevalidate: 8,
+  sMaxAge: 3,
+  staleWhileRevalidate: 5,
+  tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 
 export async function GET(req: NextRequest) {
   try {
-    // Protection anti-cache-busting (ex. attaque `?random=...` contournant l'URL canonique du CDN) :
-    // renvoie immédiatement le tampon RAM existant sans ré-exécuter de synchronisation.
+    // Défense en profondeur derrière la règle Vercel Firewall : rejette tout paramètre aléatoire
+    // (`?x=...`) avant toute allocation ou accès mémoire/SQL.
     if (req.nextUrl.searchParams.size > 0) {
-      const anyRam = getMatchesPayloadCache(true);
-      if (anyRam) {
-        return publicJsonWithEdgeCache(req, null, anyRam, MATCHES_EDGE_POLICY);
-      }
+      return rejectUnexpectedQueryParams();
     }
 
     const stored = await runSingleflight("api:matches", async () => {
@@ -194,7 +194,10 @@ export async function GET(req: NextRequest) {
     };
   });
 
-      const payload = { matches: withMarkets };
+      const payload = {
+        matches: withMarkets,
+        serverTime: new Date(now).toISOString(),
+      };
       return setMatchesPayloadCache(payload);
     });
 

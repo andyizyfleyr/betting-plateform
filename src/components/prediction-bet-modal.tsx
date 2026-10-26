@@ -4,10 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Layers, Loader2, Plus, Ticket, X } from "lucide-react";
-import { api, type ClientPrediction } from "@/lib/api";
+import { ApiRequestError, api, type ClientPrediction } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import {
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
+import { OddsLockControls } from "./odds-lock-controls";
 import { TouchStakePad } from "./touch-stake-pad";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
@@ -68,6 +74,8 @@ function PredictionBetSheet({
     setBalance,
     bumpBets,
     oddsFormat,
+    oddsPolicy,
+    setOddsPolicy,
     toast,
     openRecharge,
     comboLegs,
@@ -82,6 +90,16 @@ function PredictionBetSheet({
   });
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
+  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
+  const [serverOverrideOdds, setServerOverrideOdds] = useState<number | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (serverOverrideOdds == null) return;
+    const t = setTimeout(() => setServerOverrideOdds(null), 10_000);
+    return () => clearTimeout(t);
+  }, [serverOverrideOdds]);
   const [placed, setPlaced] = useState<{
     id: number;
     potentialWin: number;
@@ -115,7 +133,7 @@ function PredictionBetSheet({
   }, [question.id, selection]);
 
   const initialMeta = getSelectionMeta(question, selection);
-  const odds = liveOdds ?? initialMeta.odds;
+  const odds = roundOdds2(serverOverrideOdds ?? liveOdds ?? initialMeta.odds);
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
   const overBalance = stake > balance;
@@ -167,7 +185,11 @@ function PredictionBetSheet({
         questionId: question.id,
         selection,
         stake,
+        expectedOdds: odds,
+        oddsPolicy,
       });
+      setOddsChanged(null);
+      setServerOverrideOdds(null);
       setBalance(res.balance);
       bumpBets();
       playUiSound(user?.sound, "bet");
@@ -182,6 +204,18 @@ function PredictionBetSheet({
       setPhase("success");
     } catch (e) {
       setPhase("input");
+      if (
+        e instanceof ApiRequestError &&
+        e.status === 409 &&
+        e.code === ODDS_CHANGED_CODE &&
+        e.details
+      ) {
+        setOddsChanged(e.details);
+        setServerOverrideOdds(e.details.currentOdds);
+        triggerHaptic(user?.haptics, [12, 20]);
+        return;
+      }
+      setOddsChanged(null);
       const msg = e instanceof Error ? e.message : "Une erreur est survenue";
       setError(msg);
       toast({ kind: "error", title: "Pari refusé", description: msg });
@@ -330,6 +364,14 @@ function PredictionBetSheet({
               />
             </div>
 
+            <OddsLockControls
+              feedKind="predictions"
+              oddsFormat={oddsFormat}
+              oddsPolicy={oddsPolicy}
+              onChangePolicy={setOddsPolicy}
+              oddsChanged={oddsChanged}
+            />
+
             <div className="mt-3.5 flex flex-col gap-2">
               <button
                 type="button"
@@ -346,6 +388,11 @@ function PredictionBetSheet({
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
                     Validation…
+                  </>
+                ) : oddsChanged ? (
+                  <>
+                    Accepter la nouvelle cote ({formatOdds(odds, oddsFormat)})
+                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
                   </>
                 ) : (
                   <>

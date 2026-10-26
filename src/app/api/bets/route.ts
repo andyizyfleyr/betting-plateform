@@ -43,6 +43,13 @@ import {
   verifyLiveRealMatchesBeforeBet,
 } from "@/lib/real-sports-feed";
 import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
+import {
+  checkOddsChange,
+  normalizeOddsPolicy,
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 import { requireUserId } from "@/lib/session";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { jsonWithEtag } from "@/lib/response-cache";
@@ -463,7 +470,14 @@ export async function POST(req: NextRequest) {
   await ensureMlLoaded();
   await syncLiveMatchesThrottled();
 
-  let body: { matchId?: number; selection?: string; market?: string; stake?: number };
+  let body: {
+    matchId?: number;
+    selection?: string;
+    market?: string;
+    stake?: number;
+    expectedOdds?: number;
+    oddsPolicy?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -471,10 +485,18 @@ export async function POST(req: NextRequest) {
   }
 
   const { matchId, selection, stake } = body;
+  const expectedOdds = Number(body.expectedOdds);
+  const oddsPolicy = normalizeOddsPolicy(body.oddsPolicy);
   const market = body.market ?? "result";
 
   if (!matchId || !selection || !stake || stake <= 0) {
     return NextResponse.json({ error: "Données du pari incomplètes" }, { status: 400 });
+  }
+  if (!Number.isFinite(expectedOdds) || expectedOdds <= 1) {
+    return NextResponse.json(
+      { error: "Cote affichée manquante ou invalide — veuillez rafraîchir le coupon" },
+      { status: 400 }
+    );
   }
   if (stake < MIN_STAKE) {
     return NextResponse.json(
@@ -748,33 +770,226 @@ export async function POST(req: NextRequest) {
       ? "stale_near_decided"
       : null;
 
-  const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
-  if (!user || user.balance < stake) {
-    return NextResponse.json({ error: "Solde insuffisant" }, { status: 400 });
-  }
-
   const roundedStake = Math.round(stake * 100) / 100;
-  const potentialWin = Math.round(roundedStake * odds * 100) / 100;
 
-  // Transaction pour atomicité : pari + débit solde
-  const result = await db.transaction(async (tx) => {
+  // Transaction atomique : verrouillage ligne du match (`FOR UPDATE`), recalcul serveur de la cote,
+  // comparaison `expectedOdds` AVANT tout débit, verrouillage joueur (`FOR UPDATE`) et enregistrement.
+  type TxOutcome =
+    | { kind: "ok"; bet: typeof bets.$inferSelect; balance: number }
+    | { kind: "error"; status: number; error: string }
+    | { kind: "odds_changed"; details: OddsChangedDetails };
+
+  const txResult: TxOutcome = await db.transaction(async (tx) => {
+    const [lockedRaw] = await tx
+      .select()
+      .from(matches)
+      .where(eq(matches.id, matchId))
+      .for("update");
+
+    if (!lockedRaw) {
+      return { kind: "error", status: 404, error: "Match introuvable" };
+    }
+
+    const lockedMatch =
+      lockedRaw.source === "manual" ||
+      lockedRaw.status !== "live" ||
+      lockedRaw.suspended
+        ? lockedRaw
+        : hydrateLiveMatchRow(lockedRaw, Date.now());
+
+    if (lockedMatch.status === "finished") {
+      return { kind: "error", status: 400, error: "Ce match est terminé" };
+    }
+    if (lockedMatch.suspended) {
+      return {
+        kind: "error",
+        status: 400,
+        error: "Les cotes de ce match sont actuellement suspendues",
+      };
+    }
+    if (lockedMatch.source === "manual" && isRealMatchKickoffReached(lockedMatch)) {
+      return {
+        kind: "error",
+        status: 400,
+        error: "Coup d'envoi dépassé — paris pré-match clôturés en attente du direct",
+      };
+    }
+
+    const txMinute = minuteNumber(lockedMatch.minute);
+    const txHomeScore = lockedMatch.homeScore ?? 0;
+    const txAwayScore = lockedMatch.awayScore ?? 0;
+
+    if (lockedMatch.status === "live") {
+      if (
+        (lockedMatch.source === "virtual" && txMinute >= 85) ||
+        (lockedMatch.source === "manual" && txMinute >= 88)
+      ) {
+        return {
+          kind: "error",
+          status: 400,
+          error: "Marché verrouillé (fin de match ou action en cours)",
+        };
+      }
+      if (
+        txHomeScore !== initialHomeScore ||
+        txAwayScore !== initialAwayScore ||
+        (lockedMatch.redHome ?? 0) !== initialRedHome ||
+        (lockedMatch.redAway ?? 0) !== initialRedAway
+      ) {
+        return {
+          kind: "error",
+          status: 409,
+          error: "Action décisive survenue pendant la validation — cote mise à jour, réessayez",
+        };
+      }
+    }
+
+    const txModelOpts = {
+      homeForm: lockedMatch.homeForm ?? 1,
+      awayForm: lockedMatch.awayForm ?? 1,
+      redHome: lockedMatch.redHome ?? 0,
+      redAway: lockedMatch.redAway ?? 0,
+      events: lockedMatch.events ?? [],
+      regime: lockedMatch.regime ?? null,
+      league: lockedMatch.league ?? null,
+      matchId: lockedMatch.id,
+    };
+
+    if (
+      lockedMatch.status === "live" &&
+      isKnownMarket(market) &&
+      marketOutcomeSettled(market, selection, txHomeScore, txAwayScore, txMinute, txModelOpts)
+    ) {
+      return { kind: "error", status: 400, error: "Ce marché est déjà décidé" };
+    }
+
+    let rawServerOdds: number | null = null;
+    let txSelectionLabel: string | null = null;
+    if (lockedMatch.source === "manual") {
+      const realHit = realMatchOddsFor(lockedMatch, market, selection);
+      if (!realHit) {
+        return { kind: "error", status: 400, error: "Sélection fermée ou invalide" };
+      }
+      rawServerOdds = realHit.odds;
+      txSelectionLabel = realHit.label;
+    } else {
+      rawServerOdds =
+        lockedMatch.status === "live"
+          ? liveMarketOddsFor(
+              market,
+              selection,
+              lockedMatch.homeTeam,
+              lockedMatch.awayTeam,
+              txHomeScore,
+              txAwayScore,
+              txMinute,
+              txModelOpts
+            )
+          : marketOddsFor(
+              market,
+              selection,
+              lockedMatch.homeTeam,
+              lockedMatch.awayTeam,
+              txModelOpts
+            );
+      txSelectionLabel = marketLabelFor(
+        market,
+        selection,
+        lockedMatch.homeTeam,
+        lockedMatch.awayTeam
+      );
+      if (rawServerOdds == null || txSelectionLabel == null) {
+        return { kind: "error", status: 400, error: "Sélection invalide" };
+      }
+    }
+
+    const serverOdds = roundOdds2(rawServerOdds);
+
+    const txLiveProb =
+      lockedMatch.status === "live" && lockedMatch.source !== "manual"
+        ? liveOutcomeProbability(
+            market,
+            selection,
+            lockedMatch.homeTeam,
+            lockedMatch.awayTeam,
+            txHomeScore,
+            txAwayScore,
+            txMinute,
+            txModelOpts
+          )
+        : null;
+
+    if (
+      lockedMatch.status === "live" &&
+      (serverOdds <= 1.03 || (txLiveProb != null && txLiveProb >= 0.945))
+    ) {
+      return {
+        kind: "error",
+        status: 400,
+        error: "Marché verrouillé — issue quasi acquise",
+      };
+    }
+
+    // Contrôle strict de variation de cote AVANT tout débit (ne fait JAMAIS confiance à expectedOdds pour le gain)
+    const oddsCheck = checkOddsChange({
+      expectedOdds,
+      serverOdds,
+      policy: oddsPolicy,
+    });
+    if (!oddsCheck.ok) {
+      return {
+        kind: "odds_changed",
+        details: {
+          previousOdds: oddsCheck.roundedExpectedOdds,
+          currentOdds: oddsCheck.roundedServerOdds,
+          direction: oddsCheck.direction,
+        },
+      };
+    }
+
+    const [lockedUser] = await tx
+      .select({ id: appUser.id, balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .for("update");
+
+    if (!lockedUser || lockedUser.balance < roundedStake) {
+      return { kind: "error", status: 400, error: "Solde insuffisant" };
+    }
+
+    const txRiskFlag =
+      lockedMatch.status === "live" &&
+      isNearDecided(
+        market,
+        selection,
+        txHomeScore,
+        txAwayScore,
+        txMinute,
+        txLiveProb
+      )
+        ? "stale_near_decided"
+        : null;
+
+    // Gain potentiel calculé EXCLUSIVEMENT avec `serverOdds`
+    const potentialWin = Math.round(roundedStake * serverOdds * 100) / 100;
+
     const [bet] = await tx
       .insert(bets)
       .values({
         userId: uid,
-        matchId: pricedMatch.id,
-        sport: pricedMatch.sport,
-        league: pricedMatch.league,
-        homeTeam: pricedMatch.homeTeam,
-        awayTeam: pricedMatch.awayTeam,
+        matchId: lockedMatch.id,
+        sport: lockedMatch.sport,
+        league: lockedMatch.league,
+        homeTeam: lockedMatch.homeTeam,
+        awayTeam: lockedMatch.awayTeam,
         market,
         selection,
-        selectionLabel,
-        odds,
+        selectionLabel: txSelectionLabel,
+        odds: serverOdds,
         stake: roundedStake,
         potentialWin,
         status: "pending",
-        riskFlag,
+        riskFlag: txRiskFlag,
       })
       .returning();
 
@@ -784,9 +999,29 @@ export async function POST(req: NextRequest) {
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });
 
-    return { bet, balance: updatedUser.balance };
+    return { kind: "ok", bet, balance: updatedUser.balance };
   });
 
+  if (txResult.kind === "odds_changed") {
+    const dirLabel =
+      txResult.details.direction === "up" ? "augmenté" : "évolué";
+    return NextResponse.json(
+      {
+        error: `La cote a ${dirLabel} (${txResult.details.previousOdds.toFixed(2).replace(".", ",")} → ${txResult.details.currentOdds.toFixed(2).replace(".", ",")}). Confirmez la nouvelle cote pour valider.`,
+        code: ODDS_CHANGED_CODE,
+        details: txResult.details,
+      },
+      { status: 409 }
+    );
+  }
+
+  if (txResult.kind === "error") {
+    return NextResponse.json(
+      { error: txResult.error },
+      { status: txResult.status }
+    );
+  }
+
   notifyNewBetPlaced({ userId: uid, kind: "sport" });
-  return NextResponse.json(result);
+  return NextResponse.json({ bet: txResult.bet, balance: txResult.balance });
 }
