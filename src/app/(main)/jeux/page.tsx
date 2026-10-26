@@ -33,10 +33,10 @@ export default function JeuxPage() {
     <div className="mx-auto w-full max-w-[1360px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
             Casino & Mini-jeux
           </h1>
-          <p className="text-[12px] text-mist lg:text-[13px]">
+          <p className="hidden text-[13px] text-mist lg:block">
             Sessions instantanées branchées sur votre portefeuille
           </p>
         </div>

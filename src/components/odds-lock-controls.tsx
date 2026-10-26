@@ -30,6 +30,7 @@ export function OddsLockControls({
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) return;
     const id = setInterval(() => setNowMs(Date.now()), 1_000);
     return () => clearInterval(id);
   }, []);
@@ -39,8 +40,14 @@ export function OddsLockControls({
   const acceptHigher = oddsPolicy === "accept_higher";
 
   return (
-    <div className={cn("space-y-2", compact ? "mt-2.5" : "mt-3")}>
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-elev/80 px-2.5 py-1.5 text-[11px]">
+    <div
+      className={cn(
+        "space-y-2",
+        oddsChanged ? (compact ? "mt-2" : "mt-2.5") : "hidden lg:block lg:mt-3"
+      )}
+    >
+      {/* Bandeau permanent uniquement sur desktop (lg+) pour ne jamais encombrer le mobile */}
+      <div className="hidden flex-wrap items-center justify-between gap-2 rounded-xl bg-elev/80 px-2.5 py-1.5 text-[11px] lg:flex">
         <div className="flex items-center gap-1.5 text-mist">
           <span
             className={cn(
@@ -70,6 +77,7 @@ export function OddsLockControls({
         </label>
       </div>
 
+      {/* Alerte affichée sur mobile & desktop UNIQUEMENT quand la cote a réellement varié */}
       {oddsChanged && (
         <div
           className={cn(
@@ -100,8 +108,19 @@ export function OddsLockControls({
             </p>
             <p className="mt-0.5 flex items-center gap-1 text-[11px] text-mist">
               <RefreshCw className="h-3 w-3 shrink-0" />
-              Aucun montant débité — appuyez sur le bouton pour confirmer la nouvelle cote.
+              Aucun montant débité — confirmez la nouvelle cote.
             </p>
+            <label className="mt-1.5 flex cursor-pointer select-none items-center gap-1.5 text-[11px] font-semibold text-ink/85 lg:hidden">
+              <input
+                type="checkbox"
+                checked={acceptHigher}
+                onChange={(e) =>
+                  onChangePolicy(e.target.checked ? "accept_higher" : "confirm_all")
+                }
+                className="h-3.5 w-3.5 rounded border-edge accent-betclic-red"
+              />
+              <span>Accepter automatiquement les prochaines hausses</span>
+            </label>
           </div>
         </div>
       )}

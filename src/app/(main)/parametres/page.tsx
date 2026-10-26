@@ -13,10 +13,11 @@ import {
   LogOut,
   PhoneCall,
   Plus,
-  Radio,
   ShieldCheck,
+  SlidersHorizontal,
   Vibrate,
   Volume2,
+  Wallet,
   X,
   Zap,
 } from "lucide-react";
@@ -45,6 +46,7 @@ export default function ParametresPage() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
 
   const reloadWallet = useCallback(() => {
     api
@@ -244,20 +246,74 @@ export default function ParametresPage() {
   const hue = teamHue(user?.name ?? "Pulse");
 
   return (
-    <div className="mx-auto w-full max-w-[1380px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
-      <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
-        Compte
-      </h1>
-      <p className="text-[12px] text-mist lg:text-[13px]">
-        Profil, portefeuille et préférences
-      </p>
-
-      <div className="mt-3 space-y-4">
-        {/* Colonne gauche desktop : Profil, Solde et Mouvements du portefeuille */}
+    <div className="mx-auto w-full max-w-[1380px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
+      <div className="flex items-center justify-between gap-3">
         <div>
-      {/* Profil + Solde + Dépôt / Retrait */}
+          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+            Compte
+          </h1>
+          <p className="hidden text-[13px] text-mist lg:block">
+            Profil, portefeuille et préférences
+          </p>
+        </div>
+
+        {/* Mini-badge profil compact sur mobile */}
+        <div className="flex min-w-0 items-center gap-2 lg:hidden">
+          <div className="min-w-0 text-right">
+            <p className="max-w-[140px] truncate font-display text-[13px] font-bold text-ink">
+              {user?.name ?? "—"}
+            </p>
+            <p className="max-w-[140px] truncate text-[10.5px] text-dim">
+              {user?.email ?? "Session active"}
+            </p>
+          </div>
+          <span
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-display text-[12.5px] font-bold text-white"
+            style={{
+              background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))`,
+            }}
+          >
+            {initials(user?.name ?? "PU")}
+          </span>
+        </div>
+      </div>
+
+      {/* Découpage mobile en 2 onglets nets : Portefeuille | Réglages (Point 9) */}
+      <div className="mt-3 grid grid-cols-2 gap-1.5 rounded-2xl border border-edge bg-white p-1 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileTab("wallet")}
+          className={cn(
+            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[12.5px] font-bold transition-colors",
+            mobileTab === "wallet"
+              ? "bg-betclic-red text-white shadow-2xs"
+              : "text-mist active:bg-elev"
+          )}
+        >
+          <Wallet className="h-3.5 w-3.5" strokeWidth={2.3} />
+          <span>Portefeuille</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("settings")}
+          className={cn(
+            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[12.5px] font-bold transition-colors",
+            mobileTab === "settings"
+              ? "bg-betclic-red text-white shadow-2xs"
+              : "text-mist active:bg-elev"
+          )}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.3} />
+          <span>Réglages</span>
+        </button>
+      </div>
+
+      <div className="mt-3 space-y-4 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:space-y-0">
+        {/* Colonne gauche : Portefeuille, Solde et Mouvements */}
+        <div className={cn(mobileTab !== "wallet" && "hidden lg:block")}>
+      {/* Profil (desktop) + Solde + Dépôt / Retrait */}
       <section className="glass-card rounded-2xl p-4 lg:p-5">
-        <div className="flex items-center gap-3">
+        <div className="hidden items-center gap-3 pb-4 lg:flex">
           <span
             className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl font-display text-[15px] font-bold text-white"
             style={{
@@ -281,7 +337,7 @@ export default function ParametresPage() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl bg-elev p-3">
+        <div className="rounded-xl bg-elev p-3">
           <div className="flex items-baseline justify-between gap-2">
             <div>
               <p className="text-[11px] font-medium text-dim">Solde disponible</p>
@@ -549,10 +605,10 @@ export default function ParametresPage() {
       </section>
         </div>
 
-        {/* Colonne droite desktop : Préférences + Assistance & Session */}
-        <div className="lg:sticky lg:top-[84px]">
+        {/* Colonne droite : Préférences + Assistance & Session */}
+        <div className={cn(mobileTab !== "settings" && "hidden lg:block", "lg:sticky lg:top-[84px]")}>
       {/* Préférences réelles */}
-      <h2 className="mt-5 px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-mist lg:mt-0">
+      <h2 className="px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-mist">
         Préférences
       </h2>
       <div className="glass-card mt-2 overflow-hidden rounded-2xl">
@@ -597,13 +653,6 @@ export default function ParametresPage() {
           hint="Alerte quand un pari est réglé"
           checked={user?.notifications ?? true}
           onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")}
-        />
-        <SwitchRow
-          Icon={<Radio className="h-4 w-4" strokeWidth={2.1} />}
-          label="Simulation des scores en direct"
-          hint="Évolution automatique des matchs live"
-          checked={user?.liveSim ?? true}
-          onChange={(v) => patch({ liveSim: v }, "Mode direct mis à jour")}
         />
         <SwitchRow
           Icon={<Volume2 className="h-4 w-4" strokeWidth={2.1} />}

@@ -35,7 +35,7 @@ function AuthInner() {
 
   useEffect(() => {
     if (user) {
-      router.replace(user.role === "admin" ? "/admin" : "/predictions");
+      router.replace(user.role === "admin" ? "/admin" : "/matchs");
     }
   }, [user, router]);
 
@@ -57,7 +57,7 @@ function AuthInner() {
       }
       const from = params.get("from");
       const safeDest =
-        from && from.startsWith("/") && !from.startsWith("/admin") ? from : "/predictions";
+        from && from.startsWith("/") && !from.startsWith("/admin") ? from : "/matchs";
       router.push(safeDest);
     },
     [applyUser, params, router, toast]

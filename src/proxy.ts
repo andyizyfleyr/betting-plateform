@@ -73,7 +73,7 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(url);
     }
     if (!isAdmin) {
-      return NextResponse.redirect(new URL("/predictions", req.url));
+      return NextResponse.redirect(new URL("/matchs", req.url));
     }
     return NextResponse.next();
   }
@@ -82,7 +82,7 @@ export async function proxy(req: NextRequest) {
   const isAuthPage = pathname === "/auth" || pathname.startsWith("/auth/");
   if (isAuthPage) {
     if (authed) {
-      return NextResponse.redirect(new URL(isAdmin ? "/admin" : "/predictions", req.url));
+      return NextResponse.redirect(new URL(isAdmin ? "/admin" : "/matchs", req.url));
     }
     return NextResponse.next();
   }

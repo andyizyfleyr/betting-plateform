@@ -6,7 +6,7 @@ import { triggerHaptic } from "@/lib/feedback";
 import { cn, eur } from "@/lib/format";
 
 const DESKTOP_QUICK_STAKES = [5, 10, 25, 50] as const;
-const MOBILE_ADD_CHIPS = [5, 10, 50] as const;
+const MOBILE_QUICK_STAKES = [5, 10, 25, 50] as const;
 const MOBILE_MEDIA_QUERY = "(max-width: 1023px)";
 
 function subscribeMobile(cb: () => void): () => void {
@@ -129,10 +129,10 @@ export function TouchStakePad({
     if (valid !== null) emitChange(valid);
   };
 
-  const pressAdd = (delta: number) => {
+  const pressPreset = (amount: number) => {
     triggerHaptic(haptics, 10);
-    const nextVal = Math.min(99999, Math.round((numericStake + delta) * 100) / 100);
-    emitChange(formatNumberClean(nextVal));
+    const capped = Math.min(maxCap, amount);
+    emitChange(formatNumberClean(capped));
   };
 
   const pressMax = () => {
@@ -223,20 +223,27 @@ export function TouchStakePad({
         <span className="font-display text-[17px] font-bold text-dim">€</span>
       </div>
 
-      {/* ── MOBILE (< lg) : Pavé numérique tactile 1xBet intégré au pouce ── */}
+      {/* ── MOBILE (< lg) : Jetons rapides 5 · 10 · 25 · 50 · MAX + Pavé 0-9 repliable ── */}
       <div className="mt-2 space-y-1.5 lg:hidden">
-        {/* Ligne d'ajouts rapides (+5, +10, +50, MAX) toujours accessible au pouce */}
-        <div className="grid grid-cols-4 gap-1.5">
-          {MOBILE_ADD_CHIPS.map((delta) => (
-            <button
-              key={delta}
-              type="button"
-              onClick={() => pressAdd(delta)}
-              className="flex h-8.5 touch-manipulation items-center justify-center rounded-xl border border-edge bg-elev font-display text-[12px] font-bold text-ink transition-transform active:scale-95 active:bg-edge"
-            >
-              +{delta} €
-            </button>
-          ))}
+        <div className="grid grid-cols-5 gap-1.5">
+          {MOBILE_QUICK_STAKES.map((amount) => {
+            const active = numericStake === amount;
+            return (
+              <button
+                key={amount}
+                type="button"
+                onClick={() => pressPreset(amount)}
+                className={cn(
+                  "flex h-8.5 touch-manipulation items-center justify-center rounded-xl border font-display text-[12px] font-bold transition-transform active:scale-95",
+                  active
+                    ? "border-ink bg-ink text-white"
+                    : "border-edge bg-elev text-ink active:bg-edge"
+                )}
+              >
+                {amount} €
+              </button>
+            );
+          })}
           <button
             type="button"
             onClick={pressMax}

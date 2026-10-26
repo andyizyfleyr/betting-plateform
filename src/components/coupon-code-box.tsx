@@ -18,9 +18,11 @@ import { cn } from "@/lib/format";
 export function CouponCodeBox({
   variant = "compact",
   autoCheckUrlCode = false,
+  className,
 }: {
   variant?: "empty" | "compact";
   autoCheckUrlCode?: boolean;
+  className?: string;
 }) {
   const { comboLegs, loadComboLegs, toast, user } = useApp();
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
@@ -243,7 +245,7 @@ export function CouponCodeBox({
   }
 
   return (
-    <div className="rounded-2xl border border-edge bg-white p-3">
+    <div className={cn("rounded-2xl border border-edge bg-white p-3", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         {activeCode ? (
           <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl bg-elev px-3 py-1.5">

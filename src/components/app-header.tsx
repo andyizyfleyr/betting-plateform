@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, LogOut, Plus, ShieldCheck, User, Zap } from "lucide-react";
+import { Gamepad2, Loader2, LogOut, Plus, ShieldCheck, User, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, eur, initials } from "@/lib/format";
 import { AnimatedNumber } from "./animated-number";
@@ -158,9 +158,16 @@ export function AppHeader() {
 
   return (
     <header className="pt-safe sticky top-0 z-30 border-b border-edge bg-white/95 backdrop-blur-md lg:border-b-0 lg:bg-betclic-red lg:shadow-xs lg:backdrop-blur-none">
-      {/* Barre mobile (< lg) — inchangée */}
+      {/* Barre mobile (< lg) : Logo -> /matchs + accès rapide Mini-jeux + Solde */}
       <div className="flex h-[52px] items-center justify-between px-4 lg:hidden">
-        <Link href="/predictions" className="flex items-center gap-2 active:opacity-80">
+        <Link
+          href="/matchs"
+          onClick={() => {
+            setSportStatusFilter("all");
+            setSportLeagueFilter("all");
+          }}
+          className="flex items-center gap-2 active:opacity-80"
+        >
           <span className="grid h-7 w-7 place-items-center rounded-lg bg-betclic-red text-white">
             <Zap className="h-4 w-4 fill-white" strokeWidth={2.2} />
           </span>
@@ -170,6 +177,23 @@ export function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <Link
+            href="/jeux"
+            aria-label="Casino et mini-jeux"
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 rounded-full border px-2.5 font-display text-[12px] font-bold transition-colors active:scale-[0.98]",
+              isJeuxActive
+                ? "border-betclic-red bg-betclic-red text-white"
+                : "border-edge bg-elev text-ink"
+            )}
+          >
+            <Gamepad2
+              className={cn("h-3.5 w-3.5", isJeuxActive ? "text-white" : "text-betclic-red")}
+              strokeWidth={2.2}
+            />
+            <span>Jeux</span>
+          </Link>
+
           {user ? (
             <button
               type="button"

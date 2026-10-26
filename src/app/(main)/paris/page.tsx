@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, History, Plus, RefreshCw, Search, TicketX, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, History, RefreshCw, Search, TicketX, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { BetTicket } from "@/components/bet-ticket";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
@@ -11,7 +11,7 @@ import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useApp } from "@/components/providers";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
-import { eur } from "@/lib/format";
+import { cn, eur } from "@/lib/format";
 
 type Tab = "ongoing" | "finished";
 type OutcomeFilter = "all" | "won" | "lost" | "cashed" | "void";
@@ -39,13 +39,15 @@ function settledOrPlacedIso(b: ClientBet): string {
 }
 
 export default function ParisPage() {
-  const { betsVersion, user, setBalance, openRecharge } = useApp();
+  const { betsVersion, user, setBalance } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
   const [tabChoice, setTabChoice] = useState<Tab | null>(null);
   const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction" | "combo">("all");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
   const [query, setQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [bets, setBets] = useState<ClientBet[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -282,31 +284,109 @@ export default function ParisPage() {
     return [...map.entries()];
   }, [visibleBets]);
 
+  const toggleMobileSearch = () => {
+    if (mobileSearchOpen) {
+      setQuery("");
+      setMobileSearchOpen(false);
+    } else {
+      setMobileSearchOpen(true);
+      window.setTimeout(() => searchInputRef.current?.focus(), 30);
+    }
+  };
+
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
             Mes paris
           </h1>
-          <p className="text-[12px] text-mist lg:text-[13px]">
+          <p className="hidden text-[13px] text-mist lg:block">
             Coupons en cours et historique des paris
           </p>
         </div>
 
-        <Link
-          href="/resultats"
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
-        >
-          <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
-          Résultats
-        </Link>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Link
+            href="/resultats"
+            className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
+          >
+            <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
+            Résultats
+          </Link>
+
+          <button
+            type="button"
+            onClick={toggleMobileSearch}
+            aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un pari"}
+            className={cn(
+              "grid h-8.5 w-8.5 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
+              mobileSearchOpen || query
+                ? "bg-betclic-red text-white"
+                : "bg-elev text-ink"
+            )}
+          >
+            {mobileSearchOpen ? (
+              <X className="h-4 w-4" strokeWidth={2.3} />
+            ) : (
+              <Search className="h-4 w-4" strokeWidth={2.2} />
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Résumé portefeuille clair + Recherche */}
-      <div className="mt-3 space-y-2.5">
-        <section className="glass-card rounded-2xl p-3.5 lg:flex lg:items-center lg:justify-between lg:gap-6 lg:px-5 lg:py-4">
+      {/* Ruban mobile 1 ligne ultra-compact (sans doublon du solde déjà visible dans le Header) */}
+      <div className="mt-2.5 grid grid-cols-3 divide-x divide-edge rounded-xl border border-edge bg-white px-2 py-2 text-center shadow-2xs lg:hidden">
+        <div className="px-1">
+          <p className="text-[10px] font-medium text-dim">En jeu</p>
+          <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink">
+            {eur(staked)}
+          </p>
+        </div>
+        <div className="px-1">
+          <p className="text-[10px] font-medium text-dim">Gain potentiel</p>
+          <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-win">
+            {eur(potential)}
+          </p>
+        </div>
+        <div className="px-1">
+          <p className="text-[10px] font-medium text-dim">Réussite</p>
+          <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink">
+            {settled ? `${winRate}%` : "—"}
+          </p>
+        </div>
+      </div>
+
+      {/* Barre de recherche mobile dépliable au clic sur la loupe */}
+      {(mobileSearchOpen || query) && (
+        <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:hidden">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un match, un coupon, un combiné…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setMobileSearchOpen(false);
+            }}
+            aria-label="Fermer la recherche"
+            className="text-dim active:text-ink"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Résumé portefeuille complet + Recherche (desktop >= lg) */}
+      <div className="mt-3 hidden space-y-2.5 lg:block">
+        <section className="glass-card rounded-2xl lg:flex lg:items-center lg:justify-between lg:gap-6 lg:px-5 lg:py-4">
           <div className="flex items-center justify-between gap-4 lg:shrink-0">
             <div>
               <p className="text-[11px] font-medium text-dim">Solde disponible</p>
@@ -316,40 +396,31 @@ export default function ParisPage() {
                 className="mt-0.5 block font-display text-[24px] font-bold leading-none tabular-nums text-ink"
               />
             </div>
-            <button
-              type="button"
-              onClick={openRecharge}
-              className="flex h-9 items-center gap-1.5 rounded-xl bg-betclic-red px-3.5 font-display text-[12.5px] font-bold text-white active:opacity-90 lg:hidden"
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
-              Recharger
-            </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-3 divide-x divide-edge border-t border-edge pt-2.5 text-center lg:mt-0 lg:flex-1 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <div className="grid grid-cols-3 divide-x divide-edge text-center lg:flex-1 lg:border-l lg:pl-6">
             <div className="px-1">
               <p className="text-[10px] font-medium text-dim">En jeu</p>
-              <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink lg:text-[15px]">
+              <p className="mt-0.5 font-display text-[15px] font-bold tabular-nums text-ink">
                 {eur(staked)}
               </p>
             </div>
             <div className="px-1">
               <p className="text-[10px] font-medium text-dim">Gain potentiel</p>
-              <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-win lg:text-[15px]">
+              <p className="mt-0.5 font-display text-[15px] font-bold tabular-nums text-win">
                 {eur(potential)}
               </p>
             </div>
             <div className="px-1">
               <p className="text-[10px] font-medium text-dim">Réussite</p>
-              <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink lg:text-[15px]">
+              <p className="mt-0.5 font-display text-[15px] font-bold tabular-nums text-ink">
                 {settled ? `${winRate}%` : "—"}
               </p>
             </div>
           </div>
         </section>
 
-        {/* Barre de recherche */}
-        <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:mt-0 lg:h-[68px] lg:rounded-2xl lg:px-4">
+        <div className="flex h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-4">
           <Search className="h-4 w-4 shrink-0 text-dim" />
           <input
             type="text"
@@ -363,7 +434,7 @@ export default function ParisPage() {
               type="button"
               onClick={() => setQuery("")}
               aria-label="Effacer la recherche"
-              className="text-dim active:text-ink"
+              className="text-dim hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>
@@ -526,17 +597,17 @@ export default function ParisPage() {
           {tab === "ongoing" && (
             <div className="mt-4 flex gap-2">
               <Link
-                href="/predictions"
+                href="/matchs"
                 className="flex h-10 items-center gap-1.5 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white active:opacity-90"
               >
-                Prédictions
+                Matchs
                 <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.4} />
               </Link>
               <Link
-                href="/matchs"
+                href="/predictions"
                 className="flex h-10 items-center rounded-full border border-edge bg-white px-4 font-display text-[12.5px] font-semibold text-ink active:bg-elev"
               >
-                Matchs
+                Prédictions
               </Link>
             </div>
           )}

@@ -87,7 +87,7 @@ export function MarketSheet() {
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
   const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
-  const [showTracker, setShowTracker] = useState(true);
+  const [showTracker, setShowTracker] = useState(false);
 
   const sharedFromFeed = useMemo(
     () => (marketMatch && feedMatches ? feedMatches.find((m) => m.id === marketMatch.id) ?? null : null),
@@ -124,6 +124,9 @@ export function MarketSheet() {
   if (match && match.id !== prevMatchId) {
     setPrevMatchId(match.id);
     setCategory("all");
+    setShowTracker(
+      typeof window !== "undefined" && window.innerWidth >= 1024
+    );
     const groups = match.markets ?? [];
     const initialOpen: Record<string, boolean> = {};
     // Ouvre par défaut Résultat + Total de buts (ou les 2 premiers marchés disponibles)
@@ -255,12 +258,12 @@ export function MarketSheet() {
                         {isReal ? (
                           <>
                             <BarChart3 className="h-3 w-3" strokeWidth={2.4} />
-                            Stats
+                            {isLive ? "Stats live" : "Stats"}
                           </>
                         ) : (
                           <>
                             <Radio className="h-3 w-3" strokeWidth={2.4} />
-                            {isLive ? "2D" : "Stats"}
+                            {isLive ? "Terrain 2D" : "Stats"}
                           </>
                         )}
                       </button>

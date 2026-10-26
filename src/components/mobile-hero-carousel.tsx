@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 export type HeroPromoAction =
@@ -238,17 +239,28 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
                 </div>
 
                 <div className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      pauseAutoplay();
-                      onAction(slide.action);
-                    }}
-                    className={`inline-flex h-[26px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10.5px] font-bold tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
-                  >
-                    <span className="truncate">{slide.ctaLabel}</span>
-                    <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.6]" />
-                  </button>
+                  {slide.action.type === "virtual" ? (
+                    <Link
+                      href="/matchs/virtuels"
+                      onClick={pauseAutoplay}
+                      className={`inline-flex h-[26px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10.5px] font-bold tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
+                    >
+                      <span className="truncate">{slide.ctaLabel}</span>
+                      <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.6]" />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        pauseAutoplay();
+                        onAction(slide.action);
+                      }}
+                      className={`inline-flex h-[26px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10.5px] font-bold tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
+                    >
+                      <span className="truncate">{slide.ctaLabel}</span>
+                      <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.6]" />
+                    </button>
+                  )}
                 </div>
               </div>
             </article>

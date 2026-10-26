@@ -14,10 +14,10 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CalendarClock,
-  ChevronLeft,
   ChevronRight,
   Cpu,
   History,
+  List,
   RefreshCw,
   Search,
   Trophy,
@@ -392,12 +392,7 @@ export default function MatchsPage() {
           break;
         }
         case "virtual":
-          setQuery("");
-          setFilter("all");
-          setOddsProfile("all");
-          setSelectedUniverse("virtual");
-          setLeagueFilter(isMobileViewport ? VIRTUAL_FILTER_VALUE : "all");
-          scrollToMatches();
+          router.push("/matchs/virtuels");
           break;
         case "live":
           setQuery("");
@@ -419,7 +414,6 @@ export default function MatchsPage() {
       }
     },
     [
-      isMobileViewport,
       matches,
       openRecharge,
       router,
@@ -670,17 +664,16 @@ export default function MatchsPage() {
       realMatching.filter((m) => m.status === "upcoming")
     );
     const realFinished = realMatching.filter((m) => m.status === "finished");
-    const hasAnyActiveRealForSelection =
-      realLive.length > 0 || realUpcoming.length > 0;
 
-    // Choix intelligent du pool virtuel :
-    // - mode virtuel explicite → tous les matchs virtuels
-    // - ligue spécifique ayant déjà des matchs réels actifs → aucun mélange virtuel parasite
-    // - ligue spécifique sans match réel actif → ligue virtuelle correspondante, sinon clubs virtuels de cette ligue, sinon pool virtuel global
+    // Choix intelligent du pool virtuel par rangée :
+    // - s'il n'y a AUCUN match réel en cours (`realLive.length === 0`), la rangée Direct
+    //   affiche automatiquement les matchs virtuels en direct 24h/24 (même s'il existe des matchs réels à venir !)
+    // - s'il n'y a aucun match réel à venir (`realUpcoming.length === 0`), l'Avant-match bascule aussi sur les virtuels
     const canRelaxVirtualLeague = !qNorm && oddsProfile === "all" && isSpecificLeague;
     const selectVirtualPool = (needUpcomingOnly: boolean): ClientMatch[] => {
       if (isVirtualMode || leagueFilter === "all") return virtualMatchingNoLeague;
-      if (hasAnyActiveRealForSelection) return [];
+      if (!needUpcomingOnly && realLive.length > 0) return [];
+      if (needUpcomingOnly && realUpcoming.length > 0) return [];
       const checkFn = needUpcomingOnly
         ? (m: ClientMatch) => m.status === "upcoming"
         : (m: ClientMatch) => m.status !== "finished";
@@ -711,18 +704,14 @@ export default function MatchsPage() {
           : virtualMatchingClubSlug
     ).filter((m) => m.status === "finished");
 
-    const liveRowUsesVirtual =
-      isVirtualMode || (!hasAnyActiveRealForSelection && realLive.length === 0);
-    const liveRowItems = isVirtualMode
+    const liveRowUsesVirtual = isVirtualMode || realLive.length === 0;
+    const liveRowItems = liveRowUsesVirtual
       ? vLive.length > 0
         ? vLive
         : virtualAllActive
-      : liveRowUsesVirtual
-        ? virtualAllActive
-        : realLive;
+      : realLive;
 
-    const upcomingRowUsesVirtual =
-      isVirtualMode || (!hasAnyActiveRealForSelection && realUpcoming.length === 0);
+    const upcomingRowUsesVirtual = isVirtualMode || realUpcoming.length === 0;
     const upcomingRowItems = upcomingRowUsesVirtual ? virtualUpcomingOnly : realUpcoming;
 
     const finishedRowUsesVirtual = isVirtualMode || realFinished.length === 0;
@@ -1062,7 +1051,13 @@ export default function MatchsPage() {
             placeholder: "Ligue",
             value: isMobileViewport ? leagueFilter : effectiveLeague,
             defaultValue: "all",
-            onChange: setLeagueFilter,
+            onChange: (next) => {
+              if (next === VIRTUAL_FILTER_VALUE) {
+                router.push("/matchs/virtuels");
+                return;
+              }
+              setLeagueFilter(next);
+            },
             options: [
               {
                 value: "all",
@@ -1236,15 +1231,28 @@ export default function MatchsPage() {
                           mobileRows.upcomingRowItems.length === 0)))) && (
                     <RealMatchCarouselRow
                       label={
-                        mobileRows.isVirtualMode
+                        mobileRows.liveRowUsesVirtual
                           ? "Matchs virtuels EN DIRECT"
                           : mobileRows.isSpecificLeague
                             ? `${leagueFilter} · EN DIRECT`
                             : "Populaire EN DIRECT"
                       }
+                      subtitle={
+                        mobileRows.liveRowUsesVirtual
+                          ? "Aucun match officiel en cours · Multiplex virtuel 24h/24 actif"
+                          : undefined
+                      }
                       items={mobileRows.liveRowItems}
                       live
                       virtualFallback={mobileRows.liveRowUsesVirtual}
+                      trailingHref={
+                        mobileRows.liveRowUsesVirtual
+                          ? "/matchs/virtuels"
+                          : mobileRows.isSpecificLeague
+                            ? `/matchs/tous?status=live&league=${encodeURIComponent(leagueFilter)}`
+                            : "/matchs/tous?status=live"
+                      }
+                      trailingLabel="Voir tout"
                       emptyMessage="Aucun match en direct pour le moment"
                     />
                   )}
@@ -1253,22 +1261,61 @@ export default function MatchsPage() {
                     (filter === "all" &&
                       (mobileRows.upcomingRowItems.length > 0 ||
                         !mobileRows.isSpecificLeague))) && (
-                    <RealMatchCarouselRow
-                      label={
-                        mobileRows.isVirtualMode
-                          ? "Prochains départs virtuels"
-                          : mobileRows.isSpecificLeague
-                            ? `${leagueFilter} · Avant-match`
-                            : "Populaire en avant-match"
-                      }
-                      items={mobileRows.upcomingRowItems}
-                      virtualFallback={mobileRows.upcomingRowUsesVirtual}
-                      markFirstAsNextUp={
-                        mobileRows.upcomingRowUsesVirtual &&
-                        (leagueFilter === "all" || mobileRows.isVirtualMode)
-                      }
-                      emptyMessage="Aucun match en avant-match dans cette sélection"
-                    />
+                    <>
+                      <RealMatchCarouselRow
+                        label={
+                          mobileRows.isVirtualMode
+                            ? "Prochains départs virtuels"
+                            : mobileRows.isSpecificLeague
+                              ? `${leagueFilter} · Avant-match`
+                              : "Populaire en avant-match"
+                        }
+                        subtitle="Glissez horizontalement ou ouvrez toute l'affiche en liste verticale"
+                        items={mobileRows.upcomingRowItems}
+                        virtualFallback={mobileRows.upcomingRowUsesVirtual}
+                        markFirstAsNextUp={
+                          mobileRows.upcomingRowUsesVirtual &&
+                          (leagueFilter === "all" || mobileRows.isVirtualMode)
+                        }
+                        trailingHref={
+                          mobileRows.upcomingRowUsesVirtual
+                            ? "/matchs/virtuels"
+                            : mobileRows.isSpecificLeague
+                              ? `/matchs/tous?league=${encodeURIComponent(leagueFilter)}`
+                              : "/matchs/tous"
+                        }
+                        trailingLabel="Voir tout"
+                        emptyMessage="Aucun match en avant-match dans cette sélection"
+                      />
+
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-edge bg-white px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
+                            <List className="h-4 w-4" strokeWidth={2.3} />
+                          </span>
+                          <p className="min-w-0 text-[12px] font-medium leading-snug text-mist">
+                            Parcourir tous les matchs alignés{" "}
+                            <strong className="font-semibold text-ink">
+                              en liste verticale
+                            </strong>{" "}
+                            au pouce
+                          </p>
+                        </div>
+                        <Link
+                          href={
+                            mobileRows.upcomingRowUsesVirtual
+                              ? "/matchs/virtuels"
+                              : mobileRows.isSpecificLeague
+                                ? `/matchs/tous?league=${encodeURIComponent(leagueFilter)}`
+                                : "/matchs/tous"
+                          }
+                          className="inline-flex h-8.5 shrink-0 items-center gap-1 rounded-full bg-betclic-red px-3 font-display text-[12px] font-bold text-white shadow-2xs transition-transform active:scale-95"
+                        >
+                          Voir tout
+                          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+                        </Link>
+                      </div>
+                    </>
                   )}
 
                   {filter === "finished" && mobileRows.finishedRowItems.length > 0 && (
@@ -1283,9 +1330,32 @@ export default function MatchsPage() {
                       trailingHref={`/resultats?universe=${
                         mobileRows.finishedRowUsesVirtual ? "virtual" : "real"
                       }`}
-                      trailingLabel="Tout l'historique →"
+                      trailingLabel="Tout l'historique"
                     />
                   )}
+
+                  {/* Accès rapides mobiles : Matchs virtuels 24/7 & Historique des résultats */}
+                  <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    <Link
+                      href="/matchs/virtuels"
+                      className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
+                    >
+                      <Cpu className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+                      <span>Virtuels 24h/24</span>
+                      {virtualLiveTotal > 0 && (
+                        <span className="rounded-full bg-betclic-red/12 px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums text-betclic-red">
+                          {virtualLiveTotal}
+                        </span>
+                      )}
+                    </Link>
+                    <Link
+                      href="/resultats"
+                      className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
+                    >
+                      <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+                      <span>Résultats</span>
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -1451,6 +1521,7 @@ export default function MatchsPage() {
 
 const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
   label,
+  subtitle,
   items,
   live,
   virtualFallback,
@@ -1460,6 +1531,7 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
   trailingLabel,
 }: {
   label: string;
+  subtitle?: string;
   items: ClientMatch[];
   live?: boolean;
   virtualFallback?: boolean;
@@ -1470,8 +1542,6 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(items.length > 1);
   const [renderLimit, setRenderLimit] = useState(INITIAL_CAROUSEL_WINDOW);
 
   const visibleItems = useMemo(
@@ -1483,11 +1553,6 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
     const el = scrollerRef.current;
     if (!el) return;
     const maxScroll = el.scrollWidth - el.clientWidth;
-    const nextLeft = el.scrollLeft > 6;
-    const nextRight = maxScroll - el.scrollLeft > 6 || renderLimit < items.length;
-    setCanLeft((prev) => (prev === nextLeft ? prev : nextLeft));
-    setCanRight((prev) => (prev === nextRight ? prev : nextRight));
-
     // Fenêtrage progressif : monte les cartes suivantes dès que l'utilisateur approche du bord droit
     if (renderLimit < items.length && maxScroll - el.scrollLeft < 680) {
       setRenderLimit((prev) => Math.min(items.length, prev + CAROUSEL_WINDOW_STEP));
@@ -1520,16 +1585,6 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
       ro?.disconnect();
     };
   }, [visibleItems.length, syncScrollEdges]);
-
-  const scrollStep = (dir: -1 | 1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    if (dir === 1 && renderLimit < items.length) {
-      setRenderLimit((prev) => Math.min(items.length, prev + CAROUSEL_WINDOW_STEP));
-    }
-    const step = Math.max(260, Math.round(el.clientWidth * 0.84));
-    el.scrollBy({ left: dir * step, behavior: "smooth" });
-  };
 
   return (
     <section>
@@ -1565,46 +1620,22 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
           </span>
         </div>
 
-        {trailingHref && trailingLabel ? (
+        {trailingHref && trailingLabel && (
           <Link
             href={trailingHref}
-            className="shrink-0 font-display text-[11.5px] font-bold text-betclic-red"
+            className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-full bg-betclic-red/10 pl-2.5 pr-1.5 font-display text-[11.5px] font-bold text-betclic-red transition-transform active:scale-95"
           >
-            {trailingLabel}
+            <span>{trailingLabel}</span>
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
           </Link>
-        ) : items.length > 1 ? (
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={() => scrollStep(-1)}
-              disabled={!canLeft}
-              aria-label={`Défiler ${label} vers la gauche`}
-              className={cn(
-                "grid h-7 w-7 place-items-center rounded-full border transition-all active:scale-95",
-                canLeft
-                  ? "border-edge bg-white text-ink shadow-2xs"
-                  : "border-transparent bg-elev/60 text-dim/45"
-              )}
-            >
-              <ChevronLeft className="h-4 w-4" strokeWidth={2.3} />
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollStep(1)}
-              disabled={!canRight}
-              aria-label={`Défiler ${label} vers la droite`}
-              className={cn(
-                "grid h-7 w-7 place-items-center rounded-full border transition-all active:scale-95",
-                canRight
-                  ? "border-edge bg-white text-ink shadow-2xs"
-                  : "border-transparent bg-elev/60 text-dim/45"
-              )}
-            >
-              <ChevronRight className="h-4 w-4" strokeWidth={2.3} />
-            </button>
-          </div>
-        ) : null}
+        )}
       </div>
+
+      {subtitle && (
+        <p className="mt-0.5 truncate px-0.5 text-[11.5px] text-mist">
+          {subtitle}
+        </p>
+      )}
 
       {items.length === 0 ? (
         <div className="mt-2 flex h-12 items-center justify-center rounded-2xl border border-dashed border-edge bg-white/75 px-3.5 text-[12px] font-medium text-mist">
