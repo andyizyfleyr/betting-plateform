@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BarChart3, ChevronDown, ChevronRight, ChevronUp, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
@@ -60,7 +60,7 @@ export function formatGoalSummary(
   return formatGoalSummaryStrings(events, homeScore, awayScore);
 }
 
-export function MatchCard({
+function MatchCardInner({
   match,
   nextUp,
   className,
@@ -113,10 +113,10 @@ export function MatchCard({
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
           <span
             className={cn(
-              "hidden shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide lg:inline-block",
+              "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
               isReal
-                ? "bg-emerald-600/12 text-emerald-700"
-                : "bg-elev text-dim"
+                ? "hidden bg-emerald-600/12 text-emerald-700 lg:inline-block"
+                : "inline-block bg-betclic-red/10 text-betclic-red lg:bg-elev lg:text-dim"
             )}
           >
             {isReal ? "Réel" : "Virtuel"}
@@ -260,7 +260,41 @@ export function MatchCard({
   );
 }
 
-function TeamRow({
+function areMatchCardPropsEqual(
+  prev: { match: ClientMatch; index?: number; nextUp?: boolean; className?: string },
+  next: { match: ClientMatch; index?: number; nextUp?: boolean; className?: string }
+): boolean {
+  if (prev.nextUp !== next.nextUp || prev.className !== next.className) return false;
+  const a = prev.match;
+  const b = next.match;
+  if (a === b) return true;
+  return (
+    a.id === b.id &&
+    a.status === b.status &&
+    a.minute === b.minute &&
+    a.homeScore === b.homeScore &&
+    a.awayScore === b.awayScore &&
+    a.oddsHome === b.oddsHome &&
+    a.oddsDraw === b.oddsDraw &&
+    a.oddsAway === b.oddsAway &&
+    a.suspended === b.suspended &&
+    a.kickoffReached === b.kickoffReached &&
+    a.startsAt === b.startsAt &&
+    a.redHome === b.redHome &&
+    a.redAway === b.redAway &&
+    a.homeTeam === b.homeTeam &&
+    a.awayTeam === b.awayTeam &&
+    a.homeLogo === b.homeLogo &&
+    a.awayLogo === b.awayLogo &&
+    (a.markets?.length ?? 0) === (b.markets?.length ?? 0) &&
+    (a.events?.length ?? 0) === (b.events?.length ?? 0) &&
+    a.realStats?.updatedAt === b.realStats?.updatedAt
+  );
+}
+
+export const MatchCard = memo(MatchCardInner, areMatchCardPropsEqual);
+
+const TeamRow = memo(function TeamRow({
   name,
   logo,
   score,
@@ -315,7 +349,7 @@ function TeamRow({
       )}
     </div>
   );
-}
+});
 
 function useOddsFlash(odds: number) {
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
