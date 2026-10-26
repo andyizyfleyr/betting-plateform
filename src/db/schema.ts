@@ -376,6 +376,33 @@ export const adminSettings = pgTable("admin_settings", {
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+/**
+ * Codes courts de partage de coupons (« Enregistrer / Charger le coupon » type 1xBet, ex. BX-84K2).
+ */
+export interface SavedCouponLegRecord {
+  uid: string;
+  kind: "sport" | "prediction";
+  matchId?: number;
+  matchSource?: "virtual" | "manual";
+  questionId?: number;
+  title: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+  league: string;
+  market: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+}
+
+export const savedCoupons = pgTable("saved_coupons", {
+  code: text("code").primaryKey(),
+  legs: jsonb("legs").$type<SavedCouponLegRecord[]>().notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type PredictionQuestionRow = typeof predictionQuestions.$inferSelect;

@@ -30,7 +30,9 @@ import {
   type HeroPromoAction,
 } from "@/components/mobile-hero-carousel";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useApp } from "@/components/providers";
+import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { resolveEspnSlugForLeague } from "@/lib/real-leagues";
 import { cn, todayLabel } from "@/lib/format";
 
@@ -340,6 +342,22 @@ export default function MatchsPage() {
     getMobileViewportSnapshot,
     getServerFalse
   );
+  const { isOffline, isConstrained } = useNetworkQuality();
+  const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
+
+  const handlePullRefresh = useCallback(async () => {
+    try {
+      const r = await api.matches();
+      if (lastMatchesRef.current !== r.matches) {
+        lastMatchesRef.current = r.matches;
+        setMatches(r.matches);
+        setFeedMatches(r.matches);
+      }
+      setLoadError(null);
+    } catch {
+      /* conserve l'affichage en cours si le réseau mobile est instable */
+    }
+  }, [setFeedMatches]);
 
   const handleHeroAction = useCallback(
     (action: HeroPromoAction) => {
@@ -415,6 +433,9 @@ export default function MatchsPage() {
 
     async function fetchMatches(isBackground = false) {
       if (isBackground && typeof document !== "undefined" && document.hidden) return;
+      if (isBackground && typeof navigator !== "undefined" && navigator.onLine === false) {
+        return;
+      }
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
           const r = await api.matches();
@@ -446,17 +467,20 @@ export default function MatchsPage() {
     }
 
     void fetchMatches(false);
-    const id = setInterval(() => void fetchMatches(true), POLL_INTERVAL);
+    const id = setInterval(() => void fetchMatches(true), pollIntervalMs);
     const onVisible = () => {
       if (!document.hidden) void fetchMatches(true);
     };
+    const onOnline = () => void fetchMatches(true);
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
     return () => {
       cancelled = true;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
-  }, [setFeedMatches, reloadNonce]);
+  }, [setFeedMatches, reloadNonce, pollIntervalMs, isOffline]);
 
   // Séparation stricte des deux univers : Matchs réels (admin) vs Matchs virtuels (simulateur)
   const realMatchesAll = useMemo(
@@ -820,6 +844,7 @@ export default function MatchsPage() {
   };
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
     <div className="mx-auto w-full max-w-[1440px] px-4 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête desktop uniquement (masqué sur mobile) */}
       <div className="hidden items-center justify-between gap-2 lg:flex">
@@ -1418,6 +1443,7 @@ export default function MatchsPage() {
         </>
       )}
     </div>
+    </PullToRefresh>
   );
 }
 

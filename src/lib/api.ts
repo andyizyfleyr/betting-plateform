@@ -388,6 +388,24 @@ export interface ClientMatchHistoryItem {
   btts: boolean | null;
 }
 
+export interface ClientSavedCouponLeg {
+  uid: string;
+  kind: "sport" | "prediction";
+  matchId?: number;
+  matchSource?: "virtual" | "manual";
+  questionId?: number;
+  title: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+  league: string;
+  market: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+}
+
 export const api = {
   matches: () => request<{ matches: ClientMatch[] }>("/api/matches"),
   matchHistory: (matchId?: number) =>
@@ -437,6 +455,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ betId, kind }),
     }),
+  saveCoupon: (legs: ClientSavedCouponLeg[]) =>
+    request<{ code: string }>("/api/coupons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ legs }),
+    }),
+  loadCoupon: (code: string) =>
+    request<{ code: string; legs: ClientSavedCouponLeg[]; skippedClosedCount: number }>(
+      `/api/coupons?code=${encodeURIComponent(code)}`
+    ),
   wallet: () => request<ClientWalletData>("/api/wallet"),
   requestWithdrawal: (payload: { method: string; destination: string; amount: number }) =>
     request<{ withdrawal: ClientWithdrawal; balance: number }>("/api/withdrawals", {

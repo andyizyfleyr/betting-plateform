@@ -18,6 +18,7 @@ import {
   Vibrate,
   Volume2,
   X,
+  Zap,
 } from "lucide-react";
 import { api, type ClientBet, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { useApp } from "@/components/providers";
@@ -25,6 +26,7 @@ import { AnimatedNumber } from "@/components/animated-number";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { Toggle } from "@/components/toggle";
 import { WithdrawModal } from "@/components/withdraw-modal";
+import { useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 type LedgerFilter = "all" | "deposit" | "withdrawal" | "gains" | "stakes";
@@ -32,6 +34,7 @@ type LedgerFlowFilter = "all" | "credit" | "debit";
 
 export default function ParametresPage() {
   const { user, applyUser, setBalance, toast, openRecharge, betsVersion } = useApp();
+  const { manualDataSaver, autoConstrained, setManualDataSaver } = useNetworkQuality();
   const router = useRouter();
   const [bets, setBets] = useState<ClientBet[] | null>(null);
   const [wallet, setWallet] = useState<ClientWalletData | null>(null);
@@ -598,6 +601,25 @@ export default function ParametresPage() {
           label="Retour haptique"
           checked={user?.haptics ?? true}
           onChange={(v) => patch({ haptics: v }, "Vibrations mises à jour")}
+        />
+        <SwitchRow
+          Icon={<Zap className="h-4 w-4" strokeWidth={2.1} />}
+          label="Mode économie de données (3G)"
+          hint={
+            autoConstrained && !manualDataSaver
+              ? "Activé automatiquement sur réseau mobile lent"
+              : "Espace le rafraîchissement auto pour économiser data et batterie"
+          }
+          checked={manualDataSaver || autoConstrained}
+          onChange={(v) => {
+            setManualDataSaver(v);
+            toast({
+              kind: "success",
+              title: v
+                ? "Mode économie 3G activé"
+                : "Rafraîchissement rapide restauré",
+            });
+          }}
           last
         />
       </div>

@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { AnimatedNumber } from "@/components/animated-number";
+import { CouponCodeBox } from "@/components/coupon-code-box";
+import { OddsTrendCorner, useOddsTrend } from "@/components/odds-trend-corner";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
 import { api, type ClientMatch, type ClientPrediction } from "@/lib/api";
@@ -26,6 +28,22 @@ import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur, formatOdds } from "@/lib/format";
 
 const QUICK_STAKES = [5, 10, 25, 50];
+
+function DesktopLegLiveOddsBadge({
+  odds,
+  oddsFormat,
+}: {
+  odds: number;
+  oddsFormat?: "decimal" | "fractional";
+}) {
+  const trend = useOddsTrend(odds);
+  return (
+    <span className="relative overflow-hidden rounded-lg bg-betclic-red px-2 py-0.5 font-display text-[12px] font-extrabold tabular-nums text-white">
+      <OddsTrendCorner trend={trend} inverted />
+      {formatOdds(odds, oddsFormat)}
+    </span>
+  );
+}
 
 function formatMarketName(market: string): string {
   switch (market) {
@@ -543,6 +561,10 @@ export function DesktopBetslipSidebar() {
               </p>
             </div>
 
+            <div className="px-4 pb-4">
+              <CouponCodeBox variant="empty" />
+            </div>
+
             <div className="border-t border-edge bg-white p-4">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-[13px] font-semibold text-ink">
@@ -692,15 +714,18 @@ export function DesktopBetslipSidebar() {
                               {formatOdds(leg.odds, oddsFormat)}
                             </span>
                           )}
-                          <span className="rounded-lg bg-betclic-red px-2 py-0.5 font-display text-[12px] font-extrabold tabular-nums text-white">
-                            {formatOdds(leg.liveOdds, oddsFormat)}
-                          </span>
+                          <DesktopLegLiveOddsBadge
+                            odds={leg.liveOdds}
+                            oddsFormat={oddsFormat}
+                          />
                         </div>
                       )}
                     </div>
                   </article>
                 );
               })}
+
+              <CouponCodeBox variant="compact" />
 
               {hasMixedMatchSources && (
                 <div className="flex items-center gap-2 rounded-xl border border-betclic-red/30 bg-betclic-red/[0.06] px-3 py-2 text-[11.5px] font-medium text-betclic-red">

@@ -17,6 +17,7 @@ import { api, type ClientMatch, type ClientUser } from "@/lib/api";
 import { MAX_COMBO_LEGS } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur } from "@/lib/format";
+import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { BetModal } from "./bet-modal";
 import { ComboSheet, type ComboSelection } from "./combo-slip";
 import { MarketSheet } from "./market-sheet";
@@ -86,6 +87,7 @@ interface AppContextValue {
   isInCombo: (uid: string, market: string, selection: string) => boolean;
   removeComboLeg: (uid: string) => void;
   clearCombo: () => void;
+  loadComboLegs: (legs: ComboSelection[]) => void;
   toast: (t: Omit<Toast, "id">) => void;
   betsVersion: number;
   bumpBets: () => void;
@@ -195,6 +197,9 @@ export function Providers({ children }: { children: ReactNode }) {
   const isMatchsRoute = pathname === "/matchs" || pathname.startsWith("/matchs/");
   const needsBackgroundMatchFeed =
     comboLegs.length > 0 || comboOpen || marketMatch !== null || target !== null;
+  const { isConstrained } = useNetworkQuality();
+  const bgMatchesIntervalMs = getAdaptiveIntervalMs(15_000, isConstrained);
+  const bgBetsIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
 
   useEffect(() => {
     if (isAuthRoute || isAdminMode || isMatchsRoute) return;
@@ -202,6 +207,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
     const syncMatches = () => {
       if (typeof document !== "undefined" && document.hidden) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       const isDesktop =
         typeof window !== "undefined" && window.innerWidth >= 1024;
       if (!isDesktop && !needsBackgroundMatchFeed) return;
@@ -214,18 +220,21 @@ export function Providers({ children }: { children: ReactNode }) {
     };
 
     syncMatches();
-    const id = setInterval(syncMatches, 15_000);
+    const id = setInterval(syncMatches, bgMatchesIntervalMs);
     const onVisible = () => {
       if (!document.hidden) syncMatches();
     };
+    const onOnline = () => syncMatches();
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
 
     return () => {
       active = false;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
-  }, [isAuthRoute, isAdminMode, isMatchsRoute, needsBackgroundMatchFeed]);
+  }, [isAuthRoute, isAdminMode, isMatchsRoute, needsBackgroundMatchFeed, bgMatchesIntervalMs]);
 
   // Polling global unifié : solde, compteur « En cours » et alertes temps réel sur toutes les pages
   useEffect(() => {
@@ -234,6 +243,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
     const poll = () => {
       if (typeof document !== "undefined" && document.hidden) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       api
         .allBets()
         .then((r) => {
@@ -290,18 +300,21 @@ export function Providers({ children }: { children: ReactNode }) {
     };
 
     poll();
-    const id = setInterval(poll, POLL_INTERVAL);
+    const id = setInterval(poll, bgBetsIntervalMs);
     const onVisible = () => {
       if (!document.hidden) poll();
     };
+    const onOnline = () => poll();
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
 
     return () => {
       active = false;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
-  }, [loggedIn, betsVersion, toast]);
+  }, [loggedIn, betsVersion, toast, bgBetsIntervalMs]);
 
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 
@@ -366,6 +379,13 @@ export function Providers({ children }: { children: ReactNode }) {
   const clearCombo = useCallback(() => {
     persistCombo([]);
   }, [persistCombo]);
+
+  const loadComboLegs = useCallback(
+    (legs: ComboSelection[]) => {
+      persistCombo(legs.slice(0, MAX_COMBO_LEGS));
+    },
+    [persistCombo]
+  );
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -438,6 +458,7 @@ export function Providers({ children }: { children: ReactNode }) {
       isInCombo,
       removeComboLeg,
       clearCombo,
+      loadComboLegs,
       toast,
       betsVersion,
       bumpBets: () => setBetsVersion((v) => v + 1),
@@ -463,6 +484,7 @@ export function Providers({ children }: { children: ReactNode }) {
       isInCombo,
       removeComboLeg,
       clearCombo,
+      loadComboLegs,
       toast,
       betsVersion,
       pendingCount,

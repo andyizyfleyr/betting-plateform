@@ -7,9 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   Flame,
-  HandCoins,
   Layers,
-  Loader2,
   RotateCcw,
   Share2,
   TrendingUp,
@@ -17,6 +15,7 @@ import {
 } from "lucide-react";
 import { api, type ClientBet, type ClientComboLeg } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import { SlideToCashOut } from "./slide-to-cashout";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
@@ -88,7 +87,6 @@ function ComboBetTicket({
 }) {
   const { oddsFormat, setBalance, bumpBets, toast, user } = useApp();
   const [expanded, setExpanded] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [cashing, setCashing] = useState(false);
 
   const won = bet.status === "won";
@@ -136,7 +134,6 @@ function ComboBetTicket({
       });
     } finally {
       setCashing(false);
-      setConfirming(false);
     }
   };
 
@@ -646,46 +643,16 @@ function ComboBetTicket({
           </div>
         </div>
 
-        {/* Vendre le coupon (1xBet Cash Out) */}
+        {/* Vendre le coupon (1xBet Cash Out temps réel glisser-confirmer) */}
         {canCashOut && (
           <div className="mt-2.5">
-            {confirming ? (
-              <div className="flex items-center gap-2 rounded-xl border border-edge bg-elev p-2">
-                <p className="flex-1 pl-1 text-[12px] font-semibold text-ink">
-                  Vendre pour {eur(bet.cashOut!)} ?
-                </p>
-                <button
-                  type="button"
-                  onClick={doCashOut}
-                  disabled={cashing}
-                  className="flex h-8.5 items-center gap-1 rounded-lg bg-betclic-red px-3 font-display text-[12px] font-bold text-white disabled:opacity-60"
-                >
-                  {cashing ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} />
-                  ) : (
-                    <Check className="h-3.5 w-3.5" strokeWidth={2.6} />
-                  )}
-                  Confirmer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(false)}
-                  className="grid h-8.5 w-8.5 place-items-center rounded-lg border border-edge bg-white text-mist"
-                  aria-label="Annuler"
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={2.2} />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirming(true)}
-                className="flex h-10.5 w-full items-center justify-center gap-2 rounded-xl bg-ink font-display text-[12.5px] font-bold text-white shadow-xs transition-transform active:scale-[0.99] active:opacity-90"
-              >
-                <HandCoins className="h-4 w-4 text-betclic-red" strokeWidth={2.2} />
-                Vendre le coupon · {eur(bet.cashOut!)}
-              </button>
-            )}
+            <SlideToCashOut
+              amount={bet.cashOut!}
+              stake={bet.stake}
+              loading={cashing}
+              haptics={user?.haptics}
+              onConfirm={doCashOut}
+            />
           </div>
         )}
       </div>
@@ -701,7 +668,6 @@ function SingleBetTicket({
   onShare?: (bet: ClientBet) => void;
 }) {
   const { oddsFormat, setBalance, bumpBets, toast, user } = useApp();
-  const [confirming, setConfirming] = useState(false);
   const [cashing, setCashing] = useState(false);
 
   const isPrediction = bet.kind === "prediction";
@@ -734,7 +700,6 @@ function SingleBetTicket({
       });
     } finally {
       setCashing(false);
-      setConfirming(false);
     }
   };
 
@@ -904,46 +869,16 @@ function SingleBetTicket({
         )}
       </div>
 
-      {/* Vendre le coupon (1xBet Cash Out) */}
+      {/* Vendre le coupon (1xBet Cash Out temps réel glisser-confirmer) */}
       {canCashOut && (
         <div className="mt-3">
-          {confirming ? (
-            <div className="flex items-center gap-2 rounded-xl border border-edge bg-elev p-2">
-              <p className="flex-1 pl-1 text-[12px] font-medium text-ink">
-                Vendre pour {eur(bet.cashOut!)} ?
-              </p>
-              <button
-                type="button"
-                onClick={doCashOut}
-                disabled={cashing}
-                className="flex h-8 items-center gap-1 rounded-lg bg-betclic-red px-3 font-display text-[12px] font-bold text-white disabled:opacity-60"
-              >
-                {cashing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} />
-                ) : (
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.6} />
-                )}
-                Confirmer
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-edge bg-white text-mist"
-                aria-label="Annuler"
-              >
-                <X className="h-3.5 w-3.5" strokeWidth={2.2} />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-ink font-display text-[12.5px] font-bold text-white active:opacity-90"
-            >
-              <HandCoins className="h-4 w-4" strokeWidth={2.1} />
-              Vendre le coupon · {eur(bet.cashOut!)}
-            </button>
-          )}
+          <SlideToCashOut
+            amount={bet.cashOut!}
+            stake={bet.stake}
+            loading={cashing}
+            haptics={user?.haptics}
+            onConfirm={doCashOut}
+          />
         </div>
       )}
     </article>
