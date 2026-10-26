@@ -21,6 +21,11 @@ import {
 } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import {
+  InfiniteScrollSentinel,
+  sliceThreeSections,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { MatchCard } from "@/components/match-card";
 import { useApp } from "@/components/providers";
 import { PullToRefresh } from "@/components/pull-to-refresh";
@@ -228,6 +233,25 @@ export default function VirtualMatchesPage() {
     () => visible.filter((m) => m.status === "finished"),
     [visible]
   );
+
+  const totalMatchesCount =
+    liveOrdered.length + upcomingOrdered.length + finishedOrdered.length;
+  const batchResetKey = `${filter}|${leagueFilter}|${oddsProfile}|${query
+    .trim()
+    .toLowerCase()}`;
+  const batch = useInfiniteBatch(totalMatchesCount, batchResetKey);
+
+  const [visibleLiveOrdered, visibleUpcomingOrdered, visibleFinishedOrdered] =
+    useMemo(
+      () =>
+        sliceThreeSections(
+          liveOrdered,
+          upcomingOrdered,
+          finishedOrdered,
+          batch.visibleCount
+        ),
+      [liveOrdered, upcomingOrdered, finishedOrdered, batch.visibleCount]
+    );
 
   const toggleMobileSearch = () => {
     if (mobileSearchOpen) {
@@ -480,7 +504,7 @@ export default function VirtualMatchesPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            {liveOrdered.length > 0 && (
+            {visibleLiveOrdered.length > 0 && (
               <section className="space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
                   <div className="flex items-center gap-2">
@@ -494,14 +518,14 @@ export default function VirtualMatchesPage() {
                   </span>
                 </div>
                 <div className="grid grid-cols-1 items-start gap-3">
-                  {liveOrdered.map((m) => (
+                  {visibleLiveOrdered.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
                 </div>
               </section>
             )}
 
-            {upcomingOrdered.length > 0 && (
+            {visibleUpcomingOrdered.length > 0 && (
               <section className="space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
                   <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
@@ -512,7 +536,7 @@ export default function VirtualMatchesPage() {
                   </span>
                 </div>
                 <div className="grid grid-cols-1 items-start gap-3">
-                  {upcomingOrdered.map((m, idx) => (
+                  {visibleUpcomingOrdered.map((m, idx) => (
                     <MatchCard
                       key={m.id}
                       match={m}
@@ -523,7 +547,7 @@ export default function VirtualMatchesPage() {
               </section>
             )}
 
-            {finishedOrdered.length > 0 && (
+            {visibleFinishedOrdered.length > 0 && (
               <section className="space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
                   <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
@@ -538,12 +562,18 @@ export default function VirtualMatchesPage() {
                   </Link>
                 </div>
                 <div className="grid grid-cols-1 items-start gap-3">
-                  {finishedOrdered.map((m) => (
+                  {visibleFinishedOrdered.map((m) => (
                     <MatchCard key={m.id} match={m} />
                   ))}
                 </div>
               </section>
             )}
+
+            <InfiniteScrollSentinel
+              hasMore={batch.hasMore}
+              isLoadingMore={batch.isLoadingMore}
+              onLoadMore={batch.loadMore}
+            />
           </div>
         )}
       </div>

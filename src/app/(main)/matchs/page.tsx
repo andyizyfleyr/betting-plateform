@@ -17,12 +17,19 @@ import {
   ChevronRight,
   Cpu,
   History,
+  Loader2,
   RefreshCw,
   Search,
   Trophy,
   X,
 } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
+import {
+  INFINITE_BATCH_STEP,
+  InfiniteScrollSentinel,
+  sliceThreeSections,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { MatchCard } from "@/components/match-card";
 import {
   MobileHeroCarousel,
@@ -46,8 +53,8 @@ type Universe = "real" | "virtual";
 const POLL_INTERVAL = 5_000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
-const INITIAL_CAROUSEL_WINDOW = 12;
-const CAROUSEL_WINDOW_STEP = 12;
+const INITIAL_CAROUSEL_WINDOW = INFINITE_BATCH_STEP;
+const CAROUSEL_WINDOW_STEP = INFINITE_BATCH_STEP;
 const MOBILE_MEDIA_QUERY = "(max-width: 1023px)";
 
 function subscribeMobileViewport(cb: () => void): () => void {
@@ -318,6 +325,25 @@ export default function MatchsPage() {
     () => visible.filter((m) => m.status === "finished"),
     [visible]
   );
+
+  const desktopTotalCount =
+    liveRest.length + upcomingOrdered.length + finishedList.length;
+  const desktopResetKey = `${universe}|${filter}|${effectiveLeague}|${query
+    .trim()
+    .toLowerCase()}`;
+  const desktopBatch = useInfiniteBatch(desktopTotalCount, desktopResetKey);
+
+  const [visibleLiveRest, visibleUpcomingOrdered, visibleFinishedList] =
+    useMemo(
+      () =>
+        sliceThreeSections(
+          liveRest,
+          upcomingOrdered,
+          finishedList,
+          desktopBatch.visibleCount
+        ),
+      [liveRest, upcomingOrdered, finishedList, desktopBatch.visibleCount]
+    );
 
   // ── Logique Mobile (< lg) dédiée & épurée (sans barre de filtres sur l'accueil) ──
   const mobileRows = useMemo(() => {
@@ -621,6 +647,7 @@ export default function MatchsPage() {
                             : "Populaire EN DIRECT"
                         }
                         items={mobileRows.liveRowItems}
+                        resetKey={`live|${query.trim().toLowerCase()}|${mobileRows.liveRowUsesVirtual ? "v" : "r"}`}
                         live
                         virtualFallback={mobileRows.liveRowUsesVirtual}
                         trailingHref={
@@ -636,6 +663,7 @@ export default function MatchsPage() {
                     <RealMatchCarouselRow
                       label="Populaire en avant-match"
                       items={mobileRows.upcomingRowItems}
+                      resetKey={`upcoming|${query.trim().toLowerCase()}|${mobileRows.upcomingRowUsesVirtual ? "v" : "r"}`}
                       virtualFallback={mobileRows.upcomingRowUsesVirtual}
                       markFirstAsNextUp={mobileRows.upcomingRowUsesVirtual}
                       trailingHref={
@@ -692,7 +720,7 @@ export default function MatchsPage() {
                   </div>
                 ) : isRealUniverse ? (
                   <div className="flex flex-col gap-5">
-                    {liveRest.length > 0 && (
+                    {visibleLiveRest.length > 0 && (
                       <section>
                         <SectionHeader
                           label="Populaire EN DIRECT"
@@ -701,28 +729,28 @@ export default function MatchsPage() {
                           real
                         />
                         <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                          {liveRest.map((m) => (
+                          {visibleLiveRest.map((m) => (
                             <MatchCard key={m.id} match={m} />
                           ))}
                         </div>
                       </section>
                     )}
 
-                    {upcomingOrdered.length > 0 && (
+                    {visibleUpcomingOrdered.length > 0 && (
                       <section>
                         <SectionHeader
                           label="Populaire en avant-match"
                           count={upcomingOrdered.length}
                         />
                         <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                          {upcomingOrdered.map((m) => (
+                          {visibleUpcomingOrdered.map((m) => (
                             <MatchCard key={m.id} match={m} />
                           ))}
                         </div>
                       </section>
                     )}
 
-                    {finishedList.length > 0 && (
+                    {visibleFinishedList.length > 0 && (
                       <section>
                         <div className="flex items-center justify-between px-0.5">
                           <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
@@ -736,16 +764,22 @@ export default function MatchsPage() {
                           </Link>
                         </div>
                         <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                          {finishedList.map((m) => (
+                          {visibleFinishedList.map((m) => (
                             <MatchCard key={m.id} match={m} />
                           ))}
                         </div>
                       </section>
                     )}
+
+                    <InfiniteScrollSentinel
+                      hasMore={desktopBatch.hasMore}
+                      isLoadingMore={desktopBatch.isLoadingMore}
+                      onLoadMore={desktopBatch.loadMore}
+                    />
                   </div>
                 ) : (
                   <div className="flex flex-col gap-5">
-                    {liveRest.length > 0 && (
+                    {visibleLiveRest.length > 0 && (
                       <section>
                         <SectionHeader
                           label="En direct"
@@ -753,21 +787,21 @@ export default function MatchsPage() {
                           live
                         />
                         <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                          {liveRest.map((m) => (
+                          {visibleLiveRest.map((m) => (
                             <MatchCard key={m.id} match={m} />
                           ))}
                         </div>
                       </section>
                     )}
 
-                    {upcomingOrdered.length > 0 && (
+                    {visibleUpcomingOrdered.length > 0 && (
                       <section>
                         <SectionHeader
                           label="À venir · Prochains départs"
                           count={upcomingOrdered.length}
                         />
                         <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                          {upcomingOrdered.map((m, idx) => (
+                          {visibleUpcomingOrdered.map((m, idx) => (
                             <MatchCard
                               key={m.id}
                               match={m}
@@ -778,7 +812,7 @@ export default function MatchsPage() {
                       </section>
                     )}
 
-                    {finishedList.length > 0 && (
+                    {visibleFinishedList.length > 0 && (
                       <section>
                         <div className="flex items-center justify-between px-0.5">
                           <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
@@ -792,12 +826,18 @@ export default function MatchsPage() {
                           </Link>
                         </div>
                         <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                          {finishedList.map((m) => (
+                          {visibleFinishedList.map((m) => (
                             <MatchCard key={m.id} match={m} />
                           ))}
                         </div>
                       </section>
                     )}
+
+                    <InfiniteScrollSentinel
+                      hasMore={desktopBatch.hasMore}
+                      isLoadingMore={desktopBatch.isLoadingMore}
+                      onLoadMore={desktopBatch.loadMore}
+                    />
                   </div>
                 )}
               </div>
@@ -812,6 +852,7 @@ export default function MatchsPage() {
 const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
   label,
   items,
+  resetKey = "default",
   live,
   virtualFallback,
   markFirstAsNextUp,
@@ -821,6 +862,7 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
 }: {
   label: string;
   items: ClientMatch[];
+  resetKey?: string;
   live?: boolean;
   virtualFallback?: boolean;
   markFirstAsNextUp?: boolean;
@@ -830,7 +872,40 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
-  const [renderLimit, setRenderLimit] = useState(INITIAL_CAROUSEL_WINDOW);
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingRef = useRef(false);
+  const [windowState, setWindowState] = useState<{
+    key: string;
+    limit: number;
+    loading: boolean;
+  }>({
+    key: resetKey,
+    limit: INITIAL_CAROUSEL_WINDOW,
+    loading: false,
+  });
+
+  const renderLimit =
+    windowState.key === resetKey ? windowState.limit : INITIAL_CAROUSEL_WINDOW;
+  const isLoadingMore =
+    windowState.key === resetKey ? windowState.loading : false;
+  const hasMore = renderLimit < items.length;
+
+  useEffect(() => {
+    loadingRef.current = false;
+    if (loadTimerRef.current) {
+      clearTimeout(loadTimerRef.current);
+      loadTimerRef.current = null;
+    }
+  }, [resetKey]);
+
+  useEffect(() => {
+    return () => {
+      if (loadTimerRef.current) {
+        clearTimeout(loadTimerRef.current);
+        loadTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const visibleItems = useMemo(
     () => (items.length <= renderLimit ? items : items.slice(0, renderLimit)),
@@ -839,12 +914,28 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
 
   const syncScrollEdges = useCallback(() => {
     const el = scrollerRef.current;
-    if (!el) return;
+    if (!el || loadingRef.current) return;
     const maxScroll = el.scrollWidth - el.clientWidth;
-    if (renderLimit < items.length && maxScroll - el.scrollLeft < 680) {
-      setRenderLimit((prev) => Math.min(items.length, prev + CAROUSEL_WINDOW_STEP));
+    if (renderLimit < items.length && maxScroll - el.scrollLeft < 420) {
+      const activeKey = resetKey;
+      loadingRef.current = true;
+      setWindowState({ key: activeKey, limit: renderLimit, loading: true });
+      if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
+      loadTimerRef.current = setTimeout(() => {
+        loadTimerRef.current = null;
+        loadingRef.current = false;
+        setWindowState((prev) => {
+          const base =
+            prev.key === activeKey ? prev.limit : INITIAL_CAROUSEL_WINDOW;
+          return {
+            key: activeKey,
+            limit: Math.min(items.length, base + CAROUSEL_WINDOW_STEP),
+            loading: false,
+          };
+        });
+      }, 260);
     }
-  }, [items.length, renderLimit]);
+  }, [items.length, renderLimit, resetKey]);
 
   const handleScroll = useCallback(() => {
     if (scrollRafRef.current !== null) return;
@@ -928,6 +1019,20 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
               />
             </div>
           ))}
+          {(hasMore || isLoadingMore) && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex w-20 shrink-0 snap-start items-center justify-center"
+            >
+              <div className="grid h-10 w-10 place-items-center rounded-full border border-edge bg-white shadow-2xs">
+                <Loader2
+                  className="h-4 w-4 animate-spin text-betclic-red"
+                  strokeWidth={2.4}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

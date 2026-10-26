@@ -25,6 +25,10 @@ import { api, type ClientBet, type ClientUser, type ClientWalletData } from "@/l
 import { useApp } from "@/components/providers";
 import { AnimatedNumber } from "@/components/animated-number";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import {
+  InfiniteScrollSentinel,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { Toggle } from "@/components/toggle";
 import { WithdrawModal } from "@/components/withdraw-modal";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
@@ -42,7 +46,6 @@ export default function ParametresPage() {
   const [wallet, setWallet] = useState<ClientWalletData | null>(null);
   const [walletFilter, setWalletFilter] = useState<LedgerFilter>("all");
   const [walletFlow, setWalletFlow] = useState<LedgerFlowFilter>("all");
-  const [showAllLedger, setShowAllLedger] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -189,7 +192,14 @@ export default function ParametresPage() {
     return byLedgerType;
   }, [byLedgerType, walletFlow]);
 
-  const visibleLedger = showAllLedger ? filteredLedger : filteredLedger.slice(0, 6);
+  const ledgerBatch = useInfiniteBatch(
+    filteredLedger.length,
+    `${walletFilter}|${walletFlow}|${mobileTab}`
+  );
+  const visibleLedger = useMemo(
+    () => filteredLedger.slice(0, ledgerBatch.visibleCount),
+    [filteredLedger, ledgerBatch.visibleCount]
+  );
 
   const cancelSlotRef = useRef<Map<number, string>>(new Map());
   const cancelInFlightRef = useRef(false);
@@ -593,15 +603,12 @@ export default function ParametresPage() {
           </div>
         )}
 
-        {filteredLedger.length > 6 && (
-          <button
-            type="button"
-            onClick={() => setShowAllLedger((s) => !s)}
-            className="mt-3 w-full rounded-xl bg-elev py-2 font-display text-[11.5px] font-bold text-ink"
-          >
-            {showAllLedger ? "Réduire l'historique" : `Voir tout (${filteredLedger.length})`}
-          </button>
-        )}
+          <InfiniteScrollSentinel
+            hasMore={ledgerBatch.hasMore}
+            isLoadingMore={ledgerBatch.isLoadingMore}
+            onLoadMore={ledgerBatch.loadMore}
+            className="pb-1 pt-3"
+          />
       </section>
         </div>
 

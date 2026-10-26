@@ -8,6 +8,10 @@ import { BetTicket } from "@/components/bet-ticket";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { AnimatedNumber } from "@/components/animated-number";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import {
+  InfiniteScrollSentinel,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useApp } from "@/components/providers";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
@@ -275,14 +279,32 @@ export default function ParisPage() {
     return byKind.filter((b) => b.status === outcomeFilter);
   }, [byKind, outcomeFilter]);
 
+  const betsResetKey = `${tab}|${kindFilter}|${outcomeFilter}|${query
+    .trim()
+    .toLowerCase()}`;
+  const betsBatch = useInfiniteBatch(visibleBets.length, betsResetKey);
+  const pagedBets = useMemo(
+    () => visibleBets.slice(0, betsBatch.visibleCount),
+    [visibleBets, betsBatch.visibleCount]
+  );
+
+  const dayTotalCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const b of visibleBets) {
+      const key = dayLabel(settledOrPlacedIso(b));
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [visibleBets]);
+
   const finishedGroups = useMemo(() => {
     const map = new Map<string, ClientBet[]>();
-    for (const b of visibleBets) {
+    for (const b of pagedBets) {
       const key = dayLabel(settledOrPlacedIso(b));
       map.set(key, [...(map.get(key) ?? []), b]);
     }
     return [...map.entries()];
-  }, [visibleBets]);
+  }, [pagedBets]);
 
   const toggleMobileSearch = () => {
     if (mobileSearchOpen) {
@@ -616,7 +638,7 @@ export default function ParisPage() {
         <div>
           {tab === "ongoing" ? (
             <div className="grid grid-cols-1 items-start gap-3">
-              {visibleBets.map((b) => (
+              {pagedBets.map((b) => (
                 <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
               ))}
             </div>
@@ -625,7 +647,9 @@ export default function ParisPage() {
               <div key={label} className="mb-5 last:mb-0">
                 <p className="mb-2 px-0.5 text-[11.5px] font-semibold capitalize text-mist">
                   {label}
-                  <span className="ml-1.5 text-dim">({group.length})</span>
+                  <span className="ml-1.5 text-dim">
+                    ({dayTotalCounts.get(label) ?? group.length})
+                  </span>
                 </p>
                 <div className="grid grid-cols-1 items-start gap-3">
                   {group.map((b) => (
@@ -635,6 +659,11 @@ export default function ParisPage() {
               </div>
             ))
           )}
+          <InfiniteScrollSentinel
+            hasMore={betsBatch.hasMore}
+            isLoadingMore={betsBatch.isLoadingMore}
+            onLoadMore={betsBatch.loadMore}
+          />
         </div>
       )}
 
