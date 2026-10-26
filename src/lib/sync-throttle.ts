@@ -1,3 +1,4 @@
+import { waitUntil } from "@vercel/functions";
 import {
   consumeRecentEngineMilestone,
   pruneOldFinishedVirtualMatches,
@@ -8,6 +9,7 @@ import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
 import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
 import {
+  hasOverdueRealMatches,
   syncRealMatchesThrottled,
   type RealSyncSummary,
 } from "@/lib/real-sports-feed";
@@ -25,6 +27,7 @@ const SETTLE_SWEEP_THROTTLE_MS = 35_000;
 const HOUSEKEEPING_THROTTLE_MS = 5 * 60_000;
 const PRUNE_THROTTLE_MS = 10 * 60_000;
 const USER_READ_FEED_BUDGET_MS = 2_500;
+const WAKEUP_FEED_BUDGET_MS = 5_500;
 
 let lastFullSyncAt = 0;
 let inFlightFullSync: Promise<void> | null = null;
@@ -71,16 +74,26 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
         const [, rf] = await Promise.all([runLiveEngine(), realFeedPromise]);
         realFeedResult = rf;
       } else {
+        const hasOverdue = await hasOverdueRealMatches(now).catch(() => false);
+        const readBudgetMs = hasOverdue
+          ? WAKEUP_FEED_BUDGET_MS
+          : USER_READ_FEED_BUDGET_MS;
         const [, feedStatus] = await Promise.all([
           runLiveEngine(),
-          withTimeoutBudget(realFeedPromise, USER_READ_FEED_BUDGET_MS),
+          withTimeoutBudget(realFeedPromise, readBudgetMs),
         ]);
         if (feedStatus === "timed_out") {
-          void realFeedPromise.then(async (res) => {
+          const continuation = realFeedPromise.then(async (res) => {
             if (res && (res.settledCount > 0 || res.syncedCount > 0)) {
               await settleFinishedBets().catch(() => undefined);
+              invalidateAllActiveCaches(true);
             }
           });
+          try {
+            waitUntil(continuation);
+          } catch {
+            void continuation;
+          }
         } else {
           realFeedResult = feedStatus;
         }
