@@ -5,6 +5,7 @@ export type DbErrorCode =
   | "DB_QUOTA_EXCEEDED"
   | "DB_UNREACHABLE"
   | "DB_TIMEOUT"
+  | "INSUFFICIENT_BALANCE"
   | "SERVER_ERROR";
 
 export interface ClassifiedServerError {
@@ -131,6 +132,17 @@ export function classifyServerError(err: unknown): ClassifiedServerError {
       }. Dans Vercel → be-plateform → Storage, connectez une base PostgreSQL active puis redéployez.`,
       detail: rootReason,
       status: 503,
+    };
+  }
+
+  if (
+    /app_user_balance_nonneg_chk|(\b23514\b.*balance)/i.test(lower)
+  ) {
+    return {
+      code: "INSUFFICIENT_BALANCE",
+      message: "Solde disponible insuffisant pour effectuer cette opération.",
+      detail: rootReason,
+      status: 400,
     };
   }
 

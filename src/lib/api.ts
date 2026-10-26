@@ -1,5 +1,10 @@
 import type { LiveMatchTelemetry } from "@/lib/live-telemetry";
-import type { OddsChangePolicy, OddsChangedDetails } from "@/lib/odds-lock";
+import {
+  CASHOUT_CHANGED_CODE,
+  type CashoutChangedDetails,
+  type OddsChangePolicy,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 
 export type MatchStatus = "live" | "upcoming" | "finished";
 export type BetStatus = "pending" | "won" | "lost" | "cashed" | "void";
@@ -279,18 +284,21 @@ export class ApiRequestError extends Error {
   status: number;
   code?: string;
   details?: OddsChangedDetails;
+  cashoutDetails?: CashoutChangedDetails;
 
   constructor(
     message: string,
     status: number,
     code?: string,
-    details?: OddsChangedDetails
+    details?: OddsChangedDetails,
+    cashoutDetails?: CashoutChangedDetails
   ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.cashoutDetails = cashoutDetails;
   }
 }
 
@@ -336,7 +344,7 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;
     code?: string;
-    details?: OddsChangedDetails;
+    details?: OddsChangedDetails & CashoutChangedDetails;
     serverTime?: string;
   };
   if (!res.ok) {
@@ -360,11 +368,13 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
       res.status === 504
         ? "Le serveur met trop de temps à répondre — veuillez réessayer."
         : "Service temporairement indisponible — veuillez réessayer.";
+    const isCashoutChanged = data.code === CASHOUT_CHANGED_CODE;
     throw new ApiRequestError(
       data.error ?? fallbackMsg,
       res.status,
       data.code,
-      data.details
+      isCashoutChanged ? undefined : data.details,
+      isCashoutChanged ? data.details : undefined
     );
   }
 
@@ -528,12 +538,20 @@ export const api = {
         body: JSON.stringify(payload),
       }
     ),
-  cashOut: (betId: number, kind?: BetKind) =>
-    request<{ balance: number; value: number }>("/api/bets/cashout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ betId, kind }),
-    }),
+  cashOut: (payload: {
+    betId: number;
+    kind?: BetKind;
+    expectedCashout: number;
+    idempotencyKey: string;
+  }) =>
+    request<{ balance: number; value: number; deduplicated?: boolean }>(
+      "/api/bets/cashout",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    ),
   saveCoupon: (legs: ClientSavedCouponLeg[]) =>
     request<{ code: string }>("/api/coupons", {
       method: "POST",
@@ -545,18 +563,29 @@ export const api = {
       `/api/coupons?code=${encodeURIComponent(code)}`
     ),
   wallet: () => request<ClientWalletData>("/api/wallet"),
-  requestWithdrawal: (payload: { method: string; destination: string; amount: number }) =>
-    request<{ withdrawal: ClientWithdrawal; balance: number }>("/api/withdrawals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
-  cancelWithdrawal: (withdrawalId: number) =>
-    request<{ withdrawal: ClientWithdrawal; balance: number }>("/api/withdrawals", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ withdrawalId }),
-    }),
+  requestWithdrawal: (payload: {
+    method: string;
+    destination: string;
+    amount: number;
+    idempotencyKey: string;
+  }) =>
+    request<{ withdrawal: ClientWithdrawal; balance: number; deduplicated?: boolean }>(
+      "/api/withdrawals",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    ),
+  cancelWithdrawal: (withdrawalId: number, idempotencyKey: string) =>
+    request<{ withdrawal: ClientWithdrawal; balance: number; deduplicated?: boolean }>(
+      "/api/withdrawals",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ withdrawalId, idempotencyKey }),
+      }
+    ),
   predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100"),
   predictionsCatalog: () =>
     request<{ questions: ClientPrediction[]; serverTime?: string }>(
@@ -595,28 +624,32 @@ export const api = {
   payments: {
     providers: () =>
       request<{ providers: PaymentProvider[] }>("/api/payments"),
-    create: (provider: "stripe" | "paypal", amount: number) =>
-      request<{ url: string }>(`/api/payments/${provider}`, {
+    create: (provider: "stripe" | "paypal", amount: number, idempotencyKey: string) =>
+      request<{ url: string; deduplicated?: boolean }>(`/api/payments/${provider}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount, idempotencyKey }),
       }),
     manual: (payload: {
       method: "mobile_money" | "sepa";
       reference: string;
       amount: number;
+      idempotencyKey: string;
     }) =>
-      request<{ ok: boolean }>("/api/payments/manual", {
+      request<{ ok: boolean; deduplicated?: boolean }>("/api/payments/manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    capturePayPal: (orderId: string) =>
-      request<{ user: ClientUser }>("/api/payments/paypal/capture", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
-      }),
+    capturePayPal: (orderId: string, idempotencyKey: string) =>
+      request<{ user: ClientUser; deduplicated?: boolean }>(
+        "/api/payments/paypal/capture",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId, idempotencyKey }),
+        }
+      ),
     status: (ref: string) =>
       request<{ status: string; credited: boolean }>(
         `/api/payments/status?ref=${encodeURIComponent(ref)}`

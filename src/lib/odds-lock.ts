@@ -14,6 +14,8 @@
 export type OddsChangePolicy = "confirm_all" | "accept_higher";
 
 export const ODDS_CHANGED_CODE = "ODDS_CHANGED" as const;
+export const CASHOUT_CHANGED_CODE = "CASHOUT_CHANGED" as const;
+export const IDEMPOTENCY_CONFLICT_CODE = "IDEMPOTENCY_KEY_CONFLICT" as const;
 
 /** Tolérance de 1 centième (0,01) sur cotes arrondies à 2 décimales des deux côtés. */
 export const ODDS_LOCK_TOLERANCE_CENTS = 1;
@@ -22,22 +24,41 @@ const ODDS_POLICY_STORAGE_KEY = "pulse_odds_change_policy_v1";
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{12,128}$/;
 
 /**
+ * Génère une clé d'idempotence unique côté navigateur avec préfixe typé (`bet`, `co`, `wd`, `dep`).
+ */
+export function generateIdempotencyKey(prefix = "idem"): string {
+  const safePrefix = prefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 12) || "idem";
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${safePrefix}_${crypto.randomUUID().replace(/-/g, "")}`;
+  }
+  const rand = Math.random().toString(36).slice(2, 12);
+  const rand2 = Math.random().toString(36).slice(2, 12);
+  return `${safePrefix}_${Date.now().toString(36)}_${rand}${rand2}`;
+}
+
+/**
  * Génère une clé d'idempotence unique côté navigateur pour chaque intention de pari.
  * Protège contre les doubles clics rapides et les réessais réseau automatiques.
  */
 export function generateBetIdempotencyKey(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `bet_${crypto.randomUUID().replace(/-/g, "")}`;
-  }
-  const rand = Math.random().toString(36).slice(2, 12);
-  const rand2 = Math.random().toString(36).slice(2, 12);
-  return `bet_${Date.now().toString(36)}_${rand}${rand2}`;
+  return generateIdempotencyKey("bet");
 }
 
 export function normalizeIdempotencyKey(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim();
   return IDEMPOTENCY_KEY_RE.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * Extrait la clé d'idempotence soit du corps JSON (`body.idempotencyKey`),
+ * soit de l'en-tête HTTP standard `Idempotency-Key`.
+ */
+export function extractIdempotencyKey(
+  bodyKey: unknown,
+  headerKey?: string | null
+): string | null {
+  return normalizeIdempotencyKey(bodyKey) ?? normalizeIdempotencyKey(headerKey);
 }
 
 export function roundOdds2(odds: number): number {
@@ -104,6 +125,52 @@ export interface OddsChangedDetails {
   currentOdds: number;
   direction: "up" | "down";
   updatedLegs?: OddsChangedLegDetail[];
+}
+
+export interface CashoutChangedDetails {
+  previousCashout: number;
+  currentCashout: number;
+}
+
+export type CashoutCheckResult =
+  | {
+      ok: true;
+      roundedServerCashout: number;
+    }
+  | {
+      ok: false;
+      previousCashout: number;
+      currentCashout: number;
+    };
+
+/**
+ * Vérifie dans la transaction SQL que le montant réel de Cash Out calculé par le serveur
+ * n'a pas baissé par rapport au montant affiché au joueur (`expectedCashout`).
+ * Comparaison exacte en centimes entiers (`Math.round(x * 100)`) :
+ *  - Si `serverCents < expectedCents` -> refus `409 CASHOUT_CHANGED` sans aucun paiement.
+ *  - Si `serverCents >= expectedCents` -> accepté au montant serveur autoritaire.
+ */
+export function checkCashoutChange(params: {
+  expectedCashout: number;
+  serverCashout: number;
+}): CashoutCheckResult {
+  const expectedCents = Math.round(params.expectedCashout * 100);
+  const serverCents = Math.round(params.serverCashout * 100);
+  const previousCashout = expectedCents / 100;
+  const currentCashout = serverCents / 100;
+
+  if (serverCents < expectedCents) {
+    return {
+      ok: false,
+      previousCashout,
+      currentCashout,
+    };
+  }
+
+  return {
+    ok: true,
+    roundedServerCashout: currentCashout,
+  };
 }
 
 export function readStoredOddsPolicy(): OddsChangePolicy {

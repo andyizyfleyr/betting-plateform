@@ -30,11 +30,7 @@ import { publicUser } from "@/lib/auth";
 import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
-import {
-  EDGE_CACHE_TAGS,
-  invalidatePublicApiCaches,
-  purgeEdgeCacheTagsWithReport,
-} from "@/lib/response-cache";
+import { invalidatePublicApiCaches } from "@/lib/response-cache";
 import { isKnownMarket, marketLabelFor, marketOutcomeSettled, minuteNumber } from "@/lib/markets";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { getAdminMlOverview, retrainAllMlModels } from "@/lib/ml-engine";
@@ -307,16 +303,10 @@ export async function POST(req: NextRequest) {
   const action = String(body.action ?? "");
   const res = await handleAdminPost(body, action);
 
-  // Toute mutation admin invalide immédiatement les caches RAM ET purge les tags CDN Edge Vercel
-  // (`Vercel-Cache-Tag`), puis expose le statut réel de purge via `X-Edge-Tag-Purge` pour audit DevTools.
+  // Toute mutation admin invalide immédiatement les caches RAM et déclenche en arrière-plan
+  // la purge `Vercel-Cache-Tag` (sans émettre d'en-tête HTTP synchrone trompeur).
   invalidateAllActiveCaches();
-  invalidatePublicApiCaches(false);
-  const purgeStatus = await purgeEdgeCacheTagsWithReport([
-    EDGE_CACHE_TAGS.matches,
-    EDGE_CACHE_TAGS.history,
-    EDGE_CACHE_TAGS.predictionsCatalog,
-  ]);
-  res.headers.set("X-Edge-Tag-Purge", purgeStatus);
+  invalidatePublicApiCaches(true, true);
   return res;
 }
 

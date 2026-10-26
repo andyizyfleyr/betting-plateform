@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -12,8 +12,9 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { ApiRequestError, api } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "./providers";
 import { cn, eur } from "@/lib/format";
 
@@ -65,6 +66,8 @@ export function WithdrawModal({
   const [amountText, setAmountText] = useState("20");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
   const [eligibility, setEligibility] = useState<{
     withdrawable: number;
     bonusLocked: number;
@@ -115,15 +118,28 @@ export function WithdrawModal({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || inFlightRef.current) return;
+    inFlightRef.current = true;
+    const cleanDest = destination.trim();
+    const sig = `${method}:${cleanDest}:${amount}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = {
+        key: generateIdempotencyKey("wd"),
+        sig,
+      };
+    }
+    const idempotencyKey = idempotencySlotRef.current.key;
+
     setLoading(true);
     setError(null);
     try {
       const res = await api.requestWithdrawal({
         method,
-        destination: destination.trim(),
+        destination: cleanDest,
         amount,
+        idempotencyKey,
       });
+      idempotencySlotRef.current = null;
       setBalance(res.balance);
       playUiSound(user?.sound, "bet");
       triggerHaptic(user?.haptics, [18, 28]);
@@ -136,9 +152,13 @@ export function WithdrawModal({
       onSuccess?.();
       onClose();
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status >= 400 && err.status < 500) {
+        idempotencySlotRef.current = null;
+      }
       const msg = err instanceof Error ? err.message : "Retrait impossible";
       setError(msg);
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   };

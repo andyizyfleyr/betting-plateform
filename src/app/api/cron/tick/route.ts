@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser, matches, predictionQuestions } from "@/db/schema";
 import { invalidatePublicApiCaches } from "@/lib/response-cache";
+import { pruneExpiredIdempotencyKeys } from "@/lib/idempotency";
 import { retrainAllMlModels } from "@/lib/ml-engine";
 import { getAuthUserId } from "@/lib/session";
 import { syncPlatformStateThrottled } from "@/lib/sync-throttle";
@@ -61,8 +62,9 @@ export async function GET(req: NextRequest) {
   try {
     await ensureSeeded();
     await syncPlatformStateThrottled(true);
+    await pruneExpiredIdempotencyKeys();
     const ml = await retrainAllMlModels();
-    invalidatePublicApiCaches();
+    invalidatePublicApiCaches(true);
 
     const [[liveRow], [upcomingCount], [openPreds]] = await Promise.all([
       db

@@ -1,14 +1,17 @@
 import {
   bigint,
   boolean,
+  check,
   doublePrecision,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** Statistiques officielles d'un match réel récupérées gratuitement depuis le flux sportif public. */
 export interface RealMatchStats {
@@ -148,6 +151,8 @@ export const bets = pgTable("bets", {
   riskFlag: text("risk_flag"),
   /** Clé d'idempotence client unique par joueur (empêche tout double débit sur double clic / retry réseau). */
   idempotencyKey: text("idempotency_key"),
+  /** Clé d'idempotence dédiée au Cash Out de ce pari. */
+  cashoutIdempotencyKey: text("cashout_idempotency_key"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
   settledAt: timestamp("settled_at", { mode: "date" }),
 });
@@ -204,34 +209,43 @@ export const predictionBets = pgTable("prediction_bets", {
   status: text("status").notNull().default("pending"),
   cashOutAmount: doublePrecision("cash_out_amount"),
   idempotencyKey: text("idempotency_key"),
+  cashoutIdempotencyKey: text("cashout_idempotency_key"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
   settledAt: timestamp("settled_at", { mode: "date" }),
 });
 
 /**
- * Profil + préférences utilisateur (une seule ligne, id = 1).
+ * Profil + préférences utilisateur.
+ * Contrainte SQL stricte `CHECK ("balance" >= 0)` empêchant tout solde négatif au niveau moteur PostgreSQL.
  */
-export const appUser = pgTable("app_user", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().default("Alex Martin"),
-  balance: doublePrecision("balance").notNull().default(250),
-  notifications: boolean("notifications").notNull().default(true),
-  sound: boolean("sound").notNull().default(false),
-  haptics: boolean("haptics").notNull().default(true),
-  oddsFormat: text("odds_format").notNull().default("decimal"), // "decimal" | "fractional"
-  language: text("language").notNull().default("fr"),
-  liveSim: boolean("live_sim").notNull().default(true), // moteur de matchs en direct
-  /** Rôle du compte : "user" (joueur) ou "admin" (espace d'administration). */
-  role: text("role").notNull().default("user"),
-  /** Montant de bonus initial soumis à exigence de mise (wager 1× à cote ≥ 1,30) avant retrait. */
-  bonusLocked: doublePrecision("bonus_locked").notNull().default(0),
-  /** Version du jeton JWT : incrémentée à la déconnexion pour invalider les anciens cookies partout. */
-  tokenVersion: integer("token_version").notNull().default(0),
-  /** Authentification JWT. `email` est unique ; `passwordHash` = scrypt. */
-  email: text("email").unique(),
-  passwordHash: text("password_hash"),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
+export const appUser = pgTable(
+  "app_user",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull().default("Alex Martin"),
+    balance: doublePrecision("balance").notNull().default(250),
+    notifications: boolean("notifications").notNull().default(true),
+    sound: boolean("sound").notNull().default(false),
+    haptics: boolean("haptics").notNull().default(true),
+    oddsFormat: text("odds_format").notNull().default("decimal"), // "decimal" | "fractional"
+    language: text("language").notNull().default("fr"),
+    liveSim: boolean("live_sim").notNull().default(true), // moteur de matchs en direct
+    /** Rôle du compte : "user" (joueur) ou "admin" (espace d'administration). */
+    role: text("role").notNull().default("user"),
+    /** Montant de bonus initial soumis à exigence de mise (wager 1× à cote ≥ 1,30) avant retrait. */
+    bonusLocked: doublePrecision("bonus_locked").notNull().default(0),
+    /** Version du jeton JWT : incrémentée à la déconnexion pour invalider les anciens cookies partout. */
+    tokenVersion: integer("token_version").notNull().default(0),
+    /** Authentification JWT. `email` est unique ; `passwordHash` = scrypt. */
+    email: text("email").unique(),
+    passwordHash: text("password_hash"),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("app_user_balance_nonneg_chk", sql`${table.balance} >= 0`),
+    check("app_user_bonus_nonneg_chk", sql`${table.bonusLocked} >= 0`),
+  ]
+);
 
 /**
  * Historique des parties du jeu Tap Win (profil joueur + santé du système).
@@ -280,11 +294,12 @@ export const acceleratorRounds = pgTable("accelerator_rounds", {
 export const deposits = pgTable("deposits", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().default(1),
-  provider: text("provider").notNull(), // "stripe" | "paypal"
+  provider: text("provider").notNull(), // "stripe" | "paypal" | "mobile_money" | "sepa"
   providerRef: text("provider_ref").notNull(),
   amount: doublePrecision("amount").notNull(),
   currency: text("currency").notNull().default("EUR"),
   status: text("status").notNull().default("pending"),
+  idempotencyKey: text("idempotency_key"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
@@ -323,6 +338,7 @@ export const comboBets = pgTable("combo_bets", {
   status: text("status").notNull().default("pending"),
   cashOutAmount: doublePrecision("cash_out_amount"),
   idempotencyKey: text("idempotency_key"),
+  cashoutIdempotencyKey: text("cashout_idempotency_key"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
   settledAt: timestamp("settled_at", { mode: "date" }),
 });
@@ -334,14 +350,41 @@ export const comboBets = pgTable("combo_bets", {
 export const withdrawals = pgTable("withdrawals", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().default(1),
-  method: text("method").notNull(), // "iban" | "paypal" | "card"
+  method: text("method").notNull(), // "iban" | "paypal" | "card" | "mobile_money"
   destination: text("destination").notNull(),
   amount: doublePrecision("amount").notNull(),
   status: text("status").notNull().default("pending"),
   adminNote: text("admin_note"),
+  idempotencyKey: text("idempotency_key"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   processedAt: timestamp("processed_at", { mode: "date" }),
 });
+
+/**
+ * Registre transactionnel d'idempotence (paris, Cash Out, retraits, dépôts).
+ * Garantit l'unicité `(user_id, scope, idempotency_key)` ET rejette en `409` toute réutilisation
+ * d'une même clé avec une empreinte SHA-256 (`request_hash`) différente.
+ */
+export const idempotencyKeys = pgTable(
+  "idempotency_keys",
+  {
+    userId: integer("user_id").notNull(),
+    scope: text("scope").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    statusCode: integer("status_code").notNull().default(200),
+    responseBody: jsonb("response_body")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "idempotency_keys_pk",
+      columns: [table.userId, table.scope, table.idempotencyKey],
+    }),
+  ]
+);
 
 /**
  * Journal des ajustements manuels de solde par l'administration (traçabilité portefeuille).

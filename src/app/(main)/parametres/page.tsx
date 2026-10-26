@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowDownLeft,
@@ -26,6 +26,7 @@ import { AnimatedNumber } from "@/components/animated-number";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { Toggle } from "@/components/toggle";
 import { WithdrawModal } from "@/components/withdraw-modal";
+import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
@@ -120,7 +121,12 @@ export default function ParametresPage() {
         (async () => {
           toast({ kind: "info", title: "Validation du paiement…" });
           try {
-            const r = await api.payments.capturePayPal(orderId);
+            const safeOrderToken = orderId.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+            const idemKey =
+              safeOrderToken.length >= 6
+                ? `ppcap_${safeOrderToken}_v1`
+                : generateIdempotencyKey("ppcap");
+            const r = await api.payments.capturePayPal(orderId, idemKey);
             if (r.user) applyUser(r.user);
             reloadWallet();
             toast({ kind: "success", title: "Solde rechargé" });
@@ -183,11 +189,19 @@ export default function ParametresPage() {
 
   const visibleLedger = showAllLedger ? filteredLedger : filteredLedger.slice(0, 6);
 
+  const cancelSlotRef = useRef<Map<number, string>>(new Map());
+  const cancelInFlightRef = useRef(false);
+
   const cancelWithdrawal = async (withdrawalId: number) => {
-    if (cancellingId != null) return;
+    if (cancellingId != null || cancelInFlightRef.current) return;
+    cancelInFlightRef.current = true;
+    const idemKey =
+      cancelSlotRef.current.get(withdrawalId) ?? generateIdempotencyKey("wdcancel");
+    cancelSlotRef.current.set(withdrawalId, idemKey);
     setCancellingId(withdrawalId);
     try {
-      const res = await api.cancelWithdrawal(withdrawalId);
+      const res = await api.cancelWithdrawal(withdrawalId, idemKey);
+      cancelSlotRef.current.delete(withdrawalId);
       setBalance(res.balance);
       reloadWallet();
       toast({ kind: "success", title: "Retrait annulé et recrédité" });
@@ -198,6 +212,7 @@ export default function ParametresPage() {
         description: e instanceof Error ? e.message : undefined,
       });
     } finally {
+      cancelInFlightRef.current = false;
       setCancellingId(null);
     }
   };
