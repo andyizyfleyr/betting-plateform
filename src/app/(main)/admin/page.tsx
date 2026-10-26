@@ -32,6 +32,10 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/providers";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import {
+  InfiniteScrollSentinel,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { TeamAvatar } from "@/components/team-avatar";
 import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
@@ -1010,6 +1014,12 @@ function MatchesTab({
       ? byMatchStatus
       : byMatchStatus.filter((m) => m.league === effectiveLeague);
 
+  const matchesBatch = useInfiniteBatch(
+    filteredMatches.length,
+    `${universe}|${statusFilter}|${effectiveLeague}|${qMatch}`
+  );
+  const pagedMatches = filteredMatches.slice(0, matchesBatch.visibleCount);
+
   return (
     <div className="flex flex-col gap-3">
       {/* Sélecteur strict entre Matchs réels (ajoutés par l'admin) et Matchs virtuels (simulateur) */}
@@ -1491,19 +1501,26 @@ function MatchesTab({
             : "Aucun match dans cette sélection."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
-          {filteredMatches.map((m) => (
-            <AdminMatchCard
-              key={m.id}
-              m={m}
-              nowTs={nowTs}
-              forecast={!isReal ? forecasts[m.id] : undefined}
-              onOpenForecasts={onOpenForecasts}
-              busy={busy}
-              act={act}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
+            {pagedMatches.map((m) => (
+              <AdminMatchCard
+                key={m.id}
+                m={m}
+                nowTs={nowTs}
+                forecast={!isReal ? forecasts[m.id] : undefined}
+                onOpenForecasts={onOpenForecasts}
+                busy={busy}
+                act={act}
+              />
+            ))}
+          </div>
+          <InfiniteScrollSentinel
+            hasMore={matchesBatch.hasMore}
+            isLoadingMore={matchesBatch.isLoadingMore}
+            onLoadMore={matchesBatch.loadMore}
+          />
+        </>
       )}
     </div>
   );
@@ -2785,6 +2802,12 @@ function QuestionsTab({
         ? byCatQs.filter((q) => !isMultiQ(q))
         : byCatQs;
 
+  const questionsBatch = useInfiniteBatch(
+    visibleQuestions.length,
+    `${qFilter}|${qCategory}|${qFormat}|${qQuery.trim().toLowerCase()}`
+  );
+  const pagedQuestions = visibleQuestions.slice(0, questionsBatch.visibleCount);
+
   return (
     <div className="flex flex-col gap-3">
       <div className="glass-card overflow-hidden rounded-2xl">
@@ -3050,7 +3073,7 @@ function QuestionsTab({
       />
 
       <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
-        {visibleQuestions.map((q) => {
+        {pagedQuestions.map((q) => {
           const isEditing = editingId === q.id;
           const isMulti = Array.isArray(q.options) && q.options.length >= 2;
           const resolvedLabel =
@@ -3333,6 +3356,11 @@ function QuestionsTab({
           );
         })}
       </div>
+      <InfiniteScrollSentinel
+        hasMore={questionsBatch.hasMore}
+        isLoadingMore={questionsBatch.isLoadingMore}
+        onLoadMore={questionsBatch.loadMore}
+      />
     </div>
   );
 }
@@ -3378,6 +3406,12 @@ function UsersTab({
       : balFilter === "zero"
         ? byRoleUsers.filter((u) => u.balance <= 0)
         : byRoleUsers;
+
+  const usersBatch = useInfiniteBatch(
+    filteredUsers.length,
+    `${roleFilter}|${balFilter}|${q}`
+  );
+  const pagedUsers = filteredUsers.slice(0, usersBatch.visibleCount);
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -3450,7 +3484,7 @@ function UsersTab({
         resultCountText={`${filteredUsers.length} joueur${filteredUsers.length > 1 ? "s" : ""}`}
       />
       <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
-      {filteredUsers.map((u) => (
+      {pagedUsers.map((u) => (
         <div key={u.id} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -3505,6 +3539,11 @@ function UsersTab({
         </div>
       ))}
       </div>
+      <InfiniteScrollSentinel
+        hasMore={usersBatch.hasMore}
+        isLoadingMore={usersBatch.isLoadingMore}
+        onLoadMore={usersBatch.loadMore}
+      />
     </div>
   );
 }
@@ -3593,6 +3632,12 @@ function BetsTab({
     betKindFilter === "all"
       ? byBetStatus
       : byBetStatus.filter((r) => r.kind === betKindFilter);
+
+  const betsBatch = useInfiniteBatch(
+    filteredRows.length,
+    `${betStatusFilter}|${betKindFilter}|${q}`
+  );
+  const pagedRows = filteredRows.slice(0, betsBatch.visibleCount);
 
   const riskLabel = (flag: string) =>
     flag === "stale_mark_goal"
@@ -3691,7 +3736,7 @@ function BetsTab({
       />
 
       <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
-      {filteredRows.map((b) => (
+      {pagedRows.map((b) => (
         <div key={`${b.kind}-${b.id}`} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -3747,6 +3792,11 @@ function BetsTab({
         </div>
       ))}
       </div>
+      <InfiniteScrollSentinel
+        hasMore={betsBatch.hasMore}
+        isLoadingMore={betsBatch.isLoadingMore}
+        onLoadMore={betsBatch.loadMore}
+      />
     </div>
   );
 }
@@ -3773,8 +3823,21 @@ function DepositsTab({
     .filter((w) => w.status === "approved")
     .reduce((s, w) => s + w.amount, 0);
   const pendingWithdrawals = withdrawals.filter((w) => w.status === "pending");
+  const settledWithdrawals = withdrawals.filter((w) => w.status !== "pending");
   const pendingDeposits = deposits.filter((d) => d.status === "pending_review");
   const settledDeposits = deposits.filter((d) => d.status !== "pending_review");
+
+  const wdHistoryBatch = useInfiniteBatch(settledWithdrawals.length, "wd-history");
+  const pagedSettledWithdrawals = settledWithdrawals.slice(
+    0,
+    wdHistoryBatch.visibleCount
+  );
+
+  const depHistoryBatch = useInfiniteBatch(settledDeposits.length, "dep-history");
+  const pagedSettledDeposits = settledDeposits.slice(
+    0,
+    depHistoryBatch.visibleCount
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -3937,16 +4000,14 @@ function DepositsTab({
         </div>
       )}
 
-      {withdrawals.filter((w) => w.status !== "pending").length > 0 && (
+      {settledWithdrawals.length > 0 && (
         <>
           <AdminSectionTitle
             label="Historique des retraits"
-            count={withdrawals.filter((w) => w.status !== "pending").length}
+            count={settledWithdrawals.length}
           />
           <div className="flex flex-col gap-2">
-            {withdrawals
-              .filter((w) => w.status !== "pending")
-              .map((w) => (
+            {pagedSettledWithdrawals.map((w) => (
                 <div key={w.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-display text-[13px] font-semibold text-ink">
@@ -3962,6 +4023,11 @@ function DepositsTab({
                 </div>
               ))}
           </div>
+          <InfiniteScrollSentinel
+            hasMore={wdHistoryBatch.hasMore}
+            isLoadingMore={wdHistoryBatch.isLoadingMore}
+            onLoadMore={wdHistoryBatch.loadMore}
+          />
         </>
       )}
 
@@ -3969,26 +4035,33 @@ function DepositsTab({
       {settledDeposits.length === 0 ? (
         <p className="py-6 text-center text-[12.5px] text-dim">Aucun dépôt enregistré.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-2 xl:grid-cols-2 xl:gap-3">
-          {settledDeposits.map((d) => (
-            <div key={d.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev text-ink">
-                <CircleDollarSign className="h-4 w-4" strokeWidth={2.1} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-display text-[13.5px] font-semibold capitalize text-ink">
-                  {d.userName ? `${d.userName} · ` : ""}
-                  {d.provider === "mobile_money" ? "Mobile Money" : d.provider} · {eur(d.amount)}
-                </p>
-                <p className="truncate text-[11.5px] text-dim">
-                  {d.providerRef ? `${d.providerRef} · ` : ""}
-                  {formatPlacedAt(d.createdAt)}
-                </p>
+        <>
+          <div className="grid grid-cols-1 gap-2 xl:grid-cols-2 xl:gap-3">
+            {pagedSettledDeposits.map((d) => (
+              <div key={d.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev text-ink">
+                  <CircleDollarSign className="h-4 w-4" strokeWidth={2.1} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-display text-[13.5px] font-semibold capitalize text-ink">
+                    {d.userName ? `${d.userName} · ` : ""}
+                    {d.provider === "mobile_money" ? "Mobile Money" : d.provider} · {eur(d.amount)}
+                  </p>
+                  <p className="truncate text-[11.5px] text-dim">
+                    {d.providerRef ? `${d.providerRef} · ` : ""}
+                    {formatPlacedAt(d.createdAt)}
+                  </p>
+                </div>
+                <StatusBadge status={d.status} />
               </div>
-              <StatusBadge status={d.status} />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          <InfiniteScrollSentinel
+            hasMore={depHistoryBatch.hasMore}
+            isLoadingMore={depHistoryBatch.isLoadingMore}
+            onLoadMore={depHistoryBatch.loadMore}
+          />
+        </>
       )}
     </div>
   );
@@ -4508,6 +4581,12 @@ function ScoresPrevusTab({
         ? byLeague.filter((m) => !forecasts[m.id]?.isLocked)
         : byLeague;
 
+  const forecastsBatch = useInfiniteBatch(
+    visible.length,
+    `${statusFilter}|${effectiveLeague}|${lockFilter}|${query.trim().toLowerCase()}`
+  );
+  const pagedForecasts = visible.slice(0, forecastsBatch.visibleCount);
+
   const upcomingOrderMap = new Map<number, number>();
   let queueRank = 1;
   for (const m of openScheduled) {
@@ -4689,8 +4768,9 @@ function ScoresPrevusTab({
           Aucun match programmé dans ce filtre.
         </div>
       ) : (
+        <>
         <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
-          {visible.map((m) => {
+          {pagedForecasts.map((m) => {
             const fc = forecasts[m.id];
             if (!fc) return null;
             const rank = upcomingOrderMap.get(m.id);
@@ -4991,6 +5071,12 @@ function ScoresPrevusTab({
             );
           })}
         </div>
+        <InfiniteScrollSentinel
+          hasMore={forecastsBatch.hasMore}
+          isLoadingMore={forecastsBatch.isLoadingMore}
+          onLoadMore={forecastsBatch.loadMore}
+        />
+        </>
       )}
     </div>
   );

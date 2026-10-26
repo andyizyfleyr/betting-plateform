@@ -5,6 +5,10 @@ import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, ListChecks, Ref
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import {
+  InfiniteScrollSentinel,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import type { ComboSelection } from "@/components/combo-slip";
 import {
@@ -231,6 +235,18 @@ export default function PredictionsPage() {
     }
     return byFormat;
   }, [categoryFiltered, formatFilter, statusTab]);
+
+  const predictionsResetKey = `${statusTab}|${category}|${formatFilter}|${query
+    .trim()
+    .toLowerCase()}`;
+  const predictionsBatch = useInfiniteBatch(
+    visibleQuestions.length,
+    predictionsResetKey
+  );
+  const pagedQuestions = useMemo(
+    () => visibleQuestions.slice(0, predictionsBatch.visibleCount),
+    [visibleQuestions, predictionsBatch.visibleCount]
+  );
 
   const handleSelectOutcome = (
     q: ClientPrediction,
@@ -468,41 +484,55 @@ export default function PredictionsPage() {
           </p>
         </div>
       ) : statusTab === "resolved" ? (
-        <div className="grid grid-cols-1 items-start gap-3">
-          {visibleQuestions.map((q) => (
-            <ResolvedQuestionCard key={q.id} q={q} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 items-start gap-3">
+            {pagedQuestions.map((q) => (
+              <ResolvedQuestionCard key={q.id} q={q} />
+            ))}
+          </div>
+          <InfiniteScrollSentinel
+            hasMore={predictionsBatch.hasMore}
+            isLoadingMore={predictionsBatch.isLoadingMore}
+            onLoadMore={predictionsBatch.loadMore}
+          />
+        </>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-3">
-          {visibleQuestions.map((q) =>
-            isMultiChoiceQuestion(q) && q.options ? (
-              <MultiChoiceQuestionCard
-                key={q.id}
-                q={q}
-                options={q.options}
-                nowMs={nowMs}
-                onSelect={(selection, label, odds) =>
-                  handleSelectOutcome(q, selection, label, odds)
-                }
-              />
-            ) : (
-              <BinaryQuestionCard
-                key={q.id}
-                q={q}
-                nowMs={nowMs}
-                onSelect={(selection) =>
-                  handleSelectOutcome(
-                    q,
-                    selection,
-                    selection === "yes" ? "Oui" : "Non",
-                    selection === "yes" ? q.oddsYes : q.oddsNo
-                  )
-                }
-              />
-            )
-          )}
-        </div>
+        <>
+          <div className="grid grid-cols-1 items-start gap-3">
+            {pagedQuestions.map((q) =>
+              isMultiChoiceQuestion(q) && q.options ? (
+                <MultiChoiceQuestionCard
+                  key={q.id}
+                  q={q}
+                  options={q.options}
+                  nowMs={nowMs}
+                  onSelect={(selection, label, odds) =>
+                    handleSelectOutcome(q, selection, label, odds)
+                  }
+                />
+              ) : (
+                <BinaryQuestionCard
+                  key={q.id}
+                  q={q}
+                  nowMs={nowMs}
+                  onSelect={(selection) =>
+                    handleSelectOutcome(
+                      q,
+                      selection,
+                      selection === "yes" ? "Oui" : "Non",
+                      selection === "yes" ? q.oddsYes : q.oddsNo
+                    )
+                  }
+                />
+              )
+            )}
+          </div>
+          <InfiniteScrollSentinel
+            hasMore={predictionsBatch.hasMore}
+            isLoadingMore={predictionsBatch.isLoadingMore}
+            onLoadMore={predictionsBatch.loadMore}
+          />
+        </>
       )}
 
       <PredictionBetModal

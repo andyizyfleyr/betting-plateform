@@ -29,6 +29,10 @@ import {
   StatusPill,
   TicketTeamRow,
 } from "@/components/bet-ticket";
+import {
+  InfiniteScrollSentinel,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
@@ -234,6 +238,11 @@ export default function ComboDetailPage() {
 
   const legs = useMemo(() => bet?.legs ?? [], [bet]);
   const totalLegs = legs.length;
+  const legsBatch = useInfiniteBatch(totalLegs, String(comboId));
+  const pagedLegs = useMemo(
+    () => legs.slice(0, legsBatch.visibleCount),
+    [legs, legsBatch.visibleCount]
+  );
   const wonCount = legs.filter((l) => l.status === "won").length;
   const lostCount = legs.filter((l) => l.status === "lost").length;
   const voidCount = legs.filter((l) => l.status === "void").length;
@@ -586,7 +595,7 @@ export default function ComboDetailPage() {
               </div>
 
               <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
-                {legs.map((leg, idx) => {
+                {pagedLegs.map((leg, idx) => {
                   const teams = resolveLegTeams(leg);
                   const legHasScore =
                     leg.kind === "sport" &&
@@ -739,6 +748,11 @@ export default function ComboDetailPage() {
                   );
                 })}
               </div>
+              <InfiniteScrollSentinel
+                hasMore={legsBatch.hasMore}
+                isLoadingMore={legsBatch.isLoadingMore}
+                onLoadMore={legsBatch.loadMore}
+              />
             </section>
           </div>
         )}

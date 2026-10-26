@@ -15,6 +15,10 @@ import {
 } from "lucide-react";
 import { api, type ClientMatchHistoryItem } from "@/lib/api";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import {
+  InfiniteScrollSentinel,
+  useInfiniteBatch,
+} from "@/components/infinite-scroll-loader";
 import { hasAnyRealStats, RealMatchStatsCard } from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
@@ -631,10 +635,24 @@ function ResultatsContent() {
     return byWinner;
   }, [byWinner, goalsFilter]);
 
+  const unfocusedVisible = useMemo(
+    () =>
+      focusedMatch ? visible.filter((m) => m.id !== focusedMatch.id) : visible,
+    [visible, focusedMatch]
+  );
+
+  const resultsResetKey = `${universe}|${effectiveLeague}|${winnerFilter}|${goalsFilter}|${query
+    .trim()
+    .toLowerCase()}`;
+  const resultsBatch = useInfiniteBatch(unfocusedVisible.length, resultsResetKey);
+  const pagedResults = useMemo(
+    () => unfocusedVisible.slice(0, resultsBatch.visibleCount),
+    [unfocusedVisible, resultsBatch.visibleCount]
+  );
+
   const groupedByDay = useMemo(() => {
     const groups: Array<{ day: string; items: ClientMatchHistoryItem[] }> = [];
-    for (const m of visible) {
-      if (focusedMatch && m.id === focusedMatch.id) continue;
+    for (const m of pagedResults) {
       const day = formatDayHeading(m.finishedAt ?? m.startsAt);
       const last = groups[groups.length - 1];
       if (last && last.day === day) {
@@ -644,7 +662,7 @@ function ResultatsContent() {
       }
     }
     return groups;
-  }, [visible, focusedMatch]);
+  }, [pagedResults]);
 
   const toggleMobileSearch = () => {
     if (mobileSearchOpen) {
@@ -948,6 +966,11 @@ function ResultatsContent() {
               </div>
             </section>
           ))}
+          <InfiniteScrollSentinel
+            hasMore={resultsBatch.hasMore}
+            isLoadingMore={resultsBatch.isLoadingMore}
+            onLoadMore={resultsBatch.loadMore}
+          />
         </div>
       )}
     </div>
