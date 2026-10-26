@@ -45,7 +45,8 @@ function round4(v: number): number {
   return Math.round(v * 10000) / 10000;
 }
 
-const ML_CACHE_TTL_MS = 60_000;
+const ML_CACHE_TTL_MS = 10 * 60_000;
+const GLICKO_PERSIST_INTERVAL_MS = 5 * 60_000;
 
 interface InMemoryMlBundle {
   loadedAt: number;
@@ -256,14 +257,20 @@ export async function recordMatchesFinishedBatchMl(
   bundle.glickoMeta.updatedAt = new Date();
   hydrateMlRuntimeCaches({ glicko: bundle.glicko });
 
-  await upsertMlModelRow(
-    "glicko_clubs",
-    bundle.glickoMeta.version,
-    bundle.glickoMeta.samplesCount,
-    bundle.glicko.emaBrier,
-    bundle.glicko.emaLogLoss,
-    bundle.glicko as unknown as Record<string, unknown>
-  );
+  // Évite d'écrire le gros JSONB `glicko_clubs` toutes les 38 secondes dans Neon :
+  // le modèle en RAM est déjà à jour en temps réel, et la persistance SQL est groupée toutes les 5 min.
+  const nowMs = Date.now();
+  if (nowMs - lastPersistAt >= GLICKO_PERSIST_INTERVAL_MS) {
+    lastPersistAt = nowMs;
+    await upsertMlModelRow(
+      "glicko_clubs",
+      bundle.glickoMeta.version,
+      bundle.glickoMeta.samplesCount,
+      bundle.glicko.emaBrier,
+      bundle.glicko.emaLogLoss,
+      bundle.glicko as unknown as Record<string, unknown>
+    );
+  }
 }
 
 export async function recordMatchFinishedMl(match: {

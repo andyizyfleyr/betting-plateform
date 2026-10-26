@@ -343,7 +343,9 @@ export default function MatchsPage() {
     getServerFalse
   );
   const { isOffline, isConstrained } = useNetworkQuality();
-  const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
+  const baseMatchesPollMs =
+    filter === "finished" || filter === "upcoming" ? 18_000 : POLL_INTERVAL;
+  const pollIntervalMs = getAdaptiveIntervalMs(baseMatchesPollMs, isConstrained);
 
   const handlePullRefresh = useCallback(async () => {
     try {

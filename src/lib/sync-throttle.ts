@@ -1,27 +1,34 @@
-import { pruneOldFinishedVirtualMatches, runLiveEngine } from "@/db/engine";
+import {
+  consumeRecentEngineMilestone,
+  pruneOldFinishedVirtualMatches,
+  runLiveEngine,
+} from "@/db/engine";
 import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
+import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
 import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
-import { syncRealMatchesThrottled } from "@/lib/real-sports-feed";
-import { invalidatePublicApiCaches } from "@/lib/response-cache";
+import {
+  syncRealMatchesThrottled,
+  type RealSyncSummary,
+} from "@/lib/real-sports-feed";
 import { settleFinishedBets } from "@/lib/settle";
 
 /**
- * Orchestrateur unifié « Time-Continuum » :
- * - Garantit que n'importe quelle requête réveillant le serveur après une période
- *   avec 0 visiteur rattrape séquentiellement tous les matchs écoulés, résout les
- *   questions arrivées à terme, règle tous les paris simples / combinés aux dates
- *   réelles de fin d'événement et maintient les files actives.
- * - Borne l'attente réseau externe (ESPN) à 2,5 s sur les lectures utilisateurs pour
- *   qu'aucune lenteur d'API tierce ne bloque ni ne provoque de 504 sur Vercel Serverless.
+ * Orchestrateur unifié « Time-Continuum » à empreinte SQL minimale :
+ * - Fait progresser les matchs virtuels en pure mémoire toutes les 3 s (sans requêter Neon
+ *   en dehors des jalons réels : coup d'envoi, but/carton, fin de match).
+ * - N'exécute le règlement des paris que sur jalon réel ou balayage de sécurité espacé.
+ * - Espace les tâches de maintenance de fond (prédictions, dépôts expirés, purge) à 5–10 min.
  */
 const SYNC_THROTTLE_MS = 3_000;
-const HOUSEKEEPING_THROTTLE_MS = 60_000;
-const PRUNE_THROTTLE_MS = 5 * 60_000;
+const SETTLE_SWEEP_THROTTLE_MS = 35_000;
+const HOUSEKEEPING_THROTTLE_MS = 5 * 60_000;
+const PRUNE_THROTTLE_MS = 10 * 60_000;
 const USER_READ_FEED_BUDGET_MS = 2_500;
 
 let lastFullSyncAt = 0;
 let inFlightFullSync: Promise<void> | null = null;
+let lastSettleSweepAt = 0;
 let lastHousekeepingAt = 0;
 let lastPruneAt = 0;
 
@@ -58,8 +65,11 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
         return null;
       });
 
+      let realFeedResult: RealSyncSummary | null = null;
+
       if (force) {
-        await Promise.all([runLiveEngine(), realFeedPromise]);
+        const [, rf] = await Promise.all([runLiveEngine(), realFeedPromise]);
+        realFeedResult = rf;
       } else {
         const [, feedStatus] = await Promise.all([
           runLiveEngine(),
@@ -67,25 +77,42 @@ export async function syncPlatformStateThrottled(force = false): Promise<void> {
         ]);
         if (feedStatus === "timed_out") {
           void realFeedPromise.then(async (res) => {
-            if (res && res.settledCount > 0) {
+            if (res && (res.settledCount > 0 || res.syncedCount > 0)) {
               await settleFinishedBets().catch(() => undefined);
             }
           });
+        } else {
+          realFeedResult = feedStatus;
         }
       }
 
-      // `settleFinishedBets()` appelle déjà `settlePendingCombos()` une fois ses tickets réglés
-      await Promise.all([settleFinishedBets(), settleResolvedQuestions()]);
-      invalidatePublicApiCaches();
+      const hadMilestone = consumeRecentEngineMilestone();
+      const realChanged =
+        Boolean(realFeedResult) &&
+        ((realFeedResult?.settledCount ?? 0) > 0 || (realFeedResult?.syncedCount ?? 0) > 0);
+      const settleNow = Date.now();
+
+      if (
+        force ||
+        hadMilestone ||
+        realChanged ||
+        settleNow - lastSettleSweepAt >= SETTLE_SWEEP_THROTTLE_MS
+      ) {
+        lastSettleSweepAt = settleNow;
+        await Promise.all([settleFinishedBets(), settleResolvedQuestions()]);
+      } else {
+        // Vérification 0-SQL en RAM tant que la prochaine question n'est pas échue
+        await settleResolvedQuestions();
+      }
 
       const hkNow = Date.now();
       if (force || hkNow - lastHousekeepingAt >= HOUSEKEEPING_THROTTLE_MS) {
+        lastHousekeepingAt = hkNow;
         await Promise.all([
           ensureOpenPredictions(hkNow),
           expireStaleAcceleratorRounds(hkNow),
           expireStaleGatewayDeposits(),
         ]);
-        lastHousekeepingAt = Date.now();
       }
 
       if (hkNow - lastPruneAt >= PRUNE_THROTTLE_MS) {
@@ -114,6 +141,7 @@ export async function syncAllSettlementsThrottled(force = false): Promise<void> 
 
 export function resetSyncThrottle(): void {
   lastFullSyncAt = 0;
+  lastSettleSweepAt = 0;
   lastHousekeepingAt = 0;
-  invalidatePublicApiCaches();
+  invalidateAllActiveCaches();
 }

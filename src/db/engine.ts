@@ -19,6 +19,14 @@ import {
   computeUserPatternRiskWeights,
   getGlobalHouseHealth,
 } from "@/lib/house-brain";
+import {
+  ensureMatchStoreHydrated,
+  getCachedActiveVirtualMatches,
+  getCachedMatchById,
+  getCachedPendingBookForMatches,
+  invalidateAllActiveCaches,
+  upsertCachedMatches,
+} from "@/lib/active-state-cache";
 import { isKnownMarket, marketSettle, minuteNumber } from "@/lib/markets";
 import { ensureMlLoaded, recordMatchesFinishedBatchMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
@@ -290,9 +298,17 @@ export async function demoteOtherLiveMatches(keepMatchId: number, now = Date.now
   let cursorMs = expectedMatchEndMs(keepMatch, now) + INTER_MATCH_GAP_MS;
 
   for (const extra of toDemote) {
-    await demoteLiveMatchToUpcoming(extra, new Date(cursorMs));
+    const demoted = await demoteLiveMatchToUpcoming(extra, new Date(cursorMs));
+    upsertCachedMatches([demoted]);
     cursorMs += matchDurationMs(extra.id, "virtual") + INTER_MATCH_GAP_MS;
   }
+}
+
+let lastMilestoneDetected = false;
+export function consumeRecentEngineMilestone(): boolean {
+  const v = lastMilestoneDetected;
+  lastMilestoneDetected = false;
+  return v;
 }
 
 export async function runLiveEngine(): Promise<void> {
@@ -495,7 +511,7 @@ export function regimeFactors(
 }
 
 let cachedLiveSim: { enabled: boolean; ts: number } | null = null;
-const LIVE_SIM_CACHE_TTL_MS = 30_000;
+const LIVE_SIM_CACHE_TTL_MS = 5 * 60_000;
 
 export function invalidateLiveSimCache() {
   cachedLiveSim = null;
@@ -516,50 +532,54 @@ async function isLiveSimEnabled(): Promise<boolean> {
   return enabled;
 }
 
+function isDbMilestoneTransition(
+  prev: MatchRow,
+  next: MatchRow,
+  hasPendingTicketsOnMatch: boolean
+): boolean {
+  if (prev.status !== next.status) return true; // Coup d'envoi ou fin du match
+  if ((prev.homeScore ?? 0) !== (next.homeScore ?? 0)) return true; // But domicile
+  if ((prev.awayScore ?? 0) !== (next.awayScore ?? 0)) return true; // But extérieur
+  if ((prev.redHome ?? 0) !== (next.redHome ?? 0)) return true; // Carton rouge
+  if ((prev.redAway ?? 0) !== (next.redAway ?? 0)) return true; // Carton rouge
+  if ((prev.events?.length ?? 0) !== (next.events?.length ?? 0)) return true;
+  if (hasPendingTicketsOnMatch) {
+    // Règlement anticipé mi-temps : persiste le franchissement de la pause si des paris sont ouverts
+    const prevHt = prev.minute === "MT" || minuteNumber(prev.minute) >= 46;
+    const nextHt = next.minute === "MT" || minuteNumber(next.minute) >= 46;
+    if (!prevHt && nextHt) return true;
+  }
+  return false;
+}
+
 async function executeTick(now: number): Promise<void> {
   if (!(await isLiveSimEnabled())) return;
 
   await ensureMlLoaded();
-  // `ensureActiveSchedule` retourne directement la liste des matchs virtuels actifs
-  // (évite un second `SELECT * FROM matches` identique à chaque tick).
-  const openMatches = await ensureActiveSchedule(now);
+  await ensureMatchStoreHydrated();
 
+  // `ensureActiveSchedule` lit directement le store mémoire (0 `SELECT` SQL à chaque tick)
+  const openMatches = await ensureActiveSchedule(now);
   if (openMatches.length === 0) return;
 
   const openIds = openMatches.map((m) => m.id);
-  const openIdSet = new Set(openIds);
-  const [pendingBets, pendingCombos, houseHealth] = await Promise.all([
-    db
-      .select({
-        userId: bets.userId,
-        matchId: bets.matchId,
-        market: bets.market,
-        selection: bets.selection,
-        stake: bets.stake,
-        odds: bets.odds,
-      })
-      .from(bets)
-      .where(and(inArray(bets.matchId, openIds), eq(bets.status, "pending"))),
-    db
-      .select({
-        userId: comboBets.userId,
-        stake: comboBets.stake,
-        baseOdds: comboBets.baseOdds,
-        legs: comboBets.legs,
-      })
-      .from(comboBets)
-      .where(eq(comboBets.status, "pending")),
-    getGlobalHouseHealth(),
-  ]);
+  const { sportTickets, comboTickets } = await getCachedPendingBookForMatches(openIds);
+  const hasAnyExposure = sportTickets.length > 0 || comboTickets.length > 0;
+
+  const houseHealth = hasAnyExposure
+    ? await getGlobalHouseHealth()
+    : { totalIn24h: 0, totalOut24h: 0, payoutRatio: 0.9, tightness: 1.0 };
 
   const activeUserIds: number[] = [];
-  for (const b of pendingBets) activeUserIds.push(b.userId);
-  for (const cb of pendingCombos) activeUserIds.push(cb.userId);
-  const userRiskMap = await computeUserPatternRiskWeights(activeUserIds);
+  for (const b of sportTickets) activeUserIds.push(b.userId);
+  for (const cb of comboTickets) activeUserIds.push(cb.userId);
+  const userRiskMap =
+    activeUserIds.length > 0
+      ? await computeUserPatternRiskWeights(activeUserIds)
+      : new Map<number, number>();
 
   const betsByMatch = new Map<number, PendingMatchTicket[]>();
-  for (const b of pendingBets) {
-    if (b.matchId == null) continue;
+  for (const b of sportTickets) {
     const arr = betsByMatch.get(b.matchId) ?? [];
     arr.push({
       market: b.market,
@@ -570,26 +590,16 @@ async function executeTick(now: number): Promise<void> {
     });
     betsByMatch.set(b.matchId, arr);
   }
-  // Intègre aussi l'exposition des combinés en cours sur chaque match ouvert
-  for (const cb of pendingCombos) {
-    const uWeight = userRiskMap.get(cb.userId) ?? 1.0;
-    for (const leg of cb.legs ?? []) {
-      if (leg.kind !== "sport" || !leg.matchId || leg.status !== "pending") continue;
-      if (!openIdSet.has(leg.matchId)) continue;
-      const arr = betsByMatch.get(leg.matchId) ?? [];
-      const effectiveOdds = Math.min(
-        25,
-        leg.odds * Math.pow(Math.max(1, cb.baseOdds / Math.max(1.01, leg.odds)), 0.35)
-      );
-      arr.push({
-        market: leg.market,
-        selection: leg.selection,
-        stake: cb.stake,
-        odds: effectiveOdds,
-        riskWeight: uWeight,
-      });
-      betsByMatch.set(leg.matchId, arr);
-    }
+  for (const cb of comboTickets) {
+    const arr = betsByMatch.get(cb.matchId) ?? [];
+    arr.push({
+      market: cb.market,
+      selection: cb.selection,
+      stake: cb.stake,
+      odds: cb.odds,
+      riskWeight: userRiskMap.get(cb.userId) ?? 1.0,
+    });
+    betsByMatch.set(cb.matchId, arr);
   }
 
   const pressureFor = (m: MatchRow): MatchBookPressure =>
@@ -604,15 +614,26 @@ async function executeTick(now: number): Promise<void> {
   const upcomingMatches = openMatches.filter((m) => m.status === "upcoming");
   let lastCompletedEndMs = 0;
 
-  // Tampon mémoire : toutes les mutations live/finished du tick partent en UNE SEULE requête SQL groupée
-  const dirtyRows = new Map<number, MatchRow>();
+  // Séparation stricte :
+  // - `ramDirtyRows` : mis à jour immédiatement en RAM (horloge minute par minute, cotes contextuelles) -> 0 SQL
+  // - `dbMilestoneRows` : persisté dans Neon UNIQUEMENT sur jalon réel (coup d'envoi, but, rouge, mi-temps avec pari, fin)
+  const ramDirtyRows = new Map<number, MatchRow>();
+  const dbMilestoneRows = new Map<number, MatchRow>();
   const finishedRows: MatchRow[] = [];
 
-  const recordStepResult = (res: { changed: boolean; finished: boolean; row: MatchRow }) => {
+  const recordStepResult = (
+    prevRow: MatchRow,
+    res: { changed: boolean; finished: boolean; row: MatchRow }
+  ) => {
     if (res.changed) {
-      dirtyRows.set(res.row.id, res.row);
+      ramDirtyRows.set(res.row.id, res.row);
+      const hasBetsOnMatch = (betsByMatch.get(res.row.id)?.length ?? 0) > 0;
+      if (isDbMilestoneTransition(prevRow, res.row, hasBetsOnMatch)) {
+        dbMilestoneRows.set(res.row.id, res.row);
+      }
     }
     if (res.finished) {
+      dbMilestoneRows.set(res.row.id, res.row);
       finishedRows.push(res.row);
       const dur = matchDurationMs(res.row.id, res.row.source);
       lastCompletedEndMs = Math.max(lastCompletedEndMs, res.row.startsAt.getTime() + dur);
@@ -624,7 +645,7 @@ async function executeTick(now: number): Promise<void> {
   for (const m of liveMatches) {
     const clock = computeClockState(m.startsAt.getTime(), now, stepMsForMatch(m.id, m.source));
     if (clock.phase === "FT") {
-      recordStepResult(stepLiveMatchInMemory(m, now, pressureFor(m), false));
+      recordStepResult(m, stepLiveMatchInMemory(m, now, pressureFor(m), false));
     } else {
       stillLive.push(m);
     }
@@ -643,6 +664,7 @@ async function executeTick(now: number): Promise<void> {
       Math.max(...keptLive.map((lm) => expectedMatchEndMs(lm, now))) + INTER_MATCH_GAP_MS;
     for (const extra of stillLive.slice(CONCURRENT_LIVE_VIRTUAL)) {
       const demoted = await demoteLiveMatchToUpcoming(extra, new Date(deferCursor));
+      ramDirtyRows.set(demoted.id, demoted);
       upcomingMatches.push(demoted);
       deferCursor += matchDurationMs(extra.id, extra.source) + INTER_MATCH_GAP_MS;
     }
@@ -652,14 +674,13 @@ async function executeTick(now: number): Promise<void> {
   let activeLives: MatchRow[] = [];
   for (const lm of keptLive) {
     const res = stepLiveMatchInMemory(lm, now, pressureFor(lm), false);
-    recordStepResult(res);
+    recordStepResult(lm, res);
     if (!res.finished) {
       activeLives.push(res.row);
     }
   }
 
-  // 4. Rattrapage multi-canaux (« Time-Continuum » à 4 pistes parallèles) :
-  //    rattrape les créneaux passés sans visiteur et remplit les pistes libres avec décalage horaire propre.
+  // 4. Rattrapage multi-canaux (« Time-Continuum » à 4 pistes parallèles)
   if (activeLives.length < CONCURRENT_LIVE_VIRTUAL && upcomingMatches.length > 0) {
     const virtualOrdered = upcomingMatches
       .filter((m) => m.source === "virtual")
@@ -696,7 +717,7 @@ async function executeTick(now: number): Promise<void> {
       if (uIdx >= 0) upcomingMatches.splice(uIdx, 1);
 
       const stepped = kickOffInMemory(vm, effStartMs, now, pressureFor(vm));
-      recordStepResult(stepped);
+      recordStepResult(vm, stepped);
       if (stepped.finished) {
         const dur = matchDurationMs(vm.id, "virtual");
         laneReadyMs[laneIdx] = effStartMs + dur + INTER_MATCH_GAP_MS;
@@ -750,7 +771,7 @@ async function executeTick(now: number): Promise<void> {
         const startMs = now - Math.round(dur * frac);
 
         const stepped = kickOffInMemory(nextVm, startMs, now, pressureFor(nextVm));
-        recordStepResult(stepped);
+        recordStepResult(nextVm, stepped);
         if (!stepped.finished) {
           activeLives.push(stepped.row);
         }
@@ -758,11 +779,18 @@ async function executeTick(now: number): Promise<void> {
     }
   }
 
-  // Écriture SQL unique groupée pour tous les matchs live/terminés touchés durant ce tick
-  await flushMatchUpdatesBatch([...dirtyRows.values()], finishedRows, now);
+  // Met à jour immédiatement la RAM pour tous les matchs ayant avancé d'une minute
+  if (ramDirtyRows.size > 0) {
+    upsertCachedMatches([...ramDirtyRows.values()]);
+  }
 
-  // 5. Pont de continuité après une longue absence (ex. plusieurs heures sans visiteur) :
-  //    démarre jusqu'à 4 matchs virtuels simultanés déjà étalés à différentes minutes de jeu.
+  // Écriture SQL unique groupée UNIQUEMENT pour les jalons réels (coup d'envoi, but/carton, fin)
+  if (dbMilestoneRows.size > 0 || finishedRows.length > 0) {
+    lastMilestoneDetected = true;
+    await flushMatchUpdatesBatch([...dbMilestoneRows.values()], finishedRows, now);
+  }
+
+  // 5. Pont de continuité après une longue absence (ex. plusieurs heures sans visiteur)
   if (activeLives.length < CONCURRENT_LIVE_VIRTUAL && upcomingMatches.filter((m) => m.source === "virtual").length === 0) {
     const bridged = await bridgeIdleGapAndStartLives(
       now,
@@ -773,7 +801,7 @@ async function executeTick(now: number): Promise<void> {
   }
 
   // 6. Regarnit la file virtuelle si nécessaire et aligne les coups d'envoi sur les 4 canaux
-  const minQueuedNeeded = Math.max(6, MIN_ACTIVE_VIRTUAL - activeLives.length);
+  const minQueuedNeeded = Math.max(4, MIN_ACTIVE_VIRTUAL - activeLives.length - 2);
   if (upcomingMatches.filter((m) => m.source === "virtual").length < minQueuedNeeded) {
     const refreshedActive = await ensureActiveSchedule(now);
     const refreshedUpcoming = refreshedActive.filter((m) => m.status === "upcoming");
@@ -782,7 +810,7 @@ async function executeTick(now: number): Promise<void> {
     await syncUpcomingQueue(upcomingMatches, activeLives, now, betsByMatch);
   }
 
-  if (finishedRows.length > 0 || lastCompletedEndMs > 0) {
+  if ((finishedRows.length > 0 || lastCompletedEndMs > 0) && hasAnyExposure) {
     await settlePendingCombos();
   }
 }
@@ -829,6 +857,7 @@ async function syncUpcomingQueue(
   }
 
   const patches: QueuedMatchPatch[] = [];
+  const ramUpdatedQueue: MatchRow[] = [];
 
   for (const m of virtualQueue) {
     let minLane = 0;
@@ -894,23 +923,45 @@ async function syncUpcomingQueue(
       Math.abs(m.oddsAway - freshOdds.oddsAway) > 0.02;
 
     if (swapped || driftMs > 6_000 || oddsChanged || homeLogo !== m.homeLogo || awayLogo !== m.awayLogo) {
-      patches.push({
-        id: m.id,
+      const nextStartsAt = new Date(desiredStartsAt);
+      ramUpdatedQueue.push({
+        ...m,
         homeTeam,
         awayTeam,
         homeForm,
         awayForm,
-        startsAtIso: new Date(desiredStartsAt).toISOString(),
+        startsAt: nextStartsAt,
         oddsHome: freshOdds.oddsHome,
         oddsDraw: freshOdds.oddsDraw,
         oddsAway: freshOdds.oddsAway,
         homeLogo: homeLogo ?? null,
         awayLogo: awayLogo ?? null,
       });
+
+      // Persiste en base uniquement en cas d'inversion d'affiche ou de dérive horaire > 60 s
+      if (swapped || driftMs > 60_000) {
+        patches.push({
+          id: m.id,
+          homeTeam,
+          awayTeam,
+          homeForm,
+          awayForm,
+          startsAtIso: nextStartsAt.toISOString(),
+          oddsHome: freshOdds.oddsHome,
+          oddsDraw: freshOdds.oddsDraw,
+          oddsAway: freshOdds.oddsAway,
+          homeLogo: homeLogo ?? null,
+          awayLogo: awayLogo ?? null,
+        });
+      }
     }
   }
 
-  // Mise à jour groupée en UNE SEULE requête SQL `UPDATE ... FROM (VALUES ...)`
+  if (ramUpdatedQueue.length > 0) {
+    upsertCachedMatches(ramUpdatedQueue);
+  }
+
+  // Mise à jour SQL groupée uniquement pour les changements structurels réels
   if (patches.length > 0) {
     const tuples = sql.join(
       patches.map(
@@ -941,12 +992,10 @@ async function syncUpcomingQueue(
 }
 
 async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
-  const activeVirtual = await db
-    .select()
-    .from(matches)
-    .where(and(inArray(matches.status, ["upcoming", "live"]), eq(matches.source, "virtual")));
+  await ensureMatchStoreHydrated();
+  const activeVirtual = getCachedActiveVirtualMatches();
 
-  if (activeVirtual.length >= MIN_ACTIVE_VIRTUAL) return activeVirtual;
+  if (activeVirtual.length >= MIN_ACTIVE_VIRTUAL - 2) return activeVirtual;
 
   const busyTeams = new Set<string>();
   let tailEndMs = now;
@@ -1052,6 +1101,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
         WHERE m."id" = v.id
       `);
     }
+    upsertCachedMatches(insertedRows);
     return [...activeVirtual, ...insertedRows];
   }
   return activeVirtual;
@@ -1267,6 +1317,7 @@ async function bridgeIdleGapAndStartLives(
   });
 
   await flushMatchUpdatesBatch(dirtyRows, finishedRows, now);
+  upsertCachedMatches(dirtyRows);
   return liveOut;
 }
 
@@ -1520,7 +1571,15 @@ async function flushMatchUpdatesBatch(
               ? r.finishedAt.toISOString()
               : null;
         const eventsJson = JSON.stringify(r.events ?? []);
-        const historyJson = JSON.stringify(r.tickHistory ?? []);
+        // Compactage en base : un match terminé n'a plus besoin de `tick_history`, et un match live
+        // ne persiste en base que son curseur d'horloge `sim/clock` (~55 octets au lieu de 1,5 Ko).
+        const compactDbHistory =
+          r.status === "finished"
+            ? []
+            : (r.tickHistory ?? []).filter(
+                (t) => t.market === "sim" && t.selection === "clock"
+              );
+        const historyJson = JSON.stringify(compactDbHistory);
         const marketsJson = r.markets ? JSON.stringify(r.markets) : null;
         const clearScripted = r.status === "finished" && r.source === "virtual";
 
@@ -2044,6 +2103,7 @@ export async function setScenarioMode(nextMode: ScenarioMode): Promise<ScenarioM
     }
   }
 
+  invalidateAllActiveCaches();
   return nextMode;
 }
 
@@ -2061,6 +2121,7 @@ export async function lockMatchScenario(matchId: number): Promise<AdminMatchFore
     .set({ scenarioLocked: true, scriptedEvents: fc.events })
     .where(eq(matches.id, matchId));
 
+  invalidateAllActiveCaches();
   return { ...fc, isLocked: true };
 }
 
@@ -2069,6 +2130,7 @@ export async function unlockMatchScenario(matchId: number): Promise<void> {
     .update(matches)
     .set({ scenarioLocked: false, scriptedEvents: null })
     .where(and(eq(matches.id, matchId), eq(matches.source, "virtual")));
+  invalidateAllActiveCaches();
 }
 
 export async function rerollMatchScenario(matchId: number): Promise<AdminMatchForecast | null> {
@@ -2097,6 +2159,7 @@ export async function rerollMatchScenario(matchId: number): Promise<AdminMatchFo
     })
     .where(eq(matches.id, matchId));
 
+  invalidateAllActiveCaches();
   return { ...fc, isLocked: shouldRemainLocked };
 }
 
@@ -2206,6 +2269,8 @@ export async function forceMatchFinalScore(
     }
   }
 
+  invalidateAllActiveCaches();
+
   return {
     matchId: m.id,
     finalHomeScore: targetHome,
@@ -2216,3 +2281,82 @@ export async function forceMatchFinalScore(
     events: allEvents,
   };
 }
+
+/**
+ * Projette instantanément en mémoire (0 requête SQL) une ligne de match virtuel
+ * à l'instant exact `nowMs` : garantit que `GET /api/bets`, `POST /api/bets/cashout`
+ * et `GET /api/coupons` voient toujours la minute exacte (`>= 85'` verrouillé),
+ * le score exact et les cotes live exactes même entre deux jalons PostgreSQL.
+ */
+export function hydrateLiveMatchRow(match: MatchRow, nowMs = Date.now()): MatchRow {
+  const cached = getCachedMatchById(match.id);
+  const base = cached ?? match;
+  if (base.source === "manual" || base.status !== "live") {
+    return base;
+  }
+  const stepped = stepLiveMatchInMemory(
+    base,
+    nowMs,
+    { tickets: [], houseTightness: 1 },
+    false
+  );
+  return stepped.row;
+}
+
+/**
+ * Point de contrôle sécurisé exécuté juste avant l'enregistrement d'un pari réel
+ * (`POST /api/bets` et `POST /api/bets/combo`) :
+ * - Relit les lignes cibles depuis PostgreSQL, applique la projection horaire exacte `nowMs`,
+ * - Persiste le point de contrôle si le match virtuel est en direct,
+ * - Retourne l'état 100 % cohérent et infalsifiable pour la tarification et le contrôle `>= 85'`.
+ */
+export async function checkpointVirtualMatchesForBet(
+  rowsFromDb: MatchRow[],
+  nowMs = Date.now()
+): Promise<Map<number, MatchRow>> {
+  const out = new Map<number, MatchRow>();
+  const toFlush: MatchRow[] = [];
+  const finished: MatchRow[] = [];
+
+  for (const raw of rowsFromDb) {
+    if (raw.source === "manual" || raw.status !== "live") {
+      out.set(raw.id, raw);
+      continue;
+    }
+    const cached = getCachedMatchById(raw.id);
+    // Privilégie la ligne la plus avancée entre PostgreSQL et le store mémoire
+    const base =
+      cached &&
+      cached.status === "live" &&
+      minuteNumber(cached.minute) >= minuteNumber(raw.minute) &&
+      (cached.events?.length ?? 0) >= (raw.events?.length ?? 0)
+        ? cached
+        : raw;
+
+    const stepped = stepLiveMatchInMemory(
+      base,
+      nowMs,
+      { tickets: [], houseTightness: 1 },
+      false
+    );
+    out.set(raw.id, stepped.row);
+    if (
+      stepped.finished ||
+      stepped.row.minute !== raw.minute ||
+      stepped.row.homeScore !== raw.homeScore ||
+      stepped.row.awayScore !== raw.awayScore ||
+      stepped.row.suspended !== raw.suspended
+    ) {
+      toFlush.push(stepped.row);
+      if (stepped.finished) finished.push(stepped.row);
+    }
+  }
+
+  if (toFlush.length > 0) {
+    upsertCachedMatches(toFlush);
+    await flushMatchUpdatesBatch(toFlush, finished, nowMs);
+  }
+
+  return out;
+}
+

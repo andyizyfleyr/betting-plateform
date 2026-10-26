@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { appUser, withdrawals } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import { invalidateUserCaches } from "@/lib/active-state-cache";
 import { requireUserId } from "@/lib/session";
 import { computeWithdrawalEligibility } from "@/lib/wager";
 
@@ -122,6 +123,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Solde disponible insuffisant" }, { status: 400 });
   }
 
+  invalidateUserCaches([uid]);
   return NextResponse.json(txResult);
 }
 
@@ -177,5 +179,6 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  invalidateUserCaches([uid]);
   return NextResponse.json(result);
 }

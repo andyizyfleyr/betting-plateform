@@ -2,7 +2,11 @@ import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
-import { runLiveEngine } from "@/db/engine";
+import {
+  checkpointVirtualMatchesForBet,
+  hydrateLiveMatchRow,
+  runLiveEngine,
+} from "@/db/engine";
 import {
   appUser,
   bets,
@@ -13,6 +17,12 @@ import {
   type MatchRow,
   type PredictionQuestionRow,
 } from "@/db/schema";
+import {
+  getCachedMatchById,
+  getCachedUserBetsResponse,
+  notifyNewBetPlaced,
+  setCachedUserBetsResponse,
+} from "@/lib/active-state-cache";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut, resolveComboLegStatus } from "@/lib/combo";
 import {
@@ -58,12 +68,38 @@ export async function GET(req: NextRequest) {
     await syncLiveMatchesThrottled();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
-  const SETTLED_HISTORY_LIMIT = 80;
+  const cachedResp = getCachedUserBetsResponse(uid, filter);
+  if (cachedResp) {
+    return jsonWithEtag(req, null, cachedResp);
+  }
 
-  // Exécution groupée en 1 seule vague parallèle (et réutilisation des matchs/questions déjà chargés pour les combinés)
+  const SETTLED_HISTORY_LIMIT = 60;
+  const nowMs = Date.now();
+
+  // Projection SQL ultra-légère pour les paris déjà réglés : n'extrait AUCUN JSONB (`markets`,
+  // `scripted_events`, `tick_history`, `real_stats`, `events`) des matchs terminés !
+  const settledMatchScalarCols = {
+    id: matches.id,
+    status: matches.status,
+    homeTeam: matches.homeTeam,
+    awayTeam: matches.awayTeam,
+    homeScore: matches.homeScore,
+    awayScore: matches.awayScore,
+    homeLogo: matches.homeLogo,
+    awayLogo: matches.awayLogo,
+    minute: matches.minute,
+    startsAt: matches.startsAt,
+    source: matches.source,
+    oddsHome: matches.oddsHome,
+    oddsDraw: matches.oddsDraw,
+    oddsAway: matches.oddsAway,
+    suspended: matches.suspended,
+  };
+
+  // Exécution groupée en 1 seule vague parallèle
   const [
     pendingSportRows,
-    settledSportRows,
+    settledSportRawRows,
     pendingPredRows,
     settledPredRows,
     pendingComboRows,
@@ -81,7 +117,7 @@ export async function GET(req: NextRequest) {
     filter === "ongoing"
       ? Promise.resolve([])
       : db
-          .select({ bet: bets, match: matches })
+          .select({ bet: bets, match: settledMatchScalarCols })
           .from(bets)
           .leftJoin(matches, eq(bets.matchId, matches.id))
           .where(and(eq(bets.userId, uid), ne(bets.status, "pending")))
@@ -127,7 +163,16 @@ export async function GET(req: NextRequest) {
       .from(appUser)
       .where(eq(appUser.id, uid)),
   ]);
-  const rows = [...pendingSportRows, ...settledSportRows];
+  const hydratedPendingSportRows = pendingSportRows.map((r) => ({
+    bet: r.bet,
+    match: r.match ? hydrateLiveMatchRow(r.match, nowMs) : null,
+  }));
+  const settledSportRows = settledSportRawRows.map((r) => ({
+    bet: r.bet,
+    match: (r.match ? (r.match as unknown as MatchRow) : null),
+  }));
+
+  const rows = [...hydratedPendingSportRows, ...settledSportRows];
   const predRows = [...pendingPredRows, ...settledPredRows];
   const comboRows = [...pendingComboRows, ...settledComboRows];
 
@@ -284,9 +329,20 @@ export async function GET(req: NextRequest) {
     }
 
     if (missingMatchIds.size > 0 || missingQuestionIds.size > 0) {
+      // Cherche d'abord dans la RAM (0 SQL pour les matchs actifs ou récents !)
+      const stillMissingMatches: number[] = [];
+      for (const mid of missingMatchIds) {
+        const fromRam = getCachedMatchById(mid);
+        if (fromRam) {
+          comboMatchMap.set(mid, hydrateLiveMatchRow(fromRam, nowMs));
+        } else {
+          stillMissingMatches.push(mid);
+        }
+      }
+
       const [mRows, qRows] = await Promise.all([
-        missingMatchIds.size > 0
-          ? db.select().from(matches).where(inArray(matches.id, [...missingMatchIds]))
+        stillMissingMatches.length > 0
+          ? db.select().from(matches).where(inArray(matches.id, stillMissingMatches))
           : Promise.resolve([] as MatchRow[]),
         missingQuestionIds.size > 0
           ? db
@@ -295,7 +351,7 @@ export async function GET(req: NextRequest) {
               .where(inArray(predictionQuestions.id, [...missingQuestionIds]))
           : Promise.resolve([] as PredictionQuestionRow[]),
       ]);
-      for (const m of mRows) comboMatchMap.set(m.id, m);
+      for (const m of mRows) comboMatchMap.set(m.id, hydrateLiveMatchRow(m, nowMs));
       for (const q of qRows) comboQuestionMap.set(q.id, q);
     }
   }
@@ -391,7 +447,9 @@ export async function GET(req: NextRequest) {
         ? combined.filter((b) => b.status !== "pending")
         : combined;
 
-  return jsonWithEtag(req, { bets: filtered, balance: user?.balance ?? null });
+  const payload = { bets: filtered, balance: user?.balance ?? null };
+  const entry = setCachedUserBetsResponse(uid, filter, payload);
+  return jsonWithEtag(req, null, entry);
   } catch (err) {
     return formatServerErrorResponse(err, "GET /api/bets");
   }
@@ -498,10 +556,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Trop rapide — veuillez patienter" }, { status: 429 });
   }
 
-  const [match] = await db.select().from(matches).where(eq(matches.id, matchId));
-  if (!match) {
+  const [rawMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
+  if (!rawMatch) {
     return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
   }
+  const checkpointMap = await checkpointVirtualMatchesForBet([rawMatch]);
+  const match = checkpointMap.get(rawMatch.id) ?? rawMatch;
   if (!isKnownMarket(market) && !(match.source === "manual" && match.markets?.length)) {
     return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
   }
@@ -569,7 +629,11 @@ export async function POST(req: NextRequest) {
     } else {
       await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
       await runLiveEngine();
-      const [freshMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
+      const [freshRaw] = await db.select().from(matches).where(eq(matches.id, matchId));
+      const freshMap = freshRaw
+        ? await checkpointVirtualMatchesForBet([freshRaw])
+        : new Map<number, MatchRow>();
+      const freshMatch = freshRaw ? (freshMap.get(freshRaw.id) ?? freshRaw) : null;
       if (
         !freshMatch ||
         freshMatch.status === "finished" ||
@@ -723,5 +787,6 @@ export async function POST(req: NextRequest) {
     return { bet, balance: updatedUser.balance };
   });
 
+  notifyNewBetPlaced({ userId: uid, kind: "sport" });
   return NextResponse.json(result);
 }

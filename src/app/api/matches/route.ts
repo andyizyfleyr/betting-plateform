@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
-import { unionAll } from "drizzle-orm/pg-core";
 import { NextRequest } from "next/server";
-import { db } from "@/db";
-import { matches } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import {
+  ensureMatchStoreHydrated,
+  getCachedAllMatchesForFeed,
+} from "@/lib/active-state-cache";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import {
   buildLiveMarkets,
@@ -28,58 +28,22 @@ import { teamLogo } from "@/lib/team-logos";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Projection SQL légère : exclut la colonne JSONB lourde `scripted_events` dès PostgreSQL
-const { scriptedEvents: _omitScriptedEvents, ...publicMatchColumns } = getTableColumns(matches);
-void _omitScriptedEvents;
-
 export async function GET(req: NextRequest) {
   try {
     await ensureSeeded();
     await ensureMlLoaded();
     await syncLiveMatchesThrottled();
 
-    // Fast-path mémoire (2,5 s, invalidé dès qu'un tick ou une action admin modifie l'état)
+    // Fast-path mémoire sérialisé (invalidé automatiquement dès qu'une minute ou cote bouge en RAM)
     const cached = getMatchesPayloadCache();
     if (cached) {
       return jsonWithEtag(req, null, cached);
     }
 
-  const now = Date.now();
-  // UNE SEULE requête SQL `UNION ALL` projetant sans `scripted_events` et bornant les historiques :
-  // divise par 3 les allers-retours réseau vers Neon PostgreSQL et minimise la latence Vercel.
-  const qActive = db
-    .select(publicMatchColumns)
-    .from(matches)
-    .where(ne(matches.status, "finished"))
-    .orderBy(
-      asc(sql`CASE ${matches.status} WHEN 'live' THEN 0 ELSE 1 END`),
-      asc(matches.startsAt),
-      desc(matches.id)
-    )
-    .limit(120);
-
-  const qFinishedManual = db
-    .select(publicMatchColumns)
-    .from(matches)
-    .where(and(eq(matches.source, "manual"), eq(matches.status, "finished")))
-    .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
-    .limit(20);
-
-  const qFinishedVirtual = db
-    .select(publicMatchColumns)
-    .from(matches)
-    .where(and(ne(matches.source, "manual"), eq(matches.status, "finished")))
-    .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
-    .limit(12);
-
-  const unifiedRows = await unionAll(qActive, qFinishedManual, qFinishedVirtual);
-
-  const activeManual = unifiedRows.filter((r) => r.source === "manual" && r.status !== "finished");
-  const finishedManual = unifiedRows.filter((r) => r.source === "manual" && r.status === "finished");
-  const activeVirtual = unifiedRows.filter((r) => r.source !== "manual" && r.status !== "finished");
-  const finishedVirtual = unifiedRows.filter((r) => r.source !== "manual" && r.status === "finished");
-
-  const rows = [...activeManual, ...finishedManual, ...activeVirtual, ...finishedVirtual];
+    await ensureMatchStoreHydrated();
+    const now = Date.now();
+    // 0 requête SQL à chaud : lit directement le store mémoire synchronisé (matchs réels + virtuels)
+    const rows = getCachedAllMatchesForFeed();
 
   const withMarkets = rows.map((rawRow) => {
     const cleanEvents = sanitizeMatchEvents(

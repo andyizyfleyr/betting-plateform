@@ -1,7 +1,7 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { runLiveEngine } from "@/db/engine";
+import { checkpointVirtualMatchesForBet, runLiveEngine } from "@/db/engine";
 import {
   appUser,
   bets,
@@ -11,6 +11,7 @@ import {
   type ComboLeg,
 } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import { notifyNewBetPlaced } from "@/lib/active-state-cache";
 import {
   computeComboQuote,
   MAX_COMBO_LEGS,
@@ -173,12 +174,13 @@ export async function POST(req: NextRequest) {
       : Promise.resolve([]),
   ]);
 
-  let matchMap = new Map(matchRows.map((m) => [m.id, m]));
+  let matchMap = await checkpointVirtualMatchesForBet(matchRows);
+  const syncedMatchRows = [...matchMap.values()];
   const questionMap = new Map(questionRows.map((q) => [q.id, q]));
 
   // Séparation stricte : interdiction absolue de mélanger des matchs réels et des matchs virtuels dans un même combiné
-  const hasRealMatch = matchRows.some((m) => m.source === "manual");
-  const hasVirtualMatch = matchRows.some((m) => m.source !== "manual");
+  const hasRealMatch = syncedMatchRows.some((m) => m.source === "manual");
+  const hasVirtualMatch = syncedMatchRows.some((m) => m.source !== "manual");
   if (hasRealMatch && hasVirtualMatch) {
     return NextResponse.json(
       {
@@ -189,7 +191,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  for (const m of matchRows) {
+  for (const m of syncedMatchRows) {
     if (m.suspended) {
       return NextResponse.json(
         { error: `Cotes suspendues sur ${m.homeTeam} – ${m.awayTeam}` },
@@ -254,7 +256,7 @@ export async function POST(req: NextRequest) {
         .select()
         .from(matches)
         .where(inArray(matches.id, [...seenMatches]));
-      matchMap = new Map(freshMatches.map((m) => [m.id, m]));
+      matchMap = await checkpointVirtualMatchesForBet(freshMatches);
 
       for (const [mid, init] of liveInitial.entries()) {
         const fm = matchMap.get(mid);
@@ -466,6 +468,7 @@ export async function POST(req: NextRequest) {
     return { bet: inserted, balance: updatedUser.balance };
   });
 
+  notifyNewBetPlaced({ userId: uid, kind: "combo" });
   invalidateHouseHealthCache();
   return NextResponse.json(result);
 }
