@@ -14,6 +14,7 @@ import {
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { AnimatedNumber } from "./animated-number";
 import { TeamAvatar } from "./team-avatar";
+import { TouchStakePad } from "./touch-stake-pad";
 import { useApp } from "./providers";
 import { cn, eur, formatOdds } from "@/lib/format";
 
@@ -34,8 +35,6 @@ export interface ComboSelection {
   selectionLabel: string;
   odds: number;
 }
-
-const QUICK_STAKES = [5, 10, 25, 50];
 
 export function ComboFloatingBar() {
   const pathname = usePathname();
@@ -185,15 +184,6 @@ export function ComboSheet() {
     stake
   );
   const nextBoost = nextComboBoostTier(quote.eligibleLegs);
-
-  const handleStakeInput = (raw: string) => {
-    const cleaned = raw.replace(/[^0-9.,]/g, "");
-    const parts = cleaned.split(/[.,]/);
-    const normalized =
-      parts.length > 1 ? `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}` : parts[0];
-    setStakeText(normalized);
-    setError(null);
-  };
 
   const canSubmit =
     phase === "input" &&
@@ -466,64 +456,23 @@ export function ComboSheet() {
                   </p>
                 )}
 
-                {/* Mise */}
+                {/* Mise + pavé numérique tactile mobile */}
                 <div className="mt-4">
-                  <div className="flex items-center justify-between text-[11.5px]">
-                    <span className="font-semibold text-mist">Mise du coupon</span>
-                    <span className="text-dim">
-                      Solde : <strong className="font-semibold text-ink">{eur(balance)}</strong>
-                    </span>
-                  </div>
-
-                  <div
-                    className={cn(
-                      "mt-1.5 flex h-12 items-center rounded-2xl border bg-white px-3.5",
-                      overBalance || belowMin
-                        ? "border-betclic-red"
-                        : "border-edge focus-within:border-ink"
-                    )}
-                  >
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={stakeText}
-                      onChange={(e) => handleStakeInput(e.target.value)}
-                      placeholder="10"
-                      className="w-full bg-transparent font-display text-[20px] font-bold tabular-nums text-ink outline-none"
-                    />
-                    <span className="font-display text-[16px] font-bold text-dim">€</span>
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-5 gap-1.5">
-                    {QUICK_STAKES.map((amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => {
-                          setStakeText(String(amt));
-                          setError(null);
-                        }}
-                        className={cn(
-                          "h-8 rounded-xl border font-display text-[12px] font-bold",
-                          stake === amt
-                            ? "border-ink bg-ink text-white"
-                            : "border-edge bg-elev text-ink"
-                        )}
-                      >
-                        {amt} €
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStakeText(String(Math.min(200, Math.floor(balance * 100) / 100)));
-                        setError(null);
-                      }}
-                      className="h-8 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
-                    >
-                      MAX
-                    </button>
-                  </div>
+                  <TouchStakePad
+                    id="combo-sheet-stake"
+                    label="Mise du coupon"
+                    stakeText={stakeText}
+                    onChangeStakeText={(next) => {
+                      setStakeText(next);
+                      setError(null);
+                    }}
+                    balance={balance}
+                    maxCap={200}
+                    hasError={overBalance || belowMin}
+                    haptics={user?.haptics}
+                    collapsibleOnMobile
+                    defaultExpandedOnMobile={false}
+                  />
                 </div>
 
                 {overBalance && (

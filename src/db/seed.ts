@@ -1089,6 +1089,14 @@ async function runSeedInternal(): Promise<void> {
     });
   }
 
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "saved_coupons" (
+      "code" text PRIMARY KEY NOT NULL,
+      "legs" jsonb NOT NULL,
+      "created_at" timestamp DEFAULT now() NOT NULL
+    );
+  `);
+
   await db
     .insert(adminSettings)
     .values({

@@ -8,9 +8,8 @@ import { api, type ClientPrediction } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { useApp } from "./providers";
 import { AnimatedNumber } from "./animated-number";
+import { TouchStakePad } from "./touch-stake-pad";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
-
-const QUICK_STAKES = [5, 10, 25, 50];
 
 interface Props {
   question: ClientPrediction | null;
@@ -123,15 +122,6 @@ function PredictionBetSheet({
   const belowMin = stake > 0 && stake < 0.5;
   const payout = stake * odds;
   const profit = payout - stake;
-
-  const handleStakeInput = (raw: string) => {
-    const cleaned = raw.replace(/[^0-9.,]/g, "");
-    const parts = cleaned.split(/[.,]/);
-    const normalized =
-      parts.length > 1 ? `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}` : parts[0];
-    setStakeText(normalized);
-    setError(null);
-  };
 
   const comboUid = `pred-${question.id}`;
   const isMulti = Array.isArray(question.options) && question.options.length >= 2;
@@ -282,83 +272,21 @@ function PredictionBetSheet({
               </div>
             </div>
 
-            {/* Saisie directe de la mise */}
+            {/* Saisie directe de la mise + pavé numérique tactile mobile */}
             <div className="mt-3.5">
-              <div className="flex items-center justify-between text-[11.5px]">
-                <label htmlFor="pred-stake-input" className="font-semibold text-mist">
-                  Votre mise
-                </label>
-                <span className="text-dim">
-                  Solde : <strong className="font-semibold text-ink">{eur(balance)}</strong>
-                </span>
-              </div>
-
-              <div
-                className={cn(
-                  "mt-1.5 flex h-13 items-center rounded-2xl border bg-white px-3.5 transition-colors",
-                  overBalance || belowMin
-                    ? "border-betclic-red"
-                    : "border-edge focus-within:border-ink"
-                )}
-              >
-                <input
-                  id="pred-stake-input"
-                  type="text"
-                  inputMode="decimal"
-                  value={stakeText}
-                  onChange={(e) => handleStakeInput(e.target.value)}
-                  placeholder="0"
-                  className="w-full bg-transparent font-display text-[22px] font-bold tabular-nums text-ink outline-none placeholder:text-dim/50"
-                />
-                {stakeText && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStakeText("");
-                      setError(null);
-                    }}
-                    className="mr-2 rounded-md bg-elev px-2 py-1 text-[11px] font-semibold text-mist active:bg-edge"
-                  >
-                    Effacer
-                  </button>
-                )}
-                <span className="font-display text-[18px] font-bold text-dim">€</span>
-              </div>
-
-              <div className="mt-2 grid grid-cols-5 gap-1.5">
-                {QUICK_STAKES.map((amount) => {
-                  const active = stake === amount;
-                  return (
-                    <button
-                      key={amount}
-                      type="button"
-                      onClick={() => {
-                        setStakeText(String(amount));
-                        setError(null);
-                      }}
-                      className={cn(
-                        "h-9 rounded-xl border font-display text-[12.5px] font-bold transition-colors active:scale-95",
-                        active
-                          ? "border-ink bg-ink text-white"
-                          : "border-edge bg-elev text-ink"
-                      )}
-                    >
-                      {amount} €
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const maxVal = Math.min(500, Math.max(0, Math.floor(balance * 100) / 100));
-                    setStakeText(String(maxVal));
-                    setError(null);
-                  }}
-                  className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[12px] font-bold text-betclic-red active:scale-95"
-                >
-                  MAX
-                </button>
-              </div>
+              <TouchStakePad
+                id="pred-stake-input"
+                label="Votre mise"
+                stakeText={stakeText}
+                onChangeStakeText={(next) => {
+                  setStakeText(next);
+                  setError(null);
+                }}
+                balance={balance}
+                maxCap={500}
+                hasError={overBalance || belowMin}
+                haptics={user?.haptics}
+              />
             </div>
 
             {overBalance && (

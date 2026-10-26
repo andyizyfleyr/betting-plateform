@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BarChart3, ChevronDown, ChevronRight, ChevronUp, Lock, Radio } from "lucide-react";
+import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
+import { OddsTrendCorner, useOddsTrend } from "./odds-trend-corner";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
@@ -351,28 +352,6 @@ const TeamRow = memo(function TeamRow({
   );
 });
 
-function useOddsFlash(odds: number) {
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const prev = useRef(odds);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const prevVal = prev.current;
-    const delta = odds - prevVal;
-    prev.current = odds;
-    const relDelta = Math.abs(delta) / Math.max(1.01, prevVal);
-    if (Math.abs(delta) < 0.08 || relDelta < 0.035) return;
-    setFlash(delta > 0 ? "up" : "down");
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setFlash(null), 750);
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, [odds]);
-
-  return flash;
-}
-
 export function ResultOdds({ match }: { match: ClientMatch }) {
   const { openBet, target, isInCombo, comboQuickMode, toggleComboLeg, toast } = useApp();
   const comboUid = `sport-${match.id}`;
@@ -496,7 +475,7 @@ function OddsCell({
   onPick: () => void;
 }) {
   const { oddsFormat } = useApp();
-  const flash = useOddsFlash(odds);
+  const trend = useOddsTrend(odds);
   const active = selected || inCombo;
   const { pressing, handlers, style } = useLongPressOdds({
     disabled: suspended,
@@ -511,18 +490,17 @@ function OddsCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98] lg:h-10.5",
+        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98] lg:h-10.5",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
             ? "border-ink bg-ink text-white shadow-xs ring-2 ring-betclic-red/35"
             : "border-edge bg-elev/75 hover:border-ink/20 active:border-betclic-red/50 active:bg-betclic-red/8",
         pressing && !suspended && "scale-[0.96] ring-2 ring-betclic-red/50",
-        suspended && "cursor-not-allowed opacity-50",
-        !active && flash === "up" && "border-win/40 bg-win/8",
-        !active && flash === "down" && "border-betclic-red/40 bg-betclic-red/8"
+        suspended && "cursor-not-allowed opacity-50"
       )}
     >
+      {!suspended && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
           "font-display text-[11px] font-bold",
@@ -534,21 +512,13 @@ function OddsCell({
       {suspended ? (
         <Lock className="h-3.5 w-3.5 text-dim" strokeWidth={2.3} />
       ) : (
-        <span className="flex items-center gap-0.5">
-          <span
-            className={cn(
-              "font-display text-[14px] font-bold tabular-nums lg:text-[13.5px]",
-              active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
-            )}
-          >
-            {formatOdds(odds, oddsFormat)}
-          </span>
-          {!active && flash === "up" && (
-            <ChevronUp className="h-3 w-3 text-win" strokeWidth={2.8} />
+        <span
+          className={cn(
+            "font-display text-[14px] font-bold tabular-nums lg:text-[13.5px]",
+            active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
           )}
-          {!active && flash === "down" && (
-            <ChevronDown className="h-3 w-3 text-betclic-red" strokeWidth={2.8} />
-          )}
+        >
+          {formatOdds(odds, oddsFormat)}
         </span>
       )}
     </button>

@@ -7,6 +7,7 @@ import { BarChart3, ChevronDown, Layers, Lock, Radio, X } from "lucide-react";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
+import { OddsTrendCorner, useOddsTrend } from "./odds-trend-corner";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
@@ -704,6 +705,7 @@ function OutcomeCell({
   onPick: () => void;
 }) {
   const active = selected || inCombo;
+  const trend = useOddsTrend(o.odds);
   const { pressing, handlers, style } = useLongPressOdds({
     disabled: suspended,
     comboSelection,
@@ -716,7 +718,7 @@ function OutcomeCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "flex h-11 items-center justify-between gap-2 rounded-xl border px-3 transition-all active:scale-[0.98]",
+        "relative flex h-11 items-center justify-between gap-2 rounded-xl border px-3 transition-all active:scale-[0.98]",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
@@ -727,6 +729,7 @@ function OutcomeCell({
         className
       )}
     >
+      {!suspended && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
           "truncate text-[12px] font-semibold",

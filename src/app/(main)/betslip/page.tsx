@@ -25,11 +25,28 @@ import {
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { AnimatedNumber } from "@/components/animated-number";
+import { CouponCodeBox } from "@/components/coupon-code-box";
+import { OddsTrendCorner, useOddsTrend } from "@/components/odds-trend-corner";
 import { TeamAvatar } from "@/components/team-avatar";
+import { TouchStakePad } from "@/components/touch-stake-pad";
 import { useApp } from "@/components/providers";
 import { cn, eur, formatOdds } from "@/lib/format";
 
-const QUICK_STAKES = [5, 10, 25, 50];
+function LegLiveOddsBadge({
+  odds,
+  oddsFormat,
+}: {
+  odds: number;
+  oddsFormat: "decimal" | "fractional";
+}) {
+  const trend = useOddsTrend(odds);
+  return (
+    <span className="relative shrink-0 rounded-lg bg-white px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-betclic-red shadow-2xs">
+      <OddsTrendCorner trend={trend} />
+      {formatOdds(odds, oddsFormat)}
+    </span>
+  );
+}
 
 interface PlacedReceipt {
   kind: "single" | "combo";
@@ -213,15 +230,6 @@ export default function BetslipPage() {
   );
 
   const nextBoost = nextComboBoostTier(quote.eligibleLegs);
-
-  const handleStakeInput = (raw: string) => {
-    const cleaned = raw.replace(/[^0-9.,]/g, "");
-    const parts = cleaned.split(/[.,]/);
-    const normalized =
-      parts.length > 1 ? `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}` : parts[0];
-    setStakeText(normalized);
-    setError(null);
-  };
 
   const canSubmit =
     !submitting &&
@@ -451,11 +459,15 @@ export default function BetslipPage() {
               Prédictions
             </Link>
           </div>
+
+          <CouponCodeBox variant="empty" autoCheckUrlCode />
         </div>
       ) : (
         <div className="mt-4 space-y-3 lg:mt-5 lg:grid lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start lg:gap-6 lg:space-y-0">
-          {/* Colonne gauche desktop : Bonus Combiné + Sélections */}
+          {/* Colonne gauche desktop : Code coupon + Bonus Combiné + Sélections */}
           <div className="space-y-3">
+          <CouponCodeBox variant="compact" autoCheckUrlCode />
+
           {/* Jauge Bonus Combiné 1xBet */}
           <div className="rounded-2xl border border-edge bg-white p-3">
             <div className="flex items-center justify-between gap-2 text-[11.5px]">
@@ -621,9 +633,7 @@ export default function BetslipPage() {
                       <span className="truncate pr-2 text-[12.5px] font-semibold text-ink">
                         {leg.selectionLabel}
                       </span>
-                      <span className="shrink-0 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
-                        {formatOdds(leg.liveOdds, oddsFormat)}
-                      </span>
+                      <LegLiveOddsBadge odds={leg.liveOdds} oddsFormat={oddsFormat} />
                     </div>
                   </button>
                 </div>
@@ -645,57 +655,20 @@ export default function BetslipPage() {
 
           {/* Bloc Mise & Validation (collant à droite sur desktop) */}
           <div className="glass-card rounded-2xl p-3.5 space-y-3 lg:sticky lg:top-[84px] lg:p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-semibold text-mist">Votre mise</span>
-              <span className="text-[11.5px] text-dim">
-                Solde : <strong className="font-semibold text-ink">{eur(balance)}</strong>
-              </span>
-            </div>
-
-            <div className="flex h-12 items-center justify-between rounded-xl border border-edge bg-elev/60 px-3.5 focus-within:border-ink">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={stakeText}
-                onChange={(e) => handleStakeInput(e.target.value)}
-                placeholder="10"
-                className="w-full bg-transparent font-display text-[18px] font-bold tabular-nums text-ink outline-none"
-              />
-              <span className="font-display text-[15px] font-bold text-dim">€</span>
-            </div>
-
-            <div className="grid grid-cols-5 gap-1.5">
-              {QUICK_STAKES.map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  onClick={() => {
-                    setStakeText(String(amt));
-                    setError(null);
-                  }}
-                  className={cn(
-                    "h-8 rounded-lg font-display text-[12px] font-bold transition-colors",
-                    stake === amt
-                      ? "bg-ink text-white"
-                      : "bg-elev text-ink active:bg-edge"
-                  )}
-                >
-                  {amt} €
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  if (balance > 0) {
-                    setStakeText(String(Math.floor(balance * 100) / 100));
-                    setError(null);
-                  }
-                }}
-                className="h-8 rounded-lg bg-elev font-display text-[12px] font-bold text-betclic-red active:bg-edge"
-              >
-                Max
-              </button>
-            </div>
+            <TouchStakePad
+              id="betslip-stake-input"
+              label="Votre mise"
+              stakeText={stakeText}
+              onChangeStakeText={(next) => {
+                setStakeText(next);
+                setError(null);
+              }}
+              balance={balance}
+              hasError={overBalance || belowMin}
+              haptics={user?.haptics}
+              collapsibleOnMobile
+              defaultExpandedOnMobile={false}
+            />
 
             {/* Récapitulatif cotes & gain potentiel */}
             <div className="space-y-1.5 border-t border-edge pt-2.5 text-[12.5px]">

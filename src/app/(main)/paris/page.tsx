@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, History, Plus, RefreshCw, Search, TicketX, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
@@ -8,7 +8,9 @@ import { BetTicket } from "@/components/bet-ticket";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { AnimatedNumber } from "@/components/animated-number";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useApp } from "@/components/providers";
+import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { eur } from "@/lib/format";
 
 type Tab = "ongoing" | "finished";
@@ -38,6 +40,8 @@ function settledOrPlacedIso(b: ClientBet): string {
 
 export default function ParisPage() {
   const { betsVersion, user, openRecharge } = useApp();
+  const { isOffline, isConstrained } = useNetworkQuality();
+  const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
   const [tabChoice, setTabChoice] = useState<Tab | null>(null);
   const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction" | "combo">("all");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
@@ -47,11 +51,24 @@ export default function ParisPage() {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [sharingBet, setSharingBet] = useState<ClientBet | null>(null);
 
+  const handlePullRefresh = useCallback(async () => {
+    try {
+      const r = await api.allBets();
+      setBets(r.bets);
+      setLoadError(null);
+    } catch {
+      /* conserve la liste affichée si la 3G coupe brièvement */
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     async function load(isBackground = false) {
       if (isBackground && typeof document !== "undefined" && document.hidden) return;
+      if (isBackground && typeof navigator !== "undefined" && navigator.onLine === false) {
+        return;
+      }
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
           const r = await api.allBets();
@@ -78,17 +95,20 @@ export default function ParisPage() {
     }
 
     void load(false);
-    const id = setInterval(() => void load(true), POLL_INTERVAL);
+    const id = setInterval(() => void load(true), pollIntervalMs);
     const onVisible = () => {
       if (!document.hidden) void load(true);
     };
+    const onOnline = () => void load(true);
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
     return () => {
       cancelled = true;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
-  }, [betsVersion, reloadNonce]);
+  }, [betsVersion, reloadNonce, pollIntervalMs, isOffline]);
 
   const allBets = useMemo(() => bets ?? [], [bets]);
 
@@ -212,6 +232,7 @@ export default function ParisPage() {
   }, [visibleBets]);
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
     <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-2">
         <div>
@@ -497,5 +518,6 @@ export default function ParisPage() {
 
       <ShareTicketModal bet={sharingBet} onClose={() => setSharingBet(null)} />
     </div>
+    </PullToRefresh>
   );
 }
