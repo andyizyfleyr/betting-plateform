@@ -272,17 +272,32 @@ export class ApiRequestError extends Error {
   }
 }
 
+function isPublicEdgeGetUrl(url: string): boolean {
+  return (
+    url === "/api/matches" ||
+    url === "/api/matches/history" ||
+    url.startsWith("/api/matches/history?") ||
+    url === "/api/predictions/catalog"
+  );
+}
+
 async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const isGet = !init?.method || init.method.toUpperCase() === "GET";
+  const isPublicEdge = isGet && isPublicEdgeGetUrl(url);
   const cached = isGet ? clientEtagCache.get(url) : undefined;
 
-  let mergedInit = init;
+  let mergedInit: RequestInit | undefined = init;
+  if (isPublicEdge) {
+    // Omet strictement les cookies sur les routes publiques afin que le CDN Edge Vercel
+    // partage 1 seule réponse en cache entre des milliers de visiteurs connectés ou non.
+    mergedInit = { ...mergedInit, credentials: "omit" };
+  }
   if (isGet && cached?.etag) {
-    const hdrs = new Headers(init?.headers);
+    const hdrs = new Headers(mergedInit?.headers);
     if (!hdrs.has("If-None-Match")) {
       hdrs.set("If-None-Match", cached.etag);
     }
-    mergedInit = { ...init, headers: hdrs };
+    mergedInit = { ...mergedInit, headers: hdrs };
   } else if (!isGet) {
     // Toute mutation invalide les ETag clients afin de forcer une lecture fraîche immédiate
     clientEtagCache.clear();
@@ -300,6 +315,7 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     if (
       res.status === 401 &&
+      !isPublicEdge &&
       typeof window !== "undefined" &&
       !url.startsWith("/api/auth/") &&
       !window.location.pathname.startsWith("/auth") &&
@@ -493,6 +509,15 @@ export const api = {
       body: JSON.stringify({ withdrawalId }),
     }),
   predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100"),
+  predictionsCatalog: () =>
+    request<{ questions: ClientPrediction[] }>("/api/predictions/catalog"),
+  myPredictionBets: () =>
+    request<{
+      myBets: Record<
+        number,
+        NonNullable<ClientPrediction["myBet"]> & { questionId: number }
+      >;
+    }>("/api/predictions/my-bets"),
   placePredictionBet: (payload: {
     questionId: number;
     selection: string;

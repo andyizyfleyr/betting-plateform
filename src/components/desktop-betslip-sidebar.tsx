@@ -242,7 +242,7 @@ export function DesktopBetslipSidebar() {
       if (typeof document !== "undefined" && document.hidden) return;
       if (typeof window !== "undefined" && window.innerWidth < 1024) return;
       api
-        .predictions()
+        .predictionsCatalog()
         .then((pRes) => {
           if (!active) return;
           setLivePredMap(new Map(pRes.questions.map((q) => [q.id, q])));

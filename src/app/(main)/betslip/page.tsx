@@ -81,30 +81,35 @@ export default function BetslipPage() {
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<PlacedReceipt | null>(null);
 
+  const hasPredLegs = comboLegs.some((l) => l.kind === "prediction");
+
   useEffect(() => {
     if (comboLegs.length === 0) return;
     let cancelled = false;
     async function load() {
+      if (typeof document !== "undefined" && document.hidden) return;
       try {
         const [mRes, pRes] = await Promise.all([
           api.matches(),
-          api.predictions().catch(() => ({ questions: [] as ClientPrediction[] })),
+          hasPredLegs
+            ? api.predictionsCatalog().catch(() => ({ questions: [] as ClientPrediction[] }))
+            : Promise.resolve({ questions: [] as ClientPrediction[] }),
         ]);
         if (cancelled) return;
         setLiveMatches(mRes.matches);
-        setLivePredictions(pRes.questions);
+        if (hasPredLegs) setLivePredictions(pRes.questions);
         setNowMs(Date.now());
       } catch {
         /* silencieux */
       }
     }
     void load();
-    const id = setInterval(() => void load(), 5000);
+    const id = setInterval(() => void load(), 6000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [comboLegs.length]);
+  }, [comboLegs.length, hasPredLegs]);
 
   const matchMap = useMemo(
     () => new Map(liveMatches.map((m) => [m.id, m])),

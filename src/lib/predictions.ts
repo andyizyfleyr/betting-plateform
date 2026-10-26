@@ -14,6 +14,7 @@ import {
   notifyBetsSettledOrMutated,
 } from "./active-state-cache";
 import { getGlobalHouseHealth, invalidateHouseHealthCache } from "./house-brain";
+import { invalidatePredictionsCatalogCache } from "./response-cache";
 import { createServerRng } from "./server-rng";
 
 export const PRED_MIN_STAKE = 0.5;
@@ -176,6 +177,7 @@ export async function settleQuestion(
   `);
 
   invalidateQuestionScheduleCache();
+  invalidatePredictionsCatalogCache();
   notifyBetsSettledOrMutated();
   await settlePendingCombos();
   invalidateHouseHealthCache();
@@ -240,6 +242,7 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
   `);
 
   invalidateQuestionScheduleCache();
+  invalidatePredictionsCatalogCache();
   notifyBetsSettledOrMutated();
   invalidateHouseHealthCache();
   return (res.rows?.length ?? 0) > 0;
@@ -424,4 +427,7 @@ export async function ensureOpenPredictions(now = Date.now()): Promise<void> {
       })
       .onConflictDoNothing();
   }
+  invalidateQuestionScheduleCache();
+  invalidatePredictionsCatalogCache();
 }
+

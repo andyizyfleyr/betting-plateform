@@ -18,6 +18,7 @@ import {
   MIN_COMBO_LEGS,
 } from "@/lib/combo-math";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
+import { invalidatePredictionsCatalogCache } from "@/lib/response-cache";
 import {
   isKnownMarket,
   isRealMatchKickoffReached,
@@ -468,6 +469,9 @@ export async function POST(req: NextRequest) {
     return { bet: inserted, balance: updatedUser.balance };
   });
 
+  if (pricedLegs.some((l) => l.kind === "prediction")) {
+    invalidatePredictionsCatalogCache();
+  }
   notifyNewBetPlaced({ userId: uid, kind: "combo" });
   invalidateHouseHealthCache();
   return NextResponse.json(result);

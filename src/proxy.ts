@@ -3,6 +3,15 @@ import { AUTH_COOKIE, verifyJwt } from "@/lib/jwt";
 
 const STATIC_RE = /\.(?:svg|png|jpg|jpeg|gif|webp|mp3|wav|ogg|woff2?|ico|txt|json|css|js)$/i;
 
+function withPrivateApiSecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set("CDN-Cache-Control", "private, no-store");
+  res.headers.set("Vercel-CDN-Cache-Control", "private, no-store");
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return res;
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -22,20 +31,37 @@ export async function proxy(req: NextRequest) {
   if (isApi) {
     const adminApi = pathname === "/api/admin" || pathname.startsWith("/api/admin/");
     if (adminApi && !isAdmin) {
-      return NextResponse.json({ error: "Accès réservé à l'administrateur" }, { status: 403 });
+      return withPrivateApiSecurityHeaders(
+        NextResponse.json({ error: "Accès réservé à l'administrateur" }, { status: 403 })
+      );
     }
-    const publicApi =
+
+    // Flux publics Edge (également exclus par `config.matcher` ci-dessous)
+    if (
+      pathname === "/api/matches" ||
+      pathname === "/api/matches/history" ||
+      pathname === "/api/predictions/catalog"
+    ) {
+      return NextResponse.next();
+    }
+
+    const unauthedAllowedApi =
       pathname === "/api/health" ||
       pathname.startsWith("/api/auth") ||
-      pathname === "/api/matches" ||
-      pathname.startsWith("/api/matches/") ||
-      // Webhook Stripe : appelé par Stripe SANS cookie d'authentification.
-      pathname === "/api/payments/stripe/webhook";
-    if (publicApi) return NextResponse.next();
-    if (!authed) {
-      return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+      // Webhook Stripe : appelé par Stripe SANS cookie (signature HMAC vérifiée dans la route).
+      pathname === "/api/payments/stripe/webhook" ||
+      // Vercel Cron : authentifié par `Authorization: Bearer <CRON_SECRET>` dans la route.
+      pathname === "/api/cron/tick";
+
+    if (unauthedAllowedApi) {
+      return withPrivateApiSecurityHeaders(NextResponse.next());
     }
-    return NextResponse.next();
+    if (!authed) {
+      return withPrivateApiSecurityHeaders(
+        NextResponse.json({ error: "Non authentifié" }, { status: 401 })
+      );
+    }
+    return withPrivateApiSecurityHeaders(NextResponse.next());
   }
 
   // ---- Pages ----
@@ -76,5 +102,11 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclut uniquement les 3 routes publiques de lecture avec délimitation stricte de chemin
+  // (`api/matches$`, `api/matches/history$`, `api/predictions/catalog$`) afin que le CDN Edge
+  // Vercel serve directement le cache partagé sans exécuter le middleware ni lire les cookies,
+  // tout en protégeant 100 % des autres routes (`/api/predictions/my-bets`, `/api/bets`, `/api/admin`, etc.).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|api/matches$|api/matches/history$|api/predictions/catalog$).*)",
+  ],
 };

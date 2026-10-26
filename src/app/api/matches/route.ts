@@ -18,7 +18,8 @@ import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events"
 import { isRealMatchFeedStale } from "@/lib/real-sports-feed";
 import {
   getMatchesPayloadCache,
-  jsonWithEtag,
+  publicJsonWithEdgeCache,
+  runSingleflight,
   setMatchesPayloadCache,
 } from "@/lib/response-cache";
 import { formatServerErrorResponse } from "@/lib/db-error";
@@ -28,24 +29,39 @@ import { teamLogo } from "@/lib/team-logos";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const MATCHES_EDGE_POLICY = {
+  maxAge: 1,
+  sMaxAge: 4,
+  staleWhileRevalidate: 8,
+} as const;
+
 export async function GET(req: NextRequest) {
   try {
-    await ensureSeeded();
-    await ensureMlLoaded();
-    await syncLiveMatchesThrottled();
-
-    // Fast-path mémoire sérialisé (invalidé automatiquement dès qu'une minute ou cote bouge en RAM)
-    const cached = getMatchesPayloadCache();
-    if (cached) {
-      return jsonWithEtag(req, null, cached);
+    // Protection anti-cache-busting (ex. attaque `?random=...` contournant l'URL canonique du CDN) :
+    // renvoie immédiatement le tampon RAM existant sans ré-exécuter de synchronisation.
+    if (req.nextUrl.searchParams.size > 0) {
+      const anyRam = getMatchesPayloadCache(true);
+      if (anyRam) {
+        return publicJsonWithEdgeCache(req, null, anyRam, MATCHES_EDGE_POLICY);
+      }
     }
 
-    await ensureMatchStoreHydrated();
-    const now = Date.now();
-    // 0 requête SQL à chaud : lit directement le store mémoire synchronisé (matchs réels + virtuels)
-    const rows = getCachedAllMatchesForFeed();
+    const stored = await runSingleflight("api:matches", async () => {
+      await ensureSeeded();
+      await ensureMlLoaded();
+      await syncLiveMatchesThrottled();
 
-  const withMarkets = rows.map((rawRow) => {
+      const freshCached = getMatchesPayloadCache();
+      if (freshCached) {
+        return freshCached;
+      }
+
+      await ensureMatchStoreHydrated();
+      const now = Date.now();
+      // 0 requête SQL à chaud : lit directement le store mémoire synchronisé (matchs réels + virtuels)
+      const rows = getCachedAllMatchesForFeed();
+
+      const withMarkets = rows.map((rawRow) => {
     const cleanEvents = sanitizeMatchEvents(
       rawRow.events,
       rawRow.homeScore,
@@ -178,9 +194,11 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const payload = { matches: withMarkets };
-  const stored = setMatchesPayloadCache(payload);
-  return jsonWithEtag(req, payload, stored);
+      const payload = { matches: withMarkets };
+      return setMatchesPayloadCache(payload);
+    });
+
+    return publicJsonWithEdgeCache(req, null, stored, MATCHES_EDGE_POLICY);
   } catch (err) {
     return formatServerErrorResponse(err, "GET /api/matches");
   }
