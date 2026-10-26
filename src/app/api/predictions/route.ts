@@ -2,6 +2,7 @@ import { and, asc, desc, eq, getTableColumns, inArray, sql, type SQL } from "dri
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
+import { notifyNewBetPlaced } from "@/lib/active-state-cache";
 import { appUser, predictionBets, predictionQuestions } from "@/db/schema";
 import {
   PRED_MAX_STAKE,
@@ -260,6 +261,7 @@ export async function POST(req: NextRequest) {
     return { bet, balance: updatedUser.balance };
   });
 
+  notifyNewBetPlaced({ userId: uid, kind: "prediction" });
   return NextResponse.json({
     bet: {
       id: result.bet.id,

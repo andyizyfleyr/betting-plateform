@@ -1,6 +1,7 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db, ensureHealthyDbConnection } from "@/db";
+import { hydrateLiveMatchRow } from "@/db/engine";
 import {
   matches,
   predictionQuestions,
@@ -184,7 +185,8 @@ export async function GET(req: NextRequest) {
         : Promise.resolve([] as PredictionQuestionRow[]),
     ]);
 
-    const matchMap = new Map(mRows.map((m) => [m.id, m]));
+    const nowLoadMs = Date.now();
+    const matchMap = new Map(mRows.map((m) => [m.id, hydrateLiveMatchRow(m, nowLoadMs)]));
     const predMap = new Map(qRows.map((q) => [q.id, q]));
 
     const hydrated: SavedCouponLegRecord[] = [];

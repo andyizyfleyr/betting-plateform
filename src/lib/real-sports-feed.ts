@@ -4,6 +4,11 @@ import type { MatchTimelineEvent } from "@/db/fixtures";
 import { adminSettings, matches, type MatchRow, type RealMatchStats } from "@/db/schema";
 import { isFirstHalfCompleted, isRealMatchPostIncidentSuspended } from "@/lib/markets";
 import {
+  ensureMatchStoreHydrated,
+  getCachedOpenManualMatches,
+  invalidateAllActiveCaches,
+} from "@/lib/active-state-cache";
+import {
   pickPreferredPlayerLabel,
   reconcileRedCardCounts,
   samePlayerIdentity,
@@ -1477,6 +1482,28 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
 
   inFlightRealSync = (async (): Promise<RealSyncSummary> => {
     try {
+      await ensureMatchStoreHydrated();
+      const cachedManual = getCachedOpenManualMatches().filter((m) => m.autoSync);
+
+      // Fast-path en RAM (0 requête SQL vers Neon) lorsqu'il n'y a aucun match réel autoSync
+      if (!force && cachedManual.length === 0) {
+        lastRealSyncAt = Date.now();
+        return { ...EMPTY_SYNC_SUMMARY };
+      }
+
+      const cachedHasUrgent = cachedManual.some(
+        (m) =>
+          m.status === "live" ||
+          m.feedFinishedAt != null ||
+          !m.externalId ||
+          m.startsAt.getTime() <= nowMs + 20 * 60_000
+      );
+
+      // Fast-path en RAM (0 requête SQL vers Neon) s'il n'y a que des matchs réels lointains
+      if (!force && !cachedHasUrgent && nowMs - lastRealSyncAt < IDLE_FEED_SYNC_MS) {
+        return { ...EMPTY_SYNC_SUMMARY, activeCount: cachedManual.length };
+      }
+
       const openManual = await db
         .select()
         .from(matches)
@@ -1675,6 +1702,9 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
         }
       }
 
+      if (summary.syncedCount > 0) {
+        invalidateAllActiveCaches();
+      }
       lastRealSyncAt = Date.now();
       return summary;
     } finally {

@@ -39,7 +39,7 @@ function settledOrPlacedIso(b: ClientBet): string {
 }
 
 export default function ParisPage() {
-  const { betsVersion, user, openRecharge } = useApp();
+  const { betsVersion, user, setBalance, openRecharge } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
   const [tabChoice, setTabChoice] = useState<Tab | null>(null);
@@ -55,25 +55,24 @@ export default function ParisPage() {
     try {
       const r = await api.allBets();
       setBets(r.bets);
+      if (typeof r.balance === "number") setBalance(r.balance);
       setLoadError(null);
     } catch {
       /* conserve la liste affichée si la 3G coupe brièvement */
     }
-  }, []);
+  }, [setBalance]);
 
+  // 1) Chargement complet initial (et lors d'une action joueur : mise, cash-out, réessai)
   useEffect(() => {
     let cancelled = false;
 
-    async function load(isBackground = false) {
-      if (isBackground && typeof document !== "undefined" && document.hidden) return;
-      if (isBackground && typeof navigator !== "undefined" && navigator.onLine === false) {
-        return;
-      }
+    async function loadInitial() {
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
           const r = await api.allBets();
           if (cancelled) return;
           setBets(r.bets);
+          if (typeof r.balance === "number") setBalance(r.balance);
           setLoadError(null);
           return;
         } catch (err) {
@@ -82,7 +81,7 @@ export default function ParisPage() {
             await new Promise((r) => setTimeout(r, RETRY_DELAY * (attempt + 1)));
             continue;
           }
-          if (!isBackground && !cancelled) {
+          if (!cancelled) {
             setLoadError(
               err instanceof Error
                 ? err.message
@@ -94,21 +93,11 @@ export default function ParisPage() {
       }
     }
 
-    void load(false);
-    const id = setInterval(() => void load(true), pollIntervalMs);
-    const onVisible = () => {
-      if (!document.hidden) void load(true);
-    };
-    const onOnline = () => void load(true);
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
+    void loadInitial();
     return () => {
       cancelled = true;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
     };
-  }, [betsVersion, reloadNonce, pollIntervalMs, isOffline]);
+  }, [betsVersion, reloadNonce, setBalance]);
 
   const allBets = useMemo(() => bets ?? [], [bets]);
 
@@ -118,6 +107,68 @@ export default function ParisPage() {
     () => allBets.some((b) => b.status === "pending"),
     [allBets]
   );
+
+  // 2) Rafraîchissement live léger (`?filter=ongoing`) UNIQUEMENT s'il existe >= 1 pari en cours
+  //    (0 requête périodique lorsque le joueur consulte uniquement ses paris terminés !)
+  useEffect(() => {
+    if (!hasAnyOngoing) return;
+    let cancelled = false;
+
+    const refreshOngoingOnly = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      try {
+        const ongoingRes = await api.bets("ongoing");
+        if (cancelled) return;
+        if (typeof ongoingRes.balance === "number") {
+          setBalance(ongoingRes.balance);
+        }
+
+        const freshOngoingMap = new Map(
+          ongoingRes.bets.map((b) => [`${b.kind}-${b.id}`, b])
+        );
+
+        let ticketJustSettled = false;
+        setBets((prev) => {
+          if (!prev) return ongoingRes.bets;
+          const prevOngoingCount = prev.filter((b) => b.status === "pending").length;
+          if (ongoingRes.bets.length < prevOngoingCount) {
+            ticketJustSettled = true;
+            return prev;
+          }
+          const finishedPart = prev.filter((b) => b.status !== "pending");
+          return [...ongoingRes.bets, ...finishedPart].sort(
+            (a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime()
+          );
+        });
+
+        // Un pari vient d'être réglé : recharge une seule fois la liste complète pour l'onglet Terminés
+        if (ticketJustSettled || freshOngoingMap.size === 0) {
+          const full = await api.allBets();
+          if (!cancelled) {
+            setBets(full.bets);
+            if (typeof full.balance === "number") setBalance(full.balance);
+          }
+        }
+      } catch {
+        /* silencieux en arrière-plan */
+      }
+    };
+
+    const id = setInterval(() => void refreshOngoingOnly(), pollIntervalMs);
+    const onVisible = () => {
+      if (!document.hidden) void refreshOngoingOnly();
+    };
+    const onOnline = () => void refreshOngoingOnly();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [hasAnyOngoing, pollIntervalMs, isOffline, setBalance]);
   const hasAnyFinished = useMemo(
     () => allBets.some((b) => b.status !== "pending"),
     [allBets]

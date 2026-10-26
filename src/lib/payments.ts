@@ -2,6 +2,7 @@ import { timingSafeEqual } from "crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, deposits } from "@/db/schema";
+import { invalidateUserCaches } from "@/lib/active-state-cache";
 
 export type PaymentProviderId = "stripe" | "paypal";
 export type DepositStatus = "pending" | "paid" | "credited" | "failed" | "expired";
@@ -271,6 +272,7 @@ export async function creditDeposit(
     }
   });
 
+  invalidateUserCaches([uid]);
   return true;
 }
 

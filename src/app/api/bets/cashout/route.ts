@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { hydrateLiveMatchRow } from "@/db/engine";
 import { ensureSeeded } from "@/db/seed";
 import {
   appUser,
@@ -12,6 +13,7 @@ import {
   type MatchRow,
   type PredictionQuestionRow,
 } from "@/db/schema";
+import { notifyBetsSettledOrMutated } from "@/lib/active-state-cache";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
@@ -75,7 +77,10 @@ export async function POST(req: NextRequest) {
     const liveRealComboRows = mRows.filter(
       (m) => m.status === "live" && m.source === "manual"
     );
-    const effectiveMatchMap = new Map(mRows.map((m) => [m.id, m]));
+    const nowCashMs = Date.now();
+    const effectiveMatchMap = new Map(
+      mRows.map((m) => [m.id, hydrateLiveMatchRow(m, nowCashMs)])
+    );
     if (liveRealComboRows.length > 0) {
       const realGuard = await verifyLiveRealMatchesBeforeBet(liveRealComboRows);
       if (!realGuard.ok) {
@@ -120,6 +125,7 @@ export async function POST(req: NextRequest) {
     if (balance == null) {
       return NextResponse.json({ error: "Ce combiné vient d'être réglé" }, { status: 400 });
     }
+    notifyBetsSettledOrMutated([uid]);
     invalidateHouseHealthCache();
     return NextResponse.json({ balance, value });
   }
@@ -139,28 +145,30 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: "Ce coupon ne peut plus être vendu" }, { status: 400 });
         }
       } else {
-        if (!match || match.status !== "live") {
+        const syncedSportMatch = match ? hydrateLiveMatchRow(match) : null;
+        if (!syncedSportMatch || syncedSportMatch.status !== "live") {
           return NextResponse.json(
             { error: "La vente du coupon n'est disponible que pendant le match" },
             { status: 400 }
           );
         }
-        if (match.suspended) {
+        if (syncedSportMatch.suspended) {
           return NextResponse.json(
             { error: "Marché suspendu — vente du coupon indisponible" },
             { status: 400 }
           );
         }
-        let effectiveMatch = match;
-        if (match.source === "manual") {
-          const realGuard = await verifyLiveRealMatchesBeforeBet([match]);
+        let effectiveMatch = syncedSportMatch;
+        if (syncedSportMatch.source === "manual") {
+          const realGuard = await verifyLiveRealMatchesBeforeBet([syncedSportMatch]);
           if (!realGuard.ok) {
             return NextResponse.json(
               { error: realGuard.error },
               { status: 409 }
             );
           }
-          effectiveMatch = realGuard.refreshedMap.get(match.id) ?? match;
+          effectiveMatch =
+            realGuard.refreshedMap.get(syncedSportMatch.id) ?? syncedSportMatch;
         }
         const value = computeCashOut({
           stake: bet.stake,
@@ -217,6 +225,7 @@ export async function POST(req: NextRequest) {
         if (balance == null) {
           return NextResponse.json({ error: "Ce pari vient d'être réglé" }, { status: 400 });
         }
+        notifyBetsSettledOrMutated([uid]);
         invalidateHouseHealthCache();
         return NextResponse.json({ balance, value });
       }
@@ -275,6 +284,7 @@ export async function POST(req: NextRequest) {
     if (balance == null) {
       return NextResponse.json({ error: "Ce pari vient d'être réglé" }, { status: 400 });
     }
+    notifyBetsSettledOrMutated([uid]);
     invalidateHouseHealthCache();
     return NextResponse.json({ balance, value });
   }

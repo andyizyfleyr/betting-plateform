@@ -16,6 +16,10 @@ import {
   type SettledBetMlInput,
 } from "@/lib/ml-engine";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
+import {
+  ensurePendingBetFlags,
+  notifyBetsSettledOrMutated,
+} from "@/lib/active-state-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import {
   getRealMatchSettlementMode,
@@ -253,6 +257,10 @@ async function settleRows(
   );
   if (updatedIds.size === 0) return;
 
+  const affectedUsers = [
+    ...new Set(batch.filter((p) => updatedIds.has(p.betId)).map((p) => p.userId)),
+  ];
+  notifyBetsSettledOrMutated(affectedUsers);
   invalidateHouseHealthCache();
 
   // Apprentissage en ligne ML par lot unique (réservé aux matchs virtuels)
@@ -286,50 +294,59 @@ async function settleRows(
  *    définitivement acquise ou perdue (notamment les marchés 1ère mi-temps dès `MT` / `≥ 46'`).
  */
 export async function settleFinishedBets() {
-  const rows = await db
-    .select({ bet: bets, match: matches })
-    .from(bets)
-    .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(
-      and(
-        eq(bets.status, "pending"),
-        inArray(matches.status, ["finished", "live"])
-      )
-    );
+  const flags = await ensurePendingBetFlags();
+  if (!flags.hasPendingSportBets && !flags.hasPendingComboBets) {
+    return;
+  }
 
-  if (rows.length > 0) {
-    const hasLiveManual = rows.some(
-      (r) => r.match?.status === "live" && r.match?.source === "manual"
-    );
-    const realMode: RealMatchSettlementMode = hasLiveManual
-      ? await getRealMatchSettlementMode()
-      : "auto";
-    const nowMs = Date.now();
+  if (flags.hasPendingSportBets) {
+    const rows = await db
+      .select({ bet: bets, match: matches })
+      .from(bets)
+      .leftJoin(matches, eq(bets.matchId, matches.id))
+      .where(
+        and(
+          eq(bets.status, "pending"),
+          inArray(matches.status, ["finished", "live"])
+        )
+      );
 
-    const toSettle: Array<{
-      bet: (typeof bets.$inferSelect) & { id: number; userId: number };
-      match: MatchRow | null;
-      overrideDecision?: { won: boolean; voided: boolean };
-    }> = [];
+    if (rows.length > 0) {
+      const hasLiveManual = rows.some(
+        (r) => r.match?.status === "live" && r.match?.source === "manual"
+      );
+      const realMode: RealMatchSettlementMode = hasLiveManual
+        ? await getRealMatchSettlementMode()
+        : "auto";
+      const nowMs = Date.now();
 
-    for (const r of rows) {
-      if (!r.match) continue;
-      if (r.match.status === "finished") {
-        toSettle.push(r);
-      } else if (r.match.status === "live") {
-        const early = resolveEarlyLiveMatchBet(r.bet, r.match, realMode, nowMs);
-        if (early) {
-          toSettle.push({ ...r, overrideDecision: early });
+      const toSettle: Array<{
+        bet: (typeof bets.$inferSelect) & { id: number; userId: number };
+        match: MatchRow | null;
+        overrideDecision?: { won: boolean; voided: boolean };
+      }> = [];
+
+      for (const r of rows) {
+        if (!r.match) continue;
+        if (r.match.status === "finished") {
+          toSettle.push(r);
+        } else if (r.match.status === "live") {
+          const early = resolveEarlyLiveMatchBet(r.bet, r.match, realMode, nowMs);
+          if (early) {
+            toSettle.push({ ...r, overrideDecision: early });
+          }
         }
       }
-    }
 
-    if (toSettle.length > 0) {
-      await settleRows(toSettle);
+      if (toSettle.length > 0) {
+        await settleRows(toSettle);
+      }
     }
   }
 
-  await settlePendingCombos();
+  if (flags.hasPendingComboBets) {
+    await settlePendingCombos();
+  }
 }
 
 /** Règle en lot unique les paris « pending » de plusieurs matchs terminés en 1 seule lecture + 1 seule écriture CTE. */

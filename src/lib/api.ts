@@ -420,6 +420,20 @@ export const api = {
   bets: (filter: "ongoing" | "finished") =>
     request<{ bets: ClientBet[]; balance: number | null }>(`/api/bets?filter=${filter}`),
   allBets: () => request<{ bets: ClientBet[]; balance: number | null }>("/api/bets?filter=all"),
+  pulse: () =>
+    request<{
+      balance: number;
+      pendingCount: number;
+      tickets: Array<{
+        id: number;
+        kind: BetKind;
+        status: string;
+        stake: number;
+        potentialWin: number;
+        title: string;
+        selectionLabel: string;
+      }>;
+    }>("/api/pulse"),
   placeBet: (payload: {
     matchId: number;
     selection: string;

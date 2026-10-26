@@ -195,11 +195,12 @@ export function Providers({ children }: { children: ReactNode }) {
 
   // Hydratation du flux matchs hors /matchs pour la colonne Ligues, le Betslip et le badge Live desktop
   const isMatchsRoute = pathname === "/matchs" || pathname.startsWith("/matchs/");
+  const isParisRoute = pathname === "/paris" || pathname.startsWith("/paris/");
   const needsBackgroundMatchFeed =
     comboLegs.length > 0 || comboOpen || marketMatch !== null || target !== null;
   const { isConstrained } = useNetworkQuality();
   const bgMatchesIntervalMs = getAdaptiveIntervalMs(15_000, isConstrained);
-  const bgBetsIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
+  const bgBetsIntervalMs = getAdaptiveIntervalMs(8_000, isConstrained);
 
   useEffect(() => {
     if (isAuthRoute || isAdminMode || isMatchsRoute) return;
@@ -236,85 +237,83 @@ export function Providers({ children }: { children: ReactNode }) {
     };
   }, [isAuthRoute, isAdminMode, isMatchsRoute, needsBackgroundMatchFeed, bgMatchesIntervalMs]);
 
-  // Polling global unifié : solde, compteur « En cours » et alertes temps réel sur toutes les pages
-  useEffect(() => {
-    if (!loggedIn) return;
-    let active = true;
+  const hasPending = pendingCount > 0;
 
-    const poll = () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-      api
-        .allBets()
-        .then((r) => {
-          if (!active) return;
-          const ongoing = r.bets.filter((b) => b.status === "pending");
-          setPendingCount(ongoing.length);
+  const runPulseSync = useCallback(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    api
+      .pulse()
+      .then((r) => {
+        setPendingCount(r.pendingCount);
 
-          const bal = r.balance;
-          if (typeof bal === "number") {
-            setUser((u) => (u ? { ...u, balance: bal } : u));
-          }
+        if (typeof r.balance === "number") {
+          setUser((u) => (u ? { ...u, balance: r.balance } : u));
+        }
 
-          const currentPrefs = userRef.current;
-          const prev = prevBetStatuses.current;
-          if (prev && (currentPrefs?.notifications ?? true)) {
-            for (const b of r.bets) {
-              const key = `${b.kind}-${b.id}`;
-              if (prev.get(key) !== "pending" || b.status === "pending") continue;
-              if (b.status === "won") {
-                playUiSound(currentPrefs?.sound, "win");
-                triggerHaptic(currentPrefs?.haptics, [25, 35, 55]);
-                toast({
-                  kind: "success",
-                  title: "Pari gagné !",
-                  description: `+${eur(b.potentialWin)} crédités sur votre solde`,
-                });
-              } else if (b.status === "void") {
-                triggerHaptic(currentPrefs?.haptics, 18);
-                toast({
-                  kind: "info",
-                  title: "Mise remboursée",
-                  description: `+${eur(b.stake)} recrédités sur votre solde`,
-                });
-              } else if (b.status === "lost") {
-                triggerHaptic(currentPrefs?.haptics, 18);
-                toast({
-                  kind: "info",
-                  title: "Pari terminé",
-                  description:
-                    b.kind === "combo"
-                      ? `Combiné (${b.legs?.length ?? 2} sélections)`
-                      : b.kind === "prediction"
-                        ? `${b.question} · ${b.selectionLabel}`
-                        : `${b.homeTeam} – ${b.awayTeam} · ${b.selectionLabel}`,
-                });
-              }
+        const currentPrefs = userRef.current;
+        const prev = prevBetStatuses.current;
+        if (prev && (currentPrefs?.notifications ?? true)) {
+          for (const b of r.tickets) {
+            const key = `${b.kind}-${b.id}`;
+            if (prev.get(key) !== "pending" || b.status === "pending") continue;
+            if (b.status === "won") {
+              playUiSound(currentPrefs?.sound, "win");
+              triggerHaptic(currentPrefs?.haptics, [25, 35, 55]);
+              toast({
+                kind: "success",
+                title: "Pari gagné !",
+                description: `+${eur(b.potentialWin)} crédités sur votre solde`,
+              });
+            } else if (b.status === "void") {
+              triggerHaptic(currentPrefs?.haptics, 18);
+              toast({
+                kind: "info",
+                title: "Mise remboursée",
+                description: `+${eur(b.stake)} recrédités sur votre solde`,
+              });
+            } else if (b.status === "lost") {
+              triggerHaptic(currentPrefs?.haptics, 18);
+              toast({
+                kind: "info",
+                title: "Pari terminé",
+                description: b.selectionLabel
+                  ? `${b.title} · ${b.selectionLabel}`
+                  : b.title,
+              });
             }
           }
-          prevBetStatuses.current = new Map(
-            r.bets.map((b) => [`${b.kind}-${b.id}`, b.status])
-          );
-        })
-        .catch(() => undefined);
-    };
+        }
+        prevBetStatuses.current = new Map(
+          r.tickets.map((b) => [`${b.kind}-${b.id}`, b.status])
+        );
+      })
+      .catch(() => undefined);
+  }, [toast]);
 
-    poll();
-    const id = setInterval(poll, bgBetsIntervalMs);
+  // 1) Synchronisation ponctuelle à la connexion et après toute action joueur (`betsVersion`)
+  useEffect(() => {
+    if (!loggedIn) return;
+    runPulseSync();
+  }, [loggedIn, betsVersion, runPulseSync]);
+
+  // 2) Intervalle de suivi uniquement s'il existe >= 1 pari en cours ET hors page `/paris`
+  useEffect(() => {
+    if (!loggedIn || !hasPending || isParisRoute) return;
+    const id = setInterval(runPulseSync, bgBetsIntervalMs);
     const onVisible = () => {
-      if (!document.hidden) poll();
+      if (!document.hidden) runPulseSync();
     };
-    const onOnline = () => poll();
+    const onOnline = () => runPulseSync();
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
 
     return () => {
-      active = false;
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [loggedIn, betsVersion, toast, bgBetsIntervalMs]);
+  }, [loggedIn, hasPending, isParisRoute, runPulseSync, bgBetsIntervalMs]);
 
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 

@@ -11,6 +11,7 @@ import {
   type PredictionQuestionRow,
 } from "@/db/schema";
 import { computeComboQuote } from "@/lib/combo-math";
+import { notifyBetsSettledOrMutated } from "@/lib/active-state-cache";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import {
   isKnownMarket,
@@ -348,7 +349,10 @@ export async function settlePendingCombos(): Promise<void> {
       ) AS agg
       WHERE u."id" = agg."user_id"
     `);
+    notifyBetsSettledOrMutated();
     invalidateHouseHealthCache();
+  } else if (legsOnlyPatches.length > 0) {
+    notifyBetsSettledOrMutated();
   }
 }
 

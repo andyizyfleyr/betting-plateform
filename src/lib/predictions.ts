@@ -8,6 +8,11 @@ import {
   type PredictionOption,
 } from "@/db/schema";
 import { settlePendingCombos } from "./combo";
+import {
+  invalidateQuestionScheduleCache,
+  isAnyQuestionDueNow,
+  notifyBetsSettledOrMutated,
+} from "./active-state-cache";
 import { getGlobalHouseHealth, invalidateHouseHealthCache } from "./house-brain";
 import { createServerRng } from "./server-rng";
 
@@ -170,6 +175,8 @@ export async function settleQuestion(
     WHERE u."id" = agg."user_id"
   `);
 
+  invalidateQuestionScheduleCache();
+  notifyBetsSettledOrMutated();
   await settlePendingCombos();
   invalidateHouseHealthCache();
 }
@@ -232,6 +239,8 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
     SELECT "id" FROM q_reopened
   `);
 
+  invalidateQuestionScheduleCache();
+  notifyBetsSettledOrMutated();
   invalidateHouseHealthCache();
   return (res.rows?.length ?? 0) > 0;
 }
@@ -241,6 +250,10 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
  * selon leurs cotes fixes individuelles.
  */
 export async function settleResolvedQuestions() {
+  if (!(await isAnyQuestionDueNow())) {
+    return;
+  }
+
   const due = await db
     .select()
     .from(predictionQuestions)
