@@ -18,6 +18,12 @@ import { MAX_COMBO_LEGS } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur } from "@/lib/format";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
+import {
+  readStoredOddsPolicy,
+  writeStoredOddsPolicy,
+  type OddsChangedLegDetail,
+  type OddsChangePolicy,
+} from "@/lib/odds-lock";
 import { BetModal } from "./bet-modal";
 import { ComboSheet, type ComboSelection } from "./combo-slip";
 import { MarketSheet } from "./market-sheet";
@@ -88,6 +94,9 @@ interface AppContextValue {
   removeComboLeg: (uid: string) => void;
   clearCombo: () => void;
   loadComboLegs: (legs: ComboSelection[]) => void;
+  applyComboOddsUpdates: (updates: OddsChangedLegDetail[]) => void;
+  oddsPolicy: OddsChangePolicy;
+  setOddsPolicy: (policy: OddsChangePolicy) => void;
   toast: (t: Omit<Toast, "id">) => void;
   betsVersion: number;
   bumpBets: () => void;
@@ -125,6 +134,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const [comboLegs, setComboLegs] = useState<ComboSelection[]>([]);
   const [comboOpen, setComboOpen] = useState(false);
   const [comboQuickMode, setComboQuickMode] = useState(false);
+  const [oddsPolicy, setOddsPolicyState] = useState<OddsChangePolicy>("confirm_all");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
@@ -151,8 +161,14 @@ export function Providers({ children }: { children: ReactNode }) {
       } catch {
         /* silencieux */
       }
+      setOddsPolicyState(readStoredOddsPolicy());
     }, 0);
     return () => clearTimeout(t);
+  }, []);
+
+  const setOddsPolicy = useCallback((policy: OddsChangePolicy) => {
+    setOddsPolicyState(policy);
+    writeStoredOddsPolicy(policy);
   }, []);
 
   const persistCombo = useCallback((next: ComboSelection[]) => {
@@ -386,6 +402,27 @@ export function Providers({ children }: { children: ReactNode }) {
     [persistCombo]
   );
 
+  const applyComboOddsUpdates = useCallback(
+    (updates: OddsChangedLegDetail[]) => {
+      if (!updates || updates.length === 0) return;
+      const next = comboLegs.map((leg) => {
+        const hit = updates.find((u) =>
+          leg.kind === "sport"
+            ? u.kind === "sport" &&
+              u.matchId === leg.matchId &&
+              u.market === leg.market &&
+              u.selection === leg.selection
+            : u.kind === "prediction" &&
+              u.questionId === leg.questionId &&
+              u.selection === leg.selection
+        );
+        return hit ? { ...leg, odds: hit.currentOdds } : leg;
+      });
+      persistCombo(next);
+    },
+    [comboLegs, persistCombo]
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       user,
@@ -458,6 +495,9 @@ export function Providers({ children }: { children: ReactNode }) {
       removeComboLeg,
       clearCombo,
       loadComboLegs,
+      applyComboOddsUpdates,
+      oddsPolicy,
+      setOddsPolicy,
       toast,
       betsVersion,
       bumpBets: () => setBetsVersion((v) => v + 1),
@@ -484,6 +524,9 @@ export function Providers({ children }: { children: ReactNode }) {
       removeComboLeg,
       clearCombo,
       loadComboLegs,
+      applyComboOddsUpdates,
+      oddsPolicy,
+      setOddsPolicy,
       toast,
       betsVersion,
       pendingCount,

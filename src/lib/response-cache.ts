@@ -1,12 +1,9 @@
+import { invalidateByTag, waitUntil } from "@vercel/functions";
 import { NextResponse } from "next/server";
 
 /**
- * Empreinte ETag ultra-légère (double FNV-1a 32 bits + taille) et caches mémoire + Edge CDN :
- *  1) Singleflight (`runSingleflight`) : fusionne les requêtes concurrentes sur une même promesse ;
- *  2) `publicJsonWithEdgeCache` : partage la réponse d'1 visiteur avec des milliers d'autres
- *     via le CDN Edge Vercel (`s-maxage` + `stale-while-revalidate`) sans exposer aucune donnée privée ;
- *  3) `jsonWithEtag` (privé) : interdit strictement tout stockage CDN/proxy opérateur (`no-store` côté CDN,
- *     `Vary: Cookie`) tout en conservant la validation `304 Not Modified` locale du navigateur.
+ * Empreinte ETag ultra-légère (double FNV-1a 32 bits + taille), caches mémoire, Singleflight
+ * et diffusion CDN Edge Vercel avec purge par tags (`Vercel-Cache-Tag`).
  */
 export function computeWeakEtag(json: string): string {
   let h1 = 0x811c9dc5;
@@ -22,6 +19,12 @@ export function computeWeakEtag(json: string): string {
   return `W/"${len.toString(36)}-${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}"`;
 }
 
+export const EDGE_CACHE_TAGS = {
+  matches: "api-matches",
+  history: "api-matches-history",
+  predictionsCatalog: "api-predictions-catalog",
+} as const;
+
 export interface CachedJsonPayload {
   json: string;
   etag: string;
@@ -31,44 +34,51 @@ export interface CachedJsonPayload {
 export interface EdgeCachePolicy {
   /** Durée navigateur locale très courte (par défaut 1 s). */
   maxAge?: number;
-  /** Durée de fraîcheur partagée dans le CDN Edge Vercel (en secondes). */
+  /** Durée de fraîcheur partagée dans chaque PoP régional du CDN Edge Vercel (en secondes). */
   sMaxAge: number;
-  /** Fenêtre pendant laquelle l'Edge sert instantanément le cache tout en revalidant 1 seule fois en tâche de fond. */
+  /** Fenêtre pendant laquelle l'Edge sert le cache tout en revalidant en tâche de fond. */
   staleWhileRevalidate: number;
+  /** Tags `Vercel-Cache-Tag` permettant une purge ciblée lors d'actions Admin ou règlements. */
+  tags?: readonly string[];
 }
 
-const MATCHES_CACHE_TTL_MS = 3_500;
+const MATCHES_CACHE_TTL_MS = 2_500;
 const HISTORY_CACHE_TTL_MS = 12_000;
 const PREDICTIONS_CATALOG_TTL_MS = 15_000;
+const TAG_PURGE_COOLDOWN_MS = 2_500;
 
 interface GlobalResponseCacheStore {
   matchesPayload: CachedJsonPayload | null;
   historyBasePayload: CachedJsonPayload | null;
   historyParsedItems: unknown[] | null;
+  historyServerTime: string | null;
   predictionsCatalogPayload: CachedJsonPayload | null;
   singleflight: Map<string, Promise<unknown>>;
+  lastTagPurgeAt: Map<string, number>;
 }
 
 const globalCache = globalThis as typeof globalThis & {
-  __pulseResponseCacheStoreV2?: GlobalResponseCacheStore;
+  __pulseResponseCacheStoreV3?: GlobalResponseCacheStore;
 };
 
 function store(): GlobalResponseCacheStore {
-  if (!globalCache.__pulseResponseCacheStoreV2) {
-    globalCache.__pulseResponseCacheStoreV2 = {
+  if (!globalCache.__pulseResponseCacheStoreV3) {
+    globalCache.__pulseResponseCacheStoreV3 = {
       matchesPayload: null,
       historyBasePayload: null,
       historyParsedItems: null,
+      historyServerTime: null,
       predictionsCatalogPayload: null,
       singleflight: new Map(),
+      lastTagPurgeAt: new Map(),
     };
   }
-  return globalCache.__pulseResponseCacheStoreV2;
+  return globalCache.__pulseResponseCacheStoreV3;
 }
 
 /**
- * Exécute `factory` une seule fois même si 200 requêtes arrivent à la même milliseconde
- * (*Request Coalescing / Singleflight*).
+ * Exécute `factory` une seule fois par instance Serverless même si des requêtes concurrentes
+ * arrivent à la même milliseconde (*Request Coalescing / Singleflight*).
  */
 export async function runSingleflight<T>(
   key: string,
@@ -109,23 +119,26 @@ export function setMatchesPayloadCache(data: unknown): CachedJsonPayload {
 export function getHistoryBaseCache<T>(): {
   payload: CachedJsonPayload;
   items: T[];
+  serverTime: string;
 } | null {
   const s = store();
   if (
     s.historyBasePayload &&
     s.historyParsedItems &&
+    s.historyServerTime &&
     Date.now() - s.historyBasePayload.at < HISTORY_CACHE_TTL_MS
   ) {
     return {
       payload: s.historyBasePayload,
       items: s.historyParsedItems as T[],
+      serverTime: s.historyServerTime,
     };
   }
   return null;
 }
 
-export function setHistoryBaseCache<T>(items: T[]): CachedJsonPayload {
-  const data = { matches: items, focusedMatch: null };
+export function setHistoryBaseCache<T>(items: T[], serverTime: string): CachedJsonPayload {
+  const data = { matches: items, focusedMatch: null, serverTime };
   const json = JSON.stringify(data);
   const entry: CachedJsonPayload = {
     json,
@@ -135,6 +148,7 @@ export function setHistoryBaseCache<T>(items: T[]): CachedJsonPayload {
   const s = store();
   s.historyBasePayload = entry;
   s.historyParsedItems = items as unknown[];
+  s.historyServerTime = serverTime;
   return entry;
 }
 
@@ -160,22 +174,81 @@ export function setPredictionsCatalogCache(data: unknown): CachedJsonPayload {
   return entry;
 }
 
-export function invalidatePredictionsCatalogCache(): void {
-  store().predictionsCatalogPayload = null;
+/**
+ * Purge asynchrone non bloquante des tags CDN Edge Vercel (`invalidateByTag`).
+ * Protégée par un anti-rebond de 2,5 s et un `try/catch` afin d'être 100 % tolérante
+ * quel que soit le plan Vercel actif (Hobby / Pro) ou l'environnement local.
+ */
+export function purgeEdgeCacheTags(tags: readonly string[]): void {
+  if (process.env.VERCEL !== "1" || tags.length === 0) return;
+  const now = Date.now();
+  const s = store();
+  const dueTags: string[] = [];
+  for (const t of tags) {
+    const prev = s.lastTagPurgeAt.get(t) ?? 0;
+    if (now - prev >= TAG_PURGE_COOLDOWN_MS) {
+      s.lastTagPurgeAt.set(t, now);
+      dueTags.push(t);
+    }
+  }
+  if (dueTags.length === 0) return;
+
+  try {
+    waitUntil(
+      invalidateByTag(dueTags).catch(() => {
+        /* silencieux si le plan Vercel courant limite ou désactive la purge par tag */
+      })
+    );
+  } catch {
+    /* hors contexte de requête Vercel : aucun impact */
+  }
 }
 
-export function invalidatePublicApiCaches(): void {
+export function invalidatePredictionsCatalogCache(purgeEdge = false): void {
+  store().predictionsCatalogPayload = null;
+  if (purgeEdge) {
+    purgeEdgeCacheTags([EDGE_CACHE_TAGS.predictionsCatalog]);
+  }
+}
+
+export function invalidatePublicApiCaches(purgeEdge = false): void {
   const s = store();
   s.matchesPayload = null;
   s.historyBasePayload = null;
   s.historyParsedItems = null;
+  s.historyServerTime = null;
   s.predictionsCatalogPayload = null;
+  if (purgeEdge) {
+    purgeEdgeCacheTags([
+      EDGE_CACHE_TAGS.matches,
+      EDGE_CACHE_TAGS.history,
+      EDGE_CACHE_TAGS.predictionsCatalog,
+    ]);
+  }
 }
 
 /**
- * Réponse JSON strictement PRIVÉE (authentifiée par joueur) :
- * - Jamais stockée dans un CDN ou proxy partagé (`CDN-Cache-Control: private, no-store`, `Vary: Cookie`)
- * - Autorise la validation `ETag` / `304 Not Modified` uniquement dans le navigateur privé du joueur.
+ * Rejette immédiatement (`400 Bad Request`) tout paramètre d'URL non autorisé sur une route
+ * publique canonique avant toute allocation mémoire ou appel base de données (défense en profondeur
+ * derrière la règle Vercel Firewall).
+ */
+export function rejectUnexpectedQueryParams(message = "Paramètres d'URL non autorisés sur cette route publique"): NextResponse {
+  return NextResponse.json(
+    { error: message },
+    {
+      status: 400,
+      headers: {
+        "Cache-Control": "private, no-store, max-age=0",
+        "CDN-Cache-Control": "private, no-store",
+        "Vercel-CDN-Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    }
+  );
+}
+
+/**
+ * Réponse JSON strictement PRIVÉE (authentifiée par joueur).
  */
 export function jsonWithEtag(
   req: Request,
@@ -212,10 +285,7 @@ export function jsonWithEtag(
 }
 
 /**
- * Réponse JSON PUBLIQUE mutualisée sur le CDN Edge Vercel :
- * - 100 % exempte de données personnelles ou de cookies (`Vary: Accept-Encoding` uniquement)
- * - Partagée entre tous les visiteurs du monde pendant `sMaxAge` secondes, puis servie
- *   instantanément pendant `staleWhileRevalidate` secondes pendant qu'1 seule requête rafraîchit le cache.
+ * Réponse JSON PUBLIQUE mutualisée par région sur le CDN Edge Vercel.
  */
 export function publicJsonWithEdgeCache(
   req: Request,
@@ -242,6 +312,10 @@ export function publicJsonWithEdgeCache(
     Vary: "Accept-Encoding",
     "X-Content-Type-Options": "nosniff",
   };
+
+  if (policy.tags && policy.tags.length > 0) {
+    edgeHeaders["Vercel-Cache-Tag"] = policy.tags.join(",");
+  }
 
   if (ifNoneMatch && ifNoneMatch === etag) {
     return new NextResponse(null, {

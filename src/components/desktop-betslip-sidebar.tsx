@@ -15,10 +15,16 @@ import {
 } from "lucide-react";
 import { AnimatedNumber } from "@/components/animated-number";
 import { CouponCodeBox } from "@/components/coupon-code-box";
+import { OddsLockControls } from "@/components/odds-lock-controls";
 import { OddsTrendCorner, useOddsTrend } from "@/components/odds-trend-corner";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
-import { api, type ClientMatch, type ClientPrediction } from "@/lib/api";
+import {
+  ApiRequestError,
+  api,
+  type ClientMatch,
+  type ClientPrediction,
+} from "@/lib/api";
 import {
   computeComboQuote,
   MAX_COMBO_LEGS,
@@ -26,6 +32,11 @@ import {
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur, formatOdds } from "@/lib/format";
+import {
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 
 const QUICK_STAKES = [5, 10, 25, 50];
 
@@ -207,11 +218,14 @@ export function DesktopBetslipSidebar() {
     user,
     balance,
     oddsFormat,
+    oddsPolicy,
+    setOddsPolicy,
     setBalance,
     openRecharge,
     comboLegs,
     removeComboLeg,
     clearCombo,
+    applyComboOddsUpdates,
     feedMatches,
     toast,
     bumpBets,
@@ -220,6 +234,11 @@ export function DesktopBetslipSidebar() {
   const [stake, setStake] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
+  const [legOverrides, setLegOverrides] = useState<{
+    until: number;
+    byUid: Record<string, number>;
+  } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [livePredMap, setLivePredMap] = useState<Map<number, ClientPrediction>>(
     new Map()
@@ -265,13 +284,16 @@ export function DesktopBetslipSidebar() {
   );
 
   const enrichedLegs = useMemo(() => {
+    const activeOverrides =
+      legOverrides && nowMs < legOverrides.until ? legOverrides.byUid : null;
     return comboLegs.map((leg) => {
+      const overrideOdds = activeOverrides?.[leg.uid];
       if (leg.kind === "sport" && leg.matchId) {
         const m = liveMatchMap.get(leg.matchId);
         if (!m) {
           return {
             ...leg,
-            liveOdds: leg.odds,
+            liveOdds: roundOdds2(overrideOdds ?? leg.odds),
             closed: false,
             suspended: false,
             liveMatch: null as ClientMatch | null,
@@ -289,7 +311,7 @@ export function DesktopBetslipSidebar() {
           awayTeam: m.awayTeam,
           homeLogo: m.homeLogo,
           awayLogo: m.awayLogo,
-          liveOdds: resolved.odds ?? leg.odds,
+          liveOdds: roundOdds2(overrideOdds ?? resolved.odds ?? leg.odds),
           closed: resolved.closed,
           suspended: resolved.suspended,
           liveMatch: m,
@@ -300,7 +322,7 @@ export function DesktopBetslipSidebar() {
         if (!q) {
           return {
             ...leg,
-            liveOdds: leg.odds,
+            liveOdds: roundOdds2(overrideOdds ?? leg.odds),
             closed: false,
             suspended: false,
             liveMatch: null as ClientMatch | null,
@@ -309,7 +331,7 @@ export function DesktopBetslipSidebar() {
         const resolved = resolveLivePredictionOdds(q, leg.selection, nowMs);
         return {
           ...leg,
-          liveOdds: resolved.odds ?? leg.odds,
+          liveOdds: roundOdds2(overrideOdds ?? resolved.odds ?? leg.odds),
           closed: resolved.closed,
           suspended: false,
           liveMatch: null as ClientMatch | null,
@@ -317,13 +339,13 @@ export function DesktopBetslipSidebar() {
       }
       return {
         ...leg,
-        liveOdds: leg.odds,
+        liveOdds: roundOdds2(overrideOdds ?? leg.odds),
         closed: false,
         suspended: false,
         liveMatch: null as ClientMatch | null,
       };
     });
-  }, [comboLegs, liveMatchMap, livePredMap, nowMs]);
+  }, [comboLegs, liveMatchMap, livePredMap, nowMs, legOverrides]);
 
   const isSingle = enrichedLegs.length === 1;
   const isCombo = enrichedLegs.length >= 2;
@@ -390,6 +412,8 @@ export function DesktopBetslipSidebar() {
             selection: leg.selection,
             stake,
             market: leg.market,
+            expectedOdds: leg.liveOdds,
+            oddsPolicy,
           });
           newBalance = res.balance;
           finalOdds = res.bet.odds;
@@ -399,6 +423,8 @@ export function DesktopBetslipSidebar() {
             questionId: leg.questionId,
             selection: leg.selection,
             stake,
+            expectedOdds: leg.liveOdds,
+            oddsPolicy,
           });
           newBalance = res.balance;
           finalOdds = res.bet.odds;
@@ -407,12 +433,15 @@ export function DesktopBetslipSidebar() {
       } else {
         const res = await api.placeComboBet({
           stake,
+          expectedTotalOdds: quote.totalOdds,
+          oddsPolicy,
           legs: enrichedLegs.map((l) => ({
             kind: l.kind,
             ...(l.matchId ? { matchId: l.matchId } : {}),
             ...(l.questionId ? { questionId: l.questionId } : {}),
             market: l.market,
             selection: l.selection,
+            expectedOdds: l.liveOdds,
           })),
         });
         newBalance = res.balance;
@@ -420,6 +449,8 @@ export function DesktopBetslipSidebar() {
         potentialWin = res.bet.potentialWin;
       }
 
+      setOddsChanged(null);
+      setLegOverrides(null);
       setBalance(newBalance);
       bumpBets();
       triggerHaptic(user?.haptics, [18, 35, 55]);
@@ -443,6 +474,46 @@ export function DesktopBetslipSidebar() {
         description: `${eur(snap.stake)} @ ${formatOdds(snap.finalOdds, oddsFormat)} · Gain pot. ${eur(snap.potentialWin)}`,
       });
     } catch (e) {
+      if (
+        e instanceof ApiRequestError &&
+        e.status === 409 &&
+        e.code === ODDS_CHANGED_CODE &&
+        e.details
+      ) {
+        setOddsChanged(e.details);
+        setNowMs(Date.now());
+        if (e.details.updatedLegs && e.details.updatedLegs.length > 0) {
+          applyComboOddsUpdates(e.details.updatedLegs);
+          const byUid: Record<string, number> = {};
+          for (const u of e.details.updatedLegs) {
+            const uid =
+              u.kind === "sport" ? `sport-${u.matchId}` : `pred-${u.questionId}`;
+            byUid[uid] = u.currentOdds;
+          }
+          setLegOverrides({ until: Date.now() + 10_000, byUid });
+        } else if (enrichedLegs.length === 1) {
+          const single = enrichedLegs[0];
+          applyComboOddsUpdates([
+            {
+              kind: single.kind,
+              matchId: single.matchId,
+              questionId: single.questionId,
+              market: single.market,
+              selection: single.selection,
+              previousOdds: e.details.previousOdds,
+              currentOdds: e.details.currentOdds,
+              direction: e.details.direction,
+            },
+          ]);
+          setLegOverrides({
+            until: Date.now() + 10_000,
+            byUid: { [single.uid]: e.details.currentOdds },
+          });
+        }
+        triggerHaptic(user?.haptics, [12, 20]);
+        return;
+      }
+      setOddsChanged(null);
       setError(
         e instanceof Error && e.message
           ? e.message
@@ -848,6 +919,19 @@ export function DesktopBetslipSidebar() {
                 </div>
               )}
 
+              <OddsLockControls
+                feedKind={
+                  enrichedLegs.every((l) => l.kind === "prediction")
+                    ? "predictions"
+                    : "matches"
+                }
+                oddsFormat={oddsFormat}
+                oddsPolicy={oddsPolicy}
+                onChangePolicy={setOddsPolicy}
+                oddsChanged={oddsChanged}
+                compact
+              />
+
               {error && (
                 <p className="mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1.5 text-[11px] font-medium text-betclic-red">
                   {error}
@@ -859,7 +943,7 @@ export function DesktopBetslipSidebar() {
                 disabled={user ? !canSubmit : loading}
                 onClick={submit}
                 className={cn(
-                  "mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl font-display text-[14px] font-bold text-white transition-all",
+                  "mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl font-display text-[13.5px] font-bold text-white transition-all",
                   !user || canSubmit
                     ? "bg-betclic-red shadow-xs hover:bg-betclic-red-deep active:scale-[0.99]"
                     : "cursor-not-allowed bg-betclic-red/35"
@@ -870,6 +954,8 @@ export function DesktopBetslipSidebar() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Validation…
                   </>
+                ) : oddsChanged ? (
+                  `Accepter (${formatOdds(quote.totalOdds, oddsFormat)})`
                 ) : (
                   "Parier"
                 )}

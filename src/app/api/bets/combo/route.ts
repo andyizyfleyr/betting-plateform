@@ -1,7 +1,11 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { checkpointVirtualMatchesForBet, runLiveEngine } from "@/db/engine";
+import {
+  checkpointVirtualMatchesForBet,
+  hydrateLiveMatchRow,
+  runLiveEngine,
+} from "@/db/engine";
 import {
   appUser,
   bets,
@@ -30,6 +34,14 @@ import {
   realMatchOddsFor,
 } from "@/lib/markets";
 import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
+import {
+  checkOddsChange,
+  normalizeOddsPolicy,
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+  type OddsChangedLegDetail,
+} from "@/lib/odds-lock";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import { requireUserId } from "@/lib/session";
@@ -49,6 +61,7 @@ interface IncomingLeg {
   questionId?: number;
   market?: string;
   selection: string;
+  expectedOdds?: number;
 }
 
 export async function POST(req: NextRequest) {
@@ -59,7 +72,12 @@ export async function POST(req: NextRequest) {
   await ensureMlLoaded();
   await syncLiveMatchesThrottled();
 
-  let body: { legs?: IncomingLeg[]; stake?: number };
+  let body: {
+    legs?: IncomingLeg[];
+    stake?: number;
+    expectedTotalOdds?: number;
+    oddsPolicy?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -68,6 +86,8 @@ export async function POST(req: NextRequest) {
 
   const rawLegs = Array.isArray(body.legs) ? body.legs : [];
   const stake = Number(body.stake);
+  const expectedTotalOdds = Number(body.expectedTotalOdds);
+  const oddsPolicy = normalizeOddsPolicy(body.oddsPolicy);
 
   if (rawLegs.length < MIN_COMBO_LEGS) {
     return NextResponse.json(
@@ -87,6 +107,12 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  if (!Number.isFinite(expectedTotalOdds) || expectedTotalOdds <= 1) {
+    return NextResponse.json(
+      { error: "Cote totale attendue manquante ou invalide — veuillez rafraîchir le coupon" },
+      { status: 400 }
+    );
+  }
 
   // Règle anti-corrélation bookmaker : 1 seule sélection par match et 1 seule par question !
   const seenMatches = new Set<number>();
@@ -95,6 +121,13 @@ export async function POST(req: NextRequest) {
   for (const l of rawLegs) {
     if (!l || !l.selection) {
       return NextResponse.json({ error: "Sélection invalide dans le combiné" }, { status: 400 });
+    }
+    const legExpected = Number(l.expectedOdds);
+    if (!Number.isFinite(legExpected) || legExpected <= 1) {
+      return NextResponse.json(
+        { error: "Cote affichée manquante sur l'une des sélections du coupon" },
+        { status: 400 }
+      );
     }
     if (l.kind === "sport") {
       const mid = Number(l.matchId);
@@ -163,23 +196,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Trop rapide — veuillez patienter" }, { status: 429 });
   }
 
-  const [matchRows, questionRows] = await Promise.all([
+  const initialMatchRows =
     seenMatches.size > 0
-      ? db.select().from(matches).where(inArray(matches.id, [...seenMatches]))
-      : Promise.resolve([]),
-    seenQuestions.size > 0
-      ? db
-          .select()
-          .from(predictionQuestions)
-          .where(inArray(predictionQuestions.id, [...seenQuestions]))
-      : Promise.resolve([]),
-  ]);
+      ? await db.select().from(matches).where(inArray(matches.id, [...seenMatches]))
+      : [];
 
-  let matchMap = await checkpointVirtualMatchesForBet(matchRows);
-  const syncedMatchRows = [...matchMap.values()];
-  const questionMap = new Map(questionRows.map((q) => [q.id, q]));
+  const initialMatchMap = await checkpointVirtualMatchesForBet(initialMatchRows);
+  const syncedMatchRows = [...initialMatchMap.values()];
 
-  // Séparation stricte : interdiction absolue de mélanger des matchs réels et des matchs virtuels dans un même combiné
+  // Séparation stricte : interdiction absolue de mélanger des matchs réels et des matchs virtuels
   const hasRealMatch = syncedMatchRows.some((m) => m.source === "manual");
   const hasVirtualMatch = syncedMatchRows.some((m) => m.source !== "manual");
   if (hasRealMatch && hasVirtualMatch) {
@@ -207,15 +232,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Si au moins un match du combiné est en direct, on effectue le contrôle anti-but
+  // Capture de l'état live initial et délai anti-but avant d'ouvrir la transaction SQL
   const liveInitial = new Map<
     number,
     { homeScore: number; awayScore: number; redHome: number; redAway: number }
   >();
-  const liveRealRows = matchRows.filter(
+  const liveRealRows = syncedMatchRows.filter(
     (m) => m.status === "live" && m.source === "manual"
   );
-  for (const m of matchRows) {
+  for (const m of syncedMatchRows) {
     if (m.status === "live") {
       if (
         m.suspended ||
@@ -240,13 +265,7 @@ export async function POST(req: NextRequest) {
     if (liveRealRows.length > 0) {
       const realGuard = await verifyLiveRealMatchesBeforeBet(liveRealRows);
       if (!realGuard.ok) {
-        return NextResponse.json(
-          { error: realGuard.error },
-          { status: 409 }
-        );
-      }
-      for (const [mid, freshRow] of realGuard.refreshedMap.entries()) {
-        matchMap.set(mid, freshRow);
+        return NextResponse.json({ error: realGuard.error }, { status: 409 });
       }
     } else {
       await new Promise((r) => setTimeout(r, LIVE_VALIDATION_MS));
@@ -257,194 +276,371 @@ export async function POST(req: NextRequest) {
         .select()
         .from(matches)
         .where(inArray(matches.id, [...seenMatches]));
-      matchMap = await checkpointVirtualMatchesForBet(freshMatches);
-
-      for (const [mid, init] of liveInitial.entries()) {
-        const fm = matchMap.get(mid);
-        if (
-          !fm ||
-          fm.status === "finished" ||
-          fm.suspended ||
-          (fm.source === "virtual" && minuteNumber(fm.minute) >= 85)
-        ) {
-          return NextResponse.json(
-            { error: "Un match en direct a été suspendu ou terminé pendant la validation" },
-            { status: 400 }
-          );
-        }
-        if (
-          (fm.homeScore ?? 0) !== init.homeScore ||
-          (fm.awayScore ?? 0) !== init.awayScore ||
-          (fm.redHome ?? 0) !== init.redHome ||
-          (fm.redAway ?? 0) !== init.redAway
-        ) {
-          return NextResponse.json(
-            { error: "Action décisive en direct — cotes mises à jour, réessayez" },
-            { status: 409 }
-          );
-        }
-      }
-    }
-  }
-
-  // Recotation fixe serveur de chaque sélection du combiné
-  const pricedLegs: ComboLeg[] = [];
-
-  for (const leg of rawLegs) {
-    if (leg.kind === "sport") {
-      const m = matchMap.get(Number(leg.matchId));
-      if (!m || m.status === "finished") {
-        return NextResponse.json(
-          { error: "L'un des matchs sélectionnés est déjà terminé" },
-          { status: 400 }
-        );
-      }
-      const market = leg.market ?? "result";
-      if (!isKnownMarket(market) && !(m.source === "manual" && m.markets?.length)) {
-        return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
-      }
-
-      const h = m.homeScore ?? 0;
-      const a = m.awayScore ?? 0;
-      const min = minuteNumber(m.minute);
-      const formOpts = {
-        homeForm: m.homeForm ?? 1,
-        awayForm: m.awayForm ?? 1,
-        redHome: m.redHome ?? 0,
-        redAway: m.redAway ?? 0,
-        events: m.events ?? [],
-        regime: m.regime ?? null,
-        league: m.league ?? null,
-        matchId: m.id,
-      };
-
-      if (
-        m.status === "live" &&
-        isKnownMarket(market) &&
-        marketOutcomeSettled(market, leg.selection, h, a, min, formOpts)
-      ) {
-        return NextResponse.json(
-          { error: `Sélection déjà décidée sur ${m.homeTeam} – ${m.awayTeam}` },
-          { status: 400 }
-        );
-      }
-
-      let odds: number | null = null;
-      let selectionLabel: string | null = null;
-
-      if (m.source === "manual") {
-        const realHit = realMatchOddsFor(m, market, leg.selection);
-        if (realHit) {
-          odds = realHit.odds;
-          selectionLabel = realHit.label;
-        }
-      } else {
-        odds =
-          m.status === "live"
-            ? liveMarketOddsFor(market, leg.selection, m.homeTeam, m.awayTeam, h, a, min, formOpts)
-            : marketOddsFor(market, leg.selection, m.homeTeam, m.awayTeam, formOpts);
-        selectionLabel = marketLabelFor(market, leg.selection, m.homeTeam, m.awayTeam);
-      }
-
-      if (odds == null || selectionLabel == null) {
-        return NextResponse.json(
-          { error: `Sélection fermée sur ${m.homeTeam} – ${m.awayTeam}` },
-          { status: 400 }
-        );
-      }
-      if (m.status === "live" && odds <= 1.04) {
-        return NextResponse.json(
-          { error: `Cote verrouillée sur ${m.homeTeam} – ${m.awayTeam}` },
-          { status: 400 }
-        );
-      }
-
-      pricedLegs.push({
-        kind: "sport",
-        matchId: m.id,
-        questionId: null,
-        sport: m.sport,
-        league: m.league,
-        title: `${m.homeTeam} – ${m.awayTeam}`,
-        homeTeam: m.homeTeam,
-        awayTeam: m.awayTeam,
-        homeLogo: teamLogo(m.homeTeam, m.homeLogo),
-        awayLogo: teamLogo(m.awayTeam, m.awayLogo),
-        market,
-        selection: leg.selection,
-        selectionLabel,
-        odds,
-        status: "pending",
-      });
-    } else {
-      const q = questionMap.get(Number(leg.questionId));
-      if (!q || q.status !== "open" || q.resolvesAt.getTime() <= Date.now()) {
-        return NextResponse.json(
-          { error: "L'une des questions sélectionnées est clôturée" },
-          { status: 400 }
-        );
-      }
-
-      let odds: number | null = null;
-      let selectionLabel: string | null = null;
-      const isMulti = Array.isArray(q.options) && q.options.length >= 2;
-
-      if (isMulti && q.options) {
-        const opt = q.options.find((o) => o.key === leg.selection);
-        if (opt) {
-          odds = opt.odds;
-          selectionLabel = opt.label;
-        }
-      } else if (leg.selection === "yes" || leg.selection === "no") {
-        odds = leg.selection === "yes" ? q.oddsYes : q.oddsNo;
-        selectionLabel = leg.selection === "yes" ? "Oui" : "Non";
-      }
-
-      if (odds == null || selectionLabel == null) {
-        return NextResponse.json(
-          { error: `Choix invalide sur « ${q.question} »` },
-          { status: 400 }
-        );
-      }
-
-      pricedLegs.push({
-        kind: "prediction",
-        matchId: null,
-        questionId: q.id,
-        sport: "prédiction",
-        league: q.category,
-        title: q.question,
-        market: isMulti ? "multichoice" : "yesno",
-        selection: leg.selection,
-        selectionLabel,
-        odds,
-        status: "pending",
-      });
+      await checkpointVirtualMatchesForBet(freshMatches);
     }
   }
 
   const roundedStake = Math.round(stake * 100) / 100;
-  const quote = computeComboQuote(
-    pricedLegs.map((l) => l.odds),
-    roundedStake
-  );
 
-  const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
-  if (!user || user.balance < roundedStake) {
-    return NextResponse.json({ error: "Solde insuffisant" }, { status: 400 });
-  }
+  type ComboTxOutcome =
+    | {
+        kind: "ok";
+        bet: typeof comboBets.$inferSelect;
+        balance: number;
+        hasPredLeg: boolean;
+      }
+    | { kind: "error"; status: number; error: string }
+    | { kind: "odds_changed"; details: OddsChangedDetails };
 
-  const result = await db.transaction(async (tx) => {
+  // Transaction SQL atomique : verrouillage ordonné (`ORDER BY id FOR UPDATE`) des matchs,
+  // des questions et du joueur, comparaison des cotes AVANT tout débit, et calcul serveur du gain.
+  const txResult: ComboTxOutcome = await db.transaction(async (tx) => {
+    const lockedMatchesRaw =
+      seenMatches.size > 0
+        ? await tx
+            .select()
+            .from(matches)
+            .where(inArray(matches.id, [...seenMatches]))
+            .orderBy(asc(matches.id))
+            .for("update")
+        : [];
+
+    const lockedQuestions =
+      seenQuestions.size > 0
+        ? await tx
+            .select()
+            .from(predictionQuestions)
+            .where(inArray(predictionQuestions.id, [...seenQuestions]))
+            .orderBy(asc(predictionQuestions.id))
+            .for("update")
+        : [];
+
+    const nowMs = Date.now();
+    const txMatchMap = new Map(
+      lockedMatchesRaw.map((raw) => [
+        raw.id,
+        raw.source === "manual" || raw.status !== "live" || raw.suspended
+          ? raw
+          : hydrateLiveMatchRow(raw, nowMs),
+      ])
+    );
+    const txQuestionMap = new Map(lockedQuestions.map((q) => [q.id, q]));
+
+    for (const [mid, init] of liveInitial.entries()) {
+      const fm = txMatchMap.get(mid);
+      if (
+        !fm ||
+        fm.status === "finished" ||
+        fm.suspended ||
+        (fm.source === "virtual" && minuteNumber(fm.minute) >= 85) ||
+        (fm.source === "manual" && minuteNumber(fm.minute) >= 88)
+      ) {
+        return {
+          kind: "error",
+          status: 400,
+          error: "Un match en direct a été suspendu ou terminé pendant la validation",
+        };
+      }
+      if (
+        (fm.homeScore ?? 0) !== init.homeScore ||
+        (fm.awayScore ?? 0) !== init.awayScore ||
+        (fm.redHome ?? 0) !== init.redHome ||
+        (fm.redAway ?? 0) !== init.redAway
+      ) {
+        return {
+          kind: "error",
+          status: 409,
+          error: "Action décisive en direct — cotes mises à jour, réessayez",
+        };
+      }
+    }
+
+    const pricedLegs: ComboLeg[] = [];
+    const updatedLegs: OddsChangedLegDetail[] = [];
+    let anyLegBlockedByPolicy = false;
+
+    for (const leg of rawLegs) {
+      const legExpectedOdds = Number(leg.expectedOdds);
+
+      if (leg.kind === "sport") {
+        const m = txMatchMap.get(Number(leg.matchId));
+        if (!m || m.status === "finished") {
+          return {
+            kind: "error",
+            status: 400,
+            error: "L'un des matchs sélectionnés est déjà terminé",
+          };
+        }
+        if (m.suspended) {
+          return {
+            kind: "error",
+            status: 400,
+            error: `Cotes suspendues sur ${m.homeTeam} – ${m.awayTeam}`,
+          };
+        }
+        if (m.source === "manual" && isRealMatchKickoffReached(m)) {
+          return {
+            kind: "error",
+            status: 400,
+            error: `Coup d'envoi dépassé sur ${m.homeTeam} – ${m.awayTeam}`,
+          };
+        }
+
+        const market = leg.market ?? "result";
+        if (!isKnownMarket(market) && !(m.source === "manual" && m.markets?.length)) {
+          return { kind: "error", status: 400, error: "Marché invalide" };
+        }
+
+        const h = m.homeScore ?? 0;
+        const a = m.awayScore ?? 0;
+        const min = minuteNumber(m.minute);
+        const formOpts = {
+          homeForm: m.homeForm ?? 1,
+          awayForm: m.awayForm ?? 1,
+          redHome: m.redHome ?? 0,
+          redAway: m.redAway ?? 0,
+          events: m.events ?? [],
+          regime: m.regime ?? null,
+          league: m.league ?? null,
+          matchId: m.id,
+        };
+
+        if (
+          m.status === "live" &&
+          isKnownMarket(market) &&
+          marketOutcomeSettled(market, leg.selection, h, a, min, formOpts)
+        ) {
+          return {
+            kind: "error",
+            status: 400,
+            error: `Sélection déjà décidée sur ${m.homeTeam} – ${m.awayTeam}`,
+          };
+        }
+
+        let rawOdds: number | null = null;
+        let selectionLabel: string | null = null;
+
+        if (m.source === "manual") {
+          const realHit = realMatchOddsFor(m, market, leg.selection);
+          if (realHit) {
+            rawOdds = realHit.odds;
+            selectionLabel = realHit.label;
+          }
+        } else {
+          rawOdds =
+            m.status === "live"
+              ? liveMarketOddsFor(
+                  market,
+                  leg.selection,
+                  m.homeTeam,
+                  m.awayTeam,
+                  h,
+                  a,
+                  min,
+                  formOpts
+                )
+              : marketOddsFor(
+                  market,
+                  leg.selection,
+                  m.homeTeam,
+                  m.awayTeam,
+                  formOpts
+                );
+          selectionLabel = marketLabelFor(
+            market,
+            leg.selection,
+            m.homeTeam,
+            m.awayTeam
+          );
+        }
+
+        if (rawOdds == null || selectionLabel == null) {
+          return {
+            kind: "error",
+            status: 400,
+            error: `Sélection fermée sur ${m.homeTeam} – ${m.awayTeam}`,
+          };
+        }
+
+        const serverLegOdds = roundOdds2(rawOdds);
+        if (m.status === "live" && serverLegOdds <= 1.04) {
+          return {
+            kind: "error",
+            status: 400,
+            error: `Cote verrouillée sur ${m.homeTeam} – ${m.awayTeam}`,
+          };
+        }
+
+        const legCheck = checkOddsChange({
+          expectedOdds: legExpectedOdds,
+          serverOdds: serverLegOdds,
+          policy: oddsPolicy,
+        });
+        if (!legCheck.ok) {
+          anyLegBlockedByPolicy = true;
+          updatedLegs.push({
+            kind: "sport",
+            matchId: m.id,
+            market,
+            selection: leg.selection,
+            previousOdds: legCheck.roundedExpectedOdds,
+            currentOdds: legCheck.roundedServerOdds,
+            direction: legCheck.direction,
+          });
+        } else if (Math.round(serverLegOdds * 100) !== Math.round(legExpectedOdds * 100)) {
+          updatedLegs.push({
+            kind: "sport",
+            matchId: m.id,
+            market,
+            selection: leg.selection,
+            previousOdds: roundOdds2(legExpectedOdds),
+            currentOdds: serverLegOdds,
+            direction: serverLegOdds >= legExpectedOdds ? "up" : "down",
+          });
+        }
+
+        pricedLegs.push({
+          kind: "sport",
+          matchId: m.id,
+          questionId: null,
+          sport: m.sport,
+          league: m.league,
+          title: `${m.homeTeam} – ${m.awayTeam}`,
+          homeTeam: m.homeTeam,
+          awayTeam: m.awayTeam,
+          homeLogo: teamLogo(m.homeTeam, m.homeLogo),
+          awayLogo: teamLogo(m.awayTeam, m.awayLogo),
+          market,
+          selection: leg.selection,
+          selectionLabel,
+          odds: serverLegOdds,
+          status: "pending",
+        });
+      } else {
+        const q = txQuestionMap.get(Number(leg.questionId));
+        if (!q || q.status !== "open" || q.resolvesAt.getTime() <= nowMs) {
+          return {
+            kind: "error",
+            status: 400,
+            error: "L'une des questions sélectionnées est clôturée",
+          };
+        }
+
+        let rawOdds: number | null = null;
+        let selectionLabel: string | null = null;
+        const isMulti = Array.isArray(q.options) && q.options.length >= 2;
+
+        if (isMulti && q.options) {
+          const opt = q.options.find((o) => o.key === leg.selection);
+          if (opt) {
+            rawOdds = opt.odds;
+            selectionLabel = opt.label;
+          }
+        } else if (leg.selection === "yes" || leg.selection === "no") {
+          rawOdds = leg.selection === "yes" ? q.oddsYes : q.oddsNo;
+          selectionLabel = leg.selection === "yes" ? "Oui" : "Non";
+        }
+
+        if (rawOdds == null || selectionLabel == null) {
+          return {
+            kind: "error",
+            status: 400,
+            error: `Choix invalide sur « ${q.question} »`,
+          };
+        }
+
+        const serverLegOdds = roundOdds2(rawOdds);
+        const marketKey = isMulti ? "multichoice" : "yesno";
+
+        const legCheck = checkOddsChange({
+          expectedOdds: legExpectedOdds,
+          serverOdds: serverLegOdds,
+          policy: oddsPolicy,
+        });
+        if (!legCheck.ok) {
+          anyLegBlockedByPolicy = true;
+          updatedLegs.push({
+            kind: "prediction",
+            questionId: q.id,
+            market: marketKey,
+            selection: leg.selection,
+            previousOdds: legCheck.roundedExpectedOdds,
+            currentOdds: legCheck.roundedServerOdds,
+            direction: legCheck.direction,
+          });
+        } else if (Math.round(serverLegOdds * 100) !== Math.round(legExpectedOdds * 100)) {
+          updatedLegs.push({
+            kind: "prediction",
+            questionId: q.id,
+            market: marketKey,
+            selection: leg.selection,
+            previousOdds: roundOdds2(legExpectedOdds),
+            currentOdds: serverLegOdds,
+            direction: serverLegOdds >= legExpectedOdds ? "up" : "down",
+          });
+        }
+
+        pricedLegs.push({
+          kind: "prediction",
+          matchId: null,
+          questionId: q.id,
+          sport: "prédiction",
+          league: q.category,
+          title: q.question,
+          market: marketKey,
+          selection: leg.selection,
+          selectionLabel,
+          odds: serverLegOdds,
+          status: "pending",
+        });
+      }
+    }
+
+    // Cote totale calculée EXCLUSIVEMENT à partir des cotes serveur verrouillées
+    const serverQuote = computeComboQuote(
+      pricedLegs.map((l) => l.odds),
+      roundedStake
+    );
+
+    const totalCheck = checkOddsChange({
+      expectedOdds: expectedTotalOdds,
+      serverOdds: serverQuote.totalOdds,
+      policy: oddsPolicy,
+    });
+
+    if (anyLegBlockedByPolicy || !totalCheck.ok) {
+      const roundedPrevTotal = roundOdds2(expectedTotalOdds);
+      return {
+        kind: "odds_changed",
+        details: {
+          previousOdds: roundedPrevTotal,
+          currentOdds: serverQuote.totalOdds,
+          direction: serverQuote.totalOdds >= roundedPrevTotal ? "up" : "down",
+          updatedLegs,
+        },
+      };
+    }
+
+    const [lockedUser] = await tx
+      .select({ id: appUser.id, balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .for("update");
+
+    if (!lockedUser || lockedUser.balance < roundedStake) {
+      return { kind: "error", status: 400, error: "Solde insuffisant" };
+    }
+
     const [inserted] = await tx
       .insert(comboBets)
       .values({
         userId: uid,
         legs: pricedLegs,
-        baseOdds: quote.baseOdds,
-        boostPct: quote.boostPct,
-        totalOdds: quote.totalOdds,
+        baseOdds: serverQuote.baseOdds,
+        boostPct: serverQuote.boostPct,
+        totalOdds: serverQuote.totalOdds,
         stake: roundedStake,
-        potentialWin: quote.potentialWin,
+        potentialWin: serverQuote.potentialWin,
         status: "pending",
       })
       .returning();
@@ -455,7 +651,6 @@ export async function POST(req: NextRequest) {
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });
 
-    // Incrémente aussi le volume statistique sur les questions incluses
     for (const l of pricedLegs) {
       if (l.kind === "prediction" && l.questionId) {
         const share = Math.round((roundedStake / pricedLegs.length) * 100) / 100;
@@ -466,13 +661,38 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return { bet: inserted, balance: updatedUser.balance };
+    return {
+      kind: "ok",
+      bet: inserted,
+      balance: updatedUser.balance,
+      hasPredLeg: pricedLegs.some((l) => l.kind === "prediction"),
+    };
   });
 
-  if (pricedLegs.some((l) => l.kind === "prediction")) {
+  if (txResult.kind === "odds_changed") {
+    const dirLabel =
+      txResult.details.direction === "up" ? "augmenté" : "évolué";
+    return NextResponse.json(
+      {
+        error: `Les cotes du coupon ont ${dirLabel} (${txResult.details.previousOdds.toFixed(2).replace(".", ",")} → ${txResult.details.currentOdds.toFixed(2).replace(".", ",")}). Confirmez pour valider.`,
+        code: ODDS_CHANGED_CODE,
+        details: txResult.details,
+      },
+      { status: 409 }
+    );
+  }
+
+  if (txResult.kind === "error") {
+    return NextResponse.json(
+      { error: txResult.error },
+      { status: txResult.status }
+    );
+  }
+
+  if (txResult.hasPredLeg) {
     invalidatePredictionsCatalogCache();
   }
   notifyNewBetPlaced({ userId: uid, kind: "combo" });
   invalidateHouseHealthCache();
-  return NextResponse.json(result);
+  return NextResponse.json({ bet: txResult.bet, balance: txResult.balance });
 }

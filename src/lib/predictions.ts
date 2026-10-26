@@ -177,7 +177,7 @@ export async function settleQuestion(
   `);
 
   invalidateQuestionScheduleCache();
-  invalidatePredictionsCatalogCache();
+  invalidatePredictionsCatalogCache(true);
   notifyBetsSettledOrMutated();
   await settlePendingCombos();
   invalidateHouseHealthCache();
@@ -242,7 +242,7 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
   `);
 
   invalidateQuestionScheduleCache();
-  invalidatePredictionsCatalogCache();
+  invalidatePredictionsCatalogCache(true);
   notifyBetsSettledOrMutated();
   invalidateHouseHealthCache();
   return (res.rows?.length ?? 0) > 0;

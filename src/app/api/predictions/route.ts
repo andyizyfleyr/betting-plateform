@@ -9,6 +9,13 @@ import {
   PRED_MIN_STAKE,
   round2,
 } from "@/lib/predictions";
+import {
+  checkOddsChange,
+  normalizeOddsPolicy,
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import {
   invalidatePredictionsCatalogCache,
@@ -153,7 +160,13 @@ export async function POST(req: NextRequest) {
   if (typeof auth !== "number") return auth;
   const uid = auth;
 
-  let body: { questionId?: number; selection?: string; stake?: number };
+  let body: {
+    questionId?: number;
+    selection?: string;
+    stake?: number;
+    expectedOdds?: number;
+    oddsPolicy?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -161,8 +174,17 @@ export async function POST(req: NextRequest) {
   }
 
   const { questionId, selection, stake } = body;
+  const expectedOdds = Number(body.expectedOdds);
+  const oddsPolicy = normalizeOddsPolicy(body.oddsPolicy);
+
   if (!questionId || !selection || !stake || stake <= 0) {
     return NextResponse.json({ error: "Données du pari incomplètes" }, { status: 400 });
+  }
+  if (!Number.isFinite(expectedOdds) || expectedOdds <= 1) {
+    return NextResponse.json(
+      { error: "Cote affichée manquante ou invalide — veuillez rafraîchir la question" },
+      { status: 400 }
+    );
   }
   if (stake < PRED_MIN_STAKE || stake > PRED_MAX_STAKE) {
     return NextResponse.json(
@@ -181,55 +203,92 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Trop rapide — veuillez patienter" }, { status: 429 });
   }
 
-  const [question] = await db
-    .select()
-    .from(predictionQuestions)
-    .where(eq(predictionQuestions.id, questionId));
-  if (!question) {
-    return NextResponse.json({ error: "Question introuvable" }, { status: 404 });
-  }
-  if (question.status !== "open") {
-    return NextResponse.json({ error: "Cette question est résolue" }, { status: 400 });
-  }
-  if (question.resolvesAt.getTime() <= Date.now()) {
-    return NextResponse.json({ error: "Les paris sont clos sur cette question" }, { status: 400 });
-  }
-
-  const isMultiChoice = Array.isArray(question.options) && question.options.length >= 2;
-  let odds: number;
-  let selectionLabel: string;
-  let incYes = 0;
-  let incNo = 0;
-
-  if (isMultiChoice && question.options) {
-    const matched = question.options.find((opt) => opt.key === selection);
-    if (!matched) {
-      return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
-    }
-    odds = matched.odds;
-    selectionLabel = matched.label;
-    incYes = 1; // yesCount sert aussi de compteur global de participations sur multi-choix
-  } else {
-    if (!PRED_SELECTIONS.includes(selection as PredSelection)) {
-      return NextResponse.json({ error: "Sélection invalide" }, { status: 400 });
-    }
-    const isYes = selection === "yes";
-    odds = isYes ? question.oddsYes : question.oddsNo;
-    selectionLabel = isYes ? "Oui" : "Non";
-    incYes = isYes ? 1 : 0;
-    incNo = isYes ? 0 : 1;
-  }
-
-  const [user] = await db.select().from(appUser).where(eq(appUser.id, uid));
-  if (!user || user.balance < stake) {
-    return NextResponse.json({ error: "Solde insuffisant" }, { status: 400 });
-  }
-
-  // Cote fixe verrouillée au moment de la validation : gain = mise × cote garanti.
   const roundedStakeValue = round2(stake);
-  const potentialWin = round2(roundedStakeValue * odds);
 
-  const result = await db.transaction(async (tx) => {
+  type PredTxOutcome =
+    | { kind: "ok"; bet: typeof predictionBets.$inferSelect; balance: number }
+    | { kind: "error"; status: number; error: string }
+    | { kind: "odds_changed"; details: OddsChangedDetails };
+
+  const txResult: PredTxOutcome = await db.transaction(async (tx) => {
+    const [question] = await tx
+      .select()
+      .from(predictionQuestions)
+      .where(eq(predictionQuestions.id, questionId))
+      .for("update");
+
+    if (!question) {
+      return { kind: "error", status: 404, error: "Question introuvable" };
+    }
+    if (question.status !== "open") {
+      return { kind: "error", status: 400, error: "Cette question est résolue" };
+    }
+    if (question.resolvesAt.getTime() <= Date.now()) {
+      return {
+        kind: "error",
+        status: 400,
+        error: "Les paris sont clos sur cette question",
+      };
+    }
+
+    const isMultiChoice =
+      Array.isArray(question.options) && question.options.length >= 2;
+    let rawServerOdds: number;
+    let selectionLabel: string;
+    let incYes = 0;
+    let incNo = 0;
+
+    if (isMultiChoice && question.options) {
+      const matched = question.options.find((opt) => opt.key === selection);
+      if (!matched) {
+        return { kind: "error", status: 400, error: "Sélection invalide" };
+      }
+      rawServerOdds = matched.odds;
+      selectionLabel = matched.label;
+      incYes = 1;
+    } else {
+      if (!PRED_SELECTIONS.includes(selection as PredSelection)) {
+        return { kind: "error", status: 400, error: "Sélection invalide" };
+      }
+      const isYes = selection === "yes";
+      rawServerOdds = isYes ? question.oddsYes : question.oddsNo;
+      selectionLabel = isYes ? "Oui" : "Non";
+      incYes = isYes ? 1 : 0;
+      incNo = isYes ? 0 : 1;
+    }
+
+    const serverOdds = roundOdds2(rawServerOdds);
+
+    // Vérification de la cote dans la même transaction AVANT tout débit
+    const oddsCheck = checkOddsChange({
+      expectedOdds,
+      serverOdds,
+      policy: oddsPolicy,
+    });
+    if (!oddsCheck.ok) {
+      return {
+        kind: "odds_changed",
+        details: {
+          previousOdds: oddsCheck.roundedExpectedOdds,
+          currentOdds: oddsCheck.roundedServerOdds,
+          direction: oddsCheck.direction,
+        },
+      };
+    }
+
+    const [lockedUser] = await tx
+      .select({ id: appUser.id, balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .for("update");
+
+    if (!lockedUser || lockedUser.balance < roundedStakeValue) {
+      return { kind: "error", status: 400, error: "Solde insuffisant" };
+    }
+
+    // Gain calculé EXCLUSIVEMENT avec `serverOdds`
+    const potentialWin = round2(roundedStakeValue * serverOdds);
+
     const [bet] = await tx
       .insert(predictionBets)
       .values({
@@ -239,7 +298,7 @@ export async function POST(req: NextRequest) {
         selectionLabel,
         question: question.question,
         category: question.category,
-        odds,
+        odds: serverOdds,
         stake: roundedStakeValue,
         potentialWin,
         status: "pending",
@@ -261,25 +320,45 @@ export async function POST(req: NextRequest) {
       })
       .where(eq(predictionQuestions.id, question.id));
 
-    return { bet, balance: updatedUser.balance };
+    return { kind: "ok", bet, balance: updatedUser.balance };
   });
+
+  if (txResult.kind === "odds_changed") {
+    const dirLabel =
+      txResult.details.direction === "up" ? "augmenté" : "évolué";
+    return NextResponse.json(
+      {
+        error: `La cote a ${dirLabel} (${txResult.details.previousOdds.toFixed(2).replace(".", ",")} → ${txResult.details.currentOdds.toFixed(2).replace(".", ",")}). Confirmez la nouvelle cote pour valider.`,
+        code: ODDS_CHANGED_CODE,
+        details: txResult.details,
+      },
+      { status: 409 }
+    );
+  }
+
+  if (txResult.kind === "error") {
+    return NextResponse.json(
+      { error: txResult.error },
+      { status: txResult.status }
+    );
+  }
 
   invalidatePredictionsCatalogCache();
   notifyNewBetPlaced({ userId: uid, kind: "prediction" });
   return NextResponse.json({
     bet: {
-      id: result.bet.id,
-      questionId: result.bet.questionId,
-      question: result.bet.question,
-      category: result.bet.category,
-      selection: result.bet.selection,
-      selectionLabel: result.bet.selectionLabel,
-      odds: result.bet.odds,
-      stake: result.bet.stake,
-      potentialWin: result.bet.potentialWin,
-      status: result.bet.status,
-      placedAt: result.bet.placedAt.toISOString(),
+      id: txResult.bet.id,
+      questionId: txResult.bet.questionId,
+      question: txResult.bet.question,
+      category: txResult.bet.category,
+      selection: txResult.bet.selection,
+      selectionLabel: txResult.bet.selectionLabel,
+      odds: txResult.bet.odds,
+      stake: txResult.bet.stake,
+      potentialWin: txResult.bet.potentialWin,
+      status: txResult.bet.status,
+      placedAt: txResult.bet.placedAt.toISOString(),
     },
-    balance: result.balance,
+    balance: txResult.balance,
   });
 }

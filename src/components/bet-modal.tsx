@@ -4,9 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Layers, Loader2, Lock, Plus, Ticket, X } from "lucide-react";
-import { api } from "@/lib/api";
+import { ApiRequestError, api } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import {
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 import { useApp, type BetTarget } from "./providers";
+import { OddsLockControls } from "./odds-lock-controls";
 import { TeamAvatar } from "./team-avatar";
 import { AnimatedNumber } from "./animated-number";
 import { TouchStakePad } from "./touch-stake-pad";
@@ -50,6 +56,8 @@ function BetModalSheet({
     setBalance,
     bumpBets,
     oddsFormat,
+    oddsPolicy,
+    setOddsPolicy,
     toast,
     openRecharge,
     comboLegs,
@@ -65,6 +73,16 @@ function BetModalSheet({
   });
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
+  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
+  const [serverOverrideOdds, setServerOverrideOdds] = useState<number | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (serverOverrideOdds == null) return;
+    const t = setTimeout(() => setServerOverrideOdds(null), 10_000);
+    return () => clearTimeout(t);
+  }, [serverOverrideOdds]);
   const [placed, setPlaced] = useState<{
     id: number;
     potentialWin: number;
@@ -169,7 +187,8 @@ function BetModalSheet({
 
   const marketClosed = Boolean(liveActive && (liveActive.finished || liveActive.odds == null));
   const marketSuspended = Boolean(liveActive ? liveActive.suspended : target.match.suspended);
-  const displayOdds = liveActive?.odds ?? target.odds;
+  const feedOdds = liveActive?.odds ?? target.odds;
+  const displayOdds = roundOdds2(serverOverrideOdds ?? feedOdds);
   const liveMinute = liveActive ? liveActive.minute : target.match.minute;
   const liveHomeScore = liveActive ? liveActive.homeScore : target.match.homeScore;
   const liveAwayScore = liveActive ? liveActive.awayScore : target.match.awayScore;
@@ -236,7 +255,11 @@ function BetModalSheet({
         selection: target.selection,
         market: target.market,
         stake,
+        expectedOdds: displayOdds,
+        oddsPolicy,
       });
+      setOddsChanged(null);
+      setServerOverrideOdds(null);
       setBalance(res.balance);
       bumpBets();
       playUiSound(user?.sound, "bet");
@@ -250,6 +273,18 @@ function BetModalSheet({
       setPhase("success");
     } catch (e) {
       setPhase("input");
+      if (
+        e instanceof ApiRequestError &&
+        e.status === 409 &&
+        e.code === ODDS_CHANGED_CODE &&
+        e.details
+      ) {
+        setOddsChanged(e.details);
+        setServerOverrideOdds(e.details.currentOdds);
+        triggerHaptic(user?.haptics, [12, 20]);
+        return;
+      }
+      setOddsChanged(null);
       const msg = e instanceof Error ? e.message : "Une erreur est survenue";
       setError(msg);
       toast({ kind: "error", title: "Pari refusé", description: msg });
@@ -449,6 +484,14 @@ function BetModalSheet({
               />
             </div>
 
+            <OddsLockControls
+              feedKind="matches"
+              oddsFormat={oddsFormat}
+              oddsPolicy={oddsPolicy}
+              onChangePolicy={setOddsPolicy}
+              oddsChanged={oddsChanged}
+            />
+
             {/* Validation simple ou Ajout au combiné */}
             <div className="mt-3.5 flex flex-col gap-2">
               <button
@@ -471,6 +514,11 @@ function BetModalSheet({
                   "Sélection clôturée"
                 ) : marketSuspended ? (
                   "Marché suspendu…"
+                ) : oddsChanged ? (
+                  <>
+                    Accepter la nouvelle cote ({formatOdds(displayOdds, oddsFormat)})
+                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+                  </>
                 ) : (
                   <>
                     Placer {stake > 0 ? eur(stake) : "le pari"}

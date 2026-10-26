@@ -16,7 +16,12 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { api, type ClientMatch, type ClientPrediction } from "@/lib/api";
+import {
+  ApiRequestError,
+  api,
+  type ClientMatch,
+  type ClientPrediction,
+} from "@/lib/api";
 import {
   computeComboQuote,
   MAX_COMBO_LEGS,
@@ -24,8 +29,14 @@ import {
   nextComboBoostTier,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import {
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/odds-lock";
 import { AnimatedNumber } from "@/components/animated-number";
 import { CouponCodeBox } from "@/components/coupon-code-box";
+import { OddsLockControls } from "@/components/odds-lock-controls";
 import { OddsTrendCorner, useOddsTrend } from "@/components/odds-trend-corner";
 import { TeamAvatar } from "@/components/team-avatar";
 import { TouchStakePad } from "@/components/touch-stake-pad";
@@ -63,6 +74,9 @@ export default function BetslipPage() {
     comboLegs,
     removeComboLeg,
     clearCombo,
+    applyComboOddsUpdates,
+    oddsPolicy,
+    setOddsPolicy,
     openMarkets,
     balance,
     setBalance,
@@ -79,6 +93,11 @@ export default function BetslipPage() {
   const [stakeText, setStakeText] = useState("10");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
+  const [legOverrides, setLegOverrides] = useState<{
+    until: number;
+    byUid: Record<string, number>;
+  } | null>(null);
   const [receipt, setReceipt] = useState<PlacedReceipt | null>(null);
 
   const hasPredLegs = comboLegs.some((l) => l.kind === "prediction");
@@ -122,14 +141,17 @@ export default function BetslipPage() {
 
   // Enrichissement temps réel de chaque sélection du Betslip
   const enrichedLegs = useMemo(() => {
+    const activeOverrides =
+      legOverrides && nowMs < legOverrides.until ? legOverrides.byUid : null;
     return comboLegs.map((leg) => {
+      const overrideOdds = activeOverrides?.[leg.uid];
       if (leg.kind === "sport" && leg.matchId) {
         const m = matchMap.get(leg.matchId);
         if (!m) {
           return {
             ...leg,
             resolvedSource: leg.matchSource ?? null,
-            liveOdds: leg.odds,
+            liveOdds: roundOdds2(overrideOdds ?? leg.odds),
             isLive: false,
             closed: false,
             suspended: false,
@@ -140,7 +162,7 @@ export default function BetslipPage() {
           return {
             ...leg,
             resolvedSource: m.source,
-            liveOdds: leg.odds,
+            liveOdds: roundOdds2(overrideOdds ?? leg.odds),
             isLive: false,
             closed: true,
             suspended: false,
@@ -162,7 +184,7 @@ export default function BetslipPage() {
         return {
           ...leg,
           resolvedSource: m.source,
-          liveOdds: liveOdds ?? leg.odds,
+          liveOdds: roundOdds2(overrideOdds ?? liveOdds ?? leg.odds),
           isLive: m.status === "live",
           closed: grp != null && !out,
           suspended: Boolean(m.suspended || m.kickoffReached),
@@ -176,7 +198,7 @@ export default function BetslipPage() {
           return {
             ...leg,
             resolvedSource: null,
-            liveOdds: leg.odds,
+            liveOdds: roundOdds2(overrideOdds ?? leg.odds),
             isLive: false,
             closed: false,
             suspended: false,
@@ -194,7 +216,7 @@ export default function BetslipPage() {
         return {
           ...leg,
           resolvedSource: null,
-          liveOdds,
+          liveOdds: roundOdds2(overrideOdds ?? liveOdds),
           isLive: false,
           closed: expired,
           suspended: false,
@@ -205,14 +227,14 @@ export default function BetslipPage() {
       return {
         ...leg,
         resolvedSource: leg.matchSource ?? null,
-        liveOdds: leg.odds,
+        liveOdds: roundOdds2(overrideOdds ?? leg.odds),
         isLive: false,
         closed: false,
         suspended: false,
         matchObj: null,
       };
     });
-  }, [comboLegs, matchMap, predMap, nowMs]);
+  }, [comboLegs, matchMap, predMap, nowMs, legOverrides]);
 
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
@@ -260,7 +282,11 @@ export default function BetslipPage() {
             market: single.market,
             selection: single.selection,
             stake,
+            expectedOdds: single.liveOdds,
+            oddsPolicy,
           });
+          setOddsChanged(null);
+          setLegOverrides(null);
           setBalance(res.balance);
           bumpBets();
           playUiSound(user?.sound, "bet");
@@ -279,7 +305,11 @@ export default function BetslipPage() {
             questionId: single.questionId,
             selection: single.selection,
             stake,
+            expectedOdds: single.liveOdds,
+            oddsPolicy,
           });
+          setOddsChanged(null);
+          setLegOverrides(null);
           setBalance(res.balance);
           bumpBets();
           playUiSound(user?.sound, "bet");
@@ -302,9 +332,14 @@ export default function BetslipPage() {
             ...(l.questionId ? { questionId: l.questionId } : {}),
             market: l.market,
             selection: l.selection,
+            expectedOdds: l.liveOdds,
           })),
           stake,
+          expectedTotalOdds: quote.totalOdds,
+          oddsPolicy,
         });
+        setOddsChanged(null);
+        setLegOverrides(null);
         setBalance(res.balance);
         bumpBets();
         playUiSound(user?.sound, "bet");
@@ -320,6 +355,46 @@ export default function BetslipPage() {
         clearCombo();
       }
     } catch (e) {
+      if (
+        e instanceof ApiRequestError &&
+        e.status === 409 &&
+        e.code === ODDS_CHANGED_CODE &&
+        e.details
+      ) {
+        setOddsChanged(e.details);
+        setNowMs(Date.now());
+        if (e.details.updatedLegs && e.details.updatedLegs.length > 0) {
+          applyComboOddsUpdates(e.details.updatedLegs);
+          const byUid: Record<string, number> = {};
+          for (const u of e.details.updatedLegs) {
+            const uid =
+              u.kind === "sport" ? `sport-${u.matchId}` : `pred-${u.questionId}`;
+            byUid[uid] = u.currentOdds;
+          }
+          setLegOverrides({ until: Date.now() + 10_000, byUid });
+        } else if (enrichedLegs.length === 1) {
+          const single = enrichedLegs[0];
+          applyComboOddsUpdates([
+            {
+              kind: single.kind,
+              matchId: single.matchId,
+              questionId: single.questionId,
+              market: single.market,
+              selection: single.selection,
+              previousOdds: e.details.previousOdds,
+              currentOdds: e.details.currentOdds,
+              direction: e.details.direction,
+            },
+          ]);
+          setLegOverrides({
+            until: Date.now() + 10_000,
+            byUid: { [single.uid]: e.details.currentOdds },
+          });
+        }
+        triggerHaptic(user?.haptics, [12, 20]);
+        return;
+      }
+      setOddsChanged(null);
       const msg = e instanceof Error ? e.message : "Validation du coupon impossible";
       setError(msg);
       toast({ kind: "error", title: "Coupon refusé", description: msg });
@@ -744,6 +819,18 @@ export default function BetslipPage() {
               </div>
             )}
 
+            <OddsLockControls
+              feedKind={
+                enrichedLegs.every((l) => l.kind === "prediction")
+                  ? "predictions"
+                  : "matches"
+              }
+              oddsFormat={oddsFormat}
+              oddsPolicy={oddsPolicy}
+              onChangePolicy={setOddsPolicy}
+              oddsChanged={oddsChanged}
+            />
+
             {error && !overBalance && (
               <p className="text-[12px] font-medium text-betclic-red">{error}</p>
             )}
@@ -756,6 +843,10 @@ export default function BetslipPage() {
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+              ) : oddsChanged ? (
+                <>
+                  Accepter la nouvelle cote ({formatOdds(quote.totalOdds, oddsFormat)})
+                </>
               ) : (
                 <>
                   {isCombo

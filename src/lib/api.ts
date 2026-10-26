@@ -1,4 +1,5 @@
 import type { LiveMatchTelemetry } from "@/lib/live-telemetry";
+import type { OddsChangePolicy, OddsChangedDetails } from "@/lib/odds-lock";
 
 export type MatchStatus = "live" | "upcoming" | "finished";
 export type BetStatus = "pending" | "won" | "lost" | "cashed" | "void";
@@ -260,15 +261,36 @@ const CLIENT_ETAG_CACHE_MAX = 60;
 const clientEtagCache = new Map<string, { etag: string; data: unknown }>();
 const inFlightGetRequests = new Map<string, Promise<unknown>>();
 
+const lastPublicServerTime: {
+  matches: string | null;
+  predictions: string | null;
+} = {
+  matches: null,
+  predictions: null,
+};
+
+export function getLastPublicServerTime(
+  kind: "matches" | "predictions"
+): string | null {
+  return lastPublicServerTime[kind];
+}
+
 export class ApiRequestError extends Error {
   status: number;
   code?: string;
+  details?: OddsChangedDetails;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: OddsChangedDetails
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -305,12 +327,17 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
 
   const res = await fetch(url, mergedInit);
   if (res.status === 304 && cached) {
+    const nowIso = new Date().toISOString();
+    if (url === "/api/matches") lastPublicServerTime.matches = nowIso;
+    if (url === "/api/predictions/catalog") lastPublicServerTime.predictions = nowIso;
     return cached.data as T;
   }
 
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;
     code?: string;
+    details?: OddsChangedDetails;
+    serverTime?: string;
   };
   if (!res.ok) {
     if (
@@ -336,11 +363,20 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
     throw new ApiRequestError(
       data.error ?? fallbackMsg,
       res.status,
-      data.code
+      data.code,
+      data.details
     );
   }
 
   if (isGet) {
+    if (url === "/api/matches" && typeof data.serverTime === "string") {
+      lastPublicServerTime.matches = data.serverTime;
+    } else if (
+      url === "/api/predictions/catalog" &&
+      typeof data.serverTime === "string"
+    ) {
+      lastPublicServerTime.predictions = data.serverTime;
+    }
     const etag = res.headers.get("etag");
     if (etag) {
       if (clientEtagCache.size >= CLIENT_ETAG_CACHE_MAX) {
@@ -423,11 +459,13 @@ export interface ClientSavedCouponLeg {
 }
 
 export const api = {
-  matches: () => request<{ matches: ClientMatch[] }>("/api/matches"),
+  matches: () =>
+    request<{ matches: ClientMatch[]; serverTime?: string }>("/api/matches"),
   matchHistory: (matchId?: number) =>
     request<{
       matches: ClientMatchHistoryItem[];
       focusedMatch: ClientMatchHistoryItem | null;
+      serverTime?: string;
     }>(
       matchId
         ? `/api/matches/history?matchId=${encodeURIComponent(matchId)}`
@@ -455,6 +493,8 @@ export const api = {
     selection: string;
     market?: string;
     stake: number;
+    expectedOdds: number;
+    oddsPolicy?: OddsChangePolicy;
   }) =>
     request<{ bet: ClientBet; balance: number }>("/api/bets", {
       method: "POST",
@@ -468,8 +508,11 @@ export const api = {
       questionId?: number;
       market?: string;
       selection: string;
+      expectedOdds: number;
     }>;
     stake: number;
+    expectedTotalOdds: number;
+    oddsPolicy?: OddsChangePolicy;
   }) =>
     request<{ bet: { id: number; totalOdds: number; stake: number; potentialWin: number; boostPct: number }; balance: number }>(
       "/api/bets/combo",
@@ -510,7 +553,9 @@ export const api = {
     }),
   predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100"),
   predictionsCatalog: () =>
-    request<{ questions: ClientPrediction[] }>("/api/predictions/catalog"),
+    request<{ questions: ClientPrediction[]; serverTime?: string }>(
+      "/api/predictions/catalog"
+    ),
   myPredictionBets: () =>
     request<{
       myBets: Record<
@@ -522,6 +567,8 @@ export const api = {
     questionId: number;
     selection: string;
     stake: number;
+    expectedOdds: number;
+    oddsPolicy?: OddsChangePolicy;
   }) =>
     request<{ bet: ClientPredictionBet; balance: number }>("/api/predictions", {
       method: "POST",

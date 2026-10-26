@@ -5,8 +5,10 @@ import { predictionQuestions } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import {
+  EDGE_CACHE_TAGS,
   getPredictionsCatalogCache,
   publicJsonWithEdgeCache,
+  rejectUnexpectedQueryParams,
   runSingleflight,
   setPredictionsCatalogCache,
 } from "@/lib/response-cache";
@@ -19,6 +21,7 @@ const CATALOG_EDGE_POLICY = {
   maxAge: 2,
   sMaxAge: 15,
   staleWhileRevalidate: 45,
+  tags: [EDGE_CACHE_TAGS.predictionsCatalog],
 } as const;
 
 // Sécurité : exclut strictement `seed_value` (graine interne de résolution serveur)
@@ -29,12 +32,9 @@ void _omitSeedValue;
 
 export async function GET(req: NextRequest) {
   try {
-    // Protection anti-cache-busting (requête avec query string aléatoire)
+    // Défense en profondeur derrière la règle Vercel Firewall : rejette tout paramètre aléatoire
     if (req.nextUrl.searchParams.size > 0) {
-      const anyRam = getPredictionsCatalogCache(true);
-      if (anyRam) {
-        return publicJsonWithEdgeCache(req, null, anyRam, CATALOG_EDGE_POLICY);
-      }
+      return rejectUnexpectedQueryParams();
     }
 
     const stored = await runSingleflight("api:predictions:catalog", async () => {
@@ -73,7 +73,10 @@ export async function GET(req: NextRequest) {
         myBet: null,
       }));
 
-      return setPredictionsCatalogCache({ questions });
+      return setPredictionsCatalogCache({
+        questions,
+        serverTime: new Date().toISOString(),
+      });
     });
 
     return publicJsonWithEdgeCache(req, null, stored, CATALOG_EDGE_POLICY);

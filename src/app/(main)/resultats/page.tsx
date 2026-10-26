@@ -488,20 +488,39 @@ function ResultatsContent() {
   const [winnerFilter, setWinnerFilter] = useState<WinnerFilter>("all");
   const [goalsFilter, setGoalsFilter] = useState<GoalsFilter>("all");
 
+  const validId =
+    requestedMatchId != null &&
+    Number.isInteger(requestedMatchId) &&
+    requestedMatchId > 0
+      ? requestedMatchId
+      : undefined;
+
   const load = useCallback(async () => {
     try {
-      const res = await api.matchHistory(
-        requestedMatchId && Number.isFinite(requestedMatchId) ? requestedMatchId : undefined
-      );
-      setHistory(res.matches);
-      setFocusedMatch(res.focusedMatch);
-      if (res.focusedMatch) {
-        setExpandedIds((prev) => ({ ...prev, [res.focusedMatch!.id]: true }));
+      // Appelle d'abord systématiquement l'URL canonique `/api/matches/history` (100 % mutualisée au CDN Edge)
+      const baseRes = await api.matchHistory();
+      setHistory(baseRes.matches);
+
+      if (validId) {
+        const inBase = baseRes.matches.find((m) => m.id === validId) ?? null;
+        if (inBase) {
+          setFocusedMatch(inBase);
+          setExpandedIds((prev) => ({ ...prev, [inBase.id]: true }));
+        } else {
+          // Repli ciblé uniquement si le match demandé est une archive hors des 240 derniers matchs
+          const detailRes = await api.matchHistory(validId);
+          setFocusedMatch(detailRes.focusedMatch);
+          if (detailRes.focusedMatch) {
+            setExpandedIds((prev) => ({ ...prev, [detailRes.focusedMatch!.id]: true }));
+          }
+        }
+      } else {
+        setFocusedMatch(null);
       }
     } catch {
       // ignore transient error
     }
-  }, [requestedMatchId]);
+  }, [validId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

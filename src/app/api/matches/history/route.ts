@@ -13,8 +13,10 @@ import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import {
+  EDGE_CACHE_TAGS,
   getHistoryBaseCache,
   publicJsonWithEdgeCache,
+  rejectUnexpectedQueryParams,
   runSingleflight,
   setHistoryBaseCache,
 } from "@/lib/response-cache";
@@ -28,6 +30,7 @@ const HISTORY_EDGE_POLICY = {
   maxAge: 2,
   sMaxAge: 12,
   staleWhileRevalidate: 30,
+  tags: [EDGE_CACHE_TAGS.history],
 } as const;
 
 // Projection SQL légère : omet les colonnes JSONB volumineuses ou strictement serveur
@@ -146,6 +149,7 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
 async function getOrBuildBaseHistory(): Promise<{
   payload: ReturnType<typeof setHistoryBaseCache>;
   items: ClientMatchHistoryItem[];
+  serverTime: string;
 }> {
   const hit = getHistoryBaseCache<ClientMatchHistoryItem>();
   if (hit) return hit;
@@ -182,21 +186,35 @@ async function getOrBuildBaseHistory(): Promise<{
       });
 
     const mapped = sortedFinished.map(mapHistoryItem);
-    const payload = setHistoryBaseCache(mapped);
-    return { payload, items: mapped };
+    const serverTime = new Date().toISOString();
+    const payload = setHistoryBaseCache(mapped, serverTime);
+    return { payload, items: mapped, serverTime };
   });
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const matchIdParam = req.nextUrl.searchParams.get("matchId");
-    const parsedId = matchIdParam ? Number(matchIdParam) : NaN;
-    const hasValidFocusId =
-      Number.isInteger(parsedId) && parsedId > 0 && parsedId <= 2_147_483_647;
+    const params = req.nextUrl.searchParams;
+    if (params.size > 1 || (params.size === 1 && !params.has("matchId"))) {
+      return rejectUnexpectedQueryParams("Seul le paramètre numérique matchId est autorisé");
+    }
+
+    const matchIdParam = params.get("matchId");
+    let parsedId = NaN;
+    if (matchIdParam !== null) {
+      if (!/^[1-9]\d{0,9}$/.test(matchIdParam)) {
+        return rejectUnexpectedQueryParams("Paramètre matchId numérique invalide");
+      }
+      parsedId = Number(matchIdParam);
+      if (!Number.isInteger(parsedId) || parsedId <= 0 || parsedId > 2_147_483_647) {
+        return rejectUnexpectedQueryParams("Paramètre matchId hors plage");
+      }
+    }
+    const hasValidFocusId = Number.isInteger(parsedId) && parsedId > 0;
 
     const base = await getOrBuildBaseHistory();
 
-    // Cas majoritaire (95 %+) : `/api/matches/history` sans `matchId` -> sert directement le tampon pré-sérialisé
+    // Cas majoritaire (99 %+) : `/api/matches/history` sans `matchId` -> sert directement le tampon pré-sérialisé
     if (!hasValidFocusId) {
       return publicJsonWithEdgeCache(req, null, base.payload, HISTORY_EDGE_POLICY);
     }
@@ -228,7 +246,7 @@ export async function GET(req: NextRequest) {
 
     return publicJsonWithEdgeCache(
       req,
-      { matches: base.items, focusedMatch },
+      { matches: base.items, focusedMatch, serverTime: base.serverTime },
       undefined,
       HISTORY_EDGE_POLICY
     );
