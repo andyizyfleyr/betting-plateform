@@ -233,9 +233,7 @@ function ComboBetTicket({
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
           <Layers className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
-          <span className="truncate font-semibold text-ink">
-            Combiné · {totalLegs} sél.
-          </span>
+          <span className="truncate font-semibold text-ink">Combiné</span>
           {bet.boostPct != null && bet.boostPct > 0 && (
             <span className="shrink-0 rounded-md bg-win/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold text-win">
               +{bet.boostPct}%
@@ -333,8 +331,8 @@ function ComboBetTicket({
         </div>
       </Link>
 
-      {/* Montants (même grille 3 colonnes qu'un pari simple) */}
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-edge pt-2.5">
+      {/* Montants en ligne (Nom en petit + valeur en grand) */}
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-2.5">
         <Amount label="Mise" value={eur(bet.stake)} tone="neutral" />
         <Amount
           label="Cote"
@@ -683,8 +681,8 @@ function SingleBetTicket({
         )}
       </div>
 
-      {/* Montants */}
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-edge pt-2.5">
+      {/* Montants en ligne (Nom en petit + valeur en grand) */}
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-2.5">
         <Amount label="Mise" value={eur(bet.stake)} tone="neutral" />
         <Amount
           label="Cote"
@@ -861,11 +859,16 @@ function Amount({
   align?: "right";
 }) {
   return (
-    <div className={cn(align === "right" && "text-right")}>
-      <p className="text-[10.5px] font-medium text-dim">{label}</p>
-      <p
+    <div
+      className={cn(
+        "inline-flex items-baseline gap-1 whitespace-nowrap",
+        align === "right" && "justify-end text-right"
+      )}
+    >
+      <span className="text-[10.5px] font-medium text-dim">{label} :</span>
+      <span
         className={cn(
-          "mt-0.5 font-display text-[13.5px] font-bold tabular-nums",
+          "font-display text-[13.5px] font-bold tabular-nums",
           tone === "win" && "text-win",
           tone === "lost" && "text-mist",
           tone === "cash" && "text-sky-700",
@@ -874,7 +877,7 @@ function Amount({
         )}
       >
         {value}
-      </p>
+      </span>
     </div>
   );
 }

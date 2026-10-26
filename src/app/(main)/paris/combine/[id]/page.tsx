@@ -342,7 +342,7 @@ export default function ComboDetailPage() {
             </Link>
             <div className="min-w-0">
               <h1 className="truncate font-display text-[19px] font-bold leading-tight tracking-tight text-ink lg:text-[23px]">
-                {bet ? `Combiné · ${totalLegs} sélections` : "Détail du combiné"}
+                {bet ? "Combiné" : "Détail du combiné"}
               </h1>
               {bet && (
                 <p className="truncate text-[11.5px] text-mist">
@@ -481,67 +481,65 @@ export default function ComboDetailPage() {
                 })}
               </div>
 
-              {/* Grille financière 3 colonnes alignée comme sur les paris simples */}
-              <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-edge pt-3">
-                <div>
-                  <p className="text-[10.5px] font-medium text-dim">Mise</p>
-                  <p className="mt-0.5 font-display text-[14.5px] font-bold tabular-nums text-ink">
+              {/* Montants en ligne (Nom en petit + valeur en grand) */}
+              <div className="mt-3.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-3">
+                <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-[10.5px] font-medium text-dim">Mise :</span>
+                  <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
                     {eur(bet.stake)}
-                  </p>
+                  </span>
                 </div>
 
-                <div>
-                  <p className="text-[10.5px] font-medium text-dim">Cote totale</p>
-                  <div className="mt-0.5 flex items-baseline gap-1.5">
-                    {bet.boostPct != null &&
-                      bet.boostPct > 0 &&
-                      bet.baseOdds != null &&
-                      bet.odds - bet.baseOdds >= 0.01 && (
-                        <span className="font-display text-[11px] font-semibold tabular-nums text-dim line-through">
-                          {formatOdds(bet.baseOdds, oddsFormat)}
-                        </span>
-                      )}
-                    <span className="font-display text-[14.5px] font-bold tabular-nums text-ink">
-                      ×{formatOdds(bet.odds, oddsFormat)}
-                    </span>
-                  </div>
+                <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-[10.5px] font-medium text-dim">Cote :</span>
+                  {bet.boostPct != null &&
+                    bet.boostPct > 0 &&
+                    bet.baseOdds != null &&
+                    bet.odds - bet.baseOdds >= 0.01 && (
+                      <span className="font-display text-[11px] font-semibold tabular-nums text-dim line-through">
+                        {formatOdds(bet.baseOdds, oddsFormat)}
+                      </span>
+                    )}
+                  <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+                    ×{formatOdds(bet.odds, oddsFormat)}
+                  </span>
                 </div>
 
-                <div className="text-right">
+                <div className="inline-flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
                   {bet.status === "won" ? (
                     <>
-                      <p className="text-[10.5px] font-medium text-win">Gain reçu</p>
-                      <p className="mt-0.5 font-display text-[15px] font-extrabold tabular-nums text-win">
+                      <span className="text-[10.5px] font-medium text-dim">Gain reçu :</span>
+                      <span className="font-display text-[13.5px] font-bold tabular-nums text-win">
                         +{eur(bet.potentialWin)}
-                      </p>
+                      </span>
                     </>
                   ) : bet.status === "lost" ? (
                     <>
-                      <p className="text-[10.5px] font-medium text-dim">Résultat</p>
-                      <p className="mt-0.5 font-display text-[14.5px] font-bold tabular-nums text-mist">
+                      <span className="text-[10.5px] font-medium text-dim">Résultat :</span>
+                      <span className="font-display text-[13.5px] font-bold tabular-nums text-mist">
                         -{eur(bet.stake)}
-                      </p>
+                      </span>
                     </>
                   ) : bet.status === "cashed" ? (
                     <>
-                      <p className="text-[10.5px] font-medium text-sky-700">Vendu pour</p>
-                      <p className="mt-0.5 font-display text-[15px] font-extrabold tabular-nums text-sky-700">
+                      <span className="text-[10.5px] font-medium text-dim">Vendu pour :</span>
+                      <span className="font-display text-[13.5px] font-bold tabular-nums text-sky-700">
                         +{eur(bet.cashOutAmount ?? 0)}
-                      </p>
+                      </span>
                     </>
                   ) : bet.status === "void" ? (
                     <>
-                      <p className="text-[10.5px] font-medium text-amber-800">Remboursé</p>
-                      <p className="mt-0.5 font-display text-[14.5px] font-bold tabular-nums text-ink">
+                      <span className="text-[10.5px] font-medium text-dim">Remboursé :</span>
+                      <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
                         +{eur(bet.stake)}
-                      </p>
+                      </span>
                     </>
                   ) : (
                     <>
-                      <p className="text-[10.5px] font-medium text-dim">Gain max</p>
-                      <p className="mt-0.5 font-display text-[15px] font-extrabold tabular-nums text-ink">
+                      <span className="text-[10.5px] font-medium text-dim">Gain max :</span>
+                      <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
                         {eur(bet.potentialWin)}
-                      </p>
+                      </span>
                     </>
                   )}
                 </div>
