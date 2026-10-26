@@ -95,20 +95,6 @@ function MatchCardInner({
         className
       )}
     >
-      {(isLive || isReal) && (
-        <span
-          aria-hidden
-          className={cn(
-            "absolute inset-y-0 left-0 w-[3px]",
-            isReal
-              ? isLive
-                ? "bg-emerald-600"
-                : "bg-emerald-600/55"
-              : "bg-betclic-red"
-          )}
-        />
-      )}
-
       {/* En-tête : ligue + statut (compact sur mobile, sans bouton Stats mobile) */}
       <div className="flex items-center justify-between gap-2 text-[11.5px]">
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
