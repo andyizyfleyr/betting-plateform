@@ -1,7 +1,11 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { hydrateLiveMatchRow } from "@/db/engine";
+import {
+  checkpointVirtualMatchesForBet,
+  hydrateLiveMatchRow,
+  runLiveEngine,
+} from "@/db/engine";
 import { ensureSeeded } from "@/db/seed";
 import {
   appUser,
@@ -10,9 +14,15 @@ import {
   matches,
   predictionBets,
   predictionQuestions,
+  type MatchRow,
 } from "@/db/schema";
 import { notifyBetsSettledOrMutated } from "@/lib/active-state-cache";
-import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
+import {
+  checkLiveMatchCashOutGuard,
+  computeCashOut,
+  computePredictionCashOut,
+  type LiveIncidentSnapshot,
+} from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
@@ -34,6 +44,9 @@ import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
 
+/** Fenêtre de validation live identique à la prise de pari (`POST /api/bets` & `POST /api/bets/combo`). */
+const LIVE_VALIDATION_MS = 300;
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -50,7 +63,100 @@ function cashoutChangedResponse(details: CashoutChangedDetails): NextResponse {
 }
 
 /**
+ * Applique exactement le même protocole anti-but & anti-carton rouge hors transaction
+ * que `POST /api/bets` et `POST /api/bets/combo` avant d'ouvrir la transaction PostgreSQL :
+ *  1. Checkpoint mémoire -> SQL des matchs virtuels ciblés ;
+ *  2. Vérification immédiate `suspended`, `isRealMatchPostIncidentSuspended` (but/rouge < 18 s),
+ *     `isRealMatchFeedStale` et verrou de fin de match (`85'` virtuel / `88'` réel) ;
+ *  3. Empreinte `{ homeScore, awayScore, redHome, redAway }` de chaque match live ;
+ *  4. Délai d'acceptation live (`verifyLiveRealMatchesBeforeBet` 3 s sur réel,
+ *     `LIVE_VALIDATION_MS` 300 ms + `runLiveEngine` + `checkpointVirtualMatchesForBet` sur virtuel)
+ *     puis comparaison score + cartons rouges.
+ */
+async function verifyLiveMatchesBeforeCashOut(
+  rawMatchRows: MatchRow[]
+): Promise<
+  | { ok: true; liveSnapshots: Map<number, LiveIncidentSnapshot> }
+  | { ok: false; status: 400 | 409; error: string }
+> {
+  if (rawMatchRows.length === 0) {
+    return { ok: true, liveSnapshots: new Map() };
+  }
+
+  const checkpointedMap = await checkpointVirtualMatchesForBet(rawMatchRows);
+  const syncedRows = [...checkpointedMap.values()];
+  const now0 = Date.now();
+
+  const liveSnapshots = new Map<number, LiveIncidentSnapshot>();
+  const liveRealRows: MatchRow[] = [];
+  const liveVirtualIds: number[] = [];
+
+  for (const raw of syncedRows) {
+    const m = hydrateLiveMatchRow(raw, now0);
+    if (m.status !== "live") continue;
+
+    const guard0 = checkLiveMatchCashOutGuard(m, now0);
+    if (!guard0.ok) return guard0;
+
+    liveSnapshots.set(m.id, {
+      homeScore: m.homeScore ?? 0,
+      awayScore: m.awayScore ?? 0,
+      redHome: m.redHome ?? 0,
+      redAway: m.redAway ?? 0,
+    });
+
+    if (m.source === "manual") {
+      liveRealRows.push(m);
+    } else {
+      liveVirtualIds.push(m.id);
+    }
+  }
+
+  if (liveSnapshots.size === 0) {
+    return { ok: true, liveSnapshots };
+  }
+
+  if (liveRealRows.length > 0) {
+    const realGuard = await verifyLiveRealMatchesBeforeBet(liveRealRows);
+    if (!realGuard.ok) {
+      return { ok: false, status: 409, error: realGuard.error };
+    }
+    const nowReal = Date.now();
+    for (const [mid, refreshed] of realGuard.refreshedMap.entries()) {
+      const snap = liveSnapshots.get(mid);
+      if (!snap) continue;
+      const postGuard = checkLiveMatchCashOutGuard(refreshed, nowReal, snap);
+      if (!postGuard.ok) return postGuard;
+    }
+  }
+
+  if (liveVirtualIds.length > 0) {
+    await new Promise((resolve) => setTimeout(resolve, LIVE_VALIDATION_MS));
+    await runLiveEngine();
+    const freshVirtualRows = await db
+      .select()
+      .from(matches)
+      .where(inArray(matches.id, liveVirtualIds));
+    const freshMap = await checkpointVirtualMatchesForBet(freshVirtualRows);
+    const nowVirt = Date.now();
+    for (const mid of liveVirtualIds) {
+      const freshRow = freshMap.get(mid);
+      if (!freshRow) {
+        return { ok: false, status: 400, error: "Match introuvable" };
+      }
+      const hydrated = hydrateLiveMatchRow(freshRow, nowVirt);
+      const snap = liveSnapshots.get(mid);
+      const postGuard = checkLiveMatchCashOutGuard(hydrated, nowVirt, snap);
+      if (!postGuard.ok) return postGuard;
+    }
+  }
+
+  return { ok: true, liveSnapshots };
+}
+
+/**
  * Encaisse un pari en cours (sportif, prédiction ou combiné) avec :
+ *  - Suspension anti-but & anti-carton rouge strictement identique aux paris (hors tx + sous verrou `FOR SHARE`)
  *  - Verrou transactionnel sur `expectedCashout` (`409 CASHOUT_CHANGED` sans paiement si baisse)
  *  - Idempotence complète + refus `409 IDEMPOTENCY_KEY_CONFLICT` si la clé est réutilisée avec un autre contenu
  *  - Ordre canonique global acyclique des verrous PostgreSQL :
@@ -137,6 +243,7 @@ export async function POST(req: NextRequest) {
       | { kind: "ok"; balance: number; value: number; deduplicated?: boolean }
       | { kind: "idempotency_conflict" }
       | { kind: "cashout_changed"; details: CashoutChangedDetails }
+      | { kind: "live_incident"; error: string }
       | { kind: "settled" }
       | { kind: "error"; error: string };
 
@@ -157,6 +264,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const pendingSportMatchIds = [
+        ...new Set(
+          (cb.legs ?? [])
+            .filter((l) => l.kind === "sport" && l.status === "pending" && l.matchId)
+            .map((l) => l.matchId as number)
+        ),
+      ];
       const matchIds = [
         ...new Set(
           (cb.legs ?? [])
@@ -172,21 +286,23 @@ export async function POST(req: NextRequest) {
         ),
       ];
 
-      if (cb.status === "pending" && matchIds.length > 0) {
+      let liveSnapshots = new Map<number, LiveIncidentSnapshot>();
+      if (cb.status === "pending" && pendingSportMatchIds.length > 0) {
         const preMatches = await db
           .select()
           .from(matches)
-          .where(inArray(matches.id, matchIds));
-        const liveRealComboRows = preMatches.filter(
-          (m) => m.status === "live" && m.source === "manual"
-        );
-        if (liveRealComboRows.length > 0) {
-          const realGuard = await verifyLiveRealMatchesBeforeBet(liveRealComboRows);
-          if (!realGuard.ok) {
-            return NextResponse.json({ error: realGuard.error }, { status: 409 });
-          }
+          .where(inArray(matches.id, pendingSportMatchIds));
+        const liveGuard = await verifyLiveMatchesBeforeCashOut(preMatches);
+        if (!liveGuard.ok) {
+          return NextResponse.json(
+            { error: liveGuard.error },
+            { status: liveGuard.status }
+          );
         }
+        liveSnapshots = liveGuard.liveSnapshots;
       }
+
+      const pendingMatchIdSet = new Set(pendingSportMatchIds);
 
       const txRes: CashoutTxResult = await db.transaction(async (tx) => {
         await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
@@ -254,6 +370,23 @@ export async function POST(req: NextRequest) {
         const effectiveMatchMap = new Map(
           lockedMatches.map((m) => [m.id, hydrateLiveMatchRow(m, nowCashMs)])
         );
+
+        // Vérification anti-but & anti-carton rouge sous verrou `FOR SHARE` sur chaque sélection en cours
+        for (const mid of pendingMatchIdSet) {
+          const eff = effectiveMatchMap.get(mid);
+          if (!eff) continue;
+          const inTxGuard = checkLiveMatchCashOutGuard(
+            eff,
+            nowCashMs,
+            liveSnapshots.get(mid)
+          );
+          if (!inTxGuard.ok) {
+            return inTxGuard.status === 409
+              ? { kind: "live_incident", error: inTxGuard.error }
+              : { kind: "error", error: inTxGuard.error };
+          }
+        }
+
         const value = computeComboCashOut(
           lockedCb,
           effectiveMatchMap,
@@ -315,6 +448,9 @@ export async function POST(req: NextRequest) {
 
       if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
       if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
+      if (txRes.kind === "live_incident") {
+        return NextResponse.json({ error: txRes.error }, { status: 409 });
+      }
       if (txRes.kind === "settled") {
         return NextResponse.json(
           { error: "Ce combiné vient d'être réglé" },
@@ -360,11 +496,23 @@ export async function POST(req: NextRequest) {
               { status: 400 }
             );
           }
-          if (bet.status === "pending" && match.status === "live" && match.source === "manual") {
-            const realGuard = await verifyLiveRealMatchesBeforeBet([match]);
-            if (!realGuard.ok) {
-              return NextResponse.json({ error: realGuard.error }, { status: 409 });
+
+          let singleLiveSnapshots = new Map<number, LiveIncidentSnapshot>();
+          if (bet.status === "pending") {
+            if (match.status !== "live") {
+              return NextResponse.json(
+                { error: "La vente du coupon n'est disponible que pendant le match" },
+                { status: 400 }
+              );
             }
+            const liveGuard = await verifyLiveMatchesBeforeCashOut([match]);
+            if (!liveGuard.ok) {
+              return NextResponse.json(
+                { error: liveGuard.error },
+                { status: liveGuard.status }
+              );
+            }
+            singleLiveSnapshots = liveGuard.liveSnapshots;
           }
 
           const targetMatchId = bet.matchId;
@@ -416,8 +564,9 @@ export async function POST(req: NextRequest) {
               return { kind: "settled" };
             }
 
+            const nowCashMs = Date.now();
             const effectiveMatch = lockedRawMatch
-              ? hydrateLiveMatchRow(lockedRawMatch, Date.now())
+              ? hydrateLiveMatchRow(lockedRawMatch, nowCashMs)
               : null;
             if (!effectiveMatch || effectiveMatch.status !== "live") {
               return {
@@ -425,11 +574,16 @@ export async function POST(req: NextRequest) {
                 error: "La vente du coupon n'est disponible que pendant le match",
               };
             }
-            if (effectiveMatch.suspended) {
-              return {
-                kind: "error",
-                error: "Marché suspendu — vente du coupon indisponible",
-              };
+
+            const inTxGuard = checkLiveMatchCashOutGuard(
+              effectiveMatch,
+              nowCashMs,
+              singleLiveSnapshots.get(effectiveMatch.id)
+            );
+            if (!inTxGuard.ok) {
+              return inTxGuard.status === 409
+                ? { kind: "live_incident", error: inTxGuard.error }
+                : { kind: "error", error: inTxGuard.error };
             }
 
             const value = computeCashOut({
@@ -524,6 +678,9 @@ export async function POST(req: NextRequest) {
 
           if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
           if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
+          if (txRes.kind === "live_incident") {
+            return NextResponse.json({ error: txRes.error }, { status: 409 });
+          }
           if (txRes.kind === "settled") {
             return NextResponse.json(
               { error: "Ce pari vient d'être réglé" },

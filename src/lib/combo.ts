@@ -402,7 +402,7 @@ export function computeComboCashOut(
           return null;
         }
         const min = minuteNumber(m.minute);
-        if (min >= 88) return null;
+        if (min >= (m.source === "manual" ? 88 : 85)) return null;
         if (
           tryEarlyLiveSettle(leg.market, leg.selection, {
             source: m.source === "manual" ? "manual" : "virtual",

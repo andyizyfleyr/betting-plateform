@@ -1,6 +1,11 @@
 import { count, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db, ensureHealthyDbConnection, getCandidateDatabaseUrls } from "@/db";
+import {
+  db,
+  ensureHealthyDbConnection,
+  getActiveDbPoolInfo,
+  getCandidateDatabaseUrls,
+} from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { matches, predictionQuestions } from "@/db/schema";
 import { classifyServerError } from "@/lib/db-error";
@@ -34,6 +39,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       db: "connected",
+      pool: getActiveDbPoolInfo(),
       envKeys,
       matchesCount: matchTotal?.n ?? 0,
       predictionsCount: predTotal?.n ?? 0,

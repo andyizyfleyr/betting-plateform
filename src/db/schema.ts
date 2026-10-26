@@ -362,8 +362,10 @@ export const withdrawals = pgTable("withdrawals", {
 
 /**
  * Registre transactionnel d'idempotence (paris, Cash Out, retraits, dépôts).
- * Garantit l'unicité `(user_id, scope, idempotency_key)` ET rejette en `409` toute réutilisation
- * d'une même clé avec une empreinte SHA-256 (`request_hash`) différente.
+ * Garantit l'unicité `(user_id, scope, idempotency_key)`, rejette en `409` toute réutilisation
+ * d'une même clé avec une empreinte SHA-256 (`request_hash`) différente, et gère les pannes
+ * mid-flight via `status` (`'processing' | 'completed'`) et `expires_at` (TTL court en cours,
+ * TTL 24 h une fois complété).
  */
 export const idempotencyKeys = pgTable(
   "idempotency_keys",
@@ -372,16 +374,40 @@ export const idempotencyKeys = pgTable(
     scope: text("scope").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     requestHash: text("request_hash").notNull(),
+    status: text("status").notNull().default("completed"), // "processing" | "completed"
     statusCode: integer("status_code").notNull().default(200),
     responseBody: jsonb("response_body")
       .$type<Record<string, unknown>>()
       .notNull(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({
       name: "idempotency_keys_pk",
       columns: [table.userId, table.scope, table.idempotencyKey],
+    }),
+  ]
+);
+
+/**
+ * Registre persistant de dédoublonnage des webhooks entrants par `(provider, event_id)`.
+ * Garantit qu'un événement Stripe/PayPal rejoué n'exécute jamais deux fois son traitement.
+ */
+export const webhookEvents = pgTable(
+  "webhook_events",
+  {
+    provider: text("provider").notNull(),
+    eventId: text("event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    objectId: text("object_id"),
+    processedAt: timestamp("processed_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "webhook_events_pk",
+      columns: [table.provider, table.eventId],
     }),
   ]
 );

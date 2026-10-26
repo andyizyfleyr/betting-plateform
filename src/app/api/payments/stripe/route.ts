@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -11,7 +12,12 @@ import {
   saveIdempotencyRecord,
 } from "@/lib/idempotency";
 import { extractIdempotencyKey } from "@/lib/odds-lock";
-import { createStripeCheckout, findProvider, storePendingDeposit } from "@/lib/payments";
+import {
+  buildGatewayIdempotencyHeader,
+  createStripeCheckout,
+  findProvider,
+  storePendingDeposit,
+} from "@/lib/payments";
 import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -74,46 +80,18 @@ export async function POST(req: NextRequest) {
     }
 
     const origin = new URL(req.url).origin;
+    const gatewayKey = buildGatewayIdempotencyHeader(uid, "stripe", idempotencyKey);
+
+    let session: { id: string; url: string | null };
     try {
-      const session = await createStripeCheckout({
+      session = await createStripeCheckout({
         userId: uid,
         amount,
         currency: "EUR",
         successUrl: `${origin}/parametres?deposit=stripe&ref={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/parametres?deposit=cancelled`,
-        idempotencyKey,
+        idempotencyKey: gatewayKey,
       });
-
-      if (!session.url) {
-        await releaseExternalIdempotencyClaim({
-          userId: uid,
-          scope: "deposit:stripe",
-          idempotencyKey,
-        });
-        return NextResponse.json(
-          { error: "Impossible d'initier le paiement" },
-          { status: 502 }
-        );
-      }
-
-      await storePendingDeposit(
-        "stripe",
-        session.id,
-        uid,
-        amount,
-        "EUR",
-        idempotencyKey
-      );
-      await saveIdempotencyRecord(db, {
-        userId: uid,
-        scope: "deposit:stripe",
-        idempotencyKey,
-        requestHash,
-        statusCode: 200,
-        responseBody: { url: session.url },
-      });
-
-      return NextResponse.json({ url: session.url });
     } catch {
       await releaseExternalIdempotencyClaim({
         userId: uid,
@@ -125,6 +103,41 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
+
+    if (!session.url) {
+      await releaseExternalIdempotencyClaim({
+        userId: uid,
+        scope: "deposit:stripe",
+        idempotencyKey,
+      });
+      return NextResponse.json(
+        { error: "Impossible d'initier le paiement" },
+        { status: 502 }
+      );
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+      await storePendingDeposit(
+        "stripe",
+        session.id,
+        uid,
+        amount,
+        "EUR",
+        idempotencyKey,
+        tx
+      );
+      await saveIdempotencyRecord(tx, {
+        userId: uid,
+        scope: "deposit:stripe",
+        idempotencyKey,
+        requestHash,
+        statusCode: 200,
+        responseBody: { url: session.url },
+      });
+    });
+
+    return NextResponse.json({ url: session.url });
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/payments/stripe");
   }
