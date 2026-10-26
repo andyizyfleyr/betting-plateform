@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -33,6 +33,7 @@ import {
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur, formatOdds } from "@/lib/format";
 import {
+  generateBetIdempotencyKey,
   ODDS_CHANGED_CODE,
   roundOdds2,
   type OddsChangedDetails,
@@ -250,6 +251,8 @@ export function DesktopBetslipSidebar() {
     finalOdds: number;
     potentialWin: number;
   } | null>(null);
+  const inFlightRef = useRef(false);
+  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
   const hasPredLegs = comboLegs.some((l) => l.kind === "prediction");
 
@@ -394,7 +397,16 @@ export function DesktopBetslipSidebar() {
       router.push("/auth");
       return;
     }
-    if (!canSubmit) return;
+    if (!canSubmit || inFlightRef.current) return;
+    inFlightRef.current = true;
+    const legsSig = enrichedLegs
+      .map((l) => `${l.uid}:${l.market}:${l.selection}:${l.liveOdds}`)
+      .join("|");
+    const sig = `${legsSig}::${stake}::${quote.totalOdds}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = { key: generateBetIdempotencyKey(), sig };
+    }
+    const idempotencyKey = idempotencySlotRef.current.key;
 
     setLoading(true);
     setError(null);
@@ -414,6 +426,7 @@ export function DesktopBetslipSidebar() {
             market: leg.market,
             expectedOdds: leg.liveOdds,
             oddsPolicy,
+            idempotencyKey,
           });
           newBalance = res.balance;
           finalOdds = res.bet.odds;
@@ -425,6 +438,7 @@ export function DesktopBetslipSidebar() {
             stake,
             expectedOdds: leg.liveOdds,
             oddsPolicy,
+            idempotencyKey,
           });
           newBalance = res.balance;
           finalOdds = res.bet.odds;
@@ -435,6 +449,7 @@ export function DesktopBetslipSidebar() {
           stake,
           expectedTotalOdds: quote.totalOdds,
           oddsPolicy,
+          idempotencyKey,
           legs: enrichedLegs.map((l) => ({
             kind: l.kind,
             ...(l.matchId ? { matchId: l.matchId } : {}),
@@ -449,6 +464,7 @@ export function DesktopBetslipSidebar() {
         potentialWin = res.bet.potentialWin;
       }
 
+      idempotencySlotRef.current = null;
       setOddsChanged(null);
       setLegOverrides(null);
       setBalance(newBalance);
@@ -474,6 +490,9 @@ export function DesktopBetslipSidebar() {
         description: `${eur(snap.stake)} @ ${formatOdds(snap.finalOdds, oddsFormat)} · Gain pot. ${eur(snap.potentialWin)}`,
       });
     } catch (e) {
+      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
+        idempotencySlotRef.current = null;
+      }
       if (
         e instanceof ApiRequestError &&
         e.status === 409 &&
@@ -520,6 +539,7 @@ export function DesktopBetslipSidebar() {
           : "Validation du coupon impossible."
       );
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   };

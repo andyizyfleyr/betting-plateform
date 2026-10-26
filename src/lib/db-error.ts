@@ -135,6 +135,20 @@ export function classifyServerError(err: unknown): ClassifiedServerError {
   }
 
   if (
+    /\[55p03\]|\b55p03\b|\[40p01\]|\b40p01\b|lock timeout|canceling statement due to lock timeout|deadlock detected/i.test(
+      lower
+    )
+  ) {
+    return {
+      code: "DB_TIMEOUT",
+      message:
+        "Forte affluence momentanée sur ce marché — veuillez réessayer dans un instant.",
+      detail: rootReason,
+      status: 503,
+    };
+  }
+
+  if (
     /timeout|etimedout|econnrefused|econnreset|connection terminated|server closed the connection|57p01/i.test(
       lower
     )

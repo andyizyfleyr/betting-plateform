@@ -42,7 +42,7 @@ export interface EdgeCachePolicy {
   tags?: readonly string[];
 }
 
-const MATCHES_CACHE_TTL_MS = 2_500;
+const MATCHES_CACHE_TTL_MS = 4_500;
 const HISTORY_CACHE_TTL_MS = 12_000;
 const PREDICTIONS_CATALOG_TTL_MS = 15_000;
 const TAG_PURGE_COOLDOWN_MS = 2_500;
@@ -201,6 +201,34 @@ export function purgeEdgeCacheTags(tags: readonly string[]): void {
     );
   } catch {
     /* hors contexte de requête Vercel : aucun impact */
+  }
+}
+
+/**
+ * Purge synchrone avec rapport de statut (`"purged" | "cooldown" | "unsupported" | "local"`),
+ * utilisée par `POST /api/admin` pour exposer l'en-tête de diagnostic `X-Edge-Tag-Purge`.
+ */
+export async function purgeEdgeCacheTagsWithReport(
+  tags: readonly string[]
+): Promise<"purged" | "cooldown" | "unsupported" | "local"> {
+  if (process.env.VERCEL !== "1" || tags.length === 0) return "local";
+  const now = Date.now();
+  const s = store();
+  const dueTags: string[] = [];
+  for (const t of tags) {
+    const prev = s.lastTagPurgeAt.get(t) ?? 0;
+    if (now - prev >= TAG_PURGE_COOLDOWN_MS) {
+      s.lastTagPurgeAt.set(t, now);
+      dueTags.push(t);
+    }
+  }
+  if (dueTags.length === 0) return "cooldown";
+
+  try {
+    await invalidateByTag([...dueTags]);
+    return "purged";
+  } catch {
+    return "unsupported";
   }
 }
 

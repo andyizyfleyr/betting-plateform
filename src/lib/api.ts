@@ -467,8 +467,8 @@ export const api = {
       focusedMatch: ClientMatchHistoryItem | null;
       serverTime?: string;
     }>(
-      matchId
-        ? `/api/matches/history?matchId=${encodeURIComponent(matchId)}`
+      typeof matchId === "number" && Number.isInteger(matchId) && matchId > 0
+        ? `/api/matches/history?matchId=${matchId}`
         : "/api/matches/history"
     ),
   bets: (filter: "ongoing" | "finished") =>
@@ -495,8 +495,9 @@ export const api = {
     stake: number;
     expectedOdds: number;
     oddsPolicy?: OddsChangePolicy;
+    idempotencyKey: string;
   }) =>
-    request<{ bet: ClientBet; balance: number }>("/api/bets", {
+    request<{ bet: ClientBet; balance: number; deduplicated?: boolean }>("/api/bets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -513,8 +514,13 @@ export const api = {
     stake: number;
     expectedTotalOdds: number;
     oddsPolicy?: OddsChangePolicy;
+    idempotencyKey: string;
   }) =>
-    request<{ bet: { id: number; totalOdds: number; stake: number; potentialWin: number; boostPct: number }; balance: number }>(
+    request<{
+      bet: { id: number; totalOdds: number; stake: number; potentialWin: number; boostPct: number };
+      balance: number;
+      deduplicated?: boolean;
+    }>(
       "/api/bets/combo",
       {
         method: "POST",
@@ -569,12 +575,16 @@ export const api = {
     stake: number;
     expectedOdds: number;
     oddsPolicy?: OddsChangePolicy;
+    idempotencyKey: string;
   }) =>
-    request<{ bet: ClientPredictionBet; balance: number }>("/api/predictions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
+    request<{ bet: ClientPredictionBet; balance: number; deduplicated?: boolean }>(
+      "/api/predictions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    ),
   settings: () => request<{ user: ClientUser }>("/api/settings"),
   patchSettings: (patch: Partial<ClientUser>) =>
     request<{ user: ClientUser }>("/api/settings", {

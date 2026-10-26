@@ -146,6 +146,8 @@ export const bets = pgTable("bets", {
   closingOdds: doublePrecision("closing_odds"),
   /** Flag risque (latence admin-clic, marché quasi décidé…) pour revue manuelle. */
   riskFlag: text("risk_flag"),
+  /** Clé d'idempotence client unique par joueur (empêche tout double débit sur double clic / retry réseau). */
+  idempotencyKey: text("idempotency_key"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
   settledAt: timestamp("settled_at", { mode: "date" }),
 });
@@ -201,6 +203,7 @@ export const predictionBets = pgTable("prediction_bets", {
   potentialWin: doublePrecision("potential_win").notNull(),
   status: text("status").notNull().default("pending"),
   cashOutAmount: doublePrecision("cash_out_amount"),
+  idempotencyKey: text("idempotency_key"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
   settledAt: timestamp("settled_at", { mode: "date" }),
 });
@@ -319,6 +322,7 @@ export const comboBets = pgTable("combo_bets", {
   potentialWin: doublePrecision("potential_win").notNull(),
   status: text("status").notNull().default("pending"),
   cashOutAmount: doublePrecision("cash_out_amount"),
+  idempotencyKey: text("idempotency_key"),
   placedAt: timestamp("placed_at", { mode: "date" }).notNull().defaultNow(),
   settledAt: timestamp("settled_at", { mode: "date" }),
 });

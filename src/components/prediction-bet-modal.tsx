@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { ArrowRight, Check, Layers, Loader2, Plus, Ticket, X } from "lucide-react";
 import { ApiRequestError, api, type ClientPrediction } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
+  generateBetIdempotencyKey,
   ODDS_CHANGED_CODE,
   roundOdds2,
   type OddsChangedDetails,
@@ -94,6 +95,8 @@ function PredictionBetSheet({
   const [serverOverrideOdds, setServerOverrideOdds] = useState<number | null>(
     null
   );
+  const inFlightRef = useRef(false);
+  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
   useEffect(() => {
     if (serverOverrideOdds == null) return;
@@ -177,7 +180,16 @@ function PredictionBetSheet({
   };
 
   const confirm = async () => {
-    if (phase !== "input" || stake < 0.5 || overBalance) return;
+    if (phase !== "input" || stake < 0.5 || overBalance || inFlightRef.current) {
+      return;
+    }
+    inFlightRef.current = true;
+    const sig = `${question.id}:${selection}:${stake}:${odds}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = { key: generateBetIdempotencyKey(), sig };
+    }
+    const idempotencyKey = idempotencySlotRef.current.key;
+
     setPhase("loading");
     setError(null);
     try {
@@ -187,7 +199,9 @@ function PredictionBetSheet({
         stake,
         expectedOdds: odds,
         oddsPolicy,
+        idempotencyKey,
       });
+      idempotencySlotRef.current = null;
       setOddsChanged(null);
       setServerOverrideOdds(null);
       setBalance(res.balance);
@@ -204,6 +218,9 @@ function PredictionBetSheet({
       setPhase("success");
     } catch (e) {
       setPhase("input");
+      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
+        idempotencySlotRef.current = null;
+      }
       if (
         e instanceof ApiRequestError &&
         e.status === 409 &&
@@ -219,6 +236,8 @@ function PredictionBetSheet({
       const msg = e instanceof Error ? e.message : "Une erreur est survenue";
       setError(msg);
       toast({ kind: "error", title: "Pari refusé", description: msg });
+    } finally {
+      inFlightRef.current = false;
     }
   };
 

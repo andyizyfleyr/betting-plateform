@@ -19,6 +19,26 @@ export const ODDS_CHANGED_CODE = "ODDS_CHANGED" as const;
 export const ODDS_LOCK_TOLERANCE_CENTS = 1;
 
 const ODDS_POLICY_STORAGE_KEY = "pulse_odds_change_policy_v1";
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{12,128}$/;
+
+/**
+ * Génère une clé d'idempotence unique côté navigateur pour chaque intention de pari.
+ * Protège contre les doubles clics rapides et les réessais réseau automatiques.
+ */
+export function generateBetIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `bet_${crypto.randomUUID().replace(/-/g, "")}`;
+  }
+  const rand = Math.random().toString(36).slice(2, 12);
+  const rand2 = Math.random().toString(36).slice(2, 12);
+  return `bet_${Date.now().toString(36)}_${rand}${rand2}`;
+}
+
+export function normalizeIdempotencyKey(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return IDEMPOTENCY_KEY_RE.test(trimmed) ? trimmed : null;
+}
 
 export function roundOdds2(odds: number): number {
   return Math.round(odds * 100) / 100;

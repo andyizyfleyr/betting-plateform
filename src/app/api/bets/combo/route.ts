@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import {
@@ -36,12 +36,14 @@ import {
 import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
 import {
   checkOddsChange,
+  normalizeIdempotencyKey,
   normalizeOddsPolicy,
   ODDS_CHANGED_CODE,
   roundOdds2,
   type OddsChangedDetails,
   type OddsChangedLegDetail,
 } from "@/lib/odds-lock";
+import { formatServerErrorResponse } from "@/lib/db-error";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import { requireUserId } from "@/lib/session";
@@ -65,6 +67,7 @@ interface IncomingLeg {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   await ensureSeeded();
   const auth = await requireUserId(req);
   if (typeof auth !== "number") return auth;
@@ -77,6 +80,7 @@ export async function POST(req: NextRequest) {
     stake?: number;
     expectedTotalOdds?: number;
     oddsPolicy?: string;
+    idempotencyKey?: string;
   };
   try {
     body = await req.json();
@@ -88,7 +92,14 @@ export async function POST(req: NextRequest) {
   const stake = Number(body.stake);
   const expectedTotalOdds = Number(body.expectedTotalOdds);
   const oddsPolicy = normalizeOddsPolicy(body.oddsPolicy);
+  const idempotencyKey = normalizeIdempotencyKey(body.idempotencyKey);
 
+  if (!idempotencyKey) {
+    return NextResponse.json(
+      { error: "Clé d'idempotence manquante ou invalide" },
+      { status: 400 }
+    );
+  }
   if (rawLegs.length < MIN_COMBO_LEGS) {
     return NextResponse.json(
       { error: `Un combiné nécessite au moins ${MIN_COMBO_LEGS} sélections` },
@@ -152,6 +163,29 @@ export async function POST(req: NextRequest) {
     } else {
       return NextResponse.json({ error: "Type de sélection inconnu" }, { status: 400 });
     }
+  }
+
+  // Court-circuit O(1) via l'index unique `(user_id, idempotency_key)` en cas de réessai réseau
+  const [alreadyPlaced] = await db
+    .select()
+    .from(comboBets)
+    .where(
+      and(
+        eq(comboBets.userId, uid),
+        eq(comboBets.idempotencyKey, idempotencyKey)
+      )
+    )
+    .limit(1);
+  if (alreadyPlaced) {
+    const [u] = await db
+      .select({ balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid));
+    return NextResponse.json({
+      bet: alreadyPlaced,
+      balance: u?.balance ?? 0,
+      deduplicated: true,
+    });
   }
 
   // Limite de mise dynamique selon le profil de risque du joueur
@@ -287,14 +321,21 @@ export async function POST(req: NextRequest) {
         kind: "ok";
         bet: typeof comboBets.$inferSelect;
         balance: number;
-        hasPredLeg: boolean;
+        predQuestionIds: number[];
+        deduplicated?: boolean;
       }
     | { kind: "error"; status: number; error: string }
     | { kind: "odds_changed"; details: OddsChangedDetails };
 
-  // Transaction SQL atomique : verrouillage ordonné (`ORDER BY id FOR UPDATE`) des matchs,
-  // des questions et du joueur, comparaison des cotes AVANT tout débit, et calcul serveur du gain.
+  // Transaction SQL courte (0 appel externe) :
+  //  1) `SET LOCAL lock_timeout = '2500ms'`
+  //  2) `ORDER BY id FOR SHARE` sur `matches` puis `prediction_questions` (ordre canonique global,
+  //     les verrous partagés ne bloquent pas les autres parieurs entre eux)
+  //  3) Comparaison des cotes AVANT tout débit
+  //  4) `FOR UPDATE` sur `app_user` + déduplication `idempotencyKey` + insertion + débit solde
   const txResult: ComboTxOutcome = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+
     const lockedMatchesRaw =
       seenMatches.size > 0
         ? await tx
@@ -302,7 +343,7 @@ export async function POST(req: NextRequest) {
             .from(matches)
             .where(inArray(matches.id, [...seenMatches]))
             .orderBy(asc(matches.id))
-            .for("update")
+            .for("share")
         : [];
 
     const lockedQuestions =
@@ -312,7 +353,7 @@ export async function POST(req: NextRequest) {
             .from(predictionQuestions)
             .where(inArray(predictionQuestions.id, [...seenQuestions]))
             .orderBy(asc(predictionQuestions.id))
-            .for("update")
+            .for("share")
         : [];
 
     const nowMs = Date.now();
@@ -627,7 +668,31 @@ export async function POST(req: NextRequest) {
       .where(eq(appUser.id, uid))
       .for("update");
 
-    if (!lockedUser || lockedUser.balance < roundedStake) {
+    if (!lockedUser) {
+      return { kind: "error", status: 404, error: "Compte introuvable" };
+    }
+
+    const [concurrentExisting] = await tx
+      .select()
+      .from(comboBets)
+      .where(
+        and(
+          eq(comboBets.userId, uid),
+          eq(comboBets.idempotencyKey, idempotencyKey)
+        )
+      )
+      .limit(1);
+    if (concurrentExisting) {
+      return {
+        kind: "ok",
+        bet: concurrentExisting,
+        balance: lockedUser.balance,
+        predQuestionIds: [],
+        deduplicated: true,
+      };
+    }
+
+    if (lockedUser.balance < roundedStake) {
       return { kind: "error", status: 400, error: "Solde insuffisant" };
     }
 
@@ -642,6 +707,7 @@ export async function POST(req: NextRequest) {
         stake: roundedStake,
         potentialWin: serverQuote.potentialWin,
         status: "pending",
+        idempotencyKey,
       })
       .returning();
 
@@ -651,21 +717,15 @@ export async function POST(req: NextRequest) {
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });
 
-    for (const l of pricedLegs) {
-      if (l.kind === "prediction" && l.questionId) {
-        const share = Math.round((roundedStake / pricedLegs.length) * 100) / 100;
-        await tx
-          .update(predictionQuestions)
-          .set({ volume: sql`${predictionQuestions.volume} + ${share}` })
-          .where(eq(predictionQuestions.id, l.questionId));
-      }
-    }
+    const predQuestionIds = pricedLegs
+      .filter((l) => l.kind === "prediction" && l.questionId != null)
+      .map((l) => l.questionId as number);
 
     return {
       kind: "ok",
       bet: inserted,
       balance: updatedUser.balance,
-      hasPredLeg: pricedLegs.some((l) => l.kind === "prediction"),
+      predQuestionIds,
     };
   });
 
@@ -689,10 +749,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (txResult.hasPredLeg) {
-    invalidatePredictionsCatalogCache();
+  if (!txResult.deduplicated) {
+    if (txResult.predQuestionIds.length > 0) {
+      const share =
+        Math.round((roundedStake / Math.max(1, rawLegs.length)) * 100) / 100;
+      await db
+        .update(predictionQuestions)
+        .set({ volume: sql`${predictionQuestions.volume} + ${share}` })
+        .where(inArray(predictionQuestions.id, txResult.predQuestionIds))
+        .catch(() => undefined);
+      invalidatePredictionsCatalogCache();
+    }
+    notifyNewBetPlaced({ userId: uid, kind: "combo" });
+    invalidateHouseHealthCache();
   }
-  notifyNewBetPlaced({ userId: uid, kind: "combo" });
-  invalidateHouseHealthCache();
-  return NextResponse.json({ bet: txResult.bet, balance: txResult.balance });
+
+  return NextResponse.json({
+    bet: txResult.bet,
+    balance: txResult.balance,
+    ...(txResult.deduplicated ? { deduplicated: true } : {}),
+  });
+  } catch (err) {
+    return formatServerErrorResponse(err, "POST /api/bets/combo");
+  }
 }

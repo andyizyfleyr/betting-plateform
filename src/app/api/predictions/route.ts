@@ -11,6 +11,7 @@ import {
 } from "@/lib/predictions";
 import {
   checkOddsChange,
+  normalizeIdempotencyKey,
   normalizeOddsPolicy,
   ODDS_CHANGED_CODE,
   roundOdds2,
@@ -155,6 +156,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   await ensureSeeded();
   const auth = await requireUserId(req);
   if (typeof auth !== "number") return auth;
@@ -166,6 +168,7 @@ export async function POST(req: NextRequest) {
     stake?: number;
     expectedOdds?: number;
     oddsPolicy?: string;
+    idempotencyKey?: string;
   };
   try {
     body = await req.json();
@@ -176,9 +179,16 @@ export async function POST(req: NextRequest) {
   const { questionId, selection, stake } = body;
   const expectedOdds = Number(body.expectedOdds);
   const oddsPolicy = normalizeOddsPolicy(body.oddsPolicy);
+  const idempotencyKey = normalizeIdempotencyKey(body.idempotencyKey);
 
   if (!questionId || !selection || !stake || stake <= 0) {
     return NextResponse.json({ error: "Données du pari incomplètes" }, { status: 400 });
+  }
+  if (!idempotencyKey) {
+    return NextResponse.json(
+      { error: "Clé d'idempotence manquante ou invalide" },
+      { status: 400 }
+    );
   }
   if (!Number.isFinite(expectedOdds) || expectedOdds <= 1) {
     return NextResponse.json(
@@ -191,6 +201,41 @@ export async function POST(req: NextRequest) {
       { error: `Mise hors limites (${PRED_MIN_STAKE} € – ${PRED_MAX_STAKE} €)` },
       { status: 400 }
     );
+  }
+
+  // Court-circuit O(1) via l'index unique `(user_id, idempotency_key)` en cas de réessai réseau
+  const [alreadyPlaced] = await db
+    .select()
+    .from(predictionBets)
+    .where(
+      and(
+        eq(predictionBets.userId, uid),
+        eq(predictionBets.idempotencyKey, idempotencyKey)
+      )
+    )
+    .limit(1);
+  if (alreadyPlaced) {
+    const [u] = await db
+      .select({ balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid));
+    return NextResponse.json({
+      bet: {
+        id: alreadyPlaced.id,
+        questionId: alreadyPlaced.questionId,
+        question: alreadyPlaced.question,
+        category: alreadyPlaced.category,
+        selection: alreadyPlaced.selection,
+        selectionLabel: alreadyPlaced.selectionLabel,
+        odds: alreadyPlaced.odds,
+        stake: alreadyPlaced.stake,
+        potentialWin: alreadyPlaced.potentialWin,
+        status: alreadyPlaced.status,
+        placedAt: alreadyPlaced.placedAt.toISOString(),
+      },
+        balance: u?.balance ?? 0,
+        deduplicated: true,
+    });
   }
 
   const [lastBet] = await db
@@ -206,16 +251,32 @@ export async function POST(req: NextRequest) {
   const roundedStakeValue = round2(stake);
 
   type PredTxOutcome =
-    | { kind: "ok"; bet: typeof predictionBets.$inferSelect; balance: number }
+    | {
+        kind: "ok";
+        bet: typeof predictionBets.$inferSelect;
+        balance: number;
+        incYes: number;
+        incNo: number;
+        deduplicated?: boolean;
+      }
     | { kind: "error"; status: number; error: string }
     | { kind: "odds_changed"; details: OddsChangedDetails };
 
+  // Transaction courte purement SQL :
+  //  1) `SET LOCAL lock_timeout = '2500ms'`
+  //  2) `FOR SHARE` sur `prediction_questions` (zéro blocage entre parieurs simultanés,
+  //     tout en bloquant une clôture concurrente de la question)
+  //  3) Comparaison `expectedOdds` AVANT tout débit
+  //  4) `FOR UPDATE` sur `app_user` (ordre canonique global)
+  //  5) Déduplication `idempotencyKey` + insertion + débit solde
   const txResult: PredTxOutcome = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+
     const [question] = await tx
       .select()
       .from(predictionQuestions)
       .where(eq(predictionQuestions.id, questionId))
-      .for("update");
+      .for("share");
 
     if (!question) {
       return { kind: "error", status: 404, error: "Question introuvable" };
@@ -259,7 +320,6 @@ export async function POST(req: NextRequest) {
 
     const serverOdds = roundOdds2(rawServerOdds);
 
-    // Vérification de la cote dans la même transaction AVANT tout débit
     const oddsCheck = checkOddsChange({
       expectedOdds,
       serverOdds,
@@ -282,11 +342,35 @@ export async function POST(req: NextRequest) {
       .where(eq(appUser.id, uid))
       .for("update");
 
-    if (!lockedUser || lockedUser.balance < roundedStakeValue) {
+    if (!lockedUser) {
+      return { kind: "error", status: 404, error: "Compte introuvable" };
+    }
+
+    const [concurrentExisting] = await tx
+      .select()
+      .from(predictionBets)
+      .where(
+        and(
+          eq(predictionBets.userId, uid),
+          eq(predictionBets.idempotencyKey, idempotencyKey)
+        )
+      )
+      .limit(1);
+    if (concurrentExisting) {
+      return {
+        kind: "ok",
+        bet: concurrentExisting,
+        balance: lockedUser.balance,
+        incYes: 0,
+        incNo: 0,
+        deduplicated: true,
+      };
+    }
+
+    if (lockedUser.balance < roundedStakeValue) {
       return { kind: "error", status: 400, error: "Solde insuffisant" };
     }
 
-    // Gain calculé EXCLUSIVEMENT avec `serverOdds`
     const potentialWin = round2(roundedStakeValue * serverOdds);
 
     const [bet] = await tx
@@ -302,6 +386,7 @@ export async function POST(req: NextRequest) {
         stake: roundedStakeValue,
         potentialWin,
         status: "pending",
+        idempotencyKey,
       })
       .returning();
 
@@ -311,16 +396,7 @@ export async function POST(req: NextRequest) {
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });
 
-    await tx
-      .update(predictionQuestions)
-      .set({
-        volume: sql`${predictionQuestions.volume} + ${roundedStakeValue}`,
-        yesCount: sql`${predictionQuestions.yesCount} + ${incYes}`,
-        noCount: sql`${predictionQuestions.noCount} + ${incNo}`,
-      })
-      .where(eq(predictionQuestions.id, question.id));
-
-    return { kind: "ok", bet, balance: updatedUser.balance };
+    return { kind: "ok", bet, balance: updatedUser.balance, incYes, incNo };
   });
 
   if (txResult.kind === "odds_changed") {
@@ -343,8 +419,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  invalidatePredictionsCatalogCache();
-  notifyNewBetPlaced({ userId: uid, kind: "prediction" });
+  if (!txResult.deduplicated) {
+    // Mise à jour statistique hors transaction financière (évite toute escalade `FOR SHARE` -> `UPDATE`)
+    await db
+      .update(predictionQuestions)
+      .set({
+        volume: sql`${predictionQuestions.volume} + ${roundedStakeValue}`,
+        yesCount: sql`${predictionQuestions.yesCount} + ${txResult.incYes}`,
+        noCount: sql`${predictionQuestions.noCount} + ${txResult.incNo}`,
+      })
+      .where(eq(predictionQuestions.id, questionId))
+      .catch(() => undefined);
+
+    invalidatePredictionsCatalogCache();
+    notifyNewBetPlaced({ userId: uid, kind: "prediction" });
+  }
+
   return NextResponse.json({
     bet: {
       id: txResult.bet.id,
@@ -360,5 +450,9 @@ export async function POST(req: NextRequest) {
       placedAt: txResult.bet.placedAt.toISOString(),
     },
     balance: txResult.balance,
+    ...(txResult.deduplicated ? { deduplicated: true } : {}),
   });
+  } catch (err) {
+    return formatServerErrorResponse(err, "POST /api/predictions");
+  }
 }
