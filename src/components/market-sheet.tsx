@@ -1,21 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { BarChart3, ChevronDown, Layers, Lock, Radio, X } from "lucide-react";
+import { BarChart3, ChevronDown, Lock, Radio, X } from "lucide-react";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
-import { OddsTrendCorner, useOddsTrend } from "./odds-trend-corner";
+import {
+  OddsTrendCorner,
+  oddsTrendTextClass,
+  useOddsTrend,
+} from "./odds-trend-corner";
 import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
-import { KickoffCountdown } from "./kickoff-countdown";
 import { LiveMatchTracker } from "./live-match-tracker";
 import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { formatGoalSummary, LiveStatusBadge } from "./match-card";
-import { cn, formatKickoff, formatOdds } from "@/lib/format";
+import { cn, formatOdds } from "@/lib/format";
 
 const POLL_INTERVAL = 4_000;
 
@@ -44,6 +46,20 @@ const TWO_COL_MARKETS = new Set([
   "away_clean_sheet",
 ]);
 
+function formatMatchDateTime(iso: string | Date): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
+  const time = new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+  return `${day} · ${time}`;
+}
+
 function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
   if (g.category) return g.category;
   if (
@@ -69,7 +85,6 @@ function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
 }
 
 export function MarketSheet() {
-  const router = useRouter();
   const {
     marketMatch,
     closeMarkets,
@@ -90,13 +105,18 @@ export function MarketSheet() {
   const [showTracker, setShowTracker] = useState(false);
 
   const sharedFromFeed = useMemo(
-    () => (marketMatch && feedMatches ? feedMatches.find((m) => m.id === marketMatch.id) ?? null : null),
+    () =>
+      marketMatch && feedMatches
+        ? feedMatches.find((m) => m.id === marketMatch.id) ?? null
+        : null,
     [marketMatch, feedMatches]
   );
 
   const match =
     sharedFromFeed ??
-    (liveMatch && marketMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch);
+    (liveMatch && marketMatch && liveMatch.id === marketMatch.id
+      ? liveMatch
+      : marketMatch);
 
   // Ne lance un polling autonome que si MarketSheet est ouvert hors de la page /matchs
   useEffect(() => {
@@ -149,7 +169,16 @@ export function MarketSheet() {
     };
   }, [match, target]);
 
-  const groups = useMemo(() => match?.markets ?? [], [match]);
+  const groups = useMemo(() => {
+    const raw = match?.markets ?? [];
+    return raw
+      .map((g) =>
+        g.key === "score_exact"
+          ? { ...g, outcomes: g.outcomes.filter((o) => o.key !== "other") }
+          : g
+      )
+      .filter((g) => (g.rows ? g.rows.length > 0 : g.outcomes.length > 0));
+  }, [match]);
 
   const filteredGroups = useMemo(() => {
     if (category === "all") return groups;
@@ -208,43 +237,18 @@ export function MarketSheet() {
                 <div className="mx-auto h-1 w-10 rounded-full bg-edge lg:hidden" />
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-mist">
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
-                        isReal
-                          ? "bg-emerald-600/12 text-emerald-700"
-                          : "bg-elev text-dim"
-                      )}
-                    >
-                      {isReal ? "Match réel" : "Virtuel"}
-                    </span>
+                    {isReal && (
+                      <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-emerald-700 lg:inline-block">
+                        Match réel
+                      </span>
+                    )}
                     <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
                     <span className="truncate font-semibold">{match.league}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={() => {
-                        closeMarkets();
-                        router.push("/betslip");
-                      }}
-                      className={cn(
-                        "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-bold transition-colors",
-                        comboLegs.length > 0
-                          ? "bg-betclic-red text-white"
-                          : "bg-elev text-mist"
-                      )}
-                    >
-                      <Layers
-                        className={cn(
-                          "h-3 w-3",
-                          comboLegs.length > 0 ? "text-white" : "text-betclic-red"
-                        )}
-                        strokeWidth={2.4}
-                      />
-                      Betslip{comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}
-                    </button>
+                    <span className="inline-flex h-7 items-center rounded-full bg-elev px-2.5 font-display text-[10.5px] font-semibold tabular-nums text-ink">
+                      {formatMatchDateTime(match.startsAt)}
+                    </span>
                     {(isLive || isFinished) && (isReal ? realStatsAvailable : true) && (
                       <button
                         type="button"
@@ -281,13 +285,13 @@ export function MarketSheet() {
                 </div>
               </div>
 
-              {/* Tableau de score compact */}
+              {/* Tableau de score avec affichage complet des noms de clubs */}
               <div className="mt-1.5 rounded-2xl border border-edge/80 bg-elev/55 px-3 py-2.5">
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" />
                     <div className="min-w-0">
-                      <p className="truncate font-display text-[13px] font-bold text-ink">
+                      <p className="font-display text-[13px] font-bold leading-tight break-words text-ink lg:text-[14px]">
                         {match.homeTeam}
                       </p>
                       {(match.redHome ?? 0) > 0 && (
@@ -299,10 +303,10 @@ export function MarketSheet() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-center px-1.5">
+                  <div className="flex flex-col items-center px-1">
                     {isLive || isFinished ? (
                       <>
-                        <span className="font-display text-[20px] font-bold leading-none tabular-nums text-ink">
+                        <span className="font-display text-[19px] font-bold leading-none tabular-nums text-ink">
                           {match.homeScore ?? 0} – {match.awayScore ?? 0}
                         </span>
                         {isReal &&
@@ -320,18 +324,16 @@ export function MarketSheet() {
                           )}
                         </div>
                       </>
-                    ) : isReal ? (
-                      <span className="rounded-full bg-surface px-2.5 py-0.5 font-display text-[10.5px] font-semibold text-ink">
-                        {formatKickoff(match.startsAt)}
-                      </span>
                     ) : (
-                      <KickoffCountdown startsAt={match.startsAt} />
+                      <span className="font-display text-[11px] font-bold uppercase tracking-wide text-dim">
+                        vs
+                      </span>
                     )}
                   </div>
 
                   <div className="flex min-w-0 items-center justify-end gap-2 text-right">
                     <div className="min-w-0">
-                      <p className="truncate font-display text-[13px] font-bold text-ink">
+                      <p className="font-display text-[13px] font-bold leading-tight break-words text-ink lg:text-[14px]">
                         {match.awayTeam}
                       </p>
                       {(match.redAway ?? 0) > 0 && (
@@ -448,7 +450,6 @@ export function MarketSheet() {
                         key={g.key}
                         match={match}
                         group={g}
-                        isLive={isLive}
                         suspended={suspended}
                         open={isOpen}
                         oddsFormat={oddsFormat}
@@ -524,7 +525,6 @@ export function MarketSheet() {
 function AccordionItem({
   match,
   group,
-  isLive,
   suspended,
   open,
   oddsFormat,
@@ -535,7 +535,6 @@ function AccordionItem({
 }: {
   match: ClientMatch;
   group: MarketGroup;
-  isLive: boolean;
   suspended: boolean;
   open: boolean;
   oddsFormat: "decimal" | "fractional";
@@ -625,7 +624,6 @@ function AccordionItem({
                     <OutcomeCell
                       key={o.key}
                       o={o}
-                      isLive={isLive}
                       suspended={suspended}
                       selected={selectedKey === o.key}
                       inCombo={comboSelectedKey === o.key}
@@ -643,12 +641,10 @@ function AccordionItem({
                 <OutcomeCell
                   key={o.key}
                   o={o}
-                  isLive={isLive}
                   suspended={suspended}
                   selected={selectedKey === o.key}
                   inCombo={comboSelectedKey === o.key}
                   oddsFormat={oddsFormat}
-                  className={o.key === "other" ? "col-span-3" : undefined}
                   comboSelection={makeComboSelection(o)}
                   onPick={() => onPick(o)}
                 />
@@ -657,7 +653,7 @@ function AccordionItem({
           ) : (
             <div className={cn("grid gap-2", twoCols ? "grid-cols-2" : "grid-cols-3")}>
               {group.outcomes.map((o, idx) => {
-                // Si marché à 2 colonnes avec un nombre impair d'issues ouvertes (ex. 3 en live), la dernière prend toute la ligne
+                // Si marché à 2 colonnes avec un nombre impair d'issues ouvertes, la dernière prend toute la ligne
                 const spanFull =
                   twoCols &&
                   group.outcomes.length > 2 &&
@@ -667,7 +663,6 @@ function AccordionItem({
                   <OutcomeCell
                     key={o.key}
                     o={o}
-                    isLive={isLive}
                     suspended={suspended}
                     selected={selectedKey === o.key}
                     inCombo={comboSelectedKey === o.key}
@@ -688,7 +683,6 @@ function AccordionItem({
 
 function OutcomeCell({
   o,
-  isLive,
   suspended,
   selected,
   inCombo,
@@ -698,7 +692,6 @@ function OutcomeCell({
   onPick,
 }: {
   o: MarketOutcome;
-  isLive: boolean;
   suspended: boolean;
   selected?: boolean;
   inCombo?: boolean;
@@ -746,8 +739,8 @@ function OutcomeCell({
       ) : (
         <span
           className={cn(
-            "shrink-0 font-display text-[13.5px] font-bold tabular-nums",
-            active ? "text-white" : isLive ? "text-betclic-red" : "text-ink"
+            "shrink-0 font-display text-[13.5px] font-bold tabular-nums transition-colors duration-200",
+            oddsTrendTextClass(trend, active)
           )}
         >
           {formatOdds(o.odds, oddsFormat)}

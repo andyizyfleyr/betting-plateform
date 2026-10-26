@@ -649,7 +649,7 @@ const MARKETS: MarketDef[] = [
     label: "Score exact",
     short: "Score exact",
     category: "scores",
-    partition: true,
+    partition: false,
     outcomes: () => [
       { key: "1_0", label: "Score exact : 1-0", short: "1-0" },
       { key: "0_0", label: "Score exact : 0-0", short: "0-0" },
@@ -664,7 +664,6 @@ const MARKETS: MarketDef[] = [
       { key: "3_1", label: "Score exact : 3-1", short: "3-1" },
       { key: "0_3", label: "Score exact : 0-3", short: "0-3" },
       { key: "1_3", label: "Score exact : 1-3", short: "1-3" },
-      { key: "other", label: "Score exact : Autre score", short: "Autre score" },
     ],
     win: (o, h, a) => w.scoreExact(o, h, a),
   },
