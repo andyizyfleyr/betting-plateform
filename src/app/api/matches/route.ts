@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
+import { unionAll } from "drizzle-orm/pg-core";
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { matches } from "@/db/schema";
@@ -44,34 +45,39 @@ export async function GET(req: NextRequest) {
     }
 
   const now = Date.now();
-  // Filtrage, projection sans `scripted_events` et LIMIT directement en SQL
-  // pour réduire de > 99 % le transfert réseau PostgreSQL (Neon egress) à chaque rafraîchissement.
-  const [activeRows, finishedManual, finishedVirtual] = await Promise.all([
-    db
-      .select(publicMatchColumns)
-      .from(matches)
-      .where(ne(matches.status, "finished"))
-      .orderBy(
-        asc(sql`CASE ${matches.status} WHEN 'live' THEN 0 ELSE 1 END`),
-        asc(matches.startsAt),
-        desc(matches.id)
-      ),
-    db
-      .select(publicMatchColumns)
-      .from(matches)
-      .where(and(eq(matches.source, "manual"), eq(matches.status, "finished")))
-      .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
-      .limit(20),
-    db
-      .select(publicMatchColumns)
-      .from(matches)
-      .where(and(ne(matches.source, "manual"), eq(matches.status, "finished")))
-      .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
-      .limit(12),
-  ]);
+  // UNE SEULE requête SQL `UNION ALL` projetant sans `scripted_events` et bornant les historiques :
+  // divise par 3 les allers-retours réseau vers Neon PostgreSQL et minimise la latence Vercel.
+  const qActive = db
+    .select(publicMatchColumns)
+    .from(matches)
+    .where(ne(matches.status, "finished"))
+    .orderBy(
+      asc(sql`CASE ${matches.status} WHEN 'live' THEN 0 ELSE 1 END`),
+      asc(matches.startsAt),
+      desc(matches.id)
+    )
+    .limit(120);
 
-  const activeManual = activeRows.filter((r) => r.source === "manual");
-  const activeVirtual = activeRows.filter((r) => r.source !== "manual");
+  const qFinishedManual = db
+    .select(publicMatchColumns)
+    .from(matches)
+    .where(and(eq(matches.source, "manual"), eq(matches.status, "finished")))
+    .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
+    .limit(20);
+
+  const qFinishedVirtual = db
+    .select(publicMatchColumns)
+    .from(matches)
+    .where(and(ne(matches.source, "manual"), eq(matches.status, "finished")))
+    .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
+    .limit(12);
+
+  const unifiedRows = await unionAll(qActive, qFinishedManual, qFinishedVirtual);
+
+  const activeManual = unifiedRows.filter((r) => r.source === "manual" && r.status !== "finished");
+  const finishedManual = unifiedRows.filter((r) => r.source === "manual" && r.status === "finished");
+  const activeVirtual = unifiedRows.filter((r) => r.source !== "manual" && r.status !== "finished");
+  const finishedVirtual = unifiedRows.filter((r) => r.source !== "manual" && r.status === "finished");
 
   const rows = [...activeManual, ...finishedManual, ...activeVirtual, ...finishedVirtual];
 
@@ -95,13 +101,14 @@ export async function GET(req: NextRequest) {
     };
     const isReal = m.source === "manual";
 
-    // On masque strictement les variables internes du simulateur et les scénarios anticipés admin
+    // On masque strictement les variables internes du simulateur, `tickHistory` et les scénarios anticipés admin
     const {
       regime: _regime,
       homeForm: _homeForm,
       awayForm: _awayForm,
       scenarioLocked: _scenarioLocked,
       scenarioNonce: _scenarioNonce,
+      tickHistory: _tickHistory,
       ...publicMatch
     } = m;
     void _regime;
@@ -109,6 +116,7 @@ export async function GET(req: NextRequest) {
     void _awayForm;
     void _scenarioLocked;
     void _scenarioNonce;
+    void _tickHistory;
 
     if (isReal) {
       // Moteur dédié aux matchs réels : cotes officielles de l'admin, verrouillage pré-match à l'heure
@@ -162,6 +170,8 @@ export async function GET(req: NextRequest) {
       redHome: m.redHome ?? 0,
       redAway: m.redAway ?? 0,
       events: m.events ?? [],
+      regime: m.regime ?? null,
+      league: m.league ?? null,
       matchId: m.id,
     };
 
@@ -187,7 +197,7 @@ export async function GET(req: NextRequest) {
     const oddsAway = resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
 
     const telemetry =
-      m.status === "live" || m.status === "finished"
+      m.status === "live"
         ? computeMatchTelemetry(m)
         : undefined;
 

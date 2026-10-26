@@ -221,33 +221,39 @@ async function upsertMlModelRow(
  * APPRENTISSAGE EN LIGNE — Modèle 3 (`glicko_clubs`) :
  * Appelé automatiquement dès qu'un match se termine dans `engine.ts`.
  */
-export async function recordMatchFinishedMl(match: {
-  homeTeam: string;
-  awayTeam: string;
-  homeScore: number;
-  awayScore: number;
-}): Promise<void> {
+export async function recordMatchesFinishedBatchMl(
+  items: Array<{
+    homeTeam: string;
+    awayTeam: string;
+    homeScore: number;
+    awayScore: number;
+  }>
+): Promise<void> {
+  if (items.length === 0) return;
   const bundle = await ensureMlLoaded();
-  const hKey = normClubKey(match.homeTeam);
-  const aKey = normClubKey(match.awayTeam);
-  const { lambdaHome, lambdaAway } = expectedGoalsRaw(match.homeTeam, match.awayTeam);
 
-  const upd = updateGlickoPairFromMatch(
-    bundle.glicko.clubs[hKey],
-    bundle.glicko.clubs[aKey],
-    match.homeScore,
-    match.awayScore,
-    lambdaHome,
-    lambdaAway
-  );
+  for (const match of items) {
+    const hKey = normClubKey(match.homeTeam);
+    const aKey = normClubKey(match.awayTeam);
+    const { lambdaHome, lambdaAway } = expectedGoalsRaw(match.homeTeam, match.awayTeam);
 
-  bundle.glicko.clubs[hKey] = upd.homeNext;
-  bundle.glicko.clubs[aKey] = upd.awayNext;
-  bundle.glicko.emaBrier = round4(0.95 * bundle.glicko.emaBrier + 0.05 * upd.brierSample);
-  bundle.glicko.emaLogLoss = round4(0.95 * bundle.glicko.emaLogLoss + 0.05 * upd.logLossSample);
-  bundle.glickoMeta.samplesCount += 1;
+    const upd = updateGlickoPairFromMatch(
+      bundle.glicko.clubs[hKey],
+      bundle.glicko.clubs[aKey],
+      match.homeScore,
+      match.awayScore,
+      lambdaHome,
+      lambdaAway
+    );
+
+    bundle.glicko.clubs[hKey] = upd.homeNext;
+    bundle.glicko.clubs[aKey] = upd.awayNext;
+    bundle.glicko.emaBrier = round4(0.95 * bundle.glicko.emaBrier + 0.05 * upd.brierSample);
+    bundle.glicko.emaLogLoss = round4(0.95 * bundle.glicko.emaLogLoss + 0.05 * upd.logLossSample);
+    bundle.glickoMeta.samplesCount += 1;
+  }
+
   bundle.glickoMeta.updatedAt = new Date();
-
   hydrateMlRuntimeCaches({ glicko: bundle.glicko });
 
   await upsertMlModelRow(
@@ -258,6 +264,15 @@ export async function recordMatchFinishedMl(match: {
     bundle.glicko.emaLogLoss,
     bundle.glicko as unknown as Record<string, unknown>
   );
+}
+
+export async function recordMatchFinishedMl(match: {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+}): Promise<void> {
+  await recordMatchesFinishedBatchMl([match]);
 }
 
 /**

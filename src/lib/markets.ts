@@ -13,6 +13,7 @@ import {
   type LiveScoreModel,
   type MatchTimelineEvent,
   type MatchTimelineStats,
+  type RealMatchLiveStatsInput,
 } from "@/db/fixtures";
 import { getCachedMarketCalibratorMultiplier } from "./ml-weights";
 import { marginOverround, type BetLike } from "./risk";
@@ -48,6 +49,8 @@ export interface MarketModelOpts {
   redHome?: number;
   redAway?: number;
   events?: MatchTimelineEvent[] | null;
+  regime?: string | null;
+  league?: string | null;
   matchId?: number;
   skipMlCalibrator?: boolean;
 }
@@ -1321,6 +1324,7 @@ export interface RealMatchInput {
   externalId?: string | null;
   autoSync?: boolean | null;
   events?: MatchTimelineEvent[] | null;
+  realStats?: RealMatchLiveStatsInput | null;
   markets?: CustomMarketGroup[] | null;
 }
 
@@ -1382,9 +1386,12 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
     homeScore,
     awayScore,
     minute,
+    minuteLabel: m.minute ?? null,
     isLive,
     redHome: m.redHome ?? 0,
     redAway: m.redAway ?? 0,
+    events: m.events ?? null,
+    realStats: m.realStats ?? null,
   });
 
   const hasLiveEvolution =
@@ -1456,12 +1463,14 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
         homeScore,
         awayScore,
         minute,
+        minuteLabel: m.minute ?? null,
         isLive,
         redHome: m.redHome ?? 0,
         redAway: m.redAway ?? 0,
         htHomeScore: m.htHomeScore ?? null,
         htAwayScore: m.htAwayScore ?? null,
         events: m.events ?? null,
+        realStats: m.realStats ?? null,
         ftModel: model,
       })
     : NEUTRAL_SPLIT_MODEL;
@@ -1562,9 +1571,12 @@ export function realMatchLiveProbability(
     homeScore,
     awayScore,
     minute,
+    minuteLabel: m.minute ?? null,
     isLive,
     redHome: m.redHome ?? 0,
     redAway: m.redAway ?? 0,
+    events: m.events ?? null,
+    realStats: m.realStats ?? null,
   });
 
   const hasFeedTimeline = Boolean(m.externalId && (m.autoSync ?? true));
@@ -1582,12 +1594,14 @@ export function realMatchLiveProbability(
             homeScore,
             awayScore,
             minute,
+            minuteLabel: m.minute ?? null,
             isLive,
             redHome: m.redHome ?? 0,
             redAway: m.redAway ?? 0,
             htHomeScore: m.htHomeScore ?? null,
             htAwayScore: m.htAwayScore ?? null,
             events: m.events ?? null,
+            realStats: m.realStats ?? null,
             ftModel: model,
           })
         : NEUTRAL_SPLIT_MODEL;

@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { api, type ClientMatch } from "@/lib/api";
 import { MatchCard } from "@/components/match-card";
-import { FeaturedMatch } from "@/components/featured-match";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { useApp } from "@/components/providers";
 import { resolveEspnSlugForLeague } from "@/lib/real-leagues";
@@ -441,27 +440,21 @@ export default function MatchsPage() {
     return byLeague;
   }, [byLeague, oddsProfile]);
 
-  // Pour les matchs réels, tous les matchs s'affichent uniformément sous forme de cartes (aucun bloc vedette unique en haut)
-  const showFeatured =
-    !isRealUniverse &&
-    !query.trim() &&
-    oddsProfile === "all" &&
-    ((filter === "all" && effectiveLeague === "all" && visible.length >= 1) ||
-      (filter === "live" && visible.length >= 1));
-
-  const featured = showFeatured
-    ? (visible.find((m) => m.status === "live") ?? visible[0] ?? null)
-    : null;
-
+  // Tous les matchs (réels comme virtuels) s'affichent uniformément sous forme de cartes
+  // pour présenter clairement le multiplex de matchs en direct simultanés.
   const liveRest = useMemo(() => {
-    const raw = visible.filter((m) => m.status === "live" && m.id !== featured?.id);
-    return isRealUniverse ? sortRealLiveByPopularity(raw) : raw;
-  }, [visible, featured, isRealUniverse]);
+    const raw = visible.filter((m) => m.status === "live");
+    return isRealUniverse
+      ? sortRealLiveByPopularity(raw)
+      : [...raw].sort(
+          (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() || a.id - b.id
+        );
+  }, [visible, isRealUniverse]);
 
   const upcomingOrdered = useMemo(() => {
-    const raw = visible.filter((m) => m.status === "upcoming" && m.id !== featured?.id);
+    const raw = visible.filter((m) => m.status === "upcoming");
     return isRealUniverse ? sortRealUpcomingByPopularity(raw) : sortByKickoffAsc(raw);
-  }, [visible, featured, isRealUniverse]);
+  }, [visible, isRealUniverse]);
 
   const finishedList = useMemo(
     () => visible.filter((m) => m.status === "finished"),
@@ -513,11 +506,13 @@ export default function MatchsPage() {
     );
     const realFinished = realMatching.filter((m) => m.status === "finished");
 
-    const vLive = virtualPoolForActive.filter((m) => m.status === "live");
+    const vLive = [...virtualPoolForActive.filter((m) => m.status === "live")].sort(
+      (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() || a.id - b.id
+    );
     const vUpcomingForActive = sortByKickoffAsc(
       virtualPoolForActive.filter((m) => m.status === "upcoming")
     );
-    // Tous les matchs virtuels actifs : le direct en tête, suivi de toute la file d'attente virtuelle
+    // Tous les matchs virtuels actifs : les directs simultanés en tête, suivis de la file d'attente virtuelle
     const virtualAllActive = [...vLive, ...vUpcomingForActive];
 
     const virtualUpcomingOnly = sortByKickoffAsc(
@@ -779,7 +774,7 @@ export default function MatchsPage() {
         {isRealUniverse ? (
           <span>Compétitions officielles · Cotes fixes opérateur · Coup d&apos;envoi réel</span>
         ) : (
-          <span>Simulateur 24h/24 · Matchs de 2-3 min · 1 seul direct à tour de rôle</span>
+          <span>Simulateur 24h/24 · Matchs de 2-3 min · Multiplex 4 directs simultanés</span>
         )}
       </div>
 
@@ -1129,8 +1124,6 @@ export default function MatchsPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-5">
-                {featured && <FeaturedMatch match={featured} />}
-
                 {liveRest.length > 0 && (
                   <section>
                     <SectionHeader
@@ -1149,7 +1142,7 @@ export default function MatchsPage() {
                 {upcomingOrdered.length > 0 && (
                   <section>
                     <SectionHeader
-                      label="À venir · À tour de rôle"
+                      label="À venir · Prochains départs"
                       count={upcomingOrdered.length}
                     />
                     <div className="mt-2 grid grid-cols-1 items-start gap-3">

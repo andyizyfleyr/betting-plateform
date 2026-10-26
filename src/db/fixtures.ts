@@ -7,11 +7,11 @@ import { sanitizeMatchEvents } from "@/lib/match-events";
 export const VIRTUAL_LEAGUE = "Ligue des Champions · Europe";
 export const ROUND_MS = 300_000;
 
-/** Buts moyens attendus à forces égales (football européen moderne : avantage terrain mesuré ~6 %). */
-const BASE_HOME = 1.33;
-const BASE_AWAY = 1.25;
-/** Sensibilité exponentielle aux écarts d'indice de force entre clubs. */
-const ELO_SENSITIVITY = 0.027;
+/** Buts moyens attendus à forces égales (football européen moderne : avantage terrain mesuré ~8 %). */
+const BASE_HOME = 1.38;
+const BASE_AWAY = 1.22;
+/** Sensibilité exponentielle aux écarts d'indice de force entre clubs (hiérarchie réaliste 1xBet). */
+const ELO_SENSITIVITY = 0.034;
 
 const PREMATCH_MARGIN = 1.072;
 const LIVE_MARGIN_MIN = 1.075;
@@ -290,25 +290,41 @@ export interface LiveScoreModel {
   lamA: number;
 }
 
+export function leagueGoalMultiplier(league?: string | null): number {
+  if (!league) return 1;
+  const l = league.toLowerCase();
+  if (l.includes("bundesliga") || l.includes("eredivisie")) return 1.05;
+  if (l.includes("champions")) return 1.03;
+  if (l.includes("premier league")) return 1.02;
+  if (l.includes("serie a") || l.includes("liga") || l.includes("laliga")) return 0.97;
+  return 1;
+}
+
 export function expectedGoalsRaw(
   home: string,
-  away: string
+  away: string,
+  league?: string | null
 ): { lambdaHome: number; lambdaAway: number } {
   const sh = teamStrength(home);
   const sa = teamStrength(away);
   const diff = sh - sa;
+  const lgMult = leagueGoalMultiplier(league);
   return {
-    lambdaHome: clamp(BASE_HOME * Math.exp(diff * ELO_SENSITIVITY), 0.45, 3.2),
-    lambdaAway: clamp(BASE_AWAY * Math.exp(-diff * ELO_SENSITIVITY), 0.38, 2.95),
+    lambdaHome: clamp(BASE_HOME * lgMult * Math.exp(diff * ELO_SENSITIVITY), 0.36, 3.45),
+    lambdaAway: clamp(BASE_AWAY * lgMult * Math.exp(-diff * ELO_SENSITIVITY), 0.30, 3.15),
   };
 }
 
-export function expectedGoals(home: string, away: string): { lambdaHome: number; lambdaAway: number } {
-  const raw = expectedGoalsRaw(home, away);
+export function expectedGoals(
+  home: string,
+  away: string,
+  league?: string | null
+): { lambdaHome: number; lambdaAway: number } {
+  const raw = expectedGoalsRaw(home, away, league);
   const glicko = getCachedClubGlickoModifiers(home, away);
   return {
-    lambdaHome: clamp(raw.lambdaHome * glicko.homeGoalMod, 0.42, 3.3),
-    lambdaAway: clamp(raw.lambdaAway * glicko.awayGoalMod, 0.36, 3.1),
+    lambdaHome: clamp(raw.lambdaHome * glicko.homeGoalMod, 0.34, 3.55),
+    lambdaAway: clamp(raw.lambdaAway * glicko.awayGoalMod, 0.28, 3.25),
   };
 }
 
@@ -388,7 +404,7 @@ export function poissonPmf(k: number, lambda: number): number {
 export function oddsFor(
   home: string,
   away: string,
-  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+  opts?: LivePricingOpts
 ) {
   const p = liveResultProbs(home, away, 0, 0, 0, opts);
   const [rawH, rawD, rawA] = partitionOutcomeOdds(
@@ -469,13 +485,21 @@ function goalMinutes(round: number, team: string, lambda: number): number[] {
 //  Modèle probabiliste unifié (avant-match + live)
 // ──────────────────────────────────────────────
 
-const DC_RHO = -0.09; // Dixon-Coles : légère sur-représentation empirique des 0-0 et 1-1 au football
+const DC_RHO = -0.095; // Dixon-Coles : légère sur-représentation empirique des 0-0 et 1-1 au football
 
-function dixonColesTau(x: number, y: number, lambdaH: number, lambdaA: number): number {
-  if (x === 0 && y === 0) return Math.max(0.2, 1 - lambdaH * lambdaA * DC_RHO);
-  if (x === 0 && y === 1) return Math.max(0.2, 1 + lambdaH * DC_RHO);
-  if (x === 1 && y === 0) return Math.max(0.2, 1 + lambdaA * DC_RHO);
-  if (x === 1 && y === 1) return Math.max(0.2, 1 - DC_RHO);
+function dixonColesTau(
+  x: number,
+  y: number,
+  lambdaH: number,
+  lambdaA: number,
+  rhoScale = 1
+): number {
+  const rho = DC_RHO * clamp(rhoScale, 0, 1);
+  if (Math.abs(rho) < 1e-4) return 1;
+  if (x === 0 && y === 0) return Math.max(0.25, 1 - lambdaH * lambdaA * rho);
+  if (x === 0 && y === 1) return Math.max(0.25, 1 + lambdaH * rho);
+  if (x === 1 && y === 0) return Math.max(0.25, 1 + lambdaA * rho);
+  if (x === 1 && y === 1) return Math.max(0.25, 1 - rho);
   return 1;
 }
 
@@ -491,8 +515,14 @@ function bivariatePoissonGrid(
   lambdaH: number,
   lambdaA: number,
   maxGoals: number,
-  applyDixonColes = false
+  dixonColesScale: boolean | number = false
 ): number[][] {
+  const dcScale =
+    typeof dixonColesScale === "number"
+      ? dixonColesScale
+      : dixonColesScale
+        ? 1
+        : 0;
   const lambda3 = CORR_RHO * Math.sqrt(Math.max(lambdaH, 0.005) * Math.max(lambdaA, 0.005));
   const lambda1 = Math.max(lambdaH - lambda3, 0.002);
   const lambda2 = Math.max(lambdaA - lambda3, 0.002);
@@ -524,7 +554,7 @@ function bivariatePoissonGrid(
           logFact[k];
         sum += Math.exp(logTerm);
       }
-      const tau = applyDixonColes ? dixonColesTau(i, j, lambdaH, lambdaA) : 1;
+      const tau = dcScale > 0 ? dixonColesTau(i, j, lambdaH, lambdaA, dcScale) : 1;
       const cell = Math.exp(logETotal) * sum * tau;
       grid[i][j] = cell;
       total += cell;
@@ -606,20 +636,147 @@ export function skellamCDF(k: number, lambda1: number, lambda2: number): number 
 }
 
 /**
- * Lisse l'évolution temporelle des cotes live par micro-paliers de 3 minutes (~5 s réelles)
- * jusqu'à la 75', puis minute par minute dans le money-time afin d'éliminer toute fenêtre
- * d'arbitrage sur les marchés « Moins de X buts » ou « Match nul » en fin de période.
+ * Paliers tactiques calmes d'actualisation temporelle des cotes :
+ * - Sur un match virtuel (~2 min 40 s = 90'), 12 minutes simulées ≈ 21 secondes réelles :
+ *   tant qu'aucun événement (but, carton rouge, mi-temps) ne survient, les cotes restent
+ *   stables entre deux paliers au lieu de clignoter toutes les 3 secondes sans raison.
+ * - Dès qu'un but ou carton survient à la minute `lastIncidentMin`, le modèle s'ancre
+ *   immédiatement sur la minute exacte de l'incident puis reste stable jusqu'au palier suivant.
  */
-export function livePricingMinute(minute: number): number {
+const VIRTUAL_PRICING_CHECKPOINTS = [0, 12, 24, 36, 45, 57, 68, 77, 84, 89, 90] as const;
+const REAL_PRICING_CHECKPOINTS = [
+  0, 6, 12, 18, 24, 30, 36, 42, 45, 51, 57, 63, 69, 75, 79, 83, 86, 88, 90,
+] as const;
+
+export function livePricingMinute(
+  minute: number,
+  opts?: { isReal?: boolean; lastIncidentMin?: number }
+): number {
   const m = clamp(Math.round(minute), 0, 90);
   if (m <= 0) return 0;
   if (m >= 90) return 90;
-  if (m >= 76) return m;
-  return Math.min(75, Math.round(m / 3) * 3);
+
+  const checkpoints = opts?.isReal
+    ? REAL_PRICING_CHECKPOINTS
+    : VIRTUAL_PRICING_CHECKPOINTS;
+
+  let snapped = 0;
+  for (const cp of checkpoints) {
+    if (cp <= m) snapped = cp;
+    else break;
+  }
+
+  const inc = opts?.lastIncidentMin ?? 0;
+  if (inc > snapped && inc <= m) {
+    return clamp(Math.round(inc), snapped, 89);
+  }
+  return snapped;
+}
+
+export interface LivePricingOpts {
+  homeForm?: number;
+  awayForm?: number;
+  redHome?: number;
+  redAway?: number;
+  events?: MatchTimelineEvent[] | null;
+  regime?: string | null;
+  league?: string | null;
+}
+
+export interface RealMatchLiveStatsInput {
+  possessionHome?: number | null;
+  possessionAway?: number | null;
+  shotsTotalHome?: number | null;
+  shotsTotalAway?: number | null;
+  shotsOnTargetHome?: number | null;
+  shotsOnTargetAway?: number | null;
+  cornersHome?: number | null;
+  cornersAway?: number | null;
+  yellowCardsHome?: number | null;
+  yellowCardsAway?: number | null;
 }
 
 /**
- * Modèle joint unifié du SCORE FINAL conditionnellement à (homeScore, awayScore, minute).
+ * Calcule les multiplicateurs tactiques liés à la physionomie du score, à la hiérarchie
+ * initiale (favori mené vs outsider qui bétonne) et à l'élan psychologique d'un but récent.
+ */
+function computeGameStateMultipliers(params: {
+  homeScore: number;
+  awayScore: number;
+  pMin: number;
+  preShareH: number;
+  events?: MatchTimelineEvent[] | null;
+}): { hMult: number; aMult: number; lastIncidentMin: number } {
+  const { homeScore, awayScore, pMin, preShareH, events } = params;
+  const diff = homeScore - awayScore;
+  const progress = clamp(pMin / 90, 0, 1);
+  let hMult = 1;
+  let aMult = 1;
+
+  // 1) Tactique liée au score courant dès le 1er but (et amplifiée en 2e période)
+  if (diff === 0) {
+    if (homeScore >= 1) {
+      // 1-1, 2-2 : match débridé où les deux blocs sont déjà ouverts
+      hMult *= 1.07;
+      aMult *= 1.07;
+    } else if (pMin >= 55 && pMin < 78) {
+      // 0-0 fermé après l'heure de jeu : prudence tactique
+      hMult *= 0.94;
+      aMult *= 0.94;
+    } else if (pMin >= 78) {
+      // Fin de 0-0 : le favori pousse un peu plus pour éviter le partage des points
+      if (preShareH >= 0.58) hMult *= 1.06;
+      else if (preShareH <= 0.42) aMult *= 1.06;
+    }
+  } else if (diff === -1) {
+    // Domicile mené d'1 but : poussée offensive (encore plus forte si Domicile était favori)
+    const favBoost = preShareH >= 0.56 ? 0.10 : 0;
+    hMult *= 1.09 + 0.16 * progress + favBoost;
+    // Extérieur recule d'un cran mais profite d'espaces de contre-attaque en fin de match
+    aMult *= pMin >= 68 ? 0.97 : 0.90;
+  } else if (diff === 1) {
+    // Extérieur mené d'1 but : poussée visiteuse, espaces en transition pour Domicile
+    const favBoost = preShareH <= 0.44 ? 0.10 : 0;
+    aMult *= 1.08 + 0.15 * progress + favBoost;
+    hMult *= pMin >= 68 ? 0.98 : 0.91;
+  } else if (diff <= -2) {
+    // Domicile mené de 2+ buts : gestion côté visiteur, baroud d'honneur (ou découragement à -3)
+    hMult *= diff <= -3 && pMin >= 65 ? 0.92 : 1.08;
+    aMult *= pMin >= 60 ? 0.82 : 0.88;
+  } else if (diff >= 2) {
+    // Domicile mène de 2+ buts : maîtrise du ballon et baisse du tempo
+    aMult *= diff >= 3 && pMin >= 65 ? 0.92 : 1.07;
+    hMult *= pMin >= 60 ? 0.83 : 0.89;
+  }
+
+  // 2) Momentum des événements récents (but inscrit dans les 12 dernières minutes simulées)
+  let lastIncidentMin = 0;
+  if (Array.isArray(events) && events.length > 0) {
+    let recentHomeGoals = 0;
+    let recentAwayGoals = 0;
+    for (const ev of events) {
+      if (ev.minute > lastIncidentMin) lastIncidentMin = ev.minute;
+      if (ev.type === "goal" && pMin > 0 && ev.minute <= pMin && pMin - ev.minute <= 12) {
+        if (ev.team === "home") recentHomeGoals++;
+        else if (ev.team === "away") recentAwayGoals++;
+      }
+    }
+    if (recentHomeGoals > recentAwayGoals) {
+      hMult *= 1.08;
+    } else if (recentAwayGoals > recentHomeGoals) {
+      aMult *= 1.08;
+    }
+  }
+
+  return {
+    hMult: clamp(hMult, 0.72, 1.42),
+    aMult: clamp(aMult, 0.72, 1.42),
+    lastIncidentMin,
+  };
+}
+
+/**
+ * Modèle joint unifié du SCORE FINAL conditionnellement à (homeScore, awayScore, minute, events, regime).
  * Fonctionne aussi bien en avant-match (0, 0, 0) qu'en plein direct (score courant, minute).
  */
 export function liveScoreModel(
@@ -628,51 +785,75 @@ export function liveScoreModel(
   homeScore: number,
   awayScore: number,
   minute: number,
-  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+  opts?: LivePricingOpts
 ): LiveScoreModel {
-  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const pMin = livePricingMinute(minute);
-  const elapsedShare = goalTimeCDF(pMin);
-  const remainingShare = pMin >= 90 ? 0.002 : clamp(1 - elapsedShare, 0.015, 1);
+  const { lambdaHome, lambdaAway } = expectedGoals(home, away, opts?.league);
 
-  let baseH = lambdaHome * (opts?.homeForm ?? 1);
-  let baseA = lambdaAway * (opts?.awayForm ?? 1);
-
-  // Impact cartons rouges sur les buts restants
-  const rh = opts?.redHome ?? 0;
-  const ra = opts?.redAway ?? 0;
-  baseH *= Math.pow(0.68, rh) * (1 + 0.18 * ra);
-  baseA *= Math.pow(0.68, ra) * (1 + 0.18 * rh);
-
-  // Dynamique tactique selon le score en seconde période
-  const offset = homeScore - awayScore;
-  if (pMin >= 54) {
-    if (offset === -1) {
-      // Domicile mené d'un but : pousse fort, s'expose en contre
-      baseH *= 1.13;
-      baseA *= 1.05;
-    } else if (offset === 1) {
-      // Extérieur mené d'un but : pousse, laisse des espaces
-      baseA *= 1.13;
-      baseH *= 1.05;
-    } else if (Math.abs(offset) >= 2 && pMin >= 71) {
-      // Écart confortable : rythme légèrement ralenti
-      baseH *= 0.91;
-      baseA *= 0.91;
+  let lastIncidentMin = 0;
+  if (Array.isArray(opts?.events)) {
+    for (const ev of opts.events) {
+      if (ev.minute > lastIncidentMin) lastIncidentMin = ev.minute;
     }
   }
 
-  // Ajustement progressif et doux du rythme selon les buts observés (sans à-coups)
-  if (pMin >= 27 && elapsedShare >= 0.25) {
+  const pMin = livePricingMinute(minute, {
+    isReal: false,
+    lastIncidentMin,
+  });
+  const elapsedShare = goalTimeCDF(pMin);
+  const remainingShare = pMin >= 90 ? 0.002 : clamp(1 - elapsedShare, 0.006, 1);
+
+  let baseH = lambdaHome * (opts?.homeForm ?? 1);
+  let baseA = lambdaAway * (opts?.awayForm ?? 1);
+  const preShareH = baseH / Math.max(0.1, baseH + baseA);
+
+  // Impact fort et réaliste des expulsions (10 contre 11 / 9 contre 11)
+  const rh = opts?.redHome ?? 0;
+  const ra = opts?.redAway ?? 0;
+  if (rh > 0 || ra > 0) {
+    baseH *= Math.pow(0.65, rh) * Math.pow(1.24, ra);
+    baseA *= Math.pow(0.65, ra) * Math.pow(1.24, rh);
+  }
+
+  // Dynamique tactique complète selon le score, le statut favori/outsider et le momentum
+  if (pMin > 0 || homeScore > 0 || awayScore > 0) {
+    const gs = computeGameStateMultipliers({
+      homeScore,
+      awayScore,
+      pMin,
+      preShareH,
+      events: opts?.events,
+    });
+    baseH *= gs.hMult;
+    baseA *= gs.aMult;
+  }
+
+  // Révélation progressive et réaliste de la physionomie du match (tempo observé sur le terrain)
+  if (pMin >= 24 && opts?.regime) {
+    const reveal = clamp((pMin - 18) / 54, 0, 0.85);
+    if (opts.regime === "high_tempo") {
+      baseH *= 1 + 0.10 * reveal;
+      baseA *= 1 + 0.10 * reveal;
+    } else if (opts.regime === "tactical_lock") {
+      baseH *= 1 - 0.11 * reveal;
+      baseA *= 1 - 0.11 * reveal;
+    } else if (opts.regime === "late_drama" && pMin >= 57) {
+      baseH *= 1.11;
+      baseA *= 1.11;
+    }
+  }
+
+  // Ajustement bayésien doux du rythme selon le nombre de buts déjà inscrits
+  if (pMin >= 24 && elapsedShare >= 0.22) {
     const expectedSoFar = (lambdaHome + lambdaAway) * elapsedShare;
     const observedSoFar = homeScore + awayScore;
-    const paceRatio = clamp((observedSoFar + 2.4) / (expectedSoFar + 2.4), 0.88, 1.16);
+    const paceRatio = clamp((observedSoFar + 2.1) / (expectedSoFar + 2.1), 0.84, 1.22);
     baseH *= paceRatio;
     baseA *= paceRatio;
   }
 
-  const remH = pMin >= 90 ? 0.001 : Math.max(0.003, baseH * remainingShare);
-  const remA = pMin >= 90 ? 0.001 : Math.max(0.003, baseA * remainingShare);
+  const remH = pMin >= 90 ? 0.001 : Math.max(0.002, baseH * remainingShare);
+  const remA = pMin >= 90 ? 0.001 : Math.max(0.002, baseA * remainingShare);
 
   const margin =
     pMin <= 0
@@ -686,7 +867,9 @@ export function liveScoreModel(
         );
 
   const maxAdd = pMin >= 90 ? 2 : clamp(Math.ceil(Math.max(remH, remA) * 3 + 6), 7, LIVE_MAX_REMAIN);
-  const remGrid = bivariatePoissonGrid(remH, remA, maxAdd, pMin === 0 && homeScore === 0 && awayScore === 0);
+  // Corrélation Dixon-Coles continue en temps restant (évite tout saut artificiel entre 0' et 1')
+  const dcScale = Math.pow(remainingShare, 0.75);
+  const remGrid = bivariatePoissonGrid(remH, remA, maxAdd, dcScale);
 
   // Décalage vers la grille des SCORES FINAUX [homeScore + addH][awayScore + addA]
   const sizeH = homeScore + maxAdd + 1;
@@ -704,8 +887,10 @@ export function liveScoreModel(
 /**
  * Modèle de score dédié EXCLUSIVEMENT aux matchs réels ajoutés manuellement par l'admin (`source = "manual"`).
  * Ne consulte JAMAIS `teamStrength`, `homeForm` ni les paramètres du simulateur virtuel :
- * calibre les intensités restantes `(lamH, lamA)` directement à partir des cotes réelles
- * `(oddsHome, oddsDraw, oddsAway)` définies par l'administrateur.
+ * - calibre les forces intrinsèques 90' à partir des cotes officielles `(oddsHome, oddsDraw, oddsAway)` ;
+ * - intègre en direct les vraies statistiques officielles du terrain (`realStats` : tirs cadrés,
+ *   tirs totaux, corners, possession), le momentum des buts, les cartons rouges et le temps additionnel,
+ *   avec quantification par paliers pour éviter toute oscillation inutile des cotes.
  */
 export function realMatchScoreModel(params: {
   oddsHome: number;
@@ -714,9 +899,12 @@ export function realMatchScoreModel(params: {
   homeScore?: number;
   awayScore?: number;
   minute?: number;
+  minuteLabel?: string | null;
   isLive?: boolean;
   redHome?: number;
   redAway?: number;
+  events?: MatchTimelineEvent[] | null;
+  realStats?: RealMatchLiveStatsInput | null;
 }): LiveScoreModel {
   const homeScore = Math.max(0, Math.round(params.homeScore ?? 0));
   const awayScore = Math.max(0, Math.round(params.awayScore ?? 0));
@@ -731,22 +919,22 @@ export function realMatchScoreModel(params: {
   const invA = 1 / Math.max(1.02, params.oddsAway || 3.2);
   const sumInv = invH + invD + invA || 1;
 
-  const margin = round2(clamp(sumInv, 1.045, 1.12));
+  const baseMargin = round2(clamp(sumInv, 1.045, 1.12));
   const targetH = invH / sumInv;
   const targetD = invD / sumInv;
   const targetA = invA / sumInv;
 
-  // 1) Calibrage des forces intrinsèques 90 min (0-0) à partir des cotes officielles de l'admin
+  // 1) Calibrage exact des forces intrinsèques 90 min (0-0) à partir des cotes officielles de l'admin
   let baseTotal = 2.62;
   const logEdge = Math.log(
     clamp(targetH + 0.025, 0.03, 0.96) / clamp(targetA + 0.025, 0.03, 0.96)
   );
-  let shareH = clamp(0.5 + 0.24 * logEdge, 0.07, 0.93);
+  let shareH = clamp(0.5 + 0.24 * logEdge, 0.06, 0.94);
 
   const evalPreMatch = (tot: number, sh: number) => {
     const lh = Math.max(0.05, tot * sh);
     const la = Math.max(0.05, tot * (1 - sh));
-    const g = bivariatePoissonGrid(lh, la, 7, true);
+    const g = bivariatePoissonGrid(lh, la, 7, 1);
     let pH = 0;
     let pD = 0;
     let pA = 0;
@@ -772,20 +960,122 @@ export function realMatchScoreModel(params: {
     }
   }
 
-  // 2) Projection exacte du temps restant et du score officiel (0-0 avant-match ou score live réel)
-  const remShare = isLive ? clamp(1 - goalTimeCDF(livePricingMinute(minute)), 0.04, 1) : 1;
-  const redFactorH = Math.pow(0.74, redHome) * Math.pow(1.18, redAway);
-  const redFactorA = Math.pow(0.74, redAway) * Math.pow(1.18, redHome);
-  const remH = Math.max(0.015, baseTotal * shareH * remShare * redFactorH);
-  const remA = Math.max(0.015, baseTotal * (1 - shareH) * remShare * redFactorA);
+  let lastIncidentMin = 0;
+  if (Array.isArray(params.events)) {
+    for (const ev of params.events) {
+      if (ev.minute > lastIncidentMin) lastIncidentMin = ev.minute;
+    }
+  }
+
+  const pMin = isLive
+    ? livePricingMinute(minute, { isReal: true, lastIncidentMin })
+    : 0;
+
+  // Gestion fine du temps restant (incluant la mi-temps `MT` et le temps additionnel `90'+X`)
+  const minLabel = (params.minuteLabel ?? "").trim().toUpperCase();
+  const isStoppage90 = isLive && (minLabel.startsWith("90'+") || minLabel.startsWith("90+"));
+  let remShare = 1;
+  if (isLive) {
+    if (isStoppage90) {
+      const addedMatch = /90'?\+(\d+)/.exec(minLabel);
+      const addedMin = addedMatch ? Number(addedMatch[1]) : 2;
+      remShare = clamp(0.032 - addedMin * 0.005, 0.006, 0.032);
+    } else if (minLabel === "MT" || minLabel === "HT") {
+      remShare = 1 - goalTimeCDF(45);
+    } else {
+      remShare = clamp(1 - goalTimeCDF(pMin), 0.01, 1);
+    }
+  }
+
+  let liveH = baseTotal * shareH;
+  let liveA = baseTotal * (1 - shareH);
+
+  if (isLive) {
+    // 2) Intégration bayésienne quantifiée des statistiques officielles en direct (tirs cadrés, tirs, corners, possession)
+    const st = params.realStats;
+    if (st && pMin >= 10) {
+      const sotH = Math.max(0, st.shotsOnTargetHome ?? 0);
+      const sotA = Math.max(0, st.shotsOnTargetAway ?? 0);
+      const shTotH = Math.max(sotH, st.shotsTotalHome ?? 0);
+      const shTotA = Math.max(sotA, st.shotsTotalAway ?? 0);
+      const corH = Math.max(0, st.cornersHome ?? 0);
+      const corA = Math.max(0, st.cornersAway ?? 0);
+
+      // Indice de menace offensive pondéré (1 tir cadré ≈ 0,11 xG, tir non cadré ≈ 0,03 xG, corner ≈ 0,035 xG)
+      const threatH = sotH * 3.0 + (shTotH - sotH) * 0.65 + corH * 0.85;
+      const threatA = sotA * 3.0 + (shTotA - sotA) * 0.65 + corA * 0.85;
+      const totalThreat = threatH + threatA;
+
+      if (totalThreat >= 3) {
+        const obsShareH = (threatH + 1.5 * shareH) / (totalThreat + 1.5);
+        // Crédibilité croissante avec le volume d'occasions, quantifiée par pas de 4 % (zéro tremblement inutile)
+        const rawCred = clamp(totalThreat / (totalThreat + 15), 0, 0.52);
+        const blendedShareH = shareH * (1 - rawCred) + obsShareH * rawCred;
+        const quantizedShareH = clamp(
+          Math.round(blendedShareH * 25) / 25,
+          0.06,
+          0.94
+        );
+
+        // Rythme global d'occasions comparé au rythme standard à cette minute (~26 unités de menace sur 90')
+        const elapsedFrac = Math.max(0.12, goalTimeCDF(pMin));
+        const expectedThreatSoFar = 26 * elapsedFrac;
+        const rawTempo = clamp(
+          (totalThreat + 8) / (expectedThreatSoFar + 8),
+          0.82,
+          1.24
+        );
+        const quantizedTempo = Math.round(rawTempo * 20) / 20;
+
+        const adjTotal = baseTotal * quantizedTempo;
+        liveH = adjTotal * quantizedShareH;
+        liveA = adjTotal * (1 - quantizedShareH);
+      } else if (st.possessionHome != null && st.possessionAway != null && pMin >= 18) {
+        // Légère inclinaison territoriale si seules les possessions sont très déséquilibrées (> 62 %)
+        const possDiff = clamp((st.possessionHome - 50) / 100, -0.25, 0.25);
+        if (Math.abs(possDiff) >= 0.12) {
+          const tilt = Math.round(possDiff * 20) / 20;
+          liveH *= 1 + tilt * 0.35;
+          liveA *= 1 - tilt * 0.35;
+        }
+      }
+    }
+
+    // 3) Dynamique tactique du score, statut favori mené et momentum des buts récents
+    const gs = computeGameStateMultipliers({
+      homeScore,
+      awayScore,
+      pMin,
+      preShareH: shareH,
+      events: params.events,
+    });
+    liveH *= gs.hMult;
+    liveA *= gs.aMult;
+
+    // Ajustement doux selon les buts déjà marqués vs attendus
+    if (pMin >= 24) {
+      const elapsedFrac = Math.max(0.2, goalTimeCDF(pMin));
+      const expGoalsSoFar = baseTotal * elapsedFrac;
+      const obsGoals = homeScore + awayScore;
+      const goalPace = clamp((obsGoals + 2.4) / (expGoalsSoFar + 2.4), 0.86, 1.2);
+      liveH *= goalPace;
+      liveA *= goalPace;
+    }
+  }
+
+  // 4) Impact cartons rouges et projection sur le temps restant
+  const redFactorH = Math.pow(0.66, redHome) * Math.pow(1.24, redAway);
+  const redFactorA = Math.pow(0.66, redAway) * Math.pow(1.24, redHome);
+  const remH = Math.max(0.004, liveH * remShare * redFactorH);
+  const remA = Math.max(0.004, liveA * remShare * redFactorA);
+
+  const liveMargin = isLive
+    ? round2(clamp(baseMargin + (1 - remShare) * 0.035, baseMargin, 1.125))
+    : baseMargin;
 
   const maxAdd = clamp(Math.ceil(Math.max(remH, remA) * 3 + 6), 7, LIVE_MAX_REMAIN);
-  const remGrid = bivariatePoissonGrid(
-    remH,
-    remA,
-    maxAdd,
-    !isLive && homeScore === 0 && awayScore === 0
-  );
+  const dcScale = Math.pow(remShare, 0.75);
+  const remGrid = bivariatePoissonGrid(remH, remA, maxAdd, dcScale);
 
   const sizeH = homeScore + maxAdd + 1;
   const sizeA = awayScore + maxAdd + 1;
@@ -798,7 +1088,7 @@ export function realMatchScoreModel(params: {
     }
   }
 
-  return { grid: finalGrid, margin, lamH: remH, lamA: remA };
+  return { grid: finalGrid, margin: liveMargin, lamH: remH, lamA: remA };
 }
 
 /**
@@ -879,12 +1169,14 @@ export function realMatchHalfSplitModel(params: {
   homeScore?: number | null;
   awayScore?: number | null;
   minute?: number;
+  minuteLabel?: string | null;
   isLive?: boolean;
   redHome?: number;
   redAway?: number;
   htHomeScore?: number | null;
   htAwayScore?: number | null;
   events?: MatchTimelineEvent[] | null;
+  realStats?: RealMatchLiveStatsInput | null;
   ftModel?: LiveScoreModel;
 }): LiveHalfSplitModel {
   const homeScore = Math.max(0, Math.round(params.homeScore ?? 0));
@@ -900,9 +1192,12 @@ export function realMatchHalfSplitModel(params: {
       homeScore,
       awayScore,
       minute,
+      minuteLabel: params.minuteLabel,
       isLive,
       redHome: params.redHome,
       redAway: params.redAway,
+      events: params.events,
+      realStats: params.realStats,
     });
 
   // Récupère les taux 90 min (0-0) calibrés sur les cotes admin
@@ -921,9 +1216,18 @@ export function realMatchHalfSplitModel(params: {
           redAway: params.redAway,
         });
 
+  let lastIncidentMin = 0;
+  if (Array.isArray(params.events)) {
+    for (const ev of params.events) {
+      if (ev.minute > lastIncidentMin) lastIncidentMin = ev.minute;
+    }
+  }
+
   const baseH = preModel.lamH;
   const baseA = preModel.lamA;
-  const pMin = livePricingMinute(minute);
+  const pMin = isLive
+    ? livePricingMinute(minute, { isReal: true, lastIncidentMin })
+    : 0;
   const htShare = goalTimeCDF(45);
 
   let htGrid: number[][];
@@ -1147,7 +1451,7 @@ export function liveResultProbs(
   homeScore: number,
   awayScore: number,
   minute: number,
-  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+  opts?: LivePricingOpts
 ): { home: number; draw: number; away: number } {
   const { grid } = liveScoreModel(home, away, homeScore, awayScore, minute, opts);
   let pHome = 0;
@@ -1283,27 +1587,26 @@ export function liveHalfSplitModel(
   homeScore: number,
   awayScore: number,
   minute: number,
-  opts?: {
-    homeForm?: number;
-    awayForm?: number;
-    redHome?: number;
-    redAway?: number;
-    events?: MatchTimelineEvent[] | null;
-    matchId?: number;
-  },
+  opts?: LivePricingOpts & { matchId?: number },
   ftModel?: LiveScoreModel
 ): LiveHalfSplitModel {
   const fullModel = ftModel ?? liveScoreModel(home, away, homeScore, awayScore, minute, opts);
-  const { lambdaHome, lambdaAway } = expectedGoals(home, away);
-  const pMin = livePricingMinute(minute);
+  const { lambdaHome, lambdaAway } = expectedGoals(home, away, opts?.league);
+  let lastIncidentMin = 0;
+  if (Array.isArray(opts?.events)) {
+    for (const ev of opts.events) {
+      if (ev.minute > lastIncidentMin) lastIncidentMin = ev.minute;
+    }
+  }
+  const pMin = livePricingMinute(minute, { isReal: false, lastIncidentMin });
   const htShare = goalTimeCDF(45);
 
   let baseH = lambdaHome * (opts?.homeForm ?? 1);
   let baseA = lambdaAway * (opts?.awayForm ?? 1);
   const rh = opts?.redHome ?? 0;
   const ra = opts?.redAway ?? 0;
-  baseH *= Math.pow(0.68, rh) * (1 + 0.18 * ra);
-  baseA *= Math.pow(0.68, ra) * (1 + 0.18 * rh);
+  baseH *= Math.pow(0.65, rh) * Math.pow(1.24, ra);
+  baseA *= Math.pow(0.65, ra) * Math.pow(1.24, rh);
 
   let htGrid: number[][];
   let h2Grid: number[][];
@@ -1494,13 +1797,25 @@ export function liveOddsFor(
   currentHomeScore: number,
   currentAwayScore: number,
   minute: number,
-  opts?: { homeForm?: number; awayForm?: number; redHome?: number; redAway?: number }
+  opts?: LivePricingOpts
 ) {
-  const { margin } = liveScoreModel(home, away, currentHomeScore, currentAwayScore, minute, opts);
-  const p = liveResultProbs(home, away, currentHomeScore, currentAwayScore, minute, opts);
+  const model = liveScoreModel(home, away, currentHomeScore, currentAwayScore, minute, opts);
+  let pHome = 0;
+  let pDraw = 0;
+  let pAway = 0;
+  for (let i = 0; i < model.grid.length; i++) {
+    for (let j = 0; j < model.grid[i].length; j++) {
+      const v = model.grid[i][j];
+      if (v <= 0) continue;
+      if (i > j) pHome += v;
+      else if (i === j) pDraw += v;
+      else pAway += v;
+    }
+  }
+  const tot = pHome + pDraw + pAway || 1;
   const [rawH, rawD, rawA] = partitionOutcomeOdds(
-    [p.home, p.draw, p.away],
-    margin,
+    [pHome / tot, pDraw / tot, pAway / tot],
+    model.margin,
     LIVE_ODDS_MAX
   );
   const cal = (o: number) =>

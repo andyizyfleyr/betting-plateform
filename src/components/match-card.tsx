@@ -357,12 +357,14 @@ function useOddsFlash(odds: number) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const delta = odds - prev.current;
+    const prevVal = prev.current;
+    const delta = odds - prevVal;
     prev.current = odds;
-    if (Math.abs(delta) < 0.04) return;
+    const relDelta = Math.abs(delta) / Math.max(1.01, prevVal);
+    if (Math.abs(delta) < 0.08 || relDelta < 0.035) return;
     setFlash(delta > 0 ? "up" : "down");
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => setFlash(null), 850);
+    timeoutRef.current = setTimeout(() => setFlash(null), 750);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
