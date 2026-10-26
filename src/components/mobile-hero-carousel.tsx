@@ -5,11 +5,11 @@ import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 
 export type HeroPromoAction =
-  | "focus_matches"
-  | "open_live"
-  | "open_combo"
-  | "filter_favorites"
-  | "open_recharge";
+  | { type: "league"; slug: string; defaultLabel: string }
+  | { type: "virtual" }
+  | { type: "live" }
+  | { type: "combo" }
+  | { type: "recharge" };
 
 interface HeroSlide {
   id: string;
@@ -21,95 +21,115 @@ interface HeroSlide {
   action: HeroPromoAction;
   image: string;
   objectPosition: string;
-  /** Dégradé principal côté texte (gauche → droite) pour lisibilité parfaite */
-  backdropGradient: string;
-  /** Couleur du bouton d'appel à l'action */
+  /** Couleur de fond unie côté texte (gauche) */
+  solidBg: string;
+  /** Couleur intermédiaire pour le fondu doux vers la photo à droite */
+  fadeMid: string;
+  /** Style du bouton d'appel à l'action */
   ctaClassName: string;
 }
 
 const HERO_SLIDES: HeroSlide[] = [
   {
-    id: "yamal-barca",
+    id: "yamal-laliga",
     player: "Lamine Yamal",
     club: "FC Barcelone",
-    title: "Cotes boostées sur les chocs",
-    description: "Lamine Yamal enflamme le Barça : pariez en 1x2 et Total buts.",
-    ctaLabel: "Parier maintenant",
-    action: "focus_matches",
+    title: "LaLiga · Chocs & Cotes",
+    description: "Lamine Yamal enflamme le Barça : pariez en 1x2 et Total.",
+    ctaLabel: "Voir LaLiga",
+    action: { type: "league", slug: "esp.1", defaultLabel: "LaLiga" },
     image: "/images/hero/lamine-yamal.webp",
-    objectPosition: "62% 20%",
-    backdropGradient:
-      "linear-gradient(96deg, #0b1636 0%, #132352 46%, rgba(19, 35, 82, 0.58) 72%, rgba(11, 22, 54, 0.14) 100%)",
+    objectPosition: "56% 18%",
+    solidBg: "#0b1636",
+    fadeMid: "rgba(11, 22, 54, 0.72)",
     ctaClassName: "bg-[#ff3b30] text-white shadow-[0_4px_12px_rgba(255,59,48,0.35)]",
   },
   {
-    id: "mbappe-real",
+    id: "virtual-multiplex",
+    player: "Multiplex IA",
+    club: "Matchs Virtuels 24h/24",
+    title: "Matchs Virtuels 24h/24",
+    description: "4 directs simultanés de 2-3 min : cotes dynamiques non-stop.",
+    ctaLabel: "Voir les virtuels",
+    action: { type: "virtual" },
+    image: "/images/hero/virtual-matches.webp",
+    objectPosition: "62% 24%",
+    solidBg: "#13112b",
+    fadeMid: "rgba(19, 17, 43, 0.72)",
+    ctaClassName: "bg-[#8b5cf6] text-white shadow-[0_4px_12px_rgba(139,92,246,0.38)]",
+  },
+  {
+    id: "mbappe-combo",
     player: "Kylian Mbappé",
     club: "Real Madrid",
-    title: "Pari combiné · Gains boostés",
-    description: "Combinez Mbappé, Real Madrid et LDC au Betslip jusqu'à +50 %.",
+    title: "Combinés · Boost +50 %",
+    description: "Combinez Mbappé et vos favoris au Betslip jusqu'à +50 %.",
     ctaLabel: "Créer un combiné",
-    action: "open_combo",
+    action: { type: "combo" },
     image: "/images/hero/kylian-mbappe.webp",
-    objectPosition: "60% 18%",
-    backdropGradient:
-      "linear-gradient(96deg, #101828 0%, #1d2939 46%, rgba(29, 41, 57, 0.58) 72%, rgba(16, 24, 40, 0.14) 100%)",
+    objectPosition: "52% 16%",
+    solidBg: "#101828",
+    fadeMid: "rgba(16, 24, 40, 0.72)",
     ctaClassName: "bg-[#f59e0b] text-[#111827] shadow-[0_4px_12px_rgba(245,158,11,0.34)]",
   },
   {
-    id: "gordon-barca",
+    id: "gordon-ucl",
     player: "Anthony Gordon",
     club: "FC Barcelone",
-    title: "Anthony Gordon · Liga & LDC",
-    description: "Gordon brille sous le maillot du Barça : cotes ajustées au réel.",
-    ctaLabel: "Voir le direct",
-    action: "open_live",
+    title: "Ligue des Champions",
+    description: "Gordon brille sous le maillot du Barça : affiches d'Europe.",
+    ctaLabel: "Ligue des Champions",
+    action: {
+      type: "league",
+      slug: "uefa.champions",
+      defaultLabel: "Ligue des Champions",
+    },
     image: "/images/hero/anthony-gordon-barca.webp",
-    objectPosition: "52% 16%",
-    backdropGradient:
-      "linear-gradient(96deg, #2b0b1e 0%, #4a1230 46%, rgba(74, 18, 48, 0.58) 72%, rgba(43, 11, 30, 0.14) 100%)",
+    objectPosition: "50% 14%",
+    solidBg: "#2b0b1e",
+    fadeMid: "rgba(43, 11, 30, 0.72)",
     ctaClassName: "bg-[#10b981] text-white shadow-[0_4px_12px_rgba(16,185,129,0.35)]",
   },
   {
-    id: "haaland-city",
+    id: "haaland-epl",
     player: "Erling Haaland",
     club: "Manchester City",
-    title: "Premier League · Plus de 2,5",
-    description: "Haaland empile les buts avec City : lignes Total & Les 2 marquent.",
-    ctaLabel: "Voir les favoris",
-    action: "filter_favorites",
+    title: "Premier League · Buts",
+    description: "Haaland empile les buts avec City : Total & Les 2 marquent.",
+    ctaLabel: "Premier League",
+    action: { type: "league", slug: "eng.1", defaultLabel: "Premier League" },
     image: "/images/hero/erling-haaland.webp",
-    objectPosition: "55% 18%",
-    backdropGradient:
-      "linear-gradient(96deg, #082f49 0%, #0c4a6e 46%, rgba(12, 74, 110, 0.58) 72%, rgba(8, 47, 73, 0.14) 100%)",
+    objectPosition: "52% 16%",
+    solidBg: "#082f49",
+    fadeMid: "rgba(8, 47, 73, 0.72)",
     ctaClassName: "bg-[#38bdf8] text-[#082f49] shadow-[0_4px_12px_rgba(56,189,248,0.32)]",
   },
   {
-    id: "saka-arsenal",
+    id: "saka-live",
     player: "Bukayo Saka",
     club: "Arsenal",
-    title: "Chocs Premier League & LDC",
-    description: "Bukayo Saka et Arsenal à l'affiche : 19 marchés par match.",
-    ctaLabel: "Voir les affiches",
-    action: "focus_matches",
+    title: "Directs · Cotes Live",
+    description: "Bukayo Saka et les chocs en cours : cotes ajustées au réel.",
+    ctaLabel: "Voir le direct",
+    action: { type: "live" },
     image: "/images/hero/bukayo-saka.webp",
-    objectPosition: "52% 18%",
-    backdropGradient:
-      "linear-gradient(96deg, #3b0810 0%, #69111f 46%, rgba(105, 17, 31, 0.58) 72%, rgba(59, 8, 16, 0.14) 100%)",
+    objectPosition: "56% 16%",
+    solidBg: "#3b0810",
+    fadeMid: "rgba(59, 8, 16, 0.72)",
     ctaClassName: "bg-white text-[#7f1d1d] shadow-[0_4px_12px_rgba(0,0,0,0.22)]",
   },
   {
-    id: "kane-bayern",
+    id: "kane-bundesliga",
     player: "Harry Kane",
     club: "Bayern Munich",
-    title: "Dépôt rapide · Mise immédiate",
-    description: "Harry Kane et le Bayern en feu : rechargez en quelques secondes.",
-    ctaLabel: "Recharger",
-    action: "open_recharge",
+    title: "Bundesliga · Chocs",
+    description: "Harry Kane affole les compteurs : 19 marchés par match.",
+    ctaLabel: "Voir Bundesliga",
+    action: { type: "league", slug: "ger.1", defaultLabel: "Bundesliga" },
     image: "/images/hero/harry-kane.webp",
-    objectPosition: "50% 16%",
-    backdropGradient:
-      "linear-gradient(96deg, #2d0712 0%, #581023 46%, rgba(88, 16, 35, 0.58) 72%, rgba(45, 7, 18, 0.14) 100%)",
+    objectPosition: "48% 14%",
+    solidBg: "#2d0712",
+    fadeMid: "rgba(45, 7, 18, 0.72)",
     ctaClassName: "bg-[#fbbf24] text-[#111827] shadow-[0_4px_12px_rgba(251,191,36,0.34)]",
   },
 ];
@@ -169,9 +189,9 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
   return (
     <section
       aria-label="Promotions à la une"
-      className="px-3 pt-2.5 pb-0.5 lg:hidden"
+      className="pb-2 lg:hidden"
     >
-      <div className="relative overflow-hidden rounded-2xl shadow-xs">
+      <div className="overflow-hidden rounded-2xl shadow-xs">
         <div
           ref={scrollerRef}
           onScroll={handleScroll}
@@ -182,33 +202,37 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
           {HERO_SLIDES.map((slide, idx) => (
             <article
               key={slide.id}
-              className="relative h-[118px] w-full shrink-0 snap-center overflow-hidden select-none bg-[#0b1636]"
+              style={{ backgroundColor: slide.solidBg }}
+              className="relative h-[118px] w-full shrink-0 snap-center overflow-hidden select-none"
             >
-              {/* Photo plein cadre focalisée sur la moitié droite */}
-              <Image
-                src={slide.image}
-                alt={`${slide.player} — ${slide.club}`}
-                fill
-                sizes="(max-width: 1024px) 100vw, 420px"
-                priority={idx === 0}
-                style={{ objectPosition: slide.objectPosition }}
-                className="pointer-events-none object-cover"
-              />
+              {/* Scène visuelle dédiée à droite (47 % de la largeur) : joueur dégagé, net et sans superposition de texte */}
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-[47%] overflow-hidden">
+                <Image
+                  src={slide.image}
+                  alt={`${slide.player} — ${slide.club}`}
+                  fill
+                  sizes="(max-width: 1024px) 50vw, 220px"
+                  priority={idx === 0}
+                  style={{ objectPosition: slide.objectPosition }}
+                  className="object-cover"
+                />
+                {/* Fondu latéral doux sur le seul bord gauche de la photo pour fusionner avec le bloc texte */}
+                <div
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 w-8"
+                  style={{
+                    background: `linear-gradient(90deg, ${slide.solidBg} 0%, ${slide.fadeMid} 52%, transparent 100%)`,
+                  }}
+                />
+              </div>
 
-              {/* Voile dégradé pour garantir un contraste net du texte à gauche */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0"
-                style={{ background: slide.backdropGradient }}
-              />
-
-              {/* Contenu texte compact + bouton d'appel à l'action */}
-              <div className="relative z-10 flex h-full w-[72%] flex-col justify-between px-3.5 py-2.5">
+              {/* Colonne texte & CTA strictement cantonnée à gauche (55 %) */}
+              <div className="relative z-10 flex h-full w-[55%] flex-col justify-between py-2.5 pl-3.5 pr-1">
                 <div className="min-w-0 space-y-0.5">
-                  <h2 className="truncate text-[14px] font-extrabold leading-tight tracking-[-0.01em] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]">
+                  <h2 className="truncate text-[13.5px] font-extrabold leading-tight tracking-[-0.01em] text-white">
                     {slide.title}
                   </h2>
-                  <p className="line-clamp-2 text-[11px] font-medium leading-[1.3] text-white/85">
+                  <p className="line-clamp-2 text-[10.5px] font-medium leading-[1.28] text-white/85">
                     {slide.description}
                   </p>
                 </div>
@@ -220,37 +244,37 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
                       pauseAutoplay();
                       onAction(slide.action);
                     }}
-                    className={`inline-flex h-[26px] items-center gap-1 rounded-full px-3 text-[11px] font-bold tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
+                    className={`inline-flex h-[26px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10.5px] font-bold tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
                   >
-                    <span>{slide.ctaLabel}</span>
-                    <ChevronRight className="h-3 w-3 stroke-[2.6]" />
+                    <span className="truncate">{slide.ctaLabel}</span>
+                    <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.6]" />
                   </button>
                 </div>
               </div>
             </article>
           ))}
         </div>
+      </div>
 
-        {/* Indicateurs de pagination discrets intégrés en bas à droite */}
-        <div className="pointer-events-auto absolute right-3 bottom-2 z-20 flex items-center gap-1 rounded-full bg-black/30 px-1.5 py-1">
-          {HERO_SLIDES.map((slide, idx) => {
-            const isActive = idx === activeIndex;
-            return (
-              <button
-                key={slide.id}
-                type="button"
-                aria-label={`Aller à la bannière ${idx + 1} (${slide.player} · ${slide.club})`}
-                onClick={() => {
-                  pauseAutoplay();
-                  scrollToSlide(idx);
-                }}
-                className={`h-1.5 rounded-full transition-all duration-200 ${
-                  isActive ? "w-4 bg-white" : "w-1.5 bg-white/45 hover:bg-white/70"
-                }`}
-              />
-            );
-          })}
-        </div>
+      {/* Pagination externe ultra-compacte sous le slide pour ne rien masquer sur l'image */}
+      <div className="mt-1.5 flex items-center justify-center gap-1.5">
+        {HERO_SLIDES.map((slide, idx) => {
+          const isActive = idx === activeIndex;
+          return (
+            <button
+              key={slide.id}
+              type="button"
+              aria-label={`Aller à la bannière ${idx + 1} (${slide.player} · ${slide.club})`}
+              onClick={() => {
+                pauseAutoplay();
+                scrollToSlide(idx);
+              }}
+              className={`h-1.5 rounded-full transition-all duration-200 ${
+                isActive ? "w-4 bg-betclic-red" : "w-1.5 bg-ink/20 hover:bg-ink/35"
+              }`}
+            />
+          );
+        })}
       </div>
     </section>
   );

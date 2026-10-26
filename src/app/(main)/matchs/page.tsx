@@ -213,12 +213,73 @@ function matchesSearchAndOdds(
   return true;
 }
 
+const VIRTUAL_FILTER_VALUE = "__virtual__";
+
+const VIRTUAL_CLUBS_BY_SLUG: Record<string, string[]> = {
+  "esp.1": [
+    "real madrid",
+    "barcelon",
+    "atletico",
+    "atlético",
+    "athletic",
+    "villarreal",
+    "real sociedad",
+    "real betis",
+    "séville",
+    "sevilla",
+  ],
+  "eng.1": [
+    "manchester city",
+    "liverpool",
+    "arsenal",
+    "chelsea",
+    "newcastle",
+    "aston villa",
+    "tottenham",
+    "manchester united",
+    "brighton",
+  ],
+  "ger.1": ["bayern", "dortmund", "leverkusen", "leipzig"],
+  "fra.1": [
+    "paris sg",
+    "paris saint-germain",
+    "psg",
+    "marseille",
+    "monaco",
+    "lille",
+    "lyon",
+    "nice",
+    "lens",
+    "toulouse",
+  ],
+  "ita.1": [
+    "inter milan",
+    "internazionale",
+    "ac milan",
+    "juventus",
+    "naples",
+    "napoli",
+    "atalanta",
+    "rome",
+    "roma",
+  ],
+};
+
+function matchesClubForLeagueSlug(m: ClientMatch, slug: string | null): boolean {
+  if (!slug) return false;
+  const clubs = VIRTUAL_CLUBS_BY_SLUG[slug];
+  if (!clubs || clubs.length === 0) return false;
+  const home = m.homeTeam.toLowerCase();
+  const away = m.awayTeam.toLowerCase();
+  return clubs.some((c) => home.includes(c) || away.includes(c));
+}
+
 function matchesLeagueChoice(
   m: ClientMatch,
   leagueChoice: string,
   selectedSlug: string | null
 ): boolean {
-  if (leagueChoice === "all") return true;
+  if (leagueChoice === "all" || leagueChoice === VIRTUAL_FILTER_VALUE) return true;
   if (m.league === leagueChoice) return true;
   if (!selectedSlug) return false;
   return resolveEspnSlugForLeague(m.league) === selectedSlug;
@@ -285,25 +346,50 @@ export default function MatchsPage() {
       const scrollToMatches = () => {
         matchesAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       };
-      switch (action) {
-        case "focus_matches":
+      const allLoaded = matches ?? [];
+      switch (action.type) {
+        case "league": {
+          setQuery("");
           setFilter("all");
           setOddsProfile("all");
+          setSelectedUniverse("real");
+          // Privilégie le libellé exact déjà présent parmi les matchs réels chargés pour cette compétition
+          const activeRealMatch = allLoaded.find(
+            (m) =>
+              m.source === "manual" &&
+              m.status !== "finished" &&
+              resolveEspnSlugForLeague(m.league) === action.slug
+          );
+          const anyRealMatch = allLoaded.find(
+            (m) =>
+              m.source === "manual" &&
+              resolveEspnSlugForLeague(m.league) === action.slug
+          );
+          const resolvedLabel =
+            activeRealMatch?.league ?? anyRealMatch?.league ?? action.defaultLabel;
+          setLeagueFilter(resolvedLabel);
           scrollToMatches();
           break;
-        case "open_live":
+        }
+        case "virtual":
+          setQuery("");
+          setFilter("all");
+          setOddsProfile("all");
+          setSelectedUniverse("virtual");
+          setLeagueFilter(isMobileViewport ? VIRTUAL_FILTER_VALUE : "all");
+          scrollToMatches();
+          break;
+        case "live":
+          setQuery("");
+          setLeagueFilter("all");
+          setOddsProfile("all");
           setFilter("live");
           scrollToMatches();
           break;
-        case "open_combo":
+        case "combo":
           router.push("/betslip");
           break;
-        case "filter_favorites":
-          setFilter("all");
-          setOddsProfile("favorite");
-          scrollToMatches();
-          break;
-        case "open_recharge":
+        case "recharge":
           if (user) {
             openRecharge();
           } else {
@@ -312,7 +398,16 @@ export default function MatchsPage() {
           break;
       }
     },
-    [openRecharge, router, setFilter, user]
+    [
+      isMobileViewport,
+      matches,
+      openRecharge,
+      router,
+      setFilter,
+      setLeagueFilter,
+      setSelectedUniverse,
+      user,
+    ]
   );
 
   useEffect(() => {
@@ -456,11 +551,13 @@ export default function MatchsPage() {
   }, [universeMatches, baseForTab, isRealUniverse, leagueFilter]);
 
   const effectiveLeague =
-    leagueFilter === "all" ||
-    isRealUniverse ||
-    leaguesWithCounts.some((l) => l.league === leagueFilter)
-      ? leagueFilter
-      : "all";
+    leagueFilter === VIRTUAL_FILTER_VALUE
+      ? "all"
+      : leagueFilter === "all" ||
+          isRealUniverse ||
+          leaguesWithCounts.some((l) => l.league === leagueFilter)
+        ? leagueFilter
+        : "all";
 
   const byLeague = useMemo(() => {
     if (effectiveLeague === "all") return baseForTab;
@@ -506,41 +603,39 @@ export default function MatchsPage() {
   );
 
   // ── Logique Mobile (< lg) dédiée & optimisée ──────────────────────────────────
-  // 1) Ligne « Populaire EN DIRECT » : matchs réels en direct, sinon TOUS les matchs virtuels actifs
-  // 2) Ligne « Populaire en avant-match » : matchs réels avant-match, sinon les matchs virtuels avant-match
+  // 1) Mode « Matchs virtuels » explicite (`__virtual__`) : multiplex virtuel en direct + file d'attente virtuelle
+  // 2) Filtre ligue spécifique : matchs réels de cette ligue en priorité stricte, sinon repli virtuel ciblé par clubs/ligue
+  // 3) Vue par défaut (« Toutes ligues ») : matchs réels en direct / avant-match, avec repli virtuel automatique
   const mobileRows = useMemo(() => {
     const qNorm = query.trim().toLowerCase();
-    const selectedSlug =
-      leagueFilter !== "all" ? resolveEspnSlugForLeague(leagueFilter) : null;
+    const isVirtualMode = leagueFilter === VIRTUAL_FILTER_VALUE;
+    const isSpecificLeague = leagueFilter !== "all" && !isVirtualMode;
+    const selectedSlug = isSpecificLeague
+      ? resolveEspnSlugForLeague(leagueFilter)
+      : null;
 
     const realMatching: ClientMatch[] = [];
-    for (const m of realMatchesAll) {
-      if (!matchesSearchAndOdds(m, qNorm, oddsProfile)) continue;
-      if (!matchesLeagueChoice(m, leagueFilter, selectedSlug)) continue;
-      realMatching.push(m);
+    if (!isVirtualMode) {
+      for (const m of realMatchesAll) {
+        if (!matchesSearchAndOdds(m, qNorm, oddsProfile)) continue;
+        if (!matchesLeagueChoice(m, leagueFilter, selectedSlug)) continue;
+        realMatching.push(m);
+      }
     }
 
     const virtualMatchingLeague: ClientMatch[] = [];
+    const virtualMatchingClubSlug: ClientMatch[] = [];
     const virtualMatchingNoLeague: ClientMatch[] = [];
     for (const m of virtualMatchesAll) {
       if (!matchesSearchAndOdds(m, qNorm, oddsProfile)) continue;
       virtualMatchingNoLeague.push(m);
-      if (matchesLeagueChoice(m, leagueFilter, selectedSlug)) {
+      if (isVirtualMode || matchesLeagueChoice(m, leagueFilter, selectedSlug)) {
         virtualMatchingLeague.push(m);
       }
+      if (selectedSlug && matchesClubForLeagueSlug(m, selectedSlug)) {
+        virtualMatchingClubSlug.push(m);
+      }
     }
-
-    // Si l'utilisateur a filtré sur une ligue réelle qui n'existe pas dans le pool virtuel (sans recherche texte),
-    // le repli virtuel conserve tous les matchs virtuels actifs afin de ne jamais laisser une ligne vide.
-    const canRelaxVirtualLeague = !qNorm && oddsProfile === "all" && leagueFilter !== "all";
-    const virtualPoolForActive =
-      virtualMatchingLeague.some((m) => m.status !== "finished") || !canRelaxVirtualLeague
-        ? virtualMatchingLeague
-        : virtualMatchingNoLeague;
-    const virtualPoolForUpcoming =
-      virtualMatchingLeague.some((m) => m.status === "upcoming") || !canRelaxVirtualLeague
-        ? virtualMatchingLeague
-        : virtualMatchingNoLeague;
 
     const realLive = sortRealLiveByPopularity(
       realMatching.filter((m) => m.status === "live")
@@ -549,6 +644,27 @@ export default function MatchsPage() {
       realMatching.filter((m) => m.status === "upcoming")
     );
     const realFinished = realMatching.filter((m) => m.status === "finished");
+    const hasAnyActiveRealForSelection =
+      realLive.length > 0 || realUpcoming.length > 0;
+
+    // Choix intelligent du pool virtuel :
+    // - mode virtuel explicite → tous les matchs virtuels
+    // - ligue spécifique ayant déjà des matchs réels actifs → aucun mélange virtuel parasite
+    // - ligue spécifique sans match réel actif → ligue virtuelle correspondante, sinon clubs virtuels de cette ligue, sinon pool virtuel global
+    const canRelaxVirtualLeague = !qNorm && oddsProfile === "all" && isSpecificLeague;
+    const selectVirtualPool = (needUpcomingOnly: boolean): ClientMatch[] => {
+      if (isVirtualMode || leagueFilter === "all") return virtualMatchingNoLeague;
+      if (hasAnyActiveRealForSelection) return [];
+      const checkFn = needUpcomingOnly
+        ? (m: ClientMatch) => m.status === "upcoming"
+        : (m: ClientMatch) => m.status !== "finished";
+      if (virtualMatchingLeague.some(checkFn)) return virtualMatchingLeague;
+      if (virtualMatchingClubSlug.some(checkFn)) return virtualMatchingClubSlug;
+      return canRelaxVirtualLeague ? virtualMatchingNoLeague : [];
+    };
+
+    const virtualPoolForActive = selectVirtualPool(false);
+    const virtualPoolForUpcoming = selectVirtualPool(true);
 
     const vLive = [...virtualPoolForActive.filter((m) => m.status === "live")].sort(
       (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() || a.id - b.id
@@ -556,21 +672,34 @@ export default function MatchsPage() {
     const vUpcomingForActive = sortByKickoffAsc(
       virtualPoolForActive.filter((m) => m.status === "upcoming")
     );
-    // Tous les matchs virtuels actifs : les directs simultanés en tête, suivis de la file d'attente virtuelle
     const virtualAllActive = [...vLive, ...vUpcomingForActive];
 
     const virtualUpcomingOnly = sortByKickoffAsc(
       virtualPoolForUpcoming.filter((m) => m.status === "upcoming")
     );
-    const virtualFinished = virtualMatchingLeague.filter((m) => m.status === "finished");
+    const virtualFinished = (
+      isVirtualMode
+        ? virtualMatchingNoLeague
+        : virtualMatchingLeague.length > 0
+          ? virtualMatchingLeague
+          : virtualMatchingClubSlug
+    ).filter((m) => m.status === "finished");
 
-    const liveRowUsesVirtual = realLive.length === 0;
-    const liveRowItems = liveRowUsesVirtual ? virtualAllActive : realLive;
+    const liveRowUsesVirtual =
+      isVirtualMode || (!hasAnyActiveRealForSelection && realLive.length === 0);
+    const liveRowItems = isVirtualMode
+      ? vLive.length > 0
+        ? vLive
+        : virtualAllActive
+      : liveRowUsesVirtual
+        ? virtualAllActive
+        : realLive;
 
-    const upcomingRowUsesVirtual = realUpcoming.length === 0;
+    const upcomingRowUsesVirtual =
+      isVirtualMode || (!hasAnyActiveRealForSelection && realUpcoming.length === 0);
     const upcomingRowItems = upcomingRowUsesVirtual ? virtualUpcomingOnly : realUpcoming;
 
-    const finishedRowUsesVirtual = realFinished.length === 0;
+    const finishedRowUsesVirtual = isVirtualMode || realFinished.length === 0;
     const finishedRowItems = finishedRowUsesVirtual ? virtualFinished : realFinished;
 
     const hasAnyForCurrentFilter =
@@ -593,21 +722,32 @@ export default function MatchsPage() {
       for (const m of finishedRowItems) uniqueVisibleIds.add(m.id);
     }
 
-    // Compteurs et ligues adaptés au flux mobile hybride (réel + repli virtuel automatique)
-    const allMobileLeagues = new Set<string>();
-    for (const m of realMatchesAll) allMobileLeagues.add(m.league);
+    // Compteurs et ligues dédupliquées par slug ESPN (évite les doublons ex. « Ligue des Champions » vs « Ligue des Champions · Europe »)
+    const rawLeagues: string[] = [];
+    if (isSpecificLeague) rawLeagues.push(leagueFilter);
+    for (const m of realMatchesAll) rawLeagues.push(m.league);
     if (liveRowUsesVirtual || upcomingRowUsesVirtual) {
-      for (const m of virtualMatchesAll) allMobileLeagues.add(m.league);
+      for (const m of virtualMatchesAll) rawLeagues.push(m.league);
     }
-    if (leagueFilter !== "all") allMobileLeagues.add(leagueFilter);
+
+    const seenSlugs = new Set<string>();
+    const uniqueMobileLeagues: string[] = [];
+    for (const lg of rawLeagues) {
+      if (!lg || lg === VIRTUAL_FILTER_VALUE) continue;
+      const slug = resolveEspnSlugForLeague(lg);
+      const dedupKey = slug ? `slug:${slug}` : `raw:${lg.trim().toLowerCase()}`;
+      if (seenSlugs.has(dedupKey)) continue;
+      seenSlugs.add(dedupKey);
+      uniqueMobileLeagues.push(lg);
+    }
 
     const poolForFilterCounts =
       filter === "live"
-        ? realMatching.some((m) => m.status === "live")
+        ? realMatchesAll.some((m) => m.status === "live")
           ? realMatchesAll.filter((m) => m.status === "live")
           : virtualMatchesAll.filter((m) => m.status !== "finished")
         : filter === "upcoming"
-          ? realMatching.some((m) => m.status === "upcoming")
+          ? realMatchesAll.some((m) => m.status === "upcoming")
             ? realMatchesAll.filter((m) => m.status === "upcoming")
             : virtualMatchesAll.filter((m) => m.status === "upcoming")
           : filter === "finished"
@@ -615,33 +755,44 @@ export default function MatchsPage() {
               ? realMatchesAll.filter((m) => m.status === "finished")
               : virtualMatchesAll.filter((m) => m.status === "finished")
             : [
-                ...(realLive.length > 0
+                ...(realMatchesAll.some((m) => m.status === "live")
                   ? realMatchesAll.filter((m) => m.status === "live")
                   : virtualMatchesAll.filter((m) => m.status !== "finished")),
-                ...(realUpcoming.length > 0
-                  ? realMatchesAll.filter((m) => m.status === "upcoming")
-                  : []),
+                ...realMatchesAll.filter((m) => m.status === "upcoming"),
               ];
 
-    const dedupPool = Array.from(new Map(poolForFilterCounts.map((m) => [m.id, m])).values());
-    const mobileLeagueOptions = [...allMobileLeagues].map((lg) => {
+    const dedupPool = Array.from(
+      new Map(poolForFilterCounts.map((m) => [m.id, m])).values()
+    );
+    const mobileLeagueOptions = uniqueMobileLeagues.map((lg) => {
       const slug = resolveEspnSlugForLeague(lg);
       const count = dedupPool.filter((m) => matchesLeagueChoice(m, lg, slug)).length;
       return { league: lg, count };
     });
 
-    const byLeagueMobile = dedupPool.filter((m) =>
-      matchesLeagueChoice(m, leagueFilter, selectedSlug)
-    );
+    const virtualPoolForCounts =
+      filter === "live"
+        ? virtualMatchesAll.filter((m) => m.status === "live")
+        : filter === "upcoming"
+          ? virtualMatchesAll.filter((m) => m.status === "upcoming")
+          : filter === "finished"
+            ? virtualMatchesAll.filter((m) => m.status === "finished")
+            : virtualMatchesAll.filter((m) => m.status !== "finished");
+
+    const byLeagueMobile = isVirtualMode
+      ? virtualPoolForCounts
+      : dedupPool.filter((m) => matchesLeagueChoice(m, leagueFilter, selectedSlug));
     const mobileFavCount = byLeagueMobile.filter(isClearFavoriteMatch).length;
     const mobileTightCount = byLeagueMobile.length - mobileFavCount;
 
     const mobileAllStatusCount = new Set([
-      ...(realLive.length > 0 ? realLive : virtualAllActive).map((m) => m.id),
-      ...(realUpcoming.length > 0 ? realUpcoming : virtualUpcomingOnly).map((m) => m.id),
+      ...liveRowItems.map((m) => m.id),
+      ...upcomingRowItems.map((m) => m.id),
     ]).size;
 
     return {
+      isVirtualMode,
+      isSpecificLeague,
       liveRowItems,
       liveRowUsesVirtual,
       upcomingRowItems,
@@ -654,6 +805,8 @@ export default function MatchsPage() {
       liveStatusCount: liveRowItems.length,
       upcomingStatusCount: upcomingRowItems.length,
       finishedStatusCount: finishedRowItems.length,
+      allLeaguesTotal: dedupPool.length,
+      virtualModeCount: virtualPoolForCounts.length,
       leagueOptions: mobileLeagueOptions,
       byLeagueTotal: byLeagueMobile.length,
       favCount: mobileFavCount,
@@ -890,10 +1043,19 @@ export default function MatchsPage() {
                 count:
                   matches !== null
                     ? isMobileViewport
-                      ? mobileRows.byLeagueTotal
+                      ? mobileRows.allLeaguesTotal
                       : baseForTab.length
                     : undefined,
               },
+              ...(isMobileViewport
+                ? [
+                    {
+                      value: VIRTUAL_FILTER_VALUE,
+                      label: "Matchs virtuels",
+                      count: matches !== null ? mobileRows.virtualModeCount : undefined,
+                    },
+                  ]
+                : []),
               ...(isMobileViewport ? mobileRows.leagueOptions : leaguesWithCounts).map(
                 ({ league, count }) => ({
                   value: league,
@@ -951,7 +1113,11 @@ export default function MatchsPage() {
         resultCountText={
           matches !== null
             ? isMobileViewport
-              ? `${mobileRows.visibleTotal} match${mobileRows.visibleTotal > 1 ? "s" : ""}`
+              ? `${mobileRows.visibleTotal} match${mobileRows.visibleTotal > 1 ? "s" : ""}${
+                  mobileRows.isVirtualMode
+                    ? ` virtuel${mobileRows.visibleTotal > 1 ? "s" : ""}`
+                    : ""
+                }`
               : `${visible.length} match${visible.length > 1 ? "s" : ""} ${
                   isRealUniverse ? "réel" : "virtuel"
                 }${visible.length > 1 ? "s" : ""}`
@@ -1036,9 +1202,19 @@ export default function MatchsPage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-5">
-                  {(filter === "all" || filter === "live") && (
+                  {(filter === "live" ||
+                    (filter === "all" &&
+                      (mobileRows.liveRowItems.length > 0 ||
+                        (!mobileRows.isSpecificLeague &&
+                          mobileRows.upcomingRowItems.length === 0)))) && (
                     <RealMatchCarouselRow
-                      label="Populaire EN DIRECT"
+                      label={
+                        mobileRows.isVirtualMode
+                          ? "Matchs virtuels EN DIRECT"
+                          : mobileRows.isSpecificLeague
+                            ? `${leagueFilter} · EN DIRECT`
+                            : "Populaire EN DIRECT"
+                      }
                       items={mobileRows.liveRowItems}
                       live
                       virtualFallback={mobileRows.liveRowUsesVirtual}
@@ -1046,13 +1222,23 @@ export default function MatchsPage() {
                     />
                   )}
 
-                  {(filter === "all" || filter === "upcoming") && (
+                  {(filter === "upcoming" ||
+                    (filter === "all" &&
+                      (mobileRows.upcomingRowItems.length > 0 ||
+                        !mobileRows.isSpecificLeague))) && (
                     <RealMatchCarouselRow
-                      label="Populaire en avant-match"
+                      label={
+                        mobileRows.isVirtualMode
+                          ? "Prochains départs virtuels"
+                          : mobileRows.isSpecificLeague
+                            ? `${leagueFilter} · Avant-match`
+                            : "Populaire en avant-match"
+                      }
                       items={mobileRows.upcomingRowItems}
                       virtualFallback={mobileRows.upcomingRowUsesVirtual}
                       markFirstAsNextUp={
-                        mobileRows.upcomingRowUsesVirtual && leagueFilter === "all"
+                        mobileRows.upcomingRowUsesVirtual &&
+                        (leagueFilter === "all" || mobileRows.isVirtualMode)
                       }
                       emptyMessage="Aucun match en avant-match dans cette sélection"
                     />
