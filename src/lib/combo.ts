@@ -340,7 +340,7 @@ export async function settlePendingCombos(): Promise<void> {
         RETURNING cb."user_id", v.payout
       )
       UPDATE "app_user" AS u
-      SET "balance" = u."balance" + agg.total_payout
+      SET "balance" = ROUND((u."balance" + agg.total_payout)::numeric, 2)::float8
       FROM (
         SELECT "user_id", SUM(payout)::float8 AS total_payout
         FROM updated

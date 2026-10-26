@@ -282,17 +282,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Anti-spam
-  const [lastCombo] = await db
-    .select({ placedAt: comboBets.placedAt })
-    .from(comboBets)
-    .where(eq(comboBets.userId, uid))
-    .orderBy(desc(comboBets.placedAt))
-    .limit(1);
-  if (lastCombo && Date.now() - lastCombo.placedAt.getTime() < BET_COOLDOWN_MS) {
-    return NextResponse.json({ error: "Trop rapide — veuillez patienter" }, { status: 429 });
-  }
-
   const initialMatchRows =
     seenMatches.size > 0
       ? await db.select().from(matches).where(inArray(matches.id, [...seenMatches]))
@@ -398,7 +387,7 @@ export async function POST(req: NextRequest) {
   //  3) Comparaison des cotes AVANT tout débit
   //  4) `FOR UPDATE` sur `app_user` + déduplication `idempotencyKey` + insertion + débit solde
   const txResult: ComboTxOutcome = await db.transaction(async (tx) => {
-    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+    await tx.execute(sql`SET LOCAL lock_timeout = '5000ms'`);
 
     const lockedMatchesRaw =
       seenMatches.size > 0
@@ -419,6 +408,74 @@ export async function POST(req: NextRequest) {
             .orderBy(asc(predictionQuestions.id))
             .for("share")
         : [];
+
+    const [lockedUser] = await tx
+      .select({ id: appUser.id, balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .for("update");
+
+    if (!lockedUser) {
+      return { kind: "error", status: 404, error: "Compte introuvable" };
+    }
+
+    const inTxIdem = await lookupIdempotencyRecord(
+      tx,
+      uid,
+      "bet:combo",
+      idempotencyKey,
+      requestHash
+    );
+    if (inTxIdem.kind === "conflict") {
+      return { kind: "idempotency_conflict" };
+    }
+    if (inTxIdem.kind === "hit" && inTxIdem.responseBody.bet) {
+      return {
+        kind: "ok",
+        bet: inTxIdem.responseBody.bet as typeof comboBets.$inferSelect,
+        balance: lockedUser.balance,
+        predQuestionIds: [],
+        deduplicated: true,
+      };
+    }
+
+    const [concurrentExisting] = await tx
+      .select()
+      .from(comboBets)
+      .where(
+        and(
+          eq(comboBets.userId, uid),
+          eq(comboBets.idempotencyKey, idempotencyKey)
+        )
+      )
+      .limit(1);
+    if (concurrentExisting) {
+      const sameLegs =
+        Array.isArray(concurrentExisting.legs) &&
+        concurrentExisting.legs.length === rawLegs.length &&
+        concurrentExisting.legs.every((storedLeg, idx) => {
+          const inc = rawLegs[idx];
+          return (
+            storedLeg.kind === inc.kind &&
+            (storedLeg.matchId ?? null) === (inc.kind === "sport" ? Number(inc.matchId) : null) &&
+            (storedLeg.questionId ?? null) === (inc.kind === "prediction" ? Number(inc.questionId) : null) &&
+            storedLeg.selection === inc.selection
+          );
+        });
+      if (
+        !sameLegs ||
+        Math.round(concurrentExisting.stake * 100) !== Math.round(roundedStake * 100)
+      ) {
+        return { kind: "idempotency_conflict" };
+      }
+      return {
+        kind: "ok",
+        bet: concurrentExisting,
+        balance: lockedUser.balance,
+        predQuestionIds: [],
+        deduplicated: true,
+      };
+    }
 
     const nowMs = Date.now();
     const txMatchMap = new Map(
@@ -726,67 +783,18 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const [lockedUser] = await tx
-      .select({ id: appUser.id, balance: appUser.balance })
-      .from(appUser)
-      .where(eq(appUser.id, uid))
-      .for("update");
-
-    if (!lockedUser) {
-      return { kind: "error", status: 404, error: "Compte introuvable" };
-    }
-
-    const inTxIdem = await lookupIdempotencyRecord(
-      tx,
-      uid,
-      "bet:combo",
-      idempotencyKey,
-      requestHash
-    );
-    if (inTxIdem.kind === "conflict") {
-      return { kind: "idempotency_conflict" };
-    }
-
-    const [concurrentExisting] = await tx
-      .select()
-      .from(comboBets)
-      .where(
-        and(
-          eq(comboBets.userId, uid),
-          eq(comboBets.idempotencyKey, idempotencyKey)
-        )
-      )
-      .limit(1);
-    if (concurrentExisting) {
-      const sameLegs =
-        Array.isArray(concurrentExisting.legs) &&
-        concurrentExisting.legs.length === rawLegs.length &&
-        concurrentExisting.legs.every((storedLeg, idx) => {
-          const inc = rawLegs[idx];
-          return (
-            storedLeg.kind === inc.kind &&
-            (storedLeg.matchId ?? null) === (inc.kind === "sport" ? Number(inc.matchId) : null) &&
-            (storedLeg.questionId ?? null) === (inc.kind === "prediction" ? Number(inc.questionId) : null) &&
-            storedLeg.selection === inc.selection
-          );
-        });
-      if (
-        !sameLegs ||
-        Math.round(concurrentExisting.stake * 100) !== Math.round(roundedStake * 100)
-      ) {
-        return { kind: "idempotency_conflict" };
-      }
-      return {
-        kind: "ok",
-        bet: concurrentExisting,
-        balance: lockedUser.balance,
-        predQuestionIds: [],
-        deduplicated: true,
-      };
-    }
-
     if (lockedUser.balance < roundedStake) {
       return { kind: "error", status: 400, error: "Solde insuffisant" };
+    }
+
+    const [lastComboInTx] = await tx
+      .select({ placedAt: comboBets.placedAt })
+      .from(comboBets)
+      .where(eq(comboBets.userId, uid))
+      .orderBy(desc(comboBets.placedAt))
+      .limit(1);
+    if (lastComboInTx && Date.now() - lastComboInTx.placedAt.getTime() < BET_COOLDOWN_MS) {
+      return { kind: "error", status: 429, error: "Trop rapide — veuillez patienter" };
     }
 
     const [inserted] = await tx

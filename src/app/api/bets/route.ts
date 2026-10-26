@@ -644,17 +644,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Anti-spam : une mise toutes les 700 ms maximum (pas de machine-gun de paris).
-  const [lastBet] = await db
-    .select({ placedAt: bets.placedAt })
-    .from(bets)
-    .where(eq(bets.userId, uid))
-    .orderBy(desc(bets.placedAt))
-    .limit(1);
-  if (lastBet && Date.now() - lastBet.placedAt.getTime() < BET_COOLDOWN_MS) {
-    return NextResponse.json({ error: "Trop rapide — veuillez patienter" }, { status: 429 });
-  }
-
   const [rawMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
   if (!rawMatch) {
     return NextResponse.json({ error: "Match introuvable" }, { status: 404 });
@@ -678,12 +667,20 @@ export async function POST(req: NextRequest) {
   }
 
   // Anti-fractionnement : plafonne l'exposition cumulée d'un même joueur sur un même match
+  // (exclut la clé courante afin qu'un réessai idempotent parallèle ne se bloque jamais lui-même).
   const [existingMatchStake] = await db
     .select({
       staked: sql<number>`COALESCE(SUM(${bets.stake}), 0)::float8`,
     })
     .from(bets)
-    .where(and(eq(bets.userId, uid), eq(bets.matchId, matchId), eq(bets.status, "pending")));
+    .where(
+      and(
+        eq(bets.userId, uid),
+        eq(bets.matchId, matchId),
+        eq(bets.status, "pending"),
+        sql`${bets.idempotencyKey} IS DISTINCT FROM ${idempotencyKey}`
+      )
+    );
   const maxMatchCumulative = Math.min(600, Math.round(maxStake * 1.5));
   if ((existingMatchStake?.staked ?? 0) + stake > maxMatchCumulative) {
     return NextResponse.json(
@@ -868,7 +865,7 @@ export async function POST(req: NextRequest) {
     | { kind: "odds_changed"; details: OddsChangedDetails };
 
   const txResult: TxOutcome = await db.transaction(async (tx) => {
-    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+    await tx.execute(sql`SET LOCAL lock_timeout = '5000ms'`);
 
     const [lockedRaw] = await tx
       .select()
@@ -878,6 +875,59 @@ export async function POST(req: NextRequest) {
 
     if (!lockedRaw) {
       return { kind: "error", status: 404, error: "Match introuvable" };
+    }
+
+    const [lockedUser] = await tx
+      .select({ id: appUser.id, balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .for("update");
+
+    if (!lockedUser) {
+      return { kind: "error", status: 404, error: "Compte introuvable" };
+    }
+
+    // Déduplication atomique AVANT les contrôles dynamiques de cote/suspension :
+    // 20 requêtes identiques envoyées en parallèle retournent 1 création + 19 `deduplicated: true`.
+    const inTxIdem = await lookupIdempotencyRecord(
+      tx,
+      uid,
+      "bet:sport",
+      idempotencyKey,
+      requestHash
+    );
+    if (inTxIdem.kind === "conflict") {
+      return { kind: "idempotency_conflict" };
+    }
+    if (inTxIdem.kind === "hit" && inTxIdem.responseBody.bet) {
+      return {
+        kind: "ok",
+        bet: inTxIdem.responseBody.bet as typeof bets.$inferSelect,
+        balance: lockedUser.balance,
+        deduplicated: true,
+      };
+    }
+
+    const [concurrentExisting] = await tx
+      .select()
+      .from(bets)
+      .where(and(eq(bets.userId, uid), eq(bets.idempotencyKey, idempotencyKey)))
+      .limit(1);
+    if (concurrentExisting) {
+      if (
+        concurrentExisting.matchId !== lockedRaw.id ||
+        concurrentExisting.market !== market ||
+        concurrentExisting.selection !== selection ||
+        Math.round(concurrentExisting.stake * 100) !== Math.round(roundedStake * 100)
+      ) {
+        return { kind: "idempotency_conflict" };
+      }
+      return {
+        kind: "ok",
+        bet: concurrentExisting,
+        balance: lockedUser.balance,
+        deduplicated: true,
+      };
     }
 
     const lockedMatch =
@@ -1037,52 +1087,20 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const [lockedUser] = await tx
-      .select({ id: appUser.id, balance: appUser.balance })
-      .from(appUser)
-      .where(eq(appUser.id, uid))
-      .for("update");
-
-    if (!lockedUser) {
-      return { kind: "error", status: 404, error: "Compte introuvable" };
-    }
-
-    const inTxIdem = await lookupIdempotencyRecord(
-      tx,
-      uid,
-      "bet:sport",
-      idempotencyKey,
-      requestHash
-    );
-    if (inTxIdem.kind === "conflict") {
-      return { kind: "idempotency_conflict" };
-    }
-
-    // Déduplication atomique en cas de double clic concurrent arrivé à la même milliseconde
-    const [concurrentExisting] = await tx
-      .select()
-      .from(bets)
-      .where(and(eq(bets.userId, uid), eq(bets.idempotencyKey, idempotencyKey)))
-      .limit(1);
-    if (concurrentExisting) {
-      if (
-        concurrentExisting.matchId !== lockedMatch.id ||
-        concurrentExisting.market !== market ||
-        concurrentExisting.selection !== selection ||
-        Math.round(concurrentExisting.stake * 100) !== Math.round(roundedStake * 100)
-      ) {
-        return { kind: "idempotency_conflict" };
-      }
-      return {
-        kind: "ok",
-        bet: concurrentExisting,
-        balance: lockedUser.balance,
-        deduplicated: true,
-      };
-    }
-
     if (lockedUser.balance < roundedStake) {
       return { kind: "error", status: 400, error: "Solde insuffisant" };
+    }
+
+    // Anti-spam sous verrou `app_user FOR UPDATE` (après contrôle idempotence et solde) :
+    // bloque les rafales de paris distincts quand le solde permettrait d'en enchaîner plusieurs en < 700 ms.
+    const [lastBetInTx] = await tx
+      .select({ placedAt: bets.placedAt })
+      .from(bets)
+      .where(eq(bets.userId, uid))
+      .orderBy(desc(bets.placedAt))
+      .limit(1);
+    if (lastBetInTx && Date.now() - lastBetInTx.placedAt.getTime() < BET_COOLDOWN_MS) {
+      return { kind: "error", status: 429, error: "Trop rapide — veuillez patienter" };
     }
 
     const txRiskFlag =

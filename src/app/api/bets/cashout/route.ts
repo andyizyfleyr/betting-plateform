@@ -305,7 +305,7 @@ export async function POST(req: NextRequest) {
       const pendingMatchIdSet = new Set(pendingSportMatchIds);
 
       const txRes: CashoutTxResult = await db.transaction(async (tx) => {
-        await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+        await tx.execute(sql`SET LOCAL lock_timeout = '5000ms'`);
 
         const lockedMatches =
           matchIds.length > 0
@@ -517,7 +517,7 @@ export async function POST(req: NextRequest) {
 
           const targetMatchId = bet.matchId;
           const txRes: CashoutTxResult = await db.transaction(async (tx) => {
-            await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+            await tx.execute(sql`SET LOCAL lock_timeout = '5000ms'`);
 
             const [lockedRawMatch] = await tx
               .select()
@@ -722,7 +722,7 @@ export async function POST(req: NextRequest) {
       }
 
       const txRes: CashoutTxResult = await db.transaction(async (tx) => {
-        await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+        await tx.execute(sql`SET LOCAL lock_timeout = '5000ms'`);
 
         const [lockedQuestion] = await tx
           .select()

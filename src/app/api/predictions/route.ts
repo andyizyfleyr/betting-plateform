@@ -284,22 +284,24 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const [lastBet] = await db
-    .select({ placedAt: predictionBets.placedAt })
-    .from(predictionBets)
-    .where(eq(predictionBets.userId, uid))
-    .orderBy(desc(predictionBets.placedAt))
-    .limit(1);
-  if (lastBet && Date.now() - lastBet.placedAt.getTime() < BET_COOLDOWN_MS) {
-    return NextResponse.json({ error: "Trop rapide — veuillez patienter" }, { status: 429 });
-  }
-
   const roundedStakeValue = round2(stake);
 
   type PredTxOutcome =
     | {
         kind: "ok";
-        bet: typeof predictionBets.$inferSelect;
+        bet: {
+          id: number;
+          questionId: number;
+          question: string;
+          category: string;
+          selection: string;
+          selectionLabel: string;
+          odds: number;
+          stake: number;
+          potentialWin: number;
+          status: string;
+          placedAt: Date | string;
+        };
         balance: number;
         incYes: number;
         incNo: number;
@@ -309,15 +311,8 @@ export async function POST(req: NextRequest) {
     | { kind: "error"; status: number; error: string }
     | { kind: "odds_changed"; details: OddsChangedDetails };
 
-  // Transaction courte purement SQL :
-  //  1) `SET LOCAL lock_timeout = '2500ms'`
-  //  2) `FOR SHARE` sur `prediction_questions` (zéro blocage entre parieurs simultanés,
-  //     tout en bloquant une clôture concurrente de la question)
-  //  3) Comparaison `expectedOdds` AVANT tout débit
-  //  4) `FOR UPDATE` sur `app_user` (ordre canonique global)
-  //  5) Déduplication `idempotencyKey` + insertion + débit solde
   const txResult: PredTxOutcome = await db.transaction(async (tx) => {
-    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+    await tx.execute(sql`SET LOCAL lock_timeout = '5000ms'`);
 
     const [question] = await tx
       .select()
@@ -328,6 +323,71 @@ export async function POST(req: NextRequest) {
     if (!question) {
       return { kind: "error", status: 404, error: "Question introuvable" };
     }
+
+    const [lockedUser] = await tx
+      .select({ id: appUser.id, balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .for("update");
+
+    if (!lockedUser) {
+      return { kind: "error", status: 404, error: "Compte introuvable" };
+    }
+
+    const inTxIdem = await lookupIdempotencyRecord(
+      tx,
+      uid,
+      "bet:prediction",
+      idempotencyKey,
+      requestHash
+    );
+    if (inTxIdem.kind === "conflict") {
+      return { kind: "idempotency_conflict" };
+    }
+    if (inTxIdem.kind === "hit" && inTxIdem.responseBody.bet) {
+      return {
+        kind: "ok",
+        bet: inTxIdem.responseBody.bet as PredTxOutcome & { kind: "ok" } extends {
+          bet: infer B;
+        }
+          ? B
+          : never,
+        balance: lockedUser.balance,
+        incYes: 0,
+        incNo: 0,
+        deduplicated: true,
+      };
+    }
+
+    const [concurrentExisting] = await tx
+      .select()
+      .from(predictionBets)
+      .where(
+        and(
+          eq(predictionBets.userId, uid),
+          eq(predictionBets.idempotencyKey, idempotencyKey)
+        )
+      )
+      .limit(1);
+    if (concurrentExisting) {
+      if (
+        concurrentExisting.questionId !== question.id ||
+        concurrentExisting.selection !== selection ||
+        Math.round(concurrentExisting.stake * 100) !==
+          Math.round(roundedStakeValue * 100)
+      ) {
+        return { kind: "idempotency_conflict" };
+      }
+      return {
+        kind: "ok",
+        bet: concurrentExisting,
+        balance: lockedUser.balance,
+        incYes: 0,
+        incNo: 0,
+        deduplicated: true,
+      };
+    }
+
     if (question.status !== "open") {
       return { kind: "error", status: 400, error: "Cette question est résolue" };
     }
@@ -383,58 +443,18 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const [lockedUser] = await tx
-      .select({ id: appUser.id, balance: appUser.balance })
-      .from(appUser)
-      .where(eq(appUser.id, uid))
-      .for("update");
-
-    if (!lockedUser) {
-      return { kind: "error", status: 404, error: "Compte introuvable" };
-    }
-
-    const inTxIdem = await lookupIdempotencyRecord(
-      tx,
-      uid,
-      "bet:prediction",
-      idempotencyKey,
-      requestHash
-    );
-    if (inTxIdem.kind === "conflict") {
-      return { kind: "idempotency_conflict" };
-    }
-
-    const [concurrentExisting] = await tx
-      .select()
-      .from(predictionBets)
-      .where(
-        and(
-          eq(predictionBets.userId, uid),
-          eq(predictionBets.idempotencyKey, idempotencyKey)
-        )
-      )
-      .limit(1);
-    if (concurrentExisting) {
-      if (
-        concurrentExisting.questionId !== question.id ||
-        concurrentExisting.selection !== selection ||
-        Math.round(concurrentExisting.stake * 100) !==
-          Math.round(roundedStakeValue * 100)
-      ) {
-        return { kind: "idempotency_conflict" };
-      }
-      return {
-        kind: "ok",
-        bet: concurrentExisting,
-        balance: lockedUser.balance,
-        incYes: 0,
-        incNo: 0,
-        deduplicated: true,
-      };
-    }
-
     if (lockedUser.balance < roundedStakeValue) {
       return { kind: "error", status: 400, error: "Solde insuffisant" };
+    }
+
+    const [lastBetInTx] = await tx
+      .select({ placedAt: predictionBets.placedAt })
+      .from(predictionBets)
+      .where(eq(predictionBets.userId, uid))
+      .orderBy(desc(predictionBets.placedAt))
+      .limit(1);
+    if (lastBetInTx && Date.now() - lastBetInTx.placedAt.getTime() < BET_COOLDOWN_MS) {
+      return { kind: "error", status: 429, error: "Trop rapide — veuillez patienter" };
     }
 
     const potentialWin = round2(roundedStakeValue * serverOdds);
@@ -543,7 +563,10 @@ export async function POST(req: NextRequest) {
       stake: txResult.bet.stake,
       potentialWin: txResult.bet.potentialWin,
       status: txResult.bet.status,
-      placedAt: txResult.bet.placedAt.toISOString(),
+      placedAt:
+        txResult.bet.placedAt instanceof Date
+          ? txResult.bet.placedAt.toISOString()
+          : String(txResult.bet.placedAt),
     },
     balance: txResult.balance,
     ...(txResult.deduplicated ? { deduplicated: true } : {}),

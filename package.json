@@ -6,7 +6,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:concurrency": "node scripts/test-concurrency.mjs"
   },
   "dependencies": {
     "@vercel/functions": "^3.10.3",
