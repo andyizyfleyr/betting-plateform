@@ -158,18 +158,13 @@ export function InfiniteScrollSentinel({
       ref={sentinelRef}
       role="status"
       aria-live="polite"
-      aria-label="Chargement de la suite"
+      aria-label="Spinner de chargement"
       className={cn("flex items-center justify-center py-4", className)}
     >
-      <div className="inline-flex items-center gap-2 rounded-full border border-edge bg-white px-3.5 py-1.5 shadow-2xs">
-        <Loader2
-          className="h-4 w-4 animate-spin text-betclic-red"
-          strokeWidth={2.4}
-        />
-        <span className="font-display text-[12px] font-semibold text-mist">
-          Chargement…
-        </span>
-      </div>
+      <Loader2
+        className="h-5 w-5 animate-spin text-betclic-red"
+        strokeWidth={2.4}
+      />
     </div>
   );
 }

@@ -1023,14 +1023,13 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
             <div
               role="status"
               aria-live="polite"
-              className="flex w-20 shrink-0 snap-start items-center justify-center"
+              aria-label="Spinner de chargement"
+              className="flex w-16 shrink-0 snap-start items-center justify-center"
             >
-              <div className="grid h-10 w-10 place-items-center rounded-full border border-edge bg-white shadow-2xs">
-                <Loader2
-                  className="h-4 w-4 animate-spin text-betclic-red"
-                  strokeWidth={2.4}
-                />
-              </div>
+              <Loader2
+                className="h-5 w-5 animate-spin text-betclic-red"
+                strokeWidth={2.4}
+              />
             </div>
           )}
         </div>
