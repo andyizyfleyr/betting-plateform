@@ -29,263 +29,20 @@ import {
   MobileHeroCarousel,
   type HeroPromoAction,
 } from "@/components/mobile-hero-carousel";
-import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useApp } from "@/components/providers";
+import {
+  matchesSearchAndOdds,
+  sortByKickoffAsc,
+  sortRealLiveByPopularity,
+  sortRealUpcomingByPopularity,
+  VIRTUAL_FILTER_VALUE,
+} from "@/lib/matches-catalog";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { resolveEspnSlugForLeague } from "@/lib/real-leagues";
 import { cn, todayLabel } from "@/lib/format";
 
 type Universe = "real" | "virtual";
-type Filter = "all" | "live" | "upcoming" | "finished";
-type OddsProfileFilter = "all" | "favorite" | "tight";
-
-function isClearFavoriteMatch(m: ClientMatch): boolean {
-  return Math.min(m.oddsHome, m.oddsAway) <= 1.85;
-}
-
-const TIER_S_CLUBS = [
-  "real madrid",
-  "barcelon",
-  "paris saint-germain",
-  "psg",
-  "manchester city",
-  "liverpool",
-  "arsenal",
-  "bayern",
-  "inter milan",
-  "internazionale",
-];
-
-const TIER_A_CLUBS = [
-  "chelsea",
-  "manchester united",
-  "atletico",
-  "atlético",
-  "juventus",
-  "ac milan",
-  "dortmund",
-  "marseille",
-  "naples",
-  "napoli",
-  "leverkusen",
-  "tottenham",
-];
-
-const TIER_B_CLUBS = [
-  "monaco",
-  "lyon",
-  "lille",
-  "aston villa",
-  "newcastle",
-  "athletic",
-  "real betis",
-  "villarreal",
-  "rome",
-  "roma",
-  "atalanta",
-  "benfica",
-  "porto",
-  "sporting",
-  "ajax",
-  "psv",
-  "galatasaray",
-  "fenerbah",
-];
-
-function clubPopularityScore(teamName: string): number {
-  const n = teamName.toLowerCase();
-  if (TIER_S_CLUBS.some((c) => n.includes(c))) return 20;
-  if (TIER_A_CLUBS.some((c) => n.includes(c))) return 14;
-  if (TIER_B_CLUBS.some((c) => n.includes(c))) return 9;
-  return 4;
-}
-
-function leaguePopularityScore(league: string): number {
-  const l = league.toLowerCase();
-  if (
-    l.includes("champions") ||
-    l.includes("coupe du monde") ||
-    l.includes("world cup") ||
-    l === "can" ||
-    l.includes("euro ")
-  ) {
-    return 50;
-  }
-  if (
-    l.includes("premier league") ||
-    l.includes("ligue 1") ||
-    l.includes("laliga") ||
-    l.includes("la liga") ||
-    l.includes("serie a") ||
-    l.includes("bundesliga")
-  ) {
-    return 42;
-  }
-  if (l.includes("ligue europa") || l.includes("europa league") || l.includes("nations")) {
-    return 34;
-  }
-  if (
-    l.includes("conference") ||
-    l.includes("fa cup") ||
-    l.includes("copa del rey") ||
-    l.includes("portugal") ||
-    l.includes("eredivisie")
-  ) {
-    return 26;
-  }
-  return 18;
-}
-
-function scoreRealMatchBasePopularity(m: ClientMatch): number {
-  const leaguePts = leaguePopularityScore(m.league);
-  const clubsPts = clubPopularityScore(m.homeTeam) + clubPopularityScore(m.awayTeam);
-  const oddsGap = Math.abs(m.oddsHome - m.oddsAway);
-  const suspensePts = oddsGap <= 0.8 ? 8 : oddsGap <= 1.6 ? 4 : 0;
-  return leaguePts + clubsPts + suspensePts;
-}
-
-function scoreRealLivePopularity(m: ClientMatch): number {
-  const base = scoreRealMatchBasePopularity(m);
-  const openBonus = m.suspended ? 0 : 12;
-  const goalsBonus = Math.min(8, ((m.homeScore ?? 0) + (m.awayScore ?? 0)) * 2);
-  return base + openBonus + goalsBonus;
-}
-
-function scoreRealPreMatchPopularity(m: ClientMatch, earliestUpcomingMs: number): number {
-  const base = scoreRealMatchBasePopularity(m);
-  const kickoffMs = new Date(m.startsAt).getTime();
-  const hoursAfterNext = Math.max(0, (kickoffMs - earliestUpcomingMs) / 3_600_000);
-  const proximityPts =
-    hoursAfterNext <= 10 ? 24 : hoursAfterNext <= 26 ? 15 : hoursAfterNext <= 54 ? 7 : 0;
-  return base + proximityPts;
-}
-
-function sortRealLiveByPopularity(list: ClientMatch[]): ClientMatch[] {
-  if (list.length <= 1) return list;
-  return list
-    .map((m) => ({ m, s: scoreRealLivePopularity(m) }))
-    .sort((a, b) => b.s - a.s || a.m.id - b.m.id)
-    .map((x) => x.m);
-}
-
-function sortRealUpcomingByPopularity(list: ClientMatch[]): ClientMatch[] {
-  if (list.length <= 1) return list;
-  const withTime = list.map((m) => ({
-    m,
-    t: Date.parse(m.startsAt) || 0,
-  }));
-  let earliestMs = Infinity;
-  for (const x of withTime) {
-    if (x.t < earliestMs) earliestMs = x.t;
-  }
-  return withTime
-    .map((x) => ({
-      m: x.m,
-      t: x.t,
-      s: scoreRealPreMatchPopularity(x.m, earliestMs),
-    }))
-    .sort((a, b) => b.s - a.s || a.t - b.t || a.m.id - b.m.id)
-    .map((x) => x.m);
-}
-
-function sortByKickoffAsc(list: ClientMatch[]): ClientMatch[] {
-  if (list.length <= 1) return list;
-  return list
-    .map((m) => ({ m, t: Date.parse(m.startsAt) || 0 }))
-    .sort((a, b) => a.t - b.t || a.m.id - b.m.id)
-    .map((x) => x.m);
-}
-
-function matchesSearchAndOdds(
-  m: ClientMatch,
-  qNorm: string,
-  oddsProfile: OddsProfileFilter
-): boolean {
-  if (
-    qNorm &&
-    !m.homeTeam.toLowerCase().includes(qNorm) &&
-    !m.awayTeam.toLowerCase().includes(qNorm) &&
-    !m.league.toLowerCase().includes(qNorm)
-  ) {
-    return false;
-  }
-  if (oddsProfile === "favorite" && !isClearFavoriteMatch(m)) return false;
-  if (oddsProfile === "tight" && isClearFavoriteMatch(m)) return false;
-  return true;
-}
-
-const VIRTUAL_FILTER_VALUE = "__virtual__";
-
-const VIRTUAL_CLUBS_BY_SLUG: Record<string, string[]> = {
-  "esp.1": [
-    "real madrid",
-    "barcelon",
-    "atletico",
-    "atlético",
-    "athletic",
-    "villarreal",
-    "real sociedad",
-    "real betis",
-    "séville",
-    "sevilla",
-  ],
-  "eng.1": [
-    "manchester city",
-    "liverpool",
-    "arsenal",
-    "chelsea",
-    "newcastle",
-    "aston villa",
-    "tottenham",
-    "manchester united",
-    "brighton",
-  ],
-  "ger.1": ["bayern", "dortmund", "leverkusen", "leipzig"],
-  "fra.1": [
-    "paris sg",
-    "paris saint-germain",
-    "psg",
-    "marseille",
-    "monaco",
-    "lille",
-    "lyon",
-    "nice",
-    "lens",
-    "toulouse",
-  ],
-  "ita.1": [
-    "inter milan",
-    "internazionale",
-    "ac milan",
-    "juventus",
-    "naples",
-    "napoli",
-    "atalanta",
-    "rome",
-    "roma",
-  ],
-};
-
-function matchesClubForLeagueSlug(m: ClientMatch, slug: string | null): boolean {
-  if (!slug) return false;
-  const clubs = VIRTUAL_CLUBS_BY_SLUG[slug];
-  if (!clubs || clubs.length === 0) return false;
-  const home = m.homeTeam.toLowerCase();
-  const away = m.awayTeam.toLowerCase();
-  return clubs.some((c) => home.includes(c) || away.includes(c));
-}
-
-function matchesLeagueChoice(
-  m: ClientMatch,
-  leagueChoice: string,
-  selectedSlug: string | null
-): boolean {
-  if (leagueChoice === "all" || leagueChoice === VIRTUAL_FILTER_VALUE) return true;
-  if (m.league === leagueChoice) return true;
-  if (!selectedSlug) return false;
-  return resolveEspnSlugForLeague(m.league) === selectedSlug;
-}
 
 const POLL_INTERVAL = 5_000;
 const MAX_RETRIES = 3;
@@ -329,13 +86,11 @@ export default function MatchsPage() {
     sportLeagueFilter: leagueFilter,
     setSportLeagueFilter: setLeagueFilter,
   } = useApp();
-  const [oddsProfile, setOddsProfile] = useState<OddsProfileFilter>("all");
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<ClientMatch[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const lastMatchesRef = useRef<ClientMatch[] | null>(null);
-  const matchesAnchorRef = useRef<HTMLDivElement | null>(null);
   const isClient = useSyncExternalStore(subscribeNoop, getClientTrue, getServerFalse);
   const isMobileViewport = useSyncExternalStore(
     subscribeMobileViewport,
@@ -344,7 +99,9 @@ export default function MatchsPage() {
   );
   const { isOffline, isConstrained } = useNetworkQuality();
   const baseMatchesPollMs =
-    filter === "finished" || filter === "upcoming" ? 18_000 : POLL_INTERVAL;
+    !isMobileViewport && (filter === "finished" || filter === "upcoming")
+      ? 18_000
+      : POLL_INTERVAL;
   const pollIntervalMs = getAdaptiveIntervalMs(baseMatchesPollMs, isConstrained);
 
   const handlePullRefresh = useCallback(async () => {
@@ -363,17 +120,9 @@ export default function MatchsPage() {
 
   const handleHeroAction = useCallback(
     (action: HeroPromoAction) => {
-      const scrollToMatches = () => {
-        matchesAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      };
       const allLoaded = matches ?? [];
       switch (action.type) {
         case "league": {
-          setQuery("");
-          setFilter("all");
-          setOddsProfile("all");
-          setSelectedUniverse("real");
-          // Privilégie le libellé exact déjà présent parmi les matchs réels chargés pour cette compétition
           const activeRealMatch = allLoaded.find(
             (m) =>
               m.source === "manual" &&
@@ -387,20 +136,19 @@ export default function MatchsPage() {
           );
           const resolvedLabel =
             activeRealMatch?.league ?? anyRealMatch?.league ?? action.defaultLabel;
-          setLeagueFilter(resolvedLabel);
-          scrollToMatches();
+          router.push(`/matchs/tous?league=${encodeURIComponent(resolvedLabel)}`);
           break;
         }
         case "virtual":
           router.push("/matchs/virtuels");
           break;
-        case "live":
-          setQuery("");
-          setLeagueFilter("all");
-          setOddsProfile("all");
-          setFilter("live");
-          scrollToMatches();
+        case "live": {
+          const hasRealLive = allLoaded.some(
+            (m) => m.source === "manual" && m.status === "live"
+          );
+          router.push(hasRealLive ? "/matchs/tous?status=live" : "/matchs/virtuels");
           break;
+        }
         case "combo":
           router.push("/betslip");
           break;
@@ -413,15 +161,7 @@ export default function MatchsPage() {
           break;
       }
     },
-    [
-      matches,
-      openRecharge,
-      router,
-      setFilter,
-      setLeagueFilter,
-      setSelectedUniverse,
-      user,
-    ]
+    [matches, openRecharge, router, user]
   );
 
   useEffect(() => {
@@ -436,7 +176,6 @@ export default function MatchsPage() {
         try {
           const r = await api.matches();
           if (cancelled) return;
-          // Court-circuite tout re-render React si le serveur a répondu 304 Not Modified (même référence)
           if (lastMatchesRef.current !== r.matches) {
             lastMatchesRef.current = r.matches;
             setMatches(r.matches);
@@ -508,7 +247,6 @@ export default function MatchsPage() {
   const universe: Universe =
     selectedUniverse ?? (realActiveTotal > 0 ? "real" : "virtual");
   const isRealUniverse = universe === "real";
-
   const universeMatches = isRealUniverse ? realMatchesAll : virtualMatchesAll;
 
   const searchedMatches = useMemo(() => {
@@ -526,19 +264,12 @@ export default function MatchsPage() {
     () => searchedMatches.filter((m) => m.status !== "finished"),
     [searchedMatches]
   );
-
   const finishedMatches = useMemo(
     () => searchedMatches.filter((m) => m.status === "finished"),
     [searchedMatches]
   );
-
   const liveCount = useMemo(
     () => activeMatches.filter((m) => m.status === "live").length,
-    [activeMatches]
-  );
-
-  const upcomingCount = useMemo(
-    () => activeMatches.filter((m) => m.status === "upcoming").length,
     [activeMatches]
   );
 
@@ -549,37 +280,16 @@ export default function MatchsPage() {
     return activeMatches;
   }, [activeMatches, finishedMatches, filter]);
 
-  const leaguesWithCounts = useMemo(() => {
-    const allSet = new Set<string>();
-    for (const m of universeMatches) allSet.add(m.league);
-    if (isRealUniverse && leagueFilter !== "all") {
-      allSet.add(leagueFilter);
-    }
-    const counts = new Map<string, number>();
-    for (const m of baseForTab) {
-      counts.set(m.league, (counts.get(m.league) ?? 0) + 1);
-    }
-    return [...allSet].map((lg) => {
-      if (counts.has(lg)) return { league: lg, count: counts.get(lg) ?? 0 };
-      const targetSlug = resolveEspnSlugForLeague(lg);
-      if (!targetSlug) return { league: lg, count: 0 };
-      const aliasCount = baseForTab.filter(
-        (m) => resolveEspnSlugForLeague(m.league) === targetSlug
-      ).length;
-      return { league: lg, count: aliasCount };
-    });
-  }, [universeMatches, baseForTab, isRealUniverse, leagueFilter]);
-
   const effectiveLeague =
     leagueFilter === VIRTUAL_FILTER_VALUE
       ? "all"
       : leagueFilter === "all" ||
           isRealUniverse ||
-          leaguesWithCounts.some((l) => l.league === leagueFilter)
+          universeMatches.some((m) => m.league === leagueFilter)
         ? leagueFilter
         : "all";
 
-  const byLeague = useMemo(() => {
+  const visible = useMemo(() => {
     if (effectiveLeague === "all") return baseForTab;
     const selectedSlug = resolveEspnSlugForLeague(effectiveLeague);
     return baseForTab.filter((m) => {
@@ -589,26 +299,14 @@ export default function MatchsPage() {
     });
   }, [baseForTab, effectiveLeague]);
 
-  const favCount = useMemo(
-    () => byLeague.filter(isClearFavoriteMatch).length,
-    [byLeague]
-  );
-  const tightCount = byLeague.length - favCount;
-
-  const visible = useMemo(() => {
-    if (oddsProfile === "favorite") return byLeague.filter(isClearFavoriteMatch);
-    if (oddsProfile === "tight") return byLeague.filter((m) => !isClearFavoriteMatch(m));
-    return byLeague;
-  }, [byLeague, oddsProfile]);
-
-  // Tous les matchs (réels comme virtuels) s'affichent uniformément sous forme de cartes
-  // pour présenter clairement le multiplex de matchs en direct simultanés.
   const liveRest = useMemo(() => {
     const raw = visible.filter((m) => m.status === "live");
     return isRealUniverse
       ? sortRealLiveByPopularity(raw)
       : [...raw].sort(
-          (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() || a.id - b.id
+          (a, b) =>
+            new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() ||
+            a.id - b.id
         );
   }, [visible, isRealUniverse]);
 
@@ -622,40 +320,16 @@ export default function MatchsPage() {
     [visible]
   );
 
-  // ── Logique Mobile (< lg) dédiée & optimisée ──────────────────────────────────
-  // 1) Mode « Matchs virtuels » explicite (`__virtual__`) : multiplex virtuel en direct + file d'attente virtuelle
-  // 2) Filtre ligue spécifique : matchs réels de cette ligue en priorité stricte, sinon repli virtuel ciblé par clubs/ligue
-  // 3) Vue par défaut (« Toutes ligues ») : matchs réels en direct / avant-match, avec repli virtuel automatique
+  // ── Logique Mobile (< lg) dédiée & épurée (sans barre de filtres sur l'accueil) ──
   const mobileRows = useMemo(() => {
     const qNorm = query.trim().toLowerCase();
-    const isVirtualMode = leagueFilter === VIRTUAL_FILTER_VALUE;
-    const isSpecificLeague = leagueFilter !== "all" && !isVirtualMode;
-    const selectedSlug = isSpecificLeague
-      ? resolveEspnSlugForLeague(leagueFilter)
-      : null;
 
-    const realMatching: ClientMatch[] = [];
-    if (!isVirtualMode) {
-      for (const m of realMatchesAll) {
-        if (!matchesSearchAndOdds(m, qNorm, oddsProfile)) continue;
-        if (!matchesLeagueChoice(m, leagueFilter, selectedSlug)) continue;
-        realMatching.push(m);
-      }
-    }
-
-    const virtualMatchingLeague: ClientMatch[] = [];
-    const virtualMatchingClubSlug: ClientMatch[] = [];
-    const virtualMatchingNoLeague: ClientMatch[] = [];
-    for (const m of virtualMatchesAll) {
-      if (!matchesSearchAndOdds(m, qNorm, oddsProfile)) continue;
-      virtualMatchingNoLeague.push(m);
-      if (isVirtualMode || matchesLeagueChoice(m, leagueFilter, selectedSlug)) {
-        virtualMatchingLeague.push(m);
-      }
-      if (selectedSlug && matchesClubForLeagueSlug(m, selectedSlug)) {
-        virtualMatchingClubSlug.push(m);
-      }
-    }
+    const realMatching = realMatchesAll.filter((m) =>
+      matchesSearchAndOdds(m, qNorm, "all")
+    );
+    const virtualMatching = virtualMatchesAll.filter((m) =>
+      matchesSearchAndOdds(m, qNorm, "all")
+    );
 
     const realLive = sortRealLiveByPopularity(
       realMatching.filter((m) => m.status === "live")
@@ -663,171 +337,36 @@ export default function MatchsPage() {
     const realUpcoming = sortRealUpcomingByPopularity(
       realMatching.filter((m) => m.status === "upcoming")
     );
-    const realFinished = realMatching.filter((m) => m.status === "finished");
 
-    // Choix intelligent du pool virtuel par rangée :
-    // - s'il n'y a AUCUN match réel en cours (`realLive.length === 0`), la rangée Direct
-    //   affiche automatiquement les matchs virtuels en direct 24h/24 (même s'il existe des matchs réels à venir !)
-    // - s'il n'y a aucun match réel à venir (`realUpcoming.length === 0`), l'Avant-match bascule aussi sur les virtuels
-    const canRelaxVirtualLeague = !qNorm && oddsProfile === "all" && isSpecificLeague;
-    const selectVirtualPool = (needUpcomingOnly: boolean): ClientMatch[] => {
-      if (isVirtualMode || leagueFilter === "all") return virtualMatchingNoLeague;
-      if (!needUpcomingOnly && realLive.length > 0) return [];
-      if (needUpcomingOnly && realUpcoming.length > 0) return [];
-      const checkFn = needUpcomingOnly
-        ? (m: ClientMatch) => m.status === "upcoming"
-        : (m: ClientMatch) => m.status !== "finished";
-      if (virtualMatchingLeague.some(checkFn)) return virtualMatchingLeague;
-      if (virtualMatchingClubSlug.some(checkFn)) return virtualMatchingClubSlug;
-      return canRelaxVirtualLeague ? virtualMatchingNoLeague : [];
-    };
-
-    const virtualPoolForActive = selectVirtualPool(false);
-    const virtualPoolForUpcoming = selectVirtualPool(true);
-
-    const vLive = [...virtualPoolForActive.filter((m) => m.status === "live")].sort(
-      (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() || a.id - b.id
+    const vLive = [...virtualMatching.filter((m) => m.status === "live")].sort(
+      (a, b) =>
+        new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() ||
+        a.id - b.id
     );
-    const vUpcomingForActive = sortByKickoffAsc(
-      virtualPoolForActive.filter((m) => m.status === "upcoming")
+    const vUpcoming = sortByKickoffAsc(
+      virtualMatching.filter((m) => m.status === "upcoming")
     );
-    const virtualAllActive = [...vLive, ...vUpcomingForActive];
+    const virtualAllActive = [...vLive, ...vUpcoming];
 
-    const virtualUpcomingOnly = sortByKickoffAsc(
-      virtualPoolForUpcoming.filter((m) => m.status === "upcoming")
-    );
-    const virtualFinished = (
-      isVirtualMode
-        ? virtualMatchingNoLeague
-        : virtualMatchingLeague.length > 0
-          ? virtualMatchingLeague
-          : virtualMatchingClubSlug
-    ).filter((m) => m.status === "finished");
-
-    const liveRowUsesVirtual = isVirtualMode || realLive.length === 0;
+    // S'il n'y a aucun match réel en direct, les matchs virtuels en direct prennent le relais
+    const liveRowUsesVirtual = realLive.length === 0;
     const liveRowItems = liveRowUsesVirtual
       ? vLive.length > 0
         ? vLive
         : virtualAllActive
       : realLive;
 
-    const upcomingRowUsesVirtual = isVirtualMode || realUpcoming.length === 0;
-    const upcomingRowItems = upcomingRowUsesVirtual ? virtualUpcomingOnly : realUpcoming;
-
-    const finishedRowUsesVirtual = isVirtualMode || realFinished.length === 0;
-    const finishedRowItems = finishedRowUsesVirtual ? virtualFinished : realFinished;
-
-    const hasAnyForCurrentFilter =
-      filter === "live"
-        ? liveRowItems.length > 0
-        : filter === "upcoming"
-          ? upcomingRowItems.length > 0
-          : filter === "finished"
-            ? finishedRowItems.length > 0
-            : liveRowItems.length > 0 || upcomingRowItems.length > 0;
-
-    const uniqueVisibleIds = new Set<number>();
-    if (filter === "all" || filter === "live") {
-      for (const m of liveRowItems) uniqueVisibleIds.add(m.id);
-    }
-    if (filter === "all" || filter === "upcoming") {
-      for (const m of upcomingRowItems) uniqueVisibleIds.add(m.id);
-    }
-    if (filter === "finished") {
-      for (const m of finishedRowItems) uniqueVisibleIds.add(m.id);
-    }
-
-    // Compteurs et ligues dédupliquées par slug ESPN (évite les doublons ex. « Ligue des Champions » vs « Ligue des Champions · Europe »)
-    const rawLeagues: string[] = [];
-    if (isSpecificLeague) rawLeagues.push(leagueFilter);
-    for (const m of realMatchesAll) rawLeagues.push(m.league);
-    if (liveRowUsesVirtual || upcomingRowUsesVirtual) {
-      for (const m of virtualMatchesAll) rawLeagues.push(m.league);
-    }
-
-    const seenSlugs = new Set<string>();
-    const uniqueMobileLeagues: string[] = [];
-    for (const lg of rawLeagues) {
-      if (!lg || lg === VIRTUAL_FILTER_VALUE) continue;
-      const slug = resolveEspnSlugForLeague(lg);
-      const dedupKey = slug ? `slug:${slug}` : `raw:${lg.trim().toLowerCase()}`;
-      if (seenSlugs.has(dedupKey)) continue;
-      seenSlugs.add(dedupKey);
-      uniqueMobileLeagues.push(lg);
-    }
-
-    const poolForFilterCounts =
-      filter === "live"
-        ? realMatchesAll.some((m) => m.status === "live")
-          ? realMatchesAll.filter((m) => m.status === "live")
-          : virtualMatchesAll.filter((m) => m.status !== "finished")
-        : filter === "upcoming"
-          ? realMatchesAll.some((m) => m.status === "upcoming")
-            ? realMatchesAll.filter((m) => m.status === "upcoming")
-            : virtualMatchesAll.filter((m) => m.status === "upcoming")
-          : filter === "finished"
-            ? realMatchesAll.some((m) => m.status === "finished")
-              ? realMatchesAll.filter((m) => m.status === "finished")
-              : virtualMatchesAll.filter((m) => m.status === "finished")
-            : [
-                ...(realMatchesAll.some((m) => m.status === "live")
-                  ? realMatchesAll.filter((m) => m.status === "live")
-                  : virtualMatchesAll.filter((m) => m.status !== "finished")),
-                ...realMatchesAll.filter((m) => m.status === "upcoming"),
-              ];
-
-    const dedupPool = Array.from(
-      new Map(poolForFilterCounts.map((m) => [m.id, m])).values()
-    );
-    const mobileLeagueOptions = uniqueMobileLeagues.map((lg) => {
-      const slug = resolveEspnSlugForLeague(lg);
-      const count = dedupPool.filter((m) => matchesLeagueChoice(m, lg, slug)).length;
-      return { league: lg, count };
-    });
-
-    const virtualPoolForCounts =
-      filter === "live"
-        ? virtualMatchesAll.filter((m) => m.status === "live")
-        : filter === "upcoming"
-          ? virtualMatchesAll.filter((m) => m.status === "upcoming")
-          : filter === "finished"
-            ? virtualMatchesAll.filter((m) => m.status === "finished")
-            : virtualMatchesAll.filter((m) => m.status !== "finished");
-
-    const byLeagueMobile = isVirtualMode
-      ? virtualPoolForCounts
-      : dedupPool.filter((m) => matchesLeagueChoice(m, leagueFilter, selectedSlug));
-    const mobileFavCount = byLeagueMobile.filter(isClearFavoriteMatch).length;
-    const mobileTightCount = byLeagueMobile.length - mobileFavCount;
-
-    const mobileAllStatusCount = new Set([
-      ...liveRowItems.map((m) => m.id),
-      ...upcomingRowItems.map((m) => m.id),
-    ]).size;
+    const upcomingRowUsesVirtual = realUpcoming.length === 0;
+    const upcomingRowItems = upcomingRowUsesVirtual ? vUpcoming : realUpcoming;
 
     return {
-      isVirtualMode,
-      isSpecificLeague,
       liveRowItems,
       liveRowUsesVirtual,
       upcomingRowItems,
       upcomingRowUsesVirtual,
-      finishedRowItems,
-      finishedRowUsesVirtual,
-      hasAnyForCurrentFilter,
-      visibleTotal: uniqueVisibleIds.size,
-      allStatusCount: mobileAllStatusCount,
-      liveStatusCount: liveRowItems.length,
-      upcomingStatusCount: upcomingRowItems.length,
-      finishedStatusCount: finishedRowItems.length,
-      allLeaguesTotal: dedupPool.length,
-      virtualModeCount: virtualPoolForCounts.length,
-      leagueOptions: mobileLeagueOptions,
-      byLeagueTotal: byLeagueMobile.length,
-      favCount: mobileFavCount,
-      tightCount: mobileTightCount,
+      hasAny: liveRowItems.length > 0 || upcomingRowItems.length > 0,
     };
-  }, [realMatchesAll, virtualMatchesAll, query, leagueFilter, oddsProfile, filter]);
+  }, [realMatchesAll, virtualMatchesAll, query]);
 
   const switchUniverse = (next: Universe) => {
     setSelectedUniverse(next);
@@ -836,133 +375,58 @@ export default function MatchsPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-6 pt-2.5 lg:px-0 lg:py-0">
-      {/* En-tête desktop uniquement (masqué sur mobile) */}
-      <div className="hidden items-center justify-between gap-2 lg:flex">
-        <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
-            {isRealUniverse && effectiveLeague !== "all" ? effectiveLeague : "Matchs"}
-          </h1>
-          <p className="capitalize text-[12px] text-mist lg:text-[13px]">{todayLabel()}</p>
-        </div>
+      <div className="mx-auto w-full max-w-[1440px] px-4 pb-6 pt-2.5 lg:px-0 lg:py-0">
+        {/* En-tête desktop uniquement (masqué sur mobile) */}
+        <div className="hidden items-center justify-between gap-2 lg:flex">
+          <div>
+            <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+              {isRealUniverse && effectiveLeague !== "all" ? effectiveLeague : "Matchs"}
+            </h1>
+            <p className="capitalize text-[12px] text-mist lg:text-[13px]">
+              {todayLabel()}
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/resultats?universe=${universe}`}
-            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
-          >
-            <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
-            Résultats
-          </Link>
-
-          {liveCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setFilter(filter === "live" ? "all" : "live")}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-display text-[11.5px] font-bold active:scale-95",
-                isRealUniverse
-                  ? "bg-emerald-600/12 text-emerald-700"
-                  : "bg-betclic-red/12 text-betclic-red"
-              )}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/resultats?universe=${universe}`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
             >
-              <span
-                className={cn(
-                  "live-dot h-1.5 w-1.5 rounded-full",
-                  isRealUniverse ? "bg-emerald-600" : "bg-betclic-red"
-                )}
-              />
-              {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
-            </button>
-          )}
-        </div>
-      </div>
+              <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
+              Résultats
+            </Link>
 
-      {/* Hero publicitaire mobile (5 slides compacts au-dessus de la barre de recherche) */}
-      <MobileHeroCarousel onAction={handleHeroAction} />
-
-      {/* Sélecteur d'univers (desktop uniquement) + Barre de recherche */}
-      <div className="lg:mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
-        <div className="hidden grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1 lg:grid">
-          <button
-            type="button"
-            onClick={() => switchUniverse("real")}
-            className={cn(
-              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
-              isRealUniverse
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "text-mist hover:bg-elev/60 active:bg-elev"
-            )}
-          >
-            <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-            <span className="truncate">Matchs réels</span>
-            {matches !== null && (
-              <span
+            {liveCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilter(filter === "live" ? "all" : "live")}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                  isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-display text-[11.5px] font-bold active:scale-95",
+                  isRealUniverse
+                    ? "bg-emerald-600/12 text-emerald-700"
+                    : "bg-betclic-red/12 text-betclic-red"
                 )}
               >
-                {realLiveTotal > 0 && (
-                  <span
-                    className={cn(
-                      "live-dot h-1.5 w-1.5 rounded-full",
-                      isRealUniverse ? "bg-white" : "bg-emerald-600"
-                    )}
-                  />
-                )}
-                {realActiveTotal}
-              </span>
+                <span
+                  className={cn(
+                    "live-dot h-1.5 w-1.5 rounded-full",
+                    isRealUniverse ? "bg-emerald-600" : "bg-betclic-red"
+                  )}
+                />
+                {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
+              </button>
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => switchUniverse("virtual")}
-            className={cn(
-              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
-              !isRealUniverse
-                ? "bg-betclic-red text-white shadow-xs"
-                : "text-mist hover:bg-elev/60 active:bg-elev"
-            )}
-          >
-            <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-            <span className="truncate">Matchs virtuels</span>
-            {matches !== null && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-                  !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
-                )}
-              >
-                {virtualLiveTotal > 0 && (
-                  <span
-                    className={cn(
-                      "live-dot h-1.5 w-1.5 rounded-full",
-                      !isRealUniverse ? "bg-white" : "bg-betclic-red"
-                    )}
-                  />
-                )}
-                {virtualActiveTotal}
-              </span>
-            )}
-          </button>
+          </div>
         </div>
 
-        {/* Barre de recherche */}
-        <div className="flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:mt-2.5 xl:mt-0 xl:h-12 xl:rounded-2xl xl:px-3.5">
+        {/* Barre de recherche mobile placée en haut du slide Hero */}
+        <div className="mb-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:hidden">
           <Search className="h-4 w-4 shrink-0 text-dim" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={
-              isMobileViewport
-                ? "Rechercher un match, un club ou une ligue…"
-                : isRealUniverse
-                  ? "Rechercher un match réel ou une compétition…"
-                  : "Rechercher un club ou une ligue virtuelle…"
-            }
+            placeholder="Rechercher un match, un club ou une ligue…"
             className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
           />
           {query && (
@@ -976,552 +440,447 @@ export default function MatchsPage() {
             </button>
           )}
         </div>
-      </div>
 
-      {/* Bandeau explicatif du mode actif (desktop uniquement) */}
-      <div
-        className={cn(
-          "mt-2 hidden items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-[11px] font-medium lg:flex",
-          isRealUniverse
-            ? "bg-emerald-600/8 text-emerald-800"
-            : "bg-elev/80 text-mist"
-        )}
-      >
-        {isRealUniverse ? (
-          <span>Compétitions officielles · Cotes fixes opérateur · Coup d&apos;envoi réel</span>
-        ) : (
-          <span>Simulateur 24h/24 · Matchs de 2-3 min · Multiplex 4 directs simultanés</span>
-        )}
-      </div>
+        {/* Hero publicitaire mobile */}
+        <MobileHeroCarousel onAction={handleHeroAction} />
 
-      {/* Rangée unique collante de 3 pastilles dropdown */}
-      <FilterDropdownRow
-        filters={[
-          {
-            id: "status",
-            placeholder: "Statut",
-            value: filter,
-            defaultValue: "all",
-            onChange: setFilter,
-            options: [
-              {
-                value: "all",
-                label: "Affiche",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.allStatusCount
-                      : activeMatches.length
-                    : undefined,
-              },
-              {
-                value: "live",
-                label: "En direct",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.liveStatusCount
-                      : liveCount
-                    : undefined,
-              },
-              {
-                value: "upcoming",
-                label: isMobileViewport || isRealUniverse ? "Avant-match" : "À venir",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.upcomingStatusCount
-                      : upcomingCount
-                    : undefined,
-              },
-              {
-                value: "finished",
-                label: "Terminés",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.finishedStatusCount
-                      : finishedMatches.length
-                    : undefined,
-              },
-            ],
-          },
-          {
-            id: "league",
-            placeholder: "Ligue",
-            value: isMobileViewport ? leagueFilter : effectiveLeague,
-            defaultValue: "all",
-            onChange: (next) => {
-              if (next === VIRTUAL_FILTER_VALUE) {
-                router.push("/matchs/virtuels");
-                return;
-              }
-              setLeagueFilter(next);
-            },
-            options: [
-              {
-                value: "all",
-                label: "Toutes ligues",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.allLeaguesTotal
-                      : baseForTab.length
-                    : undefined,
-              },
-              ...(isMobileViewport
-                ? [
-                    {
-                      value: VIRTUAL_FILTER_VALUE,
-                      label: "Matchs virtuels",
-                      count: matches !== null ? mobileRows.virtualModeCount : undefined,
-                    },
-                  ]
-                : []),
-              ...(isMobileViewport ? mobileRows.leagueOptions : leaguesWithCounts).map(
-                ({ league, count }) => ({
-                  value: league,
-                  label: league,
-                  count: matches !== null ? count : undefined,
-                })
-              ),
-            ],
-          },
-          {
-            id: "odds",
-            placeholder: "Cotes",
-            value: oddsProfile,
-            defaultValue: "all",
-            onChange: setOddsProfile,
-            options: [
-              {
-                value: "all",
-                label: "Toutes cotes",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.byLeagueTotal
-                      : byLeague.length
-                    : undefined,
-              },
-              {
-                value: "favorite",
-                label: "Favori net",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.favCount
-                      : favCount
-                    : undefined,
-              },
-              {
-                value: "tight",
-                label: "Match serré",
-                count:
-                  matches !== null
-                    ? isMobileViewport
-                      ? mobileRows.tightCount
-                      : tightCount
-                    : undefined,
-              },
-            ],
-          },
-        ]}
-        onReset={() => {
-          setFilter("all");
-          setLeagueFilter("all");
-          setOddsProfile("all");
-        }}
-        resultCountText={
-          matches !== null
-            ? isMobileViewport
-              ? `${mobileRows.visibleTotal} match${mobileRows.visibleTotal > 1 ? "s" : ""}${
-                  mobileRows.isVirtualMode
-                    ? ` virtuel${mobileRows.visibleTotal > 1 ? "s" : ""}`
-                    : ""
-                }`
-              : `${visible.length} match${visible.length > 1 ? "s" : ""} ${
-                  isRealUniverse ? "réel" : "virtuel"
-                }${visible.length > 1 ? "s" : ""}`
-            : null
-        }
-      />
-
-      {/* Contenu */}
-      <div ref={matchesAnchorRef} className="scroll-mt-28" />
-      {matches === null ? (
-        <>
-          {/* Squelette mobile constant sur 2 lignes carrousel (zéro saut de mise en page CLS) */}
-          <div className="flex flex-col gap-5 lg:hidden">
-            {[0, 1].map((rowIdx) => (
-              <div key={rowIdx} className="space-y-2.5">
-                <div className="shimmer h-4 w-44 rounded-md" />
-                <div className="-mx-4 flex gap-3 overflow-hidden px-4">
-                  <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
-                  <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Squelette desktop (>= lg) */}
-          {isRealUniverse ? (
-            <div className="hidden grid-cols-1 gap-3 lg:grid">
-              <div className="shimmer h-[156px] rounded-2xl" />
-              <div className="shimmer h-[156px] rounded-2xl" />
-              <div className="shimmer h-[156px] rounded-2xl" />
-            </div>
-          ) : (
-            <div className="hidden flex-col gap-3 lg:flex">
-              <div className="shimmer h-[196px] rounded-2xl" />
-              <div className="grid grid-cols-1 gap-3">
-                <div className="shimmer h-[136px] rounded-2xl" />
-                <div className="shimmer h-[136px] rounded-2xl" />
-              </div>
-            </div>
-          )}
-        </>
-      ) : loadError && (matches?.length ?? 0) === 0 ? (
-        <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
-          <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
-            <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
-          </div>
-          <p className="mt-3 font-display text-[15px] font-bold text-ink">
-            Connexion au serveur interrompue
-          </p>
-          <p className="mt-1 max-w-[330px] text-[12.5px] leading-relaxed text-mist">
-            {loadError}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setMatches(null);
-              setLoadError(null);
-              setReloadNonce((n) => n + 1);
-            }}
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
-          >
-            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
-            Réessayer
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* ── VUE MOBILE (< lg) : 2 lignes carrousel avec repli automatique sur les matchs virtuels ── */}
-          {(!isClient || isMobileViewport) && (
-            <div className="lg:hidden">
-              {!mobileRows.hasAnyForCurrentFilter ? (
-                <div className="mt-10 flex flex-col items-center text-center">
-                  <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
-                    <Trophy className="h-5 w-5" strokeWidth={1.9} />
-                  </div>
-                  <p className="mt-3 font-display text-[15px] font-semibold text-ink">
-                    Aucun match dans cette vue
-                  </p>
-                  <p className="mt-1 max-w-[290px] text-[12.5px] text-dim">
-                    Modifiez ou réinitialisez les filtres pour retrouver toutes les rencontres.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-5">
-                  {(filter === "live" ||
-                    (filter === "all" &&
-                      (mobileRows.liveRowItems.length > 0 ||
-                        (!mobileRows.isSpecificLeague &&
-                          mobileRows.upcomingRowItems.length === 0)))) && (
-                    <RealMatchCarouselRow
-                      label={
-                        mobileRows.liveRowUsesVirtual
-                          ? "Matchs virtuels EN DIRECT"
-                          : mobileRows.isSpecificLeague
-                            ? `${leagueFilter} · EN DIRECT`
-                            : "Populaire EN DIRECT"
-                      }
-                      subtitle={
-                        mobileRows.liveRowUsesVirtual
-                          ? "Aucun match officiel en cours · Multiplex virtuel 24h/24 actif"
-                          : undefined
-                      }
-                      items={mobileRows.liveRowItems}
-                      live
-                      virtualFallback={mobileRows.liveRowUsesVirtual}
-                      trailingHref={
-                        mobileRows.liveRowUsesVirtual
-                          ? "/matchs/virtuels"
-                          : mobileRows.isSpecificLeague
-                            ? `/matchs/tous?status=live&league=${encodeURIComponent(leagueFilter)}`
-                            : "/matchs/tous?status=live"
-                      }
-                      trailingLabel="Voir tout"
-                      emptyMessage="Aucun match en direct pour le moment"
-                    />
-                  )}
-
-                  {(filter === "upcoming" ||
-                    (filter === "all" &&
-                      (mobileRows.upcomingRowItems.length > 0 ||
-                        !mobileRows.isSpecificLeague))) && (
-                    <>
-                      <RealMatchCarouselRow
-                        label={
-                          mobileRows.isVirtualMode
-                            ? "Prochains départs virtuels"
-                            : mobileRows.isSpecificLeague
-                              ? `${leagueFilter} · Avant-match`
-                              : "Populaire en avant-match"
-                        }
-                        subtitle="Glissez horizontalement ou ouvrez toute l'affiche en liste verticale"
-                        items={mobileRows.upcomingRowItems}
-                        virtualFallback={mobileRows.upcomingRowUsesVirtual}
-                        markFirstAsNextUp={
-                          mobileRows.upcomingRowUsesVirtual &&
-                          (leagueFilter === "all" || mobileRows.isVirtualMode)
-                        }
-                        trailingHref={
-                          mobileRows.upcomingRowUsesVirtual
-                            ? "/matchs/virtuels"
-                            : mobileRows.isSpecificLeague
-                              ? `/matchs/tous?league=${encodeURIComponent(leagueFilter)}`
-                              : "/matchs/tous"
-                        }
-                        trailingLabel="Voir tout"
-                        emptyMessage="Aucun match en avant-match dans cette sélection"
-                      />
-
-                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-edge bg-white px-3.5 py-2.5 shadow-2xs">
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
-                            <List className="h-4 w-4" strokeWidth={2.3} />
-                          </span>
-                          <p className="min-w-0 text-[12px] font-medium leading-snug text-mist">
-                            Parcourir tous les matchs alignés{" "}
-                            <strong className="font-semibold text-ink">
-                              en liste verticale
-                            </strong>{" "}
-                            au pouce
-                          </p>
-                        </div>
-                        <Link
-                          href={
-                            mobileRows.upcomingRowUsesVirtual
-                              ? "/matchs/virtuels"
-                              : mobileRows.isSpecificLeague
-                                ? `/matchs/tous?league=${encodeURIComponent(leagueFilter)}`
-                                : "/matchs/tous"
-                          }
-                          className="inline-flex h-8.5 shrink-0 items-center gap-1 rounded-full bg-betclic-red px-3 font-display text-[12px] font-bold text-white shadow-2xs transition-transform active:scale-95"
-                        >
-                          Voir tout
-                          <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
-                        </Link>
-                      </div>
-                    </>
-                  )}
-
-                  {filter === "finished" && mobileRows.finishedRowItems.length > 0 && (
-                    <RealMatchCarouselRow
-                      label={
-                        mobileRows.finishedRowUsesVirtual
-                          ? "Résultats virtuels récents"
-                          : "Résultats officiels récents"
-                      }
-                      items={mobileRows.finishedRowItems}
-                      virtualFallback={mobileRows.finishedRowUsesVirtual}
-                      trailingHref={`/resultats?universe=${
-                        mobileRows.finishedRowUsesVirtual ? "virtual" : "real"
-                      }`}
-                      trailingLabel="Tout l'historique"
-                    />
-                  )}
-
-                  {/* Accès rapides mobiles : Matchs virtuels 24/7 & Historique des résultats */}
-                  <div className="grid grid-cols-2 gap-2 pt-0.5">
-                    <Link
-                      href="/matchs/virtuels"
-                      className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
-                    >
-                      <Cpu className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-                      <span>Virtuels 24h/24</span>
-                      {virtualLiveTotal > 0 && (
-                        <span className="rounded-full bg-betclic-red/12 px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums text-betclic-red">
-                          {virtualLiveTotal}
-                        </span>
-                      )}
-                    </Link>
-                    <Link
-                      href="/resultats"
-                      className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
-                    >
-                      <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-                      <span>Résultats</span>
-                    </Link>
-                  </div>
-                </div>
+        {/* Sélecteur d'univers + Barre de recherche (desktop >= lg uniquement) */}
+        <div className="hidden lg:mt-3 lg:block xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+            <button
+              type="button"
+              onClick={() => switchUniverse("real")}
+              className={cn(
+                "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+                isRealUniverse
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-mist hover:bg-elev/60 active:bg-elev"
               )}
-            </div>
+            >
+              <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+              <span className="truncate">Matchs réels</span>
+              {matches !== null && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                    isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                  )}
+                >
+                  {realLiveTotal > 0 && (
+                    <span
+                      className={cn(
+                        "live-dot h-1.5 w-1.5 rounded-full",
+                        isRealUniverse ? "bg-white" : "bg-emerald-600"
+                      )}
+                    />
+                  )}
+                  {realActiveTotal}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => switchUniverse("virtual")}
+              className={cn(
+                "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+                !isRealUniverse
+                  ? "bg-betclic-red text-white shadow-xs"
+                  : "text-mist hover:bg-elev/60 active:bg-elev"
+              )}
+            >
+              <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+              <span className="truncate">Matchs virtuels</span>
+              {matches !== null && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                    !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                  )}
+                >
+                  {virtualLiveTotal > 0 && (
+                    <span
+                      className={cn(
+                        "live-dot h-1.5 w-1.5 rounded-full",
+                        !isRealUniverse ? "bg-white" : "bg-betclic-red"
+                      )}
+                    />
+                  )}
+                  {virtualActiveTotal}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 xl:mt-0 xl:h-12 xl:rounded-2xl xl:px-3.5">
+            <Search className="h-4 w-4 shrink-0 text-dim" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={
+                isRealUniverse
+                  ? "Rechercher un match réel ou une compétition…"
+                  : "Rechercher un club ou une ligue virtuelle…"
+              }
+              className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Effacer la recherche"
+                className="text-dim hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Bandeau explicatif du mode actif (desktop uniquement) */}
+        <div
+          className={cn(
+            "mb-4 mt-2 hidden items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-[11px] font-medium lg:flex",
+            isRealUniverse
+              ? "bg-emerald-600/8 text-emerald-800"
+              : "bg-elev/80 text-mist"
           )}
+        >
+          {isRealUniverse ? (
+            <span>
+              Compétitions officielles · Cotes fixes opérateur · Coup d&apos;envoi réel
+            </span>
+          ) : (
+            <span>
+              Simulateur 24h/24 · Matchs de 2-3 min · Multiplex 4 directs simultanés
+            </span>
+          )}
+        </div>
 
-          {/* ── VUE DESKTOP (>= lg) : séparation stricte Matchs réels / Matchs virtuels ── */}
-          {(!isClient || !isMobileViewport) && (
-            <div className="hidden lg:block">
-            {visible.length === 0 ? (
-              <div className="mt-10 flex flex-col items-center text-center">
-                <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
-                  <Trophy className="h-5 w-5" strokeWidth={1.9} />
-                </div>
-                <p className="mt-3 font-display text-[15px] font-semibold text-ink">
-                  {isRealUniverse && realMatchesAll.length === 0
-                    ? "Aucun match réel programmé"
-                    : "Aucun match dans cette vue"}
-                </p>
-                <p className="mt-1 max-w-[290px] text-[12.5px] text-dim">
-                  {isRealUniverse && realActiveTotal === 0 && filter !== "finished"
-                    ? "Les prochaines rencontres officielles publiées par l'opérateur s'afficheront ici."
-                    : "Modifiez ou réinitialisez les filtres pour retrouver toutes les rencontres."}
-                </p>
-                {isRealUniverse && realActiveTotal === 0 && (
-                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                    {realMatchesAll.length > 0 && filter !== "finished" && (
-                      <button
-                        type="button"
-                        onClick={() => setFilter("finished")}
-                        className="h-9 rounded-full bg-elev px-3.5 font-display text-[12px] font-bold text-ink active:scale-95"
-                      >
-                        Voir les résultats réels ({realMatchesAll.length})
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => switchUniverse("virtual")}
-                      className="inline-flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[12px] font-bold text-white active:scale-95"
-                    >
-                      Ouvrir les matchs virtuels ({virtualActiveTotal})
-                    </button>
+        {/* Contenu */}
+        {matches === null ? (
+          <>
+            {/* Squelette mobile constant sur 2 lignes carrousel (zéro saut de mise en page CLS) */}
+            <div className="mt-1 flex flex-col gap-5 lg:hidden">
+              {[0, 1].map((rowIdx) => (
+                <div key={rowIdx} className="space-y-2.5">
+                  <div className="shimmer h-4 w-44 rounded-md" />
+                  <div className="-mx-4 flex gap-3 overflow-hidden px-4">
+                    <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
+                    <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
                   </div>
-                )}
-              </div>
-            ) : isRealUniverse ? (
-              <div className="flex flex-col gap-5">
-                {liveRest.length > 0 && (
-                  <section>
-                    <SectionHeader
-                      label="Populaire EN DIRECT"
-                      count={liveRest.length}
-                      live
-                      real
-                    />
-                    <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                      {liveRest.map((m) => (
-                        <MatchCard key={m.id} match={m} />
-                      ))}
-                    </div>
-                  </section>
-                )}
+                </div>
+              ))}
+            </div>
 
-                {upcomingOrdered.length > 0 && (
-                  <section>
-                    <SectionHeader
-                      label="Populaire en avant-match"
-                      count={upcomingOrdered.length}
-                    />
-                    <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                      {upcomingOrdered.map((m) => (
-                        <MatchCard key={m.id} match={m} />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {finishedList.length > 0 && (
-                  <section>
-                    <div className="flex items-center justify-between px-0.5">
-                      <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
-                        Résultats officiels récents
-                      </h2>
-                      <Link
-                        href={`/resultats?universe=${universe}`}
-                        className="font-display text-[11.5px] font-bold text-betclic-red"
-                      >
-                        Tout l&apos;historique →
-                      </Link>
-                    </div>
-                    <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                      {finishedList.map((m) => (
-                        <MatchCard key={m.id} match={m} />
-                      ))}
-                    </div>
-                  </section>
-                )}
+            {/* Squelette desktop (>= lg) */}
+            {isRealUniverse ? (
+              <div className="hidden grid-cols-1 gap-3 lg:grid">
+                <div className="shimmer h-[156px] rounded-2xl" />
+                <div className="shimmer h-[156px] rounded-2xl" />
+                <div className="shimmer h-[156px] rounded-2xl" />
               </div>
             ) : (
-              <div className="flex flex-col gap-5">
-                {liveRest.length > 0 && (
-                  <section>
-                    <SectionHeader
-                      label="En direct"
-                      count={liveRest.length}
-                      live
-                    />
-                    <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                      {liveRest.map((m) => (
-                        <MatchCard key={m.id} match={m} />
-                      ))}
+              <div className="hidden flex-col gap-3 lg:flex">
+                <div className="shimmer h-[196px] rounded-2xl" />
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="shimmer h-[136px] rounded-2xl" />
+                  <div className="shimmer h-[136px] rounded-2xl" />
+                </div>
+              </div>
+            )}
+          </>
+        ) : loadError && (matches?.length ?? 0) === 0 ? (
+          <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
+              <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
+            </div>
+            <p className="mt-3 font-display text-[15px] font-bold text-ink">
+              Connexion au serveur interrompue
+            </p>
+            <p className="mt-1 max-w-[330px] text-[12.5px] leading-relaxed text-mist">
+              {loadError}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setMatches(null);
+                setLoadError(null);
+                setReloadNonce((n) => n + 1);
+              }}
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
+            >
+              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
+              Réessayer
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* ── VUE MOBILE (< lg) : 2 lignes carrousel avec repli automatique sur les matchs virtuels ── */}
+            {(!isClient || isMobileViewport) && (
+              <div className="mt-1 lg:hidden">
+                {!mobileRows.hasAny ? (
+                  <div className="mt-10 flex flex-col items-center text-center">
+                    <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
+                      <Trophy className="h-5 w-5" strokeWidth={1.9} />
                     </div>
-                  </section>
-                )}
+                    <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+                      Aucun match trouvé
+                    </p>
+                    <p className="mt-1 max-w-[290px] text-[12.5px] text-dim">
+                      Effacez la recherche pour retrouver toutes les rencontres.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-5">
+                    {mobileRows.liveRowItems.length > 0 && (
+                      <RealMatchCarouselRow
+                        label={
+                          mobileRows.liveRowUsesVirtual
+                            ? "Matchs virtuels EN DIRECT"
+                            : "Populaire EN DIRECT"
+                        }
+                        items={mobileRows.liveRowItems}
+                        live
+                        virtualFallback={mobileRows.liveRowUsesVirtual}
+                        trailingHref={
+                          mobileRows.liveRowUsesVirtual
+                            ? "/matchs/virtuels"
+                            : "/matchs/tous?status=live"
+                        }
+                        trailingLabel="Voir tout"
+                        emptyMessage="Aucun match en direct pour le moment"
+                      />
+                    )}
 
-                {upcomingOrdered.length > 0 && (
-                  <section>
-                    <SectionHeader
-                      label="À venir · Prochains départs"
-                      count={upcomingOrdered.length}
+                    <RealMatchCarouselRow
+                      label="Populaire en avant-match"
+                      items={mobileRows.upcomingRowItems}
+                      virtualFallback={mobileRows.upcomingRowUsesVirtual}
+                      markFirstAsNextUp={mobileRows.upcomingRowUsesVirtual}
+                      trailingHref={
+                        mobileRows.upcomingRowUsesVirtual
+                          ? "/matchs/virtuels"
+                          : "/matchs/tous"
+                      }
+                      trailingLabel="Voir tout"
+                      emptyMessage="Aucun match en avant-match dans cette sélection"
                     />
-                    <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                      {upcomingOrdered.map((m, idx) => (
-                        <MatchCard
-                          key={m.id}
-                          match={m}
-                          nextUp={idx === 0 && effectiveLeague === "all"}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
 
-                {finishedList.length > 0 && (
-                  <section>
-                    <div className="flex items-center justify-between px-0.5">
-                      <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
-                        Résultats virtuels récents
-                      </h2>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-edge bg-white px-3.5 py-2.5 shadow-2xs">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
+                          <List className="h-4 w-4" strokeWidth={2.3} />
+                        </span>
+                        <p className="min-w-0 text-[12px] font-medium leading-snug text-mist">
+                          Parcourir tous les matchs alignés{" "}
+                          <strong className="font-semibold text-ink">
+                            en liste verticale
+                          </strong>{" "}
+                          au pouce
+                        </p>
+                      </div>
                       <Link
-                        href={`/resultats?universe=${universe}`}
-                        className="font-display text-[11.5px] font-bold text-betclic-red"
+                        href={
+                          mobileRows.upcomingRowUsesVirtual
+                            ? "/matchs/virtuels"
+                            : "/matchs/tous"
+                        }
+                        className="inline-flex h-8.5 shrink-0 items-center gap-1 rounded-full bg-betclic-red px-3 font-display text-[12px] font-bold text-white shadow-2xs transition-transform active:scale-95"
                       >
-                        Tout l&apos;historique →
+                        Voir tout
+                        <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
                       </Link>
                     </div>
-                    <div className="mt-2 grid grid-cols-1 items-start gap-3">
-                      {finishedList.map((m) => (
-                        <MatchCard key={m.id} match={m} />
-                      ))}
+
+                    {/* Accès rapides mobiles : Matchs virtuels 24/7 & Historique des résultats */}
+                    <div className="grid grid-cols-2 gap-2 pt-0.5">
+                      <Link
+                        href="/matchs/virtuels"
+                        className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
+                      >
+                        <Cpu className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+                        <span>Virtuels 24h/24</span>
+                        {virtualLiveTotal > 0 && (
+                          <span className="rounded-full bg-betclic-red/12 px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums text-betclic-red">
+                            {virtualLiveTotal}
+                          </span>
+                        )}
+                      </Link>
+                      <Link
+                        href="/resultats"
+                        className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white px-3 font-display text-[12px] font-bold text-ink shadow-2xs active:bg-elev"
+                      >
+                        <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+                        <span>Résultats</span>
+                      </Link>
                     </div>
-                  </section>
+                  </div>
                 )}
               </div>
             )}
-          </div>
-          )}
-        </>
-      )}
-    </div>
+
+            {/* ── VUE DESKTOP (>= lg) : séparation stricte Matchs réels / Matchs virtuels ── */}
+            {(!isClient || !isMobileViewport) && (
+              <div className="hidden lg:block">
+                {visible.length === 0 ? (
+                  <div className="mt-10 flex flex-col items-center text-center">
+                    <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
+                      <Trophy className="h-5 w-5" strokeWidth={1.9} />
+                    </div>
+                    <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+                      {isRealUniverse && realMatchesAll.length === 0
+                        ? "Aucun match réel programmé"
+                        : "Aucun match dans cette vue"}
+                    </p>
+                    <p className="mt-1 max-w-[290px] text-[12.5px] text-dim">
+                      {isRealUniverse && realActiveTotal === 0 && filter !== "finished"
+                        ? "Les prochaines rencontres officielles publiées par l'opérateur s'afficheront ici."
+                        : "Modifiez votre sélection de ligue ou effacez la recherche pour retrouver toutes les rencontres."}
+                    </p>
+                    {isRealUniverse && realActiveTotal === 0 && (
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        {realMatchesAll.length > 0 && filter !== "finished" && (
+                          <button
+                            type="button"
+                            onClick={() => setFilter("finished")}
+                            className="h-9 rounded-full bg-elev px-3.5 font-display text-[12px] font-bold text-ink active:scale-95"
+                          >
+                            Voir les résultats réels ({realMatchesAll.length})
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => switchUniverse("virtual")}
+                          className="inline-flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[12px] font-bold text-white active:scale-95"
+                        >
+                          Ouvrir les matchs virtuels ({virtualActiveTotal})
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : isRealUniverse ? (
+                  <div className="flex flex-col gap-5">
+                    {liveRest.length > 0 && (
+                      <section>
+                        <SectionHeader
+                          label="Populaire EN DIRECT"
+                          count={liveRest.length}
+                          live
+                          real
+                        />
+                        <div className="mt-2 grid grid-cols-1 items-start gap-3">
+                          {liveRest.map((m) => (
+                            <MatchCard key={m.id} match={m} />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {upcomingOrdered.length > 0 && (
+                      <section>
+                        <SectionHeader
+                          label="Populaire en avant-match"
+                          count={upcomingOrdered.length}
+                        />
+                        <div className="mt-2 grid grid-cols-1 items-start gap-3">
+                          {upcomingOrdered.map((m) => (
+                            <MatchCard key={m.id} match={m} />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {finishedList.length > 0 && (
+                      <section>
+                        <div className="flex items-center justify-between px-0.5">
+                          <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                            Résultats officiels récents
+                          </h2>
+                          <Link
+                            href={`/resultats?universe=${universe}`}
+                            className="font-display text-[11.5px] font-bold text-betclic-red"
+                          >
+                            Tout l&apos;historique →
+                          </Link>
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 items-start gap-3">
+                          {finishedList.map((m) => (
+                            <MatchCard key={m.id} match={m} />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-5">
+                    {liveRest.length > 0 && (
+                      <section>
+                        <SectionHeader
+                          label="En direct"
+                          count={liveRest.length}
+                          live
+                        />
+                        <div className="mt-2 grid grid-cols-1 items-start gap-3">
+                          {liveRest.map((m) => (
+                            <MatchCard key={m.id} match={m} />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {upcomingOrdered.length > 0 && (
+                      <section>
+                        <SectionHeader
+                          label="À venir · Prochains départs"
+                          count={upcomingOrdered.length}
+                        />
+                        <div className="mt-2 grid grid-cols-1 items-start gap-3">
+                          {upcomingOrdered.map((m, idx) => (
+                            <MatchCard
+                              key={m.id}
+                              match={m}
+                              nextUp={idx === 0 && effectiveLeague === "all"}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {finishedList.length > 0 && (
+                      <section>
+                        <div className="flex items-center justify-between px-0.5">
+                          <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                            Résultats virtuels récents
+                          </h2>
+                          <Link
+                            href={`/resultats?universe=${universe}`}
+                            className="font-display text-[11.5px] font-bold text-betclic-red"
+                          >
+                            Tout l&apos;historique →
+                          </Link>
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 items-start gap-3">
+                          {finishedList.map((m) => (
+                            <MatchCard key={m.id} match={m} />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </PullToRefresh>
   );
 }
 
 const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
   label,
-  subtitle,
   items,
   live,
   virtualFallback,
@@ -1531,7 +890,6 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
   trailingLabel,
 }: {
   label: string;
-  subtitle?: string;
   items: ClientMatch[];
   live?: boolean;
   virtualFallback?: boolean;
@@ -1553,7 +911,6 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
     const el = scrollerRef.current;
     if (!el) return;
     const maxScroll = el.scrollWidth - el.clientWidth;
-    // Fenêtrage progressif : monte les cartes suivantes dès que l'utilisateur approche du bord droit
     if (renderLimit < items.length && maxScroll - el.scrollLeft < 680) {
       setRenderLimit((prev) => Math.min(items.length, prev + CAROUSEL_WINDOW_STEP));
     }
@@ -1630,12 +987,6 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
           </Link>
         )}
       </div>
-
-      {subtitle && (
-        <p className="mt-0.5 truncate px-0.5 text-[11.5px] text-mist">
-          {subtitle}
-        </p>
-      )}
 
       {items.length === 0 ? (
         <div className="mt-2 flex h-12 items-center justify-center rounded-2xl border border-dashed border-edge bg-white/75 px-3.5 text-[12px] font-medium text-mist">
