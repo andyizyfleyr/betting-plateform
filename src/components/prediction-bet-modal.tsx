@@ -284,160 +284,181 @@ function PredictionBetSheet({
             onContinue={onClose}
           />
         ) : (
-          <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-2 lg:px-6 lg:pb-6 lg:pt-4">
-            <div
-              onPointerDown={(e) => dragControls.start(e)}
-              className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing lg:hidden"
-            />
-
-            <div className="mt-3 flex items-center justify-between">
-              <h2 className="font-display text-[17px] font-bold tracking-tight text-ink">
-                Confirmer la prédiction
-              </h2>
-              <button
-                type="button"
-                onClick={onClose}
-                className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
-                aria-label="Fermer"
-              >
-                <X className="h-4 w-4" strokeWidth={2.2} />
-              </button>
-            </div>
-
-            {/* Question & choix */}
-            <div className="mt-3 rounded-2xl border border-edge bg-elev/60 p-3">
-              <div className="flex items-center justify-between text-[11px] text-dim">
-                <span className="rounded-md bg-white px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
-                  {question.category}
-                </span>
-                <span>Clôture · {formatKickoff(question.resolvesAt)}</span>
-              </div>
-              <p className="mt-2 font-display text-[14px] font-semibold leading-snug text-ink">
-                {question.question}
-              </p>
-              <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl border border-edge bg-white px-3 py-2">
-                <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink">
-                  Choix : <span className="text-betclic-red">{initialMeta.label}</span>
-                </span>
-                <span className="shrink-0 rounded-lg bg-betclic-red px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-white">
-                  {formatOdds(odds, oddsFormat)}
-                </span>
-              </div>
-            </div>
-
-            {/* Saisie directe de la mise + pavé numérique tactile mobile */}
-            <div className="mt-3.5">
-              <TouchStakePad
-                id="pred-stake-input"
-                label="Votre mise"
-                stakeText={stakeText}
-                onChangeStakeText={(next) => {
-                  setStakeText(next);
-                  setError(null);
-                }}
-                balance={balance}
-                maxCap={500}
-                hasError={overBalance || belowMin}
-                haptics={user?.haptics}
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar px-4 pb-3 pt-2 lg:px-6 lg:pb-4 lg:pt-4">
+              <div
+                onPointerDown={(e) => dragControls.start(e)}
+                className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing lg:hidden"
               />
-            </div>
 
-            {overBalance && (
-              <div className="mt-3 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
-                <span className="font-medium text-betclic-red">Solde insuffisant</span>
+              <div className="mt-2.5 flex items-center justify-between">
+                <h2 className="font-display text-[16.5px] font-bold tracking-tight text-ink lg:text-[17px]">
+                  Confirmer la prédiction
+                </h2>
                 <button
                   type="button"
-                  onClick={openRecharge}
-                  className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline underline-offset-2"
+                  onClick={onClose}
+                  className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
+                  aria-label="Fermer"
                 >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  Recharger
+                  <X className="h-4 w-4" strokeWidth={2.2} />
                 </button>
               </div>
-            )}
 
-            {belowMin && !overBalance && (
-              <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
-                Mise minimale : 0,50 €
-              </p>
-            )}
-
-            {error && !overBalance && (
-              <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
-                {error}
-              </p>
-            )}
-
-            {/* Gain potentiel à cote fixe */}
-            <div className="mt-3.5 flex items-center justify-between rounded-2xl bg-elev px-3.5 py-3">
-              <div>
-                <p className="text-[11px] font-semibold text-mist">Gain potentiel (cote fixe)</p>
-                <p className="text-[11px] font-medium text-win">
-                  Bénéfice net +{eur(Math.max(profit, 0))}
+              {/* Question & choix */}
+              <div className="mt-2.5 rounded-2xl border border-edge bg-elev/60 p-3">
+                <div className="flex items-center justify-between text-[11px] text-dim">
+                  <span className="rounded-md bg-white px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
+                    {question.category}
+                  </span>
+                  <span>Clôture · {formatKickoff(question.resolvesAt)}</span>
+                </div>
+                <p className="mt-1.5 line-clamp-2 font-display text-[13.5px] font-semibold leading-snug text-ink">
+                  {question.question}
                 </p>
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-edge bg-white px-3 py-1.5">
+                  <span className="min-w-0 truncate text-[12px] font-semibold text-ink">
+                    Choix : <span className="text-betclic-red">{initialMeta.label}</span>
+                  </span>
+                  <span className="shrink-0 rounded-lg bg-betclic-red px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-white">
+                    {formatOdds(odds, oddsFormat)}
+                  </span>
+                </div>
               </div>
-              <AnimatedNumber
-                value={payout}
-                format={eur}
-                className="font-display text-[20px] font-bold tabular-nums text-win"
+
+              {/* Saisie de la mise + jetons 5/10/25/50/MAX (pavé 0-9 replié par défaut sur mobile) */}
+              <div className="mt-3">
+                <TouchStakePad
+                  id="pred-stake-input"
+                  label="Votre mise"
+                  stakeText={stakeText}
+                  onChangeStakeText={(next) => {
+                    setStakeText(next);
+                    setError(null);
+                  }}
+                  balance={balance}
+                  maxCap={500}
+                  hasError={overBalance || belowMin}
+                  haptics={user?.haptics}
+                  collapsibleOnMobile
+                  defaultExpandedOnMobile={false}
+                />
+              </div>
+
+              {overBalance && (
+                <div className="mt-2.5 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
+                  <span className="font-medium text-betclic-red">Solde insuffisant</span>
+                  <button
+                    type="button"
+                    onClick={openRecharge}
+                    className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline underline-offset-2"
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    Recharger
+                  </button>
+                </div>
+              )}
+
+              {belowMin && !overBalance && (
+                <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
+                  Mise minimale : 0,50 €
+                </p>
+              )}
+
+              {error && !overBalance && (
+                <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+                  {error}
+                </p>
+              )}
+
+              <OddsLockControls
+                feedKind="predictions"
+                oddsFormat={oddsFormat}
+                oddsPolicy={oddsPolicy}
+                onChangePolicy={setOddsPolicy}
+                oddsChanged={oddsChanged}
               />
             </div>
 
-            <OddsLockControls
-              feedKind="predictions"
-              oddsFormat={oddsFormat}
-              oddsPolicy={oddsPolicy}
-              onChangePolicy={setOddsPolicy}
-              oddsChanged={oddsChanged}
-            />
+            {/* Pied épinglé en bas de la feuille : Gain potentiel + Validation immédiate sans scroller */}
+            <div className="shrink-0 border-t border-edge bg-surface px-4 pb-4 pb-safe pt-2.5 lg:px-6 lg:pb-5">
+              <div className="mb-2.5 flex items-center justify-between">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-[12px] font-bold text-ink">
+                    Gain potentiel
+                  </span>
+                  <span className="text-[11px] font-medium text-win">
+                    +{eur(Math.max(profit, 0))} net
+                  </span>
+                </div>
+                <AnimatedNumber
+                  value={payout}
+                  format={eur}
+                  className="font-display text-[19px] font-extrabold tabular-nums text-win"
+                />
+              </div>
 
-            <div className="mt-3.5 flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={stake < 0.5 || overBalance || phase === "loading"}
-                onClick={confirm}
-                className={cn(
-                  "flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
-                  stake >= 0.5 && !overBalance
-                    ? "bg-betclic-red text-white shadow-sm"
-                    : "bg-elev text-dim"
-                )}
-              >
-                {phase === "loading" ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
-                    Validation…
-                  </>
-                ) : oddsChanged ? (
-                  <>
-                    Accepter la nouvelle cote ({formatOdds(odds, oddsFormat)})
-                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-                  </>
-                ) : (
-                  <>
-                    Valider {stake > 0 ? eur(stake) : "la prédiction"}
-                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddToCombo}
+                  aria-label={inComboExact ? "Retirer du coupon" : "Ajouter au combiné"}
+                  className={cn(
+                    "inline-flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3.5 font-display text-[12px] font-bold transition-colors active:scale-[0.99]",
+                    inComboExact
+                      ? "border-ink bg-ink text-white"
+                      : "border-edge bg-elev text-ink active:bg-edge"
+                  )}
+                >
+                  <Layers
+                    className={cn(
+                      "h-3.5 w-3.5",
+                      inComboExact ? "text-white" : "text-betclic-red"
+                    )}
+                    strokeWidth={2.3}
+                  />
+                  <span>
+                    {inComboExact
+                      ? "Retirer"
+                      : `+ Combiné${comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}`}
+                  </span>
+                </button>
 
-              <button
-                type="button"
-                onClick={handleAddToCombo}
-                className={cn(
-                  "flex h-10 w-full items-center justify-center gap-1.5 rounded-2xl border font-display text-[12.5px] font-bold transition-colors active:scale-[0.99]",
-                  inComboExact
-                    ? "border-ink bg-ink text-white"
-                    : "border-edge bg-white text-ink active:bg-elev"
-                )}
-              >
-                <Layers className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-                {inComboExact
-                  ? "Dans le coupon (toucher pour retirer)"
-                  : `Ajouter au coupon${comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}`}
-              </button>
+                <button
+                  type="button"
+                  disabled={stake < 0.5 || overBalance || phase === "loading"}
+                  onClick={confirm}
+                  className={cn(
+                    "flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl px-3 font-display text-[14px] font-bold transition-all active:scale-[0.99]",
+                    stake >= 0.5 && !overBalance
+                      ? "bg-betclic-red text-white shadow-sm"
+                      : "bg-elev text-dim"
+                  )}
+                >
+                  {phase === "loading" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
+                      <span className="truncate">Validation…</span>
+                    </>
+                  ) : oddsChanged ? (
+                    <>
+                      <span className="truncate">
+                        Accepter ({formatOdds(odds, oddsFormat)})
+                      </span>
+                      <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                    </>
+                  ) : (
+                    <>
+                      <span className="truncate">
+                        Valider {stake > 0 ? eur(stake) : "la prédiction"}
+                      </span>
+                      <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </motion.div>
     </div>

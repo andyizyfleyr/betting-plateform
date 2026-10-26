@@ -716,7 +716,7 @@ export default function AcceleratorPage() {
       <div className={s.shell}>
         <header className={s.header}>
           <div className={s.headerLeft}>
-            <Link href="/predictions" className={s.btnIcon} aria-label="Retour">
+            <Link href="/jeux" className={s.btnIcon} aria-label="Retour aux mini-jeux">
               <ArrowLeft className="h-4 w-4" strokeWidth={2.3} />
             </Link>
             <div className={s.logo}>

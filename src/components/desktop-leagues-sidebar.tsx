@@ -354,7 +354,7 @@ export function DesktopLeaguesSidebar() {
     if (leagueValue === "all") {
       setSportStatusFilter("all");
     }
-    if (!isOnMatchs) {
+    if (pathname !== "/matchs" && pathname !== "/matchs/tous") {
       router.push("/matchs");
     }
   };
@@ -363,7 +363,9 @@ export function DesktopLeaguesSidebar() {
     setSportUniverse("virtual");
     setSportLeagueFilter("all");
     setSportStatusFilter("all");
-    if (!isOnMatchs) {
+    if (pathname === "/matchs/tous") {
+      router.push("/matchs/virtuels");
+    } else if (!isOnMatchs) {
       router.push("/matchs");
     }
   };

@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Check,
   Flame,
+  Hash,
   Layers,
   Loader2,
   Plus,
@@ -100,6 +101,7 @@ export default function BetslipPage() {
     byUid: Record<string, number>;
   } | null>(null);
   const [receipt, setReceipt] = useState<PlacedReceipt | null>(null);
+  const [mobileCouponOpen, setMobileCouponOpen] = useState(false);
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
@@ -493,12 +495,12 @@ export default function BetslipPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1360px] px-4 pt-4 pb-8 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1360px] px-4 pt-3.5 pb-2 lg:px-0 lg:py-0">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+            <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
               Coupon de pari
             </h1>
             {enrichedLegs.length > 0 && (
@@ -507,7 +509,7 @@ export default function BetslipPage() {
               </span>
             )}
           </div>
-          <p className="text-[12px] text-mist lg:text-[13px]">
+          <p className="hidden text-[13px] text-mist lg:block">
             {enrichedLegs.length === 0
               ? "Coupon de pari · Simple & Combiné"
               : isCombo
@@ -517,17 +519,32 @@ export default function BetslipPage() {
         </div>
 
         {enrichedLegs.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              clearCombo();
-              setError(null);
-            }}
-            className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-3 font-display text-[11.5px] font-bold text-mist hover:bg-edge/80 hover:text-ink active:bg-edge active:text-ink"
-          >
-            <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />
-            Vider
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMobileCouponOpen((o) => !o)}
+              className={cn(
+                "inline-flex h-8 items-center gap-1 rounded-full px-2.5 font-display text-[11.5px] font-bold transition-colors active:scale-95 lg:hidden",
+                mobileCouponOpen
+                  ? "bg-ink text-white"
+                  : "bg-elev text-ink"
+              )}
+            >
+              <Hash className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
+              Code coupon
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                clearCombo();
+                setError(null);
+              }}
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-mist hover:bg-edge/80 hover:text-ink active:bg-edge active:text-ink"
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />
+              Vider
+            </button>
+          </div>
         )}
       </div>
 
@@ -566,10 +583,14 @@ export default function BetslipPage() {
           <CouponCodeBox variant="empty" autoCheckUrlCode />
         </div>
       ) : (
-        <div className="mt-4 space-y-3 lg:mt-5 lg:grid lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start lg:gap-6 lg:space-y-0">
-          {/* Colonne gauche desktop : Code coupon + Bonus Combiné + Sélections */}
-          <div className="space-y-3">
-          <CouponCodeBox variant="compact" autoCheckUrlCode />
+        <div className="mt-3 space-y-3 lg:mt-5 lg:grid lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start lg:gap-6 lg:space-y-0">
+          {/* Colonne gauche desktop : Code coupon (replié sur mobile sauf demande) + Bonus Combiné + Sélections */}
+          <div className="space-y-2.5 lg:space-y-3">
+          <CouponCodeBox
+            variant="compact"
+            autoCheckUrlCode
+            className={cn(!mobileCouponOpen && "hidden lg:block")}
+          />
 
           {/* Jauge Bonus Combiné 1xBet */}
           <div className="rounded-2xl border border-edge bg-white p-3">
@@ -617,7 +638,7 @@ export default function BetslipPage() {
                 <div
                   key={leg.uid}
                   className={cn(
-                    "glass-card rounded-2xl p-3.5",
+                    "glass-card rounded-2xl p-3 lg:p-3.5",
                     leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
                   )}
                 >
@@ -756,8 +777,8 @@ export default function BetslipPage() {
           )}
           </div>
 
-          {/* Bloc Mise & Validation (collant à droite sur desktop) */}
-          <div className="glass-card rounded-2xl p-3.5 space-y-3 lg:sticky lg:top-[84px] lg:p-5">
+          {/* Bloc Mise & Validation : barre collante juste au-dessus de la BottomNav sur mobile, colonne collante à droite sur desktop */}
+          <div className="glass-card rounded-2xl p-3.5 space-y-2.5 max-lg:sticky max-lg:bottom-[calc(58px+env(safe-area-inset-bottom,0px))] max-lg:z-20 max-lg:-mx-4 max-lg:rounded-t-2xl max-lg:rounded-b-none max-lg:border-x-0 max-lg:border-b-0 max-lg:border-t max-lg:border-edge max-lg:bg-white/98 max-lg:px-4 max-lg:pt-2.5 max-lg:pb-3 max-lg:shadow-[0_-6px_20px_rgba(17,24,39,0.08)] max-lg:backdrop-blur-md lg:sticky lg:top-[84px] lg:space-y-3 lg:p-5">
             <TouchStakePad
               id="betslip-stake-input"
               label="Votre mise"

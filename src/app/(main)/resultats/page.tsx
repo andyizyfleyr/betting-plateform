@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -484,6 +484,8 @@ function ResultatsContent() {
   const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(null);
   const [expandedIds, setExpandedIds] = useState<Record<number, boolean>>({});
   const [query, setQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [leagueFilter, setLeagueFilter] = useState<string>("all");
   const [winnerFilter, setWinnerFilter] = useState<WinnerFilter>("all");
   const [goalsFilter, setGoalsFilter] = useState<GoalsFilter>("all");
@@ -644,9 +646,19 @@ function ResultatsContent() {
     return groups;
   }, [visible, focusedMatch]);
 
+  const toggleMobileSearch = () => {
+    if (mobileSearchOpen) {
+      setQuery("");
+      setMobileSearchOpen(false);
+    } else {
+      setMobileSearchOpen(true);
+      window.setTimeout(() => searchInputRef.current?.focus(), 30);
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 pt-3.5 pb-6 lg:px-0 lg:py-0">
-      {/* En-tête */}
+      {/* En-tête compact + Loupe dépliable sur mobile (Point 10) */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <button
@@ -661,22 +673,42 @@ function ResultatsContent() {
             <h1 className="font-display text-[20px] font-bold tracking-tight text-ink lg:text-[25px]">
               Résultats
             </h1>
-            <p className="text-[12px] text-mist lg:text-[13px]">
+            <p className="hidden text-[13px] text-mist lg:block">
               Historique des matchs terminés
             </p>
           </div>
         </div>
 
-        <Link
-          href="/matchs"
-          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-elev px-3 font-display text-[11.5px] font-bold text-ink active:scale-95"
-        >
-          Affiche live
-        </Link>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Link
+            href="/matchs"
+            className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-elev px-3 font-display text-[11.5px] font-bold text-ink active:scale-95"
+          >
+            Affiche live
+          </Link>
+
+          <button
+            type="button"
+            onClick={toggleMobileSearch}
+            aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un résultat"}
+            className={cn(
+              "grid h-8.5 w-8.5 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
+              mobileSearchOpen || query
+                ? "bg-betclic-red text-white"
+                : "bg-elev text-ink"
+            )}
+          >
+            {mobileSearchOpen ? (
+              <X className="h-4 w-4" strokeWidth={2.3} />
+            ) : (
+              <Search className="h-4 w-4" strokeWidth={2.2} />
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Sélecteur d'univers + Recherche côte à côte sur grand écran */}
-      <div className="mt-3.5 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
+      {/* Sélecteur d'univers + Recherche en ligne sur desktop */}
+      <div className="mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
           <button
             type="button"
@@ -733,8 +765,8 @@ function ResultatsContent() {
           </button>
         </div>
 
-        {/* Recherche */}
-        <div className="mt-3 flex h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-3.5 max-lg:h-10 max-lg:rounded-xl max-lg:px-3 lg:mt-0">
+        {/* Recherche desktop */}
+        <div className="hidden h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-3.5 lg:mt-3 lg:flex xl:mt-0">
           <Search className="h-4 w-4 shrink-0 text-dim" />
           <input
             type="text"
@@ -748,13 +780,39 @@ function ResultatsContent() {
               type="button"
               onClick={() => setQuery("")}
               aria-label="Effacer la recherche"
-              className="text-dim active:text-ink"
+              className="text-dim hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
       </div>
+
+      {/* Recherche mobile dépliable à la demande */}
+      {(mobileSearchOpen || query) && (
+        <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:hidden">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher une équipe ou compétition…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setMobileSearchOpen(false);
+            }}
+            aria-label="Fermer la recherche"
+            className="text-dim active:text-ink"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Match ciblé depuis un coupon / pari */}
       {focusedMatch && (

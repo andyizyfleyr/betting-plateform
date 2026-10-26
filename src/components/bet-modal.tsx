@@ -350,219 +350,239 @@ function BetModalSheet({
             onContinue={onClose}
           />
         ) : (
-          <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-2 lg:px-6 lg:pb-6 lg:pt-4">
-            <div
-              onPointerDown={phase === "input" ? (e) => dragControls.start(e) : undefined}
-              className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing lg:hidden"
-            />
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar px-4 pb-3 pt-2 lg:px-6 lg:pb-4 lg:pt-4">
+              <div
+                onPointerDown={phase === "input" ? (e) => dragControls.start(e) : undefined}
+                className="mx-auto h-1 w-10 cursor-grab rounded-full bg-edge active:cursor-grabbing lg:hidden"
+              />
 
-            <div className="mt-3 flex items-center justify-between">
-              <h2 className="font-display text-[17px] font-bold tracking-tight text-ink">
-                Coupon de pari
-              </h2>
-              <button
-                type="button"
-                onClick={onClose}
-                className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
-                aria-label="Fermer"
-              >
-                <X className="h-4 w-4" strokeWidth={2.2} />
-              </button>
-            </div>
+              <div className="mt-2.5 flex items-center justify-between">
+                <h2 className="font-display text-[16.5px] font-bold tracking-tight text-ink lg:text-[17px]">
+                  Coupon de pari
+                </h2>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="grid h-8 w-8 place-items-center rounded-full bg-elev text-mist active:scale-95"
+                  aria-label="Fermer"
+                >
+                  <X className="h-4 w-4" strokeWidth={2.2} />
+                </button>
+              </div>
 
-            {/* Résumé de la sélection (même disposition d'équipes & logos que la page Matchs) */}
-            <div className="mt-3 rounded-2xl border border-edge bg-elev/60 p-3">
-              {target.match.status === "live" && (
-                <div className="mb-2 flex items-center justify-between gap-2 text-[10.5px]">
-                  <span className="truncate font-semibold text-mist">{target.match.league}</span>
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display font-bold tabular-nums text-betclic-red">
-                    <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                    {liveMinute ?? "LIVE"}
+              {/* Résumé de la sélection (même disposition d'équipes & logos que la page Matchs) */}
+              <div className="mt-2.5 rounded-2xl border border-edge bg-elev/60 p-3">
+                {target.match.status === "live" && (
+                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[10.5px]">
+                    <span className="truncate font-semibold text-mist">{target.match.league}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display font-bold tabular-nums text-betclic-red">
+                      <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+                      {liveMinute ?? "LIVE"}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2.5">
+                    <TeamAvatar
+                      name={target.match.homeTeam}
+                      logo={target.match.homeLogo}
+                      size="xs"
+                    />
+                    <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                      {target.match.homeTeam}
+                    </span>
+                    {target.match.status === "live" && liveHomeScore != null && (
+                      <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14px] font-bold tabular-nums text-betclic-red">
+                        {liveHomeScore}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <TeamAvatar
+                      name={target.match.awayTeam}
+                      logo={target.match.awayLogo}
+                      size="xs"
+                    />
+                    <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                      {target.match.awayTeam}
+                    </span>
+                    {target.match.status === "live" && liveHomeScore != null && (
+                      <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14px] font-bold tabular-nums text-betclic-red">
+                        {liveAwayScore ?? 0}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-1.5">
+                  <p className="min-w-0 truncate text-[12px] text-mist">
+                    <span className="font-semibold text-ink">{target.label}</span>
+                    {target.market !== "result" && (
+                      <span className="text-dim"> · {target.marketLabel}</span>
+                    )}
+                  </p>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-lg px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-white",
+                      marketSuspended || marketClosed ? "bg-dim" : "bg-betclic-red"
+                    )}
+                  >
+                    {marketClosed ? "Fermé" : formatOdds(displayOdds, oddsFormat)}
+                  </span>
+                </div>
+              </div>
+
+              {(marketSuspended || marketClosed) && (
+                <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11.5px] font-semibold text-amber-800">
+                  <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+                  <span>
+                    {marketClosed
+                      ? "Cette sélection est désormais décidée ou clôturée."
+                      : "Marché momentanément suspendu (action de jeu en cours)…"}
                   </span>
                 </div>
               )}
 
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2.5">
-                  <TeamAvatar
-                    name={target.match.homeTeam}
-                    logo={target.match.homeLogo}
-                    size="xs"
-                  />
-                  <span className="truncate font-display text-[14px] font-semibold text-ink">
-                    {target.match.homeTeam}
-                  </span>
-                  {target.match.status === "live" && liveHomeScore != null && (
-                    <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14.5px] font-bold tabular-nums text-betclic-red">
-                      {liveHomeScore}
-                    </span>
-                  )}
+              {/* Champ de mise + jetons 5/10/25/50/MAX (pavé 0-9 replié par défaut sur mobile) */}
+              <div className="mt-3">
+                <TouchStakePad
+                  id="sport-stake-input"
+                  label="Votre mise"
+                  stakeText={stakeText}
+                  onChangeStakeText={(next) => {
+                    setStakeText(next);
+                    setError(null);
+                  }}
+                  balance={balance}
+                  hasError={overBalance || belowMin}
+                  haptics={user?.haptics}
+                  collapsibleOnMobile
+                  defaultExpandedOnMobile={false}
+                />
+              </div>
+
+              {overBalance && (
+                <div className="mt-2.5 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
+                  <span className="font-medium text-betclic-red">Solde insuffisant</span>
+                  <button
+                    type="button"
+                    onClick={openRecharge}
+                    className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline underline-offset-2"
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    Recharger
+                  </button>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <TeamAvatar
-                    name={target.match.awayTeam}
-                    logo={target.match.awayLogo}
-                    size="xs"
-                  />
-                  <span className="truncate font-display text-[14px] font-semibold text-ink">
-                    {target.match.awayTeam}
-                  </span>
-                  {target.match.status === "live" && liveHomeScore != null && (
-                    <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14.5px] font-bold tabular-nums text-betclic-red">
-                      {liveAwayScore ?? 0}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2">
-                <p className="min-w-0 truncate text-[12px] text-mist">
-                  <span className="font-semibold text-ink">{target.label}</span>
-                  {target.market !== "result" && (
-                    <span className="text-dim"> · {target.marketLabel}</span>
-                  )}
-                </p>
-                <span
-                  className={cn(
-                    "shrink-0 rounded-lg px-2.5 py-1 font-display text-[14px] font-bold tabular-nums text-white",
-                    marketSuspended || marketClosed ? "bg-dim" : "bg-betclic-red"
-                  )}
-                >
-                  {marketClosed ? "Fermé" : formatOdds(displayOdds, oddsFormat)}
-                </span>
-              </div>
-            </div>
-
-            {(marketSuspended || marketClosed) && (
-              <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11.5px] font-semibold text-amber-800">
-                <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-                <span>
-                  {marketClosed
-                    ? "Cette sélection est désormais décidée ou clôturée."
-                    : "Marché momentanément suspendu (action de jeu en cours)…"}
-                </span>
-              </div>
-            )}
-
-            {/* Champ de mise + pavé numérique tactile mobile (sans remontée du clavier système) */}
-            <div className="mt-3.5">
-              <TouchStakePad
-                id="sport-stake-input"
-                label="Votre mise"
-                stakeText={stakeText}
-                onChangeStakeText={(next) => {
-                  setStakeText(next);
-                  setError(null);
-                }}
-                balance={balance}
-                hasError={overBalance || belowMin}
-                haptics={user?.haptics}
-              />
-            </div>
-
-            {overBalance && (
-              <div className="mt-3 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
-                <span className="font-medium text-betclic-red">Solde insuffisant</span>
-                <button
-                  type="button"
-                  onClick={openRecharge}
-                  className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline underline-offset-2"
-                >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                  Recharger
-                </button>
-              </div>
-            )}
-
-            {belowMin && !overBalance && (
-              <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
-                Mise minimale : 0,50 €
-              </p>
-            )}
-
-            {error && !overBalance && (
-              <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
-                {error}
-              </p>
-            )}
-
-            {/* Gain potentiel */}
-            <div className="mt-3.5 flex items-center justify-between rounded-2xl bg-elev px-3.5 py-3">
-              <div>
-                <p className="text-[11px] font-semibold text-mist">Gain potentiel</p>
-                <p className="text-[11px] font-medium text-win">
-                  Bénéfice net +{eur(Math.max(profit, 0))}
-                </p>
-              </div>
-              <AnimatedNumber
-                value={payout}
-                format={eur}
-                className="font-display text-[20px] font-bold tabular-nums text-win"
-              />
-            </div>
-
-            <OddsLockControls
-              feedKind="matches"
-              oddsFormat={oddsFormat}
-              oddsPolicy={oddsPolicy}
-              onChangePolicy={setOddsPolicy}
-              oddsChanged={oddsChanged}
-            />
-
-            {/* Validation simple ou Ajout au combiné */}
-            <div className="mt-3.5 flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={!canSubmit}
-                onClick={confirm}
-                className={cn(
-                  "flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
-                  canSubmit
-                    ? "bg-betclic-red text-white shadow-sm"
-                    : "bg-elev text-dim"
-                )}
-              >
-                {phase === "loading" ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
-                    Validation en cours…
-                  </>
-                ) : marketClosed ? (
-                  "Sélection clôturée"
-                ) : marketSuspended ? (
-                  "Marché suspendu…"
-                ) : oddsChanged ? (
-                  <>
-                    Accepter la nouvelle cote ({formatOdds(displayOdds, oddsFormat)})
-                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-                  </>
-                ) : (
-                  <>
-                    Placer {stake > 0 ? eur(stake) : "le pari"}
-                    <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-                  </>
-                )}
-              </button>
-
-              {!marketClosed && !marketSuspended && (
-                <button
-                  type="button"
-                  onClick={handleAddToCombo}
-                  className={cn(
-                    "flex h-10 w-full items-center justify-center gap-1.5 rounded-2xl border font-display text-[12.5px] font-bold transition-colors active:scale-[0.99]",
-                    inComboExact
-                      ? "border-ink bg-ink text-white"
-                      : "border-edge bg-white text-ink active:bg-elev"
-                  )}
-                >
-                  <Layers className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-                  {inComboExact
-                    ? "Dans le coupon (toucher pour retirer)"
-                    : `Ajouter au coupon${comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}`}
-                </button>
               )}
+
+              {belowMin && !overBalance && (
+                <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
+                  Mise minimale : 0,50 €
+                </p>
+              )}
+
+              {error && !overBalance && (
+                <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+                  {error}
+                </p>
+              )}
+
+              <OddsLockControls
+                feedKind="matches"
+                oddsFormat={oddsFormat}
+                oddsPolicy={oddsPolicy}
+                onChangePolicy={setOddsPolicy}
+                oddsChanged={oddsChanged}
+              />
             </div>
-          </div>
+
+            {/* Pied épinglé en bas de la feuille : Gain potentiel + Validation immédiate sans scroller */}
+            <div className="shrink-0 border-t border-edge bg-surface px-4 pb-4 pb-safe pt-2.5 lg:px-6 lg:pb-5">
+              <div className="mb-2.5 flex items-center justify-between">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-[12px] font-bold text-ink">
+                    Gain potentiel
+                  </span>
+                  <span className="text-[11px] font-medium text-win">
+                    +{eur(Math.max(profit, 0))} net
+                  </span>
+                </div>
+                <AnimatedNumber
+                  value={payout}
+                  format={eur}
+                  className="font-display text-[19px] font-extrabold tabular-nums text-win"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                {!marketClosed && !marketSuspended && (
+                  <button
+                    type="button"
+                    onClick={handleAddToCombo}
+                    aria-label={inComboExact ? "Retirer du coupon" : "Ajouter au combiné"}
+                    className={cn(
+                      "inline-flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3.5 font-display text-[12px] font-bold transition-colors active:scale-[0.99]",
+                      inComboExact
+                        ? "border-ink bg-ink text-white"
+                        : "border-edge bg-elev text-ink active:bg-edge"
+                    )}
+                  >
+                    <Layers
+                      className={cn(
+                        "h-3.5 w-3.5",
+                        inComboExact ? "text-white" : "text-betclic-red"
+                      )}
+                      strokeWidth={2.3}
+                    />
+                    <span>
+                      {inComboExact
+                        ? "Retirer"
+                        : `+ Combiné${comboLegs.length > 0 ? ` (${comboLegs.length})` : ""}`}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={!canSubmit}
+                  onClick={confirm}
+                  className={cn(
+                    "flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl px-3 font-display text-[14px] font-bold transition-all active:scale-[0.99]",
+                    canSubmit
+                      ? "bg-betclic-red text-white shadow-sm"
+                      : "bg-elev text-dim"
+                  )}
+                >
+                  {phase === "loading" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.4} />
+                      <span className="truncate">Validation…</span>
+                    </>
+                  ) : marketClosed ? (
+                    "Clôturée"
+                  ) : marketSuspended ? (
+                    "Suspendu…"
+                  ) : oddsChanged ? (
+                    <>
+                      <span className="truncate">
+                        Accepter ({formatOdds(displayOdds, oddsFormat)})
+                      </span>
+                      <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                    </>
+                  ) : (
+                    <>
+                      <span className="truncate">
+                        Placer {stake > 0 ? eur(stake) : "le pari"}
+                      </span>
+                      <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2.5} />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </motion.div>
     </div>

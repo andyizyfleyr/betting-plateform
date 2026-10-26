@@ -7,8 +7,8 @@ import { useApp } from "./providers";
 import { cn } from "@/lib/format";
 
 const ITEMS = [
-  { href: "/predictions", label: "Prédictions", Icon: TrendingUp },
   { href: "/matchs", label: "Matchs", Icon: Trophy },
+  { href: "/predictions", label: "Prédictions", Icon: TrendingUp },
   { href: "/betslip", label: "Betslip", Icon: Layers },
   { href: "/paris", label: "Mes paris", Icon: Ticket },
   { href: "/parametres", label: "Compte", Icon: SlidersHorizontal },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, ListChecks, RefreshCw, Search, TrendingUp, X } from "lucide-react";
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
@@ -54,6 +54,8 @@ export default function PredictionsPage() {
   const [category, setCategory] = useState<Category>("Tous");
   const [formatFilter, setFormatFilter] = useState<FormatFilter>("all");
   const [query, setQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [target, setTarget] = useState<{
     question: ClientPrediction;
     selection: string;
@@ -253,22 +255,50 @@ export default function PredictionsPage() {
     setTarget({ question: q, selection });
   };
 
+  const toggleMobileSearch = () => {
+    if (mobileSearchOpen) {
+      setQuery("");
+      setMobileSearchOpen(false);
+    } else {
+      setMobileSearchOpen(true);
+      window.setTimeout(() => searchInputRef.current?.focus(), 30);
+    }
+  };
+
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
-      {/* En-tête compact + Barre de recherche en ligne sur desktop */}
-      <div className="lg:flex lg:items-center lg:justify-between lg:gap-4">
+    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
+      {/* En-tête compact + Loupe dépliable sur mobile / Recherche en ligne sur desktop */}
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
             Prédictions
           </h1>
-          <p className="text-[12px] text-mist lg:text-[13px]">
+          <p className="hidden text-[13px] text-mist lg:block">
             Choix multiples & Oui / Non à cotes fixes
           </p>
         </div>
 
-        {/* Barre de recherche */}
-        <div className="mt-3 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:mt-0 lg:w-[360px] xl:w-[400px]">
+        <button
+          type="button"
+          onClick={toggleMobileSearch}
+          aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher une prédiction"}
+          className={cn(
+            "grid h-8.5 w-8.5 shrink-0 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
+            mobileSearchOpen || query
+              ? "bg-betclic-red text-white"
+              : "bg-elev text-ink"
+          )}
+        >
+          {mobileSearchOpen ? (
+            <X className="h-4 w-4" strokeWidth={2.3} />
+          ) : (
+            <Search className="h-4 w-4" strokeWidth={2.2} />
+          )}
+        </button>
+
+        {/* Barre de recherche desktop */}
+        <div className="hidden h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:flex lg:w-[360px] xl:w-[400px]">
           <Search className="h-4 w-4 shrink-0 text-dim" />
           <input
             type="text"
@@ -282,13 +312,39 @@ export default function PredictionsPage() {
               type="button"
               onClick={() => setQuery("")}
               aria-label="Effacer la recherche"
-              className="text-dim active:text-ink"
+              className="text-dim hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
       </div>
+
+      {/* Barre de recherche mobile dépliable au clic sur la loupe */}
+      {(mobileSearchOpen || query) && (
+        <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:hidden">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher une question ou un candidat…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setMobileSearchOpen(false);
+            }}
+            aria-label="Fermer la recherche"
+            className="text-dim active:text-ink"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Rangée unique collante de 3 pastilles dropdown */}
       <FilterDropdownRow
