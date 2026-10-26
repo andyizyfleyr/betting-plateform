@@ -332,22 +332,33 @@ export async function settleFinishedBets() {
   await settlePendingCombos();
 }
 
-/** Règle les paris « pending » d'un match précis (après clôture manuelle par l'admin ou fin live). */
-export async function settleMatchBets(
-  matchId: number,
+/** Règle en lot unique les paris « pending » de plusieurs matchs terminés en 1 seule lecture + 1 seule écriture CTE. */
+export async function settleMatchesBetsBatch(
+  matchIds: number[],
   opts?: { skipCombos?: boolean }
 ) {
+  const uniqueIds = [...new Set(matchIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (uniqueIds.length === 0) return;
+
   const rows = await db
     .select({ bet: bets, match: matches })
     .from(bets)
     .leftJoin(matches, eq(bets.matchId, matches.id))
-    .where(and(eq(bets.status, "pending"), eq(bets.matchId, matchId)));
+    .where(and(eq(bets.status, "pending"), inArray(bets.matchId, uniqueIds)));
   if (rows.length > 0) {
     await settleRows(rows);
   }
   if (!opts?.skipCombos) {
     await settlePendingCombos();
   }
+}
+
+/** Règle les paris « pending » d'un match précis (après clôture manuelle par l'admin ou fin live). */
+export async function settleMatchBets(
+  matchId: number,
+  opts?: { skipCombos?: boolean }
+) {
+  await settleMatchesBetsBatch([matchId], opts);
 }
 
 /** Rembourse intégralement (void) tous les paris simples et sélections combinées d'un match annulé/reporté en 1 seule requête SQL CTE. */

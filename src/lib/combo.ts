@@ -433,6 +433,8 @@ export function computeComboCashOut(
                     redHome: m.redHome ?? 0,
                     redAway: m.redAway ?? 0,
                     events: m.events ?? null,
+                    regime: m.regime ?? null,
+                    league: m.league ?? null,
                     matchId: m.id,
                   }
                 )

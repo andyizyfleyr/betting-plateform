@@ -604,6 +604,8 @@ export async function POST(req: NextRequest) {
     redHome: pricedMatch.redHome ?? 0,
     redAway: pricedMatch.redAway ?? 0,
     events: pricedMatch.events ?? [],
+    regime: pricedMatch.regime ?? null,
+    league: pricedMatch.league ?? null,
     matchId: pricedMatch.id,
   };
 
