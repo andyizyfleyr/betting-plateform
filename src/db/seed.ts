@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v9";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v10";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -95,7 +95,9 @@ async function runSeedInternal(): Promise<void> {
       "token_version" integer DEFAULT 0 NOT NULL,
       "email" text UNIQUE,
       "password_hash" text,
-      "created_at" timestamp DEFAULT now() NOT NULL
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      CONSTRAINT "app_user_balance_nonneg_chk" CHECK ("balance" >= 0),
+      CONSTRAINT "app_user_bonus_nonneg_chk" CHECK ("bonus_locked" >= 0)
     );
   `);
 
@@ -166,6 +168,7 @@ async function runSeedInternal(): Promise<void> {
       "closing_odds" double precision,
       "risk_flag" text,
       "idempotency_key" text,
+      "cashout_idempotency_key" text,
       "placed_at" timestamp DEFAULT now() NOT NULL,
       "settled_at" timestamp
     );
@@ -210,6 +213,23 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
+    UPDATE "app_user" SET "balance" = 0 WHERE "balance" < 0;
+    UPDATE "app_user" SET "bonus_locked" = 0 WHERE "bonus_locked" < 0;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'app_user_balance_nonneg_chk'
+      ) THEN
+        ALTER TABLE "app_user"
+          ADD CONSTRAINT "app_user_balance_nonneg_chk" CHECK ("balance" >= 0);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'app_user_bonus_nonneg_chk'
+      ) THEN
+        ALTER TABLE "app_user"
+          ADD CONSTRAINT "app_user_bonus_nonneg_chk" CHECK ("bonus_locked" >= 0);
+      END IF;
+    END $$;
   `);
 
   await db.execute(sql`
@@ -368,15 +388,18 @@ async function runSeedInternal(): Promise<void> {
       "status" text DEFAULT 'pending' NOT NULL,
       "cash_out_amount" double precision,
       "idempotency_key" text,
+      "cashout_idempotency_key" text,
       "placed_at" timestamp DEFAULT now() NOT NULL
     );
   `);
 
   await db.execute(sql`
     ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+    ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
     ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+    ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
   `);
 
   await db.execute(sql`
@@ -392,11 +415,13 @@ async function runSeedInternal(): Promise<void> {
       "status" text DEFAULT 'pending' NOT NULL,
       "cash_out_amount" double precision,
       "idempotency_key" text,
+      "cashout_idempotency_key" text,
       "placed_at" timestamp DEFAULT now() NOT NULL,
       "settled_at" timestamp
     );
     ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
     ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+    ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
   `);
 
   await db.execute(sql`
@@ -408,8 +433,23 @@ async function runSeedInternal(): Promise<void> {
       "amount" double precision NOT NULL,
       "status" text DEFAULT 'pending' NOT NULL,
       "admin_note" text,
+      "idempotency_key" text,
       "created_at" timestamp DEFAULT now() NOT NULL,
       "processed_at" timestamp
+    );
+    ALTER TABLE "withdrawals" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "idempotency_keys" (
+      "user_id" integer NOT NULL,
+      "scope" text NOT NULL,
+      "idempotency_key" text NOT NULL,
+      "request_hash" text NOT NULL,
+      "status_code" integer DEFAULT 200 NOT NULL,
+      "response_body" jsonb NOT NULL,
+      "created_at" timestamp DEFAULT now() NOT NULL,
+      CONSTRAINT "idempotency_keys_pk" PRIMARY KEY ("user_id", "scope", "idempotency_key")
     );
   `);
 
@@ -510,9 +550,11 @@ async function runSeedInternal(): Promise<void> {
       "amount" double precision NOT NULL,
       "currency" text DEFAULT 'EUR' NOT NULL,
       "status" text DEFAULT 'pending' NOT NULL,
+      "idempotency_key" text,
       "created_at" timestamp DEFAULT now() NOT NULL,
       "updated_at" timestamp DEFAULT now() NOT NULL
     );
+    ALTER TABLE "deposits" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
   `);
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -548,6 +590,9 @@ async function runSeedInternal(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS "bets_user_idem_uniq"
       ON "bets" ("user_id", "idempotency_key")
       WHERE "idempotency_key" IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS "bets_user_cashout_idem_uniq"
+      ON "bets" ("user_id", "cashout_idempotency_key")
+      WHERE "cashout_idempotency_key" IS NOT NULL;
 
     -- Questions & paris de prédictions (questions ouvertes/échues, règlements partiels, parieur, 24h)
     CREATE INDEX IF NOT EXISTS "pred_questions_status_resolves_idx"
@@ -566,6 +611,9 @@ async function runSeedInternal(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS "pred_bets_user_idem_uniq"
       ON "prediction_bets" ("user_id", "idempotency_key")
       WHERE "idempotency_key" IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS "pred_bets_user_cashout_idem_uniq"
+      ON "prediction_bets" ("user_id", "cashout_idempotency_key")
+      WHERE "cashout_idempotency_key" IS NOT NULL;
 
     -- Paris combinés (index partiel sur les tickets ayant encore >= 1 sélection ouverte, parieur, 24h)
     CREATE INDEX IF NOT EXISTS "combo_bets_open_legs_idx"
@@ -581,19 +629,30 @@ async function runSeedInternal(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS "combo_bets_user_idem_uniq"
       ON "combo_bets" ("user_id", "idempotency_key")
       WHERE "idempotency_key" IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS "combo_bets_user_cashout_idem_uniq"
+      ON "combo_bets" ("user_id", "cashout_idempotency_key")
+      WHERE "cashout_idempotency_key" IS NOT NULL;
 
-    -- Portefeuille, dépôts, retraits, jeux & ajustements (historiques paginés + agrégation House Brain 24h)
+    -- Portefeuille, dépôts, retraits, idempotence, jeux & ajustements (historiques paginés + agrégation House Brain 24h)
     CREATE INDEX IF NOT EXISTS "deposits_user_created_idx"
       ON "deposits" ("user_id", "created_at" DESC);
     CREATE INDEX IF NOT EXISTS "deposits_status_created_idx"
       ON "deposits" ("status", "created_at" DESC);
     CREATE INDEX IF NOT EXISTS "deposits_provider_ref_idx"
       ON "deposits" ("provider_ref");
+    CREATE UNIQUE INDEX IF NOT EXISTS "deposits_user_idem_uniq"
+      ON "deposits" ("user_id", "idempotency_key")
+      WHERE "idempotency_key" IS NOT NULL;
     CREATE INDEX IF NOT EXISTS "withdrawals_user_created_idx"
       ON "withdrawals" ("user_id", "created_at" DESC);
     CREATE INDEX IF NOT EXISTS "withdrawals_pending_idx"
       ON "withdrawals" ("created_at" DESC)
       WHERE "status" = 'pending';
+    CREATE UNIQUE INDEX IF NOT EXISTS "withdrawals_user_idem_uniq"
+      ON "withdrawals" ("user_id", "idempotency_key")
+      WHERE "idempotency_key" IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS "idempotency_keys_created_idx"
+      ON "idempotency_keys" ("created_at");
     CREATE INDEX IF NOT EXISTS "wallet_adj_user_created_idx"
       ON "wallet_adjustments" ("user_id", "created_at" DESC);
     CREATE INDEX IF NOT EXISTS "tap_history_user_created_idx"

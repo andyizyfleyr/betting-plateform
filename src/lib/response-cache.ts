@@ -176,17 +176,22 @@ export function setPredictionsCatalogCache(data: unknown): CachedJsonPayload {
 
 /**
  * Purge asynchrone non bloquante des tags CDN Edge Vercel (`invalidateByTag`).
- * Protégée par un anti-rebond de 2,5 s et un `try/catch` afin d'être 100 % tolérante
- * quel que soit le plan Vercel actif (Hobby / Pro) ou l'environnement local.
+ * Note d'architecture : `@vercel/functions` `invalidateByTag` renvoie `Promise<void>` sans exposer
+ * d'acquittement synchrone de propagation PoP (et résout silencieusement si `getContext().purge`
+ * n'est pas injecté par le plan/runtime actif). Aucun en-tête trompeur n'est donc émis côté HTTP ;
+ * en cas d'absence de purge par tag, le TTL court (`s-maxage=5`) borne la fraîcheur maximale.
  */
-export function purgeEdgeCacheTags(tags: readonly string[]): void {
+export function purgeEdgeCacheTags(
+  tags: readonly string[],
+  force = false
+): void {
   if (process.env.VERCEL !== "1" || tags.length === 0) return;
   const now = Date.now();
   const s = store();
   const dueTags: string[] = [];
   for (const t of tags) {
     const prev = s.lastTagPurgeAt.get(t) ?? 0;
-    if (now - prev >= TAG_PURGE_COOLDOWN_MS) {
+    if (force || now - prev >= TAG_PURGE_COOLDOWN_MS) {
       s.lastTagPurgeAt.set(t, now);
       dueTags.push(t);
     }
@@ -204,42 +209,20 @@ export function purgeEdgeCacheTags(tags: readonly string[]): void {
   }
 }
 
-/**
- * Purge synchrone avec rapport de statut (`"purged" | "cooldown" | "unsupported" | "local"`),
- * utilisée par `POST /api/admin` pour exposer l'en-tête de diagnostic `X-Edge-Tag-Purge`.
- */
-export async function purgeEdgeCacheTagsWithReport(
-  tags: readonly string[]
-): Promise<"purged" | "cooldown" | "unsupported" | "local"> {
-  if (process.env.VERCEL !== "1" || tags.length === 0) return "local";
-  const now = Date.now();
-  const s = store();
-  const dueTags: string[] = [];
-  for (const t of tags) {
-    const prev = s.lastTagPurgeAt.get(t) ?? 0;
-    if (now - prev >= TAG_PURGE_COOLDOWN_MS) {
-      s.lastTagPurgeAt.set(t, now);
-      dueTags.push(t);
-    }
-  }
-  if (dueTags.length === 0) return "cooldown";
-
-  try {
-    await invalidateByTag([...dueTags]);
-    return "purged";
-  } catch {
-    return "unsupported";
-  }
-}
-
-export function invalidatePredictionsCatalogCache(purgeEdge = false): void {
+export function invalidatePredictionsCatalogCache(
+  purgeEdge = false,
+  forceEdgePurge = false
+): void {
   store().predictionsCatalogPayload = null;
   if (purgeEdge) {
-    purgeEdgeCacheTags([EDGE_CACHE_TAGS.predictionsCatalog]);
+    purgeEdgeCacheTags([EDGE_CACHE_TAGS.predictionsCatalog], forceEdgePurge);
   }
 }
 
-export function invalidatePublicApiCaches(purgeEdge = false): void {
+export function invalidatePublicApiCaches(
+  purgeEdge = false,
+  forceEdgePurge = false
+): void {
   const s = store();
   s.matchesPayload = null;
   s.historyBasePayload = null;
@@ -247,11 +230,14 @@ export function invalidatePublicApiCaches(purgeEdge = false): void {
   s.historyServerTime = null;
   s.predictionsCatalogPayload = null;
   if (purgeEdge) {
-    purgeEdgeCacheTags([
-      EDGE_CACHE_TAGS.matches,
-      EDGE_CACHE_TAGS.history,
-      EDGE_CACHE_TAGS.predictionsCatalog,
-    ]);
+    purgeEdgeCacheTags(
+      [
+        EDGE_CACHE_TAGS.matches,
+        EDGE_CACHE_TAGS.history,
+        EDGE_CACHE_TAGS.predictionsCatalog,
+      ],
+      forceEdgePurge
+    );
   }
 }
 

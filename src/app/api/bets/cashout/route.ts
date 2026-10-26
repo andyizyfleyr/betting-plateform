@@ -16,20 +16,49 @@ import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
+import {
+  computeIdempotencyHash,
+  idempotencyConflictResponse,
+  lookupIdempotencyRecord,
+  saveIdempotencyRecord,
+} from "@/lib/idempotency";
+import {
+  CASHOUT_CHANGED_CODE,
+  checkCashoutChange,
+  extractIdempotencyKey,
+  type CashoutChangedDetails,
+} from "@/lib/odds-lock";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import { requireUserId } from "@/lib/session";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function cashoutChangedResponse(details: CashoutChangedDetails): NextResponse {
+  return NextResponse.json(
+    {
+      error: `Le montant du Cash Out a baissé (${details.previousCashout.toFixed(2).replace(".", ",")} € → ${details.currentCashout.toFixed(2).replace(".", ",")} €). Confirmez le nouveau montant pour vendre le coupon.`,
+      code: CASHOUT_CHANGED_CODE,
+      details,
+    },
+    { status: 409 }
+  );
+}
+
 /**
- * Encaisse un pari en cours (sportif, prédiction ou combiné).
- *
- * Ordre canonique global des verrous PostgreSQL (strictement acyclique sur toute la plateforme) :
- *   1. `matches` (`ORDER BY id FOR SHARE`)
- *   2. `prediction_questions` (`ORDER BY id FOR SHARE`)
- *   3. `bets` / `prediction_bets` / `combo_bets` (`FOR UPDATE`)
- *   4. `app_user` (`FOR UPDATE`)
+ * Encaisse un pari en cours (sportif, prédiction ou combiné) avec :
+ *  - Verrou transactionnel sur `expectedCashout` (`409 CASHOUT_CHANGED` sans paiement si baisse)
+ *  - Idempotence complète + refus `409 IDEMPOTENCY_KEY_CONFLICT` si la clé est réutilisée avec un autre contenu
+ *  - Ordre canonique global acyclique des verrous PostgreSQL :
+ *      1. `matches` (`ORDER BY id FOR SHARE`)
+ *      2. `prediction_questions` (`ORDER BY id FOR SHARE`)
+ *      3. `bets` / `prediction_bets` / `combo_bets` (`FOR UPDATE`)
+ *      4. `app_user` (`FOR UPDATE`)
+ *      5. `idempotency_keys`
  */
 export async function POST(req: NextRequest) {
   try {
@@ -39,7 +68,12 @@ export async function POST(req: NextRequest) {
     const uid = auth;
     await syncLiveMatchesThrottled();
 
-    let body: { betId?: number; kind?: "sport" | "prediction" | "combo" };
+    let body: {
+      betId?: number;
+      kind?: "sport" | "prediction" | "combo";
+      expectedCashout?: number;
+      idempotencyKey?: string;
+    };
     try {
       body = await req.json();
     } catch {
@@ -48,9 +82,63 @@ export async function POST(req: NextRequest) {
 
     const betId = Number(body.betId);
     const kind = body.kind;
-    if (!betId) {
+    const expectedCashout = Number(body.expectedCashout);
+    const idempotencyKey = extractIdempotencyKey(
+      body.idempotencyKey,
+      req.headers.get("idempotency-key")
+    );
+
+    if (!Number.isInteger(betId) || betId <= 0) {
       return NextResponse.json({ error: "Pari introuvable" }, { status: 400 });
     }
+    if (!idempotencyKey) {
+      return NextResponse.json(
+        { error: "Clé d'idempotence manquante ou invalide" },
+        { status: 400 }
+      );
+    }
+    if (!Number.isFinite(expectedCashout) || expectedCashout <= 0) {
+      return NextResponse.json(
+        { error: "Montant de Cash Out attendu manquant ou invalide" },
+        { status: 400 }
+      );
+    }
+
+    const requestHash = computeIdempotencyHash({
+      betId,
+      kind: kind ?? "sport_or_prediction",
+      expectedCashout: round2(expectedCashout),
+    });
+
+    // Court-circuit O(1) hors transaction (réessai réseau ou conflit d'idempotence)
+    const preIdem = await lookupIdempotencyRecord(
+      db,
+      uid,
+      "cashout",
+      idempotencyKey,
+      requestHash
+    );
+    if (preIdem.kind === "conflict") {
+      return idempotencyConflictResponse();
+    }
+    if (preIdem.kind === "hit") {
+      const [u] = await db
+        .select({ balance: appUser.balance })
+        .from(appUser)
+        .where(eq(appUser.id, uid));
+      return NextResponse.json({
+        ...preIdem.responseBody,
+        balance: u?.balance ?? preIdem.responseBody.balance ?? 0,
+        deduplicated: true,
+      });
+    }
+
+    type CashoutTxResult =
+      | { kind: "ok"; balance: number; value: number; deduplicated?: boolean }
+      | { kind: "idempotency_conflict" }
+      | { kind: "cashout_changed"; details: CashoutChangedDetails }
+      | { kind: "settled" }
+      | { kind: "error"; error: string };
 
     // 1. Pari combiné
     if (kind === "combo") {
@@ -59,7 +147,10 @@ export async function POST(req: NextRequest) {
         .from(comboBets)
         .where(and(eq(comboBets.id, betId), eq(comboBets.userId, uid)));
 
-      if (!cb || cb.status !== "pending") {
+      if (!cb) {
+        return NextResponse.json({ error: "Pari introuvable" }, { status: 404 });
+      }
+      if (cb.status !== "pending" && cb.cashoutIdempotencyKey !== idempotencyKey) {
         return NextResponse.json(
           { error: "Ce coupon ne peut plus être vendu" },
           { status: 400 }
@@ -81,8 +172,7 @@ export async function POST(req: NextRequest) {
         ),
       ];
 
-      // Contrôle externe anti-but (hors transaction SQL pour garder la transaction ultra-courte)
-      if (matchIds.length > 0) {
+      if (cb.status === "pending" && matchIds.length > 0) {
         const preMatches = await db
           .select()
           .from(matches)
@@ -98,7 +188,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const txRes = await db.transaction(async (tx) => {
+      const txRes: CashoutTxResult = await db.transaction(async (tx) => {
         await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
 
         const lockedMatches =
@@ -127,8 +217,37 @@ export async function POST(req: NextRequest) {
           .where(and(eq(comboBets.id, cb.id), eq(comboBets.userId, uid)))
           .for("update");
 
+        const [lockedUser] = await tx
+          .select({ id: appUser.id, balance: appUser.balance })
+          .from(appUser)
+          .where(eq(appUser.id, uid))
+          .for("update");
+
+        if (!lockedUser) {
+          return { kind: "error", error: "Compte introuvable" };
+        }
+
+        const inTxIdem = await lookupIdempotencyRecord(
+          tx,
+          uid,
+          "cashout",
+          idempotencyKey,
+          requestHash
+        );
+        if (inTxIdem.kind === "conflict") {
+          return { kind: "idempotency_conflict" };
+        }
+        if (inTxIdem.kind === "hit") {
+          return {
+            kind: "ok",
+            balance: lockedUser.balance,
+            value: Number(inTxIdem.responseBody.value ?? lockedCb?.cashOutAmount ?? 0),
+            deduplicated: true,
+          };
+        }
+
         if (!lockedCb || lockedCb.status !== "pending") {
-          return { kind: "settled" as const };
+          return { kind: "settled" };
         }
 
         const nowCashMs = Date.now();
@@ -141,45 +260,80 @@ export async function POST(req: NextRequest) {
           new Map(lockedQuestions.map((q) => [q.id, q]))
         );
         if (value == null) {
-          return { kind: "unavailable" as const };
+          return {
+            kind: "error",
+            error: "La vente du coupon est momentanément indisponible sur ce combiné",
+          };
         }
 
-        await tx
-          .select({ id: appUser.id })
-          .from(appUser)
-          .where(eq(appUser.id, uid))
-          .for("update");
+        // Comparaison transactionnelle AVANT toute écriture / paiement
+        const cashoutCheck = checkCashoutChange({
+          expectedCashout,
+          serverCashout: value,
+        });
+        if (!cashoutCheck.ok) {
+          return {
+            kind: "cashout_changed",
+            details: {
+              previousCashout: cashoutCheck.previousCashout,
+              currentCashout: cashoutCheck.currentCashout,
+            },
+          };
+        }
+
+        const finalValue = cashoutCheck.roundedServerCashout;
 
         await tx
           .update(comboBets)
-          .set({ status: "cashed", cashOutAmount: value, settledAt: new Date() })
+          .set({
+            status: "cashed",
+            cashOutAmount: finalValue,
+            cashoutIdempotencyKey: idempotencyKey,
+            settledAt: new Date(),
+          })
           .where(eq(comboBets.id, lockedCb.id));
 
         const [updatedUser] = await tx
           .update(appUser)
-          .set({ balance: sql`${appUser.balance} + ${value}` })
+          .set({
+            balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 2)::float8`,
+          })
           .where(eq(appUser.id, uid))
           .returning({ balance: appUser.balance });
 
-        return { kind: "ok" as const, balance: updatedUser.balance, value };
+        await saveIdempotencyRecord(tx, {
+          userId: uid,
+          scope: "cashout",
+          idempotencyKey,
+          requestHash,
+          statusCode: 200,
+          responseBody: { balance: updatedUser.balance, value: finalValue },
+        });
+
+        return { kind: "ok", balance: updatedUser.balance, value: finalValue };
       });
 
+      if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
+      if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
       if (txRes.kind === "settled") {
         return NextResponse.json(
           { error: "Ce combiné vient d'être réglé" },
           { status: 400 }
         );
       }
-      if (txRes.kind === "unavailable") {
-        return NextResponse.json(
-          { error: "La vente du coupon est momentanément indisponible sur ce combiné" },
-          { status: 400 }
-        );
+      if (txRes.kind === "error") {
+        return NextResponse.json({ error: txRes.error }, { status: 400 });
       }
 
-      notifyBetsSettledOrMutated([uid]);
-      invalidateHouseHealthCache();
-      return NextResponse.json({ balance: txRes.balance, value: txRes.value });
+      if (!txRes.deduplicated) {
+        notifyBetsSettledOrMutated([uid]);
+        invalidateHouseHealthCache();
+      }
+      return NextResponse.json({
+        balance: txRes.balance,
+        value: txRes.value,
+        ...(txRes.deduplicated ? { deduplicated: true } : {}),
+      });
     }
 
     // 2. Pari sportif simple
@@ -192,7 +346,7 @@ export async function POST(req: NextRequest) {
 
       if (sportRow && sportRow.bet) {
         const { bet, match } = sportRow;
-        if (bet.status !== "pending") {
+        if (bet.status !== "pending" && bet.cashoutIdempotencyKey !== idempotencyKey) {
           if (kind === "sport") {
             return NextResponse.json(
               { error: "Ce coupon ne peut plus être vendu" },
@@ -206,7 +360,7 @@ export async function POST(req: NextRequest) {
               { status: 400 }
             );
           }
-          if (match.status === "live" && match.source === "manual") {
+          if (bet.status === "pending" && match.status === "live" && match.source === "manual") {
             const realGuard = await verifyLiveRealMatchesBeforeBet([match]);
             if (!realGuard.ok) {
               return NextResponse.json({ error: realGuard.error }, { status: 409 });
@@ -214,7 +368,7 @@ export async function POST(req: NextRequest) {
           }
 
           const targetMatchId = bet.matchId;
-          const txRes = await db.transaction(async (tx) => {
+          const txRes: CashoutTxResult = await db.transaction(async (tx) => {
             await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
 
             const [lockedRawMatch] = await tx
@@ -229,8 +383,37 @@ export async function POST(req: NextRequest) {
               .where(and(eq(bets.id, bet.id), eq(bets.userId, uid)))
               .for("update");
 
+            const [lockedUser] = await tx
+              .select({ id: appUser.id, balance: appUser.balance })
+              .from(appUser)
+              .where(eq(appUser.id, uid))
+              .for("update");
+
+            if (!lockedUser) {
+              return { kind: "error", error: "Compte introuvable" };
+            }
+
+            const inTxIdem = await lookupIdempotencyRecord(
+              tx,
+              uid,
+              "cashout",
+              idempotencyKey,
+              requestHash
+            );
+            if (inTxIdem.kind === "conflict") {
+              return { kind: "idempotency_conflict" };
+            }
+            if (inTxIdem.kind === "hit") {
+              return {
+                kind: "ok",
+                balance: lockedUser.balance,
+                value: Number(inTxIdem.responseBody.value ?? lockedBet?.cashOutAmount ?? 0),
+                deduplicated: true,
+              };
+            }
+
             if (!lockedBet || lockedBet.status !== "pending") {
-              return { kind: "settled" as const };
+              return { kind: "settled" };
             }
 
             const effectiveMatch = lockedRawMatch
@@ -238,13 +421,13 @@ export async function POST(req: NextRequest) {
               : null;
             if (!effectiveMatch || effectiveMatch.status !== "live") {
               return {
-                kind: "error" as const,
+                kind: "error",
                 error: "La vente du coupon n'est disponible que pendant le match",
               };
             }
             if (effectiveMatch.suspended) {
               return {
-                kind: "error" as const,
+                kind: "error",
                 error: "Marché suspendu — vente du coupon indisponible",
               };
             }
@@ -262,8 +445,11 @@ export async function POST(req: NextRequest) {
               awayScore: effectiveMatch.awayScore,
               htHomeScore:
                 effectiveMatch.htHomeScore ??
-                effectiveMatch.realStats?.htHomeScore ??
-                null,
+                effectiveMatch.realStats?.htAwayScore !== undefined
+                  ? (effectiveMatch.htHomeScore ??
+                    effectiveMatch.realStats?.htHomeScore ??
+                    null)
+                  : null,
               htAwayScore:
                 effectiveMatch.htAwayScore ??
                 effectiveMatch.realStats?.htAwayScore ??
@@ -284,36 +470,60 @@ export async function POST(req: NextRequest) {
             });
             if (value == null) {
               return {
-                kind: "error" as const,
+                kind: "error",
                 error:
                   "La vente du coupon n'est plus disponible sur ce pari actuellement",
               };
             }
 
-            await tx
-              .select({ id: appUser.id })
-              .from(appUser)
-              .where(eq(appUser.id, uid))
-              .for("update");
+            const cashoutCheck = checkCashoutChange({
+              expectedCashout,
+              serverCashout: value,
+            });
+            if (!cashoutCheck.ok) {
+              return {
+                kind: "cashout_changed",
+                details: {
+                  previousCashout: cashoutCheck.previousCashout,
+                  currentCashout: cashoutCheck.currentCashout,
+                },
+              };
+            }
+
+            const finalValue = cashoutCheck.roundedServerCashout;
 
             await tx
               .update(bets)
               .set({
                 status: "cashed",
-                cashOutAmount: value,
+                cashOutAmount: finalValue,
+                cashoutIdempotencyKey: idempotencyKey,
                 settledAt: new Date(),
               })
               .where(eq(bets.id, lockedBet.id));
 
             const [updatedUser] = await tx
               .update(appUser)
-              .set({ balance: sql`${appUser.balance} + ${value}` })
+              .set({
+                balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 2)::float8`,
+              })
               .where(eq(appUser.id, uid))
               .returning({ balance: appUser.balance });
 
-            return { kind: "ok" as const, balance: updatedUser.balance, value };
+            await saveIdempotencyRecord(tx, {
+              userId: uid,
+              scope: "cashout",
+              idempotencyKey,
+              requestHash,
+              statusCode: 200,
+              responseBody: { balance: updatedUser.balance, value: finalValue },
+            });
+
+            return { kind: "ok", balance: updatedUser.balance, value: finalValue };
           });
 
+          if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
+          if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
           if (txRes.kind === "settled") {
             return NextResponse.json(
               { error: "Ce pari vient d'être réglé" },
@@ -324,11 +534,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: txRes.error }, { status: 400 });
           }
 
-          notifyBetsSettledOrMutated([uid]);
-          invalidateHouseHealthCache();
+          if (!txRes.deduplicated) {
+            notifyBetsSettledOrMutated([uid]);
+            invalidateHouseHealthCache();
+          }
           return NextResponse.json({
             balance: txRes.balance,
             value: txRes.value,
+            ...(txRes.deduplicated ? { deduplicated: true } : {}),
           });
         }
       } else if (kind === "sport") {
@@ -344,14 +557,14 @@ export async function POST(req: NextRequest) {
 
     if (predRow && predRow.bet) {
       const { bet } = predRow;
-      if (bet.status !== "pending") {
+      if (bet.status !== "pending" && bet.cashoutIdempotencyKey !== idempotencyKey) {
         return NextResponse.json(
           { error: "Ce coupon ne peut plus être vendu" },
           { status: 400 }
         );
       }
 
-      const txRes = await db.transaction(async (tx) => {
+      const txRes: CashoutTxResult = await db.transaction(async (tx) => {
         await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
 
         const [lockedQuestion] = await tx
@@ -366,8 +579,37 @@ export async function POST(req: NextRequest) {
           .where(and(eq(predictionBets.id, bet.id), eq(predictionBets.userId, uid)))
           .for("update");
 
+        const [lockedUser] = await tx
+          .select({ id: appUser.id, balance: appUser.balance })
+          .from(appUser)
+          .where(eq(appUser.id, uid))
+          .for("update");
+
+        if (!lockedUser) {
+          return { kind: "error", error: "Compte introuvable" };
+        }
+
+        const inTxIdem = await lookupIdempotencyRecord(
+          tx,
+          uid,
+          "cashout",
+          idempotencyKey,
+          requestHash
+        );
+        if (inTxIdem.kind === "conflict") {
+          return { kind: "idempotency_conflict" };
+        }
+        if (inTxIdem.kind === "hit") {
+          return {
+            kind: "ok",
+            balance: lockedUser.balance,
+            value: Number(inTxIdem.responseBody.value ?? lockedBet?.cashOutAmount ?? 0),
+            deduplicated: true,
+          };
+        }
+
         if (!lockedBet || lockedBet.status !== "pending") {
-          return { kind: "settled" as const };
+          return { kind: "settled" };
         }
         if (
           !lockedQuestion ||
@@ -375,7 +617,7 @@ export async function POST(req: NextRequest) {
           lockedQuestion.resolvesAt.getTime() <= Date.now()
         ) {
           return {
-            kind: "error" as const,
+            kind: "error",
             error:
               "La vente du coupon n'est disponible que sur les prédictions ouvertes",
           };
@@ -393,30 +635,54 @@ export async function POST(req: NextRequest) {
           selection: lockedBet.selection,
         });
 
-        await tx
-          .select({ id: appUser.id })
-          .from(appUser)
-          .where(eq(appUser.id, uid))
-          .for("update");
+        const cashoutCheck = checkCashoutChange({
+          expectedCashout,
+          serverCashout: value,
+        });
+        if (!cashoutCheck.ok) {
+          return {
+            kind: "cashout_changed",
+            details: {
+              previousCashout: cashoutCheck.previousCashout,
+              currentCashout: cashoutCheck.currentCashout,
+            },
+          };
+        }
+
+        const finalValue = cashoutCheck.roundedServerCashout;
 
         await tx
           .update(predictionBets)
           .set({
             status: "cashed",
-            cashOutAmount: value,
+            cashOutAmount: finalValue,
+            cashoutIdempotencyKey: idempotencyKey,
             settledAt: new Date(),
           })
           .where(eq(predictionBets.id, lockedBet.id));
 
         const [updatedUser] = await tx
           .update(appUser)
-          .set({ balance: sql`${appUser.balance} + ${value}` })
+          .set({
+            balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 2)::float8`,
+          })
           .where(eq(appUser.id, uid))
           .returning({ balance: appUser.balance });
 
-        return { kind: "ok" as const, balance: updatedUser.balance, value };
+        await saveIdempotencyRecord(tx, {
+          userId: uid,
+          scope: "cashout",
+          idempotencyKey,
+          requestHash,
+          statusCode: 200,
+          responseBody: { balance: updatedUser.balance, value: finalValue },
+        });
+
+        return { kind: "ok", balance: updatedUser.balance, value: finalValue };
       });
 
+      if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
+      if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
       if (txRes.kind === "settled") {
         return NextResponse.json(
           { error: "Ce pari vient d'être réglé" },
@@ -427,9 +693,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: txRes.error }, { status: 400 });
       }
 
-      notifyBetsSettledOrMutated([uid]);
-      invalidateHouseHealthCache();
-      return NextResponse.json({ balance: txRes.balance, value: txRes.value });
+      if (!txRes.deduplicated) {
+        notifyBetsSettledOrMutated([uid]);
+        invalidateHouseHealthCache();
+      }
+      return NextResponse.json({
+        balance: txRes.balance,
+        value: txRes.value,
+        ...(txRes.deduplicated ? { deduplicated: true } : {}),
+      });
     }
 
     return NextResponse.json({ error: "Pari introuvable" }, { status: 404 });

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { Building2, Check, CreditCard, Loader2, Lock, Smartphone, Wallet, X } from "lucide-react";
-import { api, type PaymentProvider } from "@/lib/api";
+import { ApiRequestError, api, type PaymentProvider } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
 import { cn, eur } from "@/lib/format";
 
@@ -31,6 +32,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [doneManual, setDoneManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -66,27 +69,46 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
     (isManual ? reference.trim().length >= 4 : Boolean(onlineProvider?.enabled));
 
   const submit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || inFlightRef.current) return;
+    inFlightRef.current = true;
+    const cleanRef = reference.trim();
+    const sig = `${method}:${isManual ? cleanRef : "online"}:${amount}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = {
+        key: generateIdempotencyKey("dep"),
+        sig,
+      };
+    }
+    const idempotencyKey = idempotencySlotRef.current.key;
+
     setLoading(true);
     setError(null);
     try {
       if (method === "mobile_money" || method === "sepa") {
         await api.payments.manual({
           method,
-          reference: reference.trim(),
+          reference: cleanRef,
           amount,
+          idempotencyKey,
         });
+        idempotencySlotRef.current = null;
         playUiSound(user?.sound, "bet");
         triggerHaptic(user?.haptics, [18, 28]);
         bumpBets();
         setDoneManual(true);
+        inFlightRef.current = false;
         setLoading(false);
         return;
       }
-      const r = await api.payments.create(method, amount);
+      const r = await api.payments.create(method, amount, idempotencyKey);
+      idempotencySlotRef.current = null;
       window.location.href = r.url;
     } catch (e) {
+      if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
+        idempotencySlotRef.current = null;
+      }
       setError(e instanceof Error ? e.message : "Dépôt indisponible");
+      inFlightRef.current = false;
       setLoading(false);
       toast({ kind: "error", title: "Dépôt impossible", description: "Vérifiez les informations" });
     }

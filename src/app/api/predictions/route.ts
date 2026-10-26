@@ -11,12 +11,18 @@ import {
 } from "@/lib/predictions";
 import {
   checkOddsChange,
-  normalizeIdempotencyKey,
+  extractIdempotencyKey,
   normalizeOddsPolicy,
   ODDS_CHANGED_CODE,
   roundOdds2,
   type OddsChangedDetails,
 } from "@/lib/odds-lock";
+import {
+  computeIdempotencyHash,
+  idempotencyConflictResponse,
+  lookupIdempotencyRecord,
+  saveIdempotencyRecord,
+} from "@/lib/idempotency";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import {
   invalidatePredictionsCatalogCache,
@@ -179,7 +185,10 @@ export async function POST(req: NextRequest) {
   const { questionId, selection, stake } = body;
   const expectedOdds = Number(body.expectedOdds);
   const oddsPolicy = normalizeOddsPolicy(body.oddsPolicy);
-  const idempotencyKey = normalizeIdempotencyKey(body.idempotencyKey);
+  const idempotencyKey = extractIdempotencyKey(
+    body.idempotencyKey,
+    req.headers.get("idempotency-key")
+  );
 
   if (!questionId || !selection || !stake || stake <= 0) {
     return NextResponse.json({ error: "Données du pari incomplètes" }, { status: 400 });
@@ -203,7 +212,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Court-circuit O(1) via l'index unique `(user_id, idempotency_key)` en cas de réessai réseau
+  const roundedInputStake = round2(stake);
+  const requestHash = computeIdempotencyHash({
+    questionId: Number(questionId),
+    selection,
+    stake: roundedInputStake,
+    expectedOdds: roundOdds2(expectedOdds),
+  });
+
+  const preIdem = await lookupIdempotencyRecord(
+    db,
+    uid,
+    "bet:prediction",
+    idempotencyKey,
+    requestHash
+  );
+  if (preIdem.kind === "conflict") {
+    return idempotencyConflictResponse();
+  }
+  if (preIdem.kind === "hit") {
+    const [u] = await db
+      .select({ balance: appUser.balance })
+      .from(appUser)
+      .where(eq(appUser.id, uid));
+    return NextResponse.json({
+      ...preIdem.responseBody,
+      balance: u?.balance ?? preIdem.responseBody.balance ?? 0,
+      deduplicated: true,
+    });
+  }
+
+  // Fallback O(1) sur la colonne `prediction_bets.idempotency_key`
   const [alreadyPlaced] = await db
     .select()
     .from(predictionBets)
@@ -215,6 +254,13 @@ export async function POST(req: NextRequest) {
     )
     .limit(1);
   if (alreadyPlaced) {
+    if (
+      alreadyPlaced.questionId !== Number(questionId) ||
+      alreadyPlaced.selection !== selection ||
+      Math.round(alreadyPlaced.stake * 100) !== Math.round(roundedInputStake * 100)
+    ) {
+      return idempotencyConflictResponse();
+    }
     const [u] = await db
       .select({ balance: appUser.balance })
       .from(appUser)
@@ -233,8 +279,8 @@ export async function POST(req: NextRequest) {
         status: alreadyPlaced.status,
         placedAt: alreadyPlaced.placedAt.toISOString(),
       },
-        balance: u?.balance ?? 0,
-        deduplicated: true,
+      balance: u?.balance ?? 0,
+      deduplicated: true,
     });
   }
 
@@ -259,6 +305,7 @@ export async function POST(req: NextRequest) {
         incNo: number;
         deduplicated?: boolean;
       }
+    | { kind: "idempotency_conflict" }
     | { kind: "error"; status: number; error: string }
     | { kind: "odds_changed"; details: OddsChangedDetails };
 
@@ -346,6 +393,17 @@ export async function POST(req: NextRequest) {
       return { kind: "error", status: 404, error: "Compte introuvable" };
     }
 
+    const inTxIdem = await lookupIdempotencyRecord(
+      tx,
+      uid,
+      "bet:prediction",
+      idempotencyKey,
+      requestHash
+    );
+    if (inTxIdem.kind === "conflict") {
+      return { kind: "idempotency_conflict" };
+    }
+
     const [concurrentExisting] = await tx
       .select()
       .from(predictionBets)
@@ -357,6 +415,14 @@ export async function POST(req: NextRequest) {
       )
       .limit(1);
     if (concurrentExisting) {
+      if (
+        concurrentExisting.questionId !== question.id ||
+        concurrentExisting.selection !== selection ||
+        Math.round(concurrentExisting.stake * 100) !==
+          Math.round(roundedStakeValue * 100)
+      ) {
+        return { kind: "idempotency_conflict" };
+      }
       return {
         kind: "ok",
         bet: concurrentExisting,
@@ -392,12 +458,42 @@ export async function POST(req: NextRequest) {
 
     const [updatedUser] = await tx
       .update(appUser)
-      .set({ balance: sql`${appUser.balance} - ${roundedStakeValue}` })
+      .set({
+        balance: sql`ROUND((${appUser.balance} - ${roundedStakeValue})::numeric, 2)::float8`,
+      })
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });
 
+    await saveIdempotencyRecord(tx, {
+      userId: uid,
+      scope: "bet:prediction",
+      idempotencyKey,
+      requestHash,
+      statusCode: 200,
+      responseBody: {
+        bet: {
+          id: bet.id,
+          questionId: bet.questionId,
+          question: bet.question,
+          category: bet.category,
+          selection: bet.selection,
+          selectionLabel: bet.selectionLabel,
+          odds: bet.odds,
+          stake: bet.stake,
+          potentialWin: bet.potentialWin,
+          status: bet.status,
+          placedAt: bet.placedAt.toISOString(),
+        },
+        balance: updatedUser.balance,
+      },
+    });
+
     return { kind: "ok", bet, balance: updatedUser.balance, incYes, incNo };
   });
+
+  if (txResult.kind === "idempotency_conflict") {
+    return idempotencyConflictResponse();
+  }
 
   if (txResult.kind === "odds_changed") {
     const dirLabel =

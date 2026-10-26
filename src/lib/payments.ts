@@ -44,10 +44,11 @@ export function findProvider(id: PaymentProviderId): ProviderInfo | undefined {
 
 /* ------------------------------- Stripe (Checkout) ------------------------------- */
 
-function stripeHeaders(): HeadersInit {
+function stripeHeaders(idempotencyKey?: string): HeadersInit {
   return {
     Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
     "Content-Type": "application/x-www-form-urlencoded",
+    ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
   };
 }
 
@@ -56,13 +57,14 @@ export interface StripeCheckout {
   url: string | null;
 }
 
-/** Crée une session Stripe Checkout hébergée. */
+/** Crée une session Stripe Checkout hébergée (avec propagation de `Idempotency-Key`). */
 export async function createStripeCheckout(opts: {
   userId: number;
   amount: number; // en euros
   currency: string;
   successUrl: string;
   cancelUrl: string;
+  idempotencyKey?: string;
 }): Promise<StripeCheckout> {
   const params = new URLSearchParams();
   params.append("mode", "payment");
@@ -75,11 +77,14 @@ export async function createStripeCheckout(opts: {
     "Recharge de solde PULSE"
   );
   params.append("line_items[0][price_data][currency]", opts.currency);
-  params.append("line_items[0][price_data][unit_amount]", String(Math.round(opts.amount * 100)));
+  params.append(
+    "line_items[0][price_data][unit_amount]",
+    String(Math.round(opts.amount * 100))
+  );
 
   const res = await fetch(`${STRIPE_BASE}/v1/checkout/sessions`, {
     method: "POST",
-    headers: stripeHeaders(),
+    headers: stripeHeaders(opts.idempotencyKey),
     body: params,
   });
   if (!res.ok) throw new Error(`Stripe ${res.status}`);
@@ -110,9 +115,13 @@ export async function verifyStripeWebhook(
 
   const key = new TextEncoder().encode(secret);
   const data = new TextEncoder().encode(`${t}.${rawBody}`);
-  const cryptoKey = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, [
-    "sign",
-  ]);
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    key,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
   const mac = await crypto.subtle.sign("HMAC", cryptoKey, data);
   const expected = Buffer.from(new Uint8Array(mac)).toString("hex");
   const a = Buffer.from(v1, "hex");
@@ -167,6 +176,7 @@ export async function createPayPalOrder(opts: {
   currency: string;
   returnUrl: string;
   cancelUrl: string;
+  idempotencyKey?: string;
 }): Promise<PayPalOrder> {
   const token = await paypalToken();
   const res = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
@@ -174,6 +184,7 @@ export async function createPayPalOrder(opts: {
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
+      ...(opts.idempotencyKey ? { "PayPal-Request-Id": opts.idempotencyKey } : {}),
     },
     body: JSON.stringify({
       intent: "CAPTURE",
@@ -199,15 +210,22 @@ export async function createPayPalOrder(opts: {
 }
 
 /** Capture une commande PayPal approuvée. */
-export async function capturePayPalOrder(orderId: string): Promise<boolean> {
+export async function capturePayPalOrder(
+  orderId: string,
+  idempotencyKey?: string
+): Promise<boolean> {
   const token = await paypalToken();
-  const res = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${orderId}/capture`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const res = await fetch(
+    `${PAYPAL_BASE}/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...(idempotencyKey ? { "PayPal-Request-Id": idempotencyKey } : {}),
+      },
+    }
+  );
   if (!res.ok) return false;
   const body = (await res.json()) as { status: string };
   return body.status === "COMPLETED";
@@ -221,58 +239,87 @@ export async function storePendingDeposit(
   providerRef: string,
   userId: number,
   amount: number,
-  currency: string
+  currency: string,
+  idempotencyKey?: string
 ) {
   await db
     .insert(deposits)
-    .values({ userId, provider, providerRef, amount, currency, status: "pending" })
+    .values({
+      userId,
+      provider,
+      providerRef,
+      amount,
+      currency,
+      status: "pending",
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+    })
     .onConflictDoNothing();
 }
 
 /**
- * Crédite le solde d'un dépôt, de façon idempotente (une seule fois par providerRef).
+ * Crédite le solde d'un dépôt de façon strictement atomique et idempotente sous verrou SQL :
+ * même si un webhook Stripe et une requête client arrivent à la même milliseconde,
+ * le crédit ne peut se produire qu'une seule et unique fois.
  */
 export async function creditDeposit(
   provider: PaymentProviderId,
   providerRef: string,
   fallbackUserId = 1
 ): Promise<boolean> {
-  const [dep] = await db
-    .select()
-    .from(deposits)
-    .where(eq(deposits.providerRef, providerRef))
-    .limit(1);
-
-  if (dep && dep.status === "credited") return true;
-
-  const uid = dep?.userId ?? fallbackUserId;
-  const amount = dep?.amount;
+  let creditedUserId: number | null = null;
 
   await db.transaction(async (tx) => {
-    if (dep) {
+    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+
+    const [lockedDep] = await tx
+      .select()
+      .from(deposits)
+      .where(eq(deposits.providerRef, providerRef))
+      .for("update");
+
+    if (lockedDep && lockedDep.status === "credited") {
+      return;
+    }
+
+    const uid = lockedDep?.userId ?? fallbackUserId;
+    const amount = lockedDep ? Math.round(lockedDep.amount * 100) / 100 : 0;
+
+    await tx
+      .select({ id: appUser.id })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .for("update");
+
+    if (lockedDep) {
       await tx
         .update(deposits)
         .set({ status: "credited", updatedAt: new Date() })
-        .where(eq(deposits.id, dep.id));
+        .where(eq(deposits.id, lockedDep.id));
     } else {
       await tx.insert(deposits).values({
         userId: uid,
         provider,
         providerRef,
-        amount: amount ?? 0,
+        amount,
         currency: "EUR",
         status: "credited",
       });
     }
-    if (amount) {
+
+    if (amount > 0) {
       await tx
         .update(appUser)
-        .set({ balance: sql`${appUser.balance} + ${amount}` })
+        .set({
+          balance: sql`ROUND((${appUser.balance} + ${amount})::numeric, 2)::float8`,
+        })
         .where(eq(appUser.id, uid));
+      creditedUserId = uid;
     }
   });
 
-  invalidateUserCaches([uid]);
+  if (creditedUserId != null) {
+    invalidateUserCaches([creditedUserId]);
+  }
   return true;
 }
 
