@@ -267,6 +267,7 @@ export default function PredictionsPage() {
         selection,
         selectionLabel,
         odds,
+        startsAt: q.resolvesAt,
       });
       if (res === "full") {
         toast({ kind: "error", title: "Combiné complet (8 sélections max)" });
@@ -669,6 +670,7 @@ function MultiChoiceQuestionCard({
             selection: opt.key,
             selectionLabel: opt.label,
             odds: opt.odds,
+            startsAt: q.resolvesAt,
           };
           return (
             <MultiOptionButton
@@ -779,6 +781,7 @@ function BinaryQuestionCard({
             selection: "yes",
             selectionLabel: "Oui",
             odds: q.oddsYes,
+            startsAt: q.resolvesAt,
           }}
         />
         <SideButton
@@ -799,6 +802,7 @@ function BinaryQuestionCard({
             selection: "no",
             selectionLabel: "Non",
             odds: q.oddsNo,
+            startsAt: q.resolvesAt,
           }}
         />
       </div>

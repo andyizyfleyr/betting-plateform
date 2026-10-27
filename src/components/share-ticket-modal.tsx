@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Copy, Download, Eye, EyeOff, Share2, X } from "lucide-react";
 import type { ClientBet } from "@/lib/api";
+import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { cn, eur, formatOdds, formatPlacedAt } from "@/lib/format";
 
 interface Props {
@@ -39,7 +40,10 @@ function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: num
 
 function drawTicketCanvas(canvas: HTMLCanvasElement, bet: ClientBet, hideAmounts: boolean) {
   const W = 1080;
-  const legs = bet.kind === "combo" && bet.legs ? bet.legs : [];
+  const legs =
+    bet.kind === "combo" && bet.legs
+      ? sortComboBetLegsChronologically(bet.legs)
+      : [];
   const visibleLegs = legs.slice(0, 6);
   const extraLegs = Math.max(0, legs.length - visibleLegs.length);
   const H = bet.kind === "combo" ? Math.max(1220, 880 + visibleLegs.length * 92) : 1140;

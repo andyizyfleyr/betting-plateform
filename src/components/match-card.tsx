@@ -398,6 +398,8 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
           selection: c.key,
           selectionLabel: c.label,
           odds: c.odds,
+          startsAt: match.startsAt,
+          isLive: match.status === "live",
         };
 
         return (

@@ -484,6 +484,8 @@ export function MarketSheet() {
                               selection: outcome.key,
                               selectionLabel: outcome.label,
                               odds: outcome.odds,
+                              startsAt: match.startsAt,
+                              isLive: match.status === "live",
                             });
                             if (res === "full") {
                               toast({
@@ -564,6 +566,8 @@ function AccordionItem({
     selection: o.key,
     selectionLabel: o.label,
     odds: o.odds,
+    startsAt: match.startsAt,
+    isLive: match.status === "live",
   });
 
   return (

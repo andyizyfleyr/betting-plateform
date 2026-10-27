@@ -224,6 +224,8 @@ function BetModalSheet({
       selection: target.selection,
       selectionLabel: target.label,
       odds: displayOdds,
+      startsAt: target.match.startsAt,
+      isLive: target.match.status === "live",
     });
     if (outcome === "full") {
       toast({ kind: "error", title: "Coupon complet (8 sélections max)" });

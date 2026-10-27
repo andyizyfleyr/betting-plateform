@@ -468,6 +468,8 @@ export interface SavedCouponLegRecord {
   selection: string;
   selectionLabel: string;
   odds: number;
+  startsAt?: string | null;
+  isLive?: boolean;
 }
 
 export const savedCoupons = pgTable("saved_coupons", {

@@ -14,7 +14,10 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { api, type ClientMatch, type ClientUser } from "@/lib/api";
-import { MAX_COMBO_LEGS } from "@/lib/combo-math";
+import {
+  MAX_COMBO_LEGS,
+  sortSlipSelectionsChronologically,
+} from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur } from "@/lib/format";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
@@ -155,7 +158,9 @@ export function Providers({ children }: { children: ReactNode }) {
         if (raw) {
           const parsed = JSON.parse(raw) as ComboSelection[];
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+            setComboLegs(
+              sortSlipSelectionsChronologically(parsed.slice(0, MAX_COMBO_LEGS))
+            );
           }
         }
       } catch {
@@ -172,10 +177,11 @@ export function Providers({ children }: { children: ReactNode }) {
   }, []);
 
   const persistCombo = useCallback((next: ComboSelection[]) => {
-    setComboLegs(next);
-    if (next.length === 0) setComboQuickMode(false);
+    const ordered = sortSlipSelectionsChronologically(next);
+    setComboLegs(ordered);
+    if (ordered.length === 0) setComboQuickMode(false);
     try {
-      sessionStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next));
+      sessionStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(ordered));
     } catch {
       /* silencieux */
     }
@@ -449,6 +455,8 @@ export function Providers({ children }: { children: ReactNode }) {
             selection: t.selection,
             selectionLabel: t.label,
             odds: t.odds,
+            startsAt: t.match.startsAt,
+            isLive: t.match.status === "live",
           };
           const res = toggleComboLeg(comboSel);
           if (res === "full") {

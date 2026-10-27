@@ -93,3 +93,80 @@ export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
     capped: uncappedWin > MAX_COMBO_PAYOUT || rawTotalOdds > MAX_COMBO_ODDS,
   };
 }
+
+function parseStartsAtMs(iso?: string | null): number {
+  if (!iso) return Number.MAX_SAFE_INTEGER;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Classe les sélections d'un pari combiné placé du plus présent au plus futur :
+ *  0) Matchs actuellement EN DIRECT (du coup d'envoi le plus ancien au plus récent)
+ *  1) Matchs / événements À JOUER (date et heure de coup d'envoi croissantes : du plus proche au plus futur)
+ *  2) Sélections déjà terminées / réglées (ordre chronologique croissant)
+ */
+export function sortComboBetLegsChronologically<
+  T extends {
+    status: string;
+    matchStatus?: string | null;
+    matchStartsAt?: string | null;
+  },
+>(legs: readonly T[]): T[] {
+  if (legs.length <= 1) return [...legs];
+  return legs
+    .map((leg, idx) => {
+      const isPendingLeg = leg.status === "pending";
+      const phaseRank =
+        isPendingLeg && leg.matchStatus === "live"
+          ? 0
+          : isPendingLeg && leg.matchStatus !== "finished"
+            ? 1
+            : 2;
+      return {
+        leg,
+        idx,
+        phaseRank,
+        startsAtMs: parseStartsAtMs(leg.matchStartsAt),
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.phaseRank - b.phaseRank ||
+        a.startsAtMs - b.startsAtMs ||
+        a.idx - b.idx
+    )
+    .map((x) => x.leg);
+}
+
+/**
+ * Classe les sélections d'un coupon combiné en cours de préparation
+ * du plus présent (en direct, puis date/heure la plus proche) au plus futur.
+ */
+export function sortSlipSelectionsChronologically<
+  T extends {
+    isLive?: boolean;
+    closed?: boolean;
+    startsAt?: string | null;
+  },
+>(legs: readonly T[]): T[] {
+  if (legs.length <= 1) return [...legs];
+  return legs
+    .map((leg, idx) => {
+      const phaseRank = leg.closed ? 2 : leg.isLive ? 0 : 1;
+      return {
+        leg,
+        idx,
+        phaseRank,
+        startsAtMs: parseStartsAtMs(leg.startsAt),
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.phaseRank - b.phaseRank ||
+        a.startsAtMs - b.startsAtMs ||
+        a.idx - b.idx
+    )
+    .map((x) => x.leg);
+}
+

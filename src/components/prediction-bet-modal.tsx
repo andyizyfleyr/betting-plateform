@@ -162,6 +162,7 @@ function PredictionBetSheet({
       selection,
       selectionLabel: initialMeta.label,
       odds,
+      startsAt: question.resolvesAt,
     });
     if (res === "full") {
       toast({ kind: "error", title: "Coupon complet (8 sélections max)" });

@@ -10,7 +10,10 @@ import {
   type PredictionQuestionRow,
   type SavedCouponLegRecord,
 } from "@/db/schema";
-import { MAX_COMBO_LEGS } from "@/lib/combo-math";
+import {
+  MAX_COMBO_LEGS,
+  sortSlipSelectionsChronologically,
+} from "@/lib/combo-math";
 import { classifyServerError } from "@/lib/db-error";
 import {
   liveMarketOddsFor,
@@ -258,6 +261,8 @@ export async function GET(req: NextRequest) {
           selection: leg.selection,
           selectionLabel: resolvedLabel || leg.selectionLabel,
           odds: resolvedOdds,
+          startsAt: m.startsAt ? m.startsAt.toISOString() : null,
+          isLive: m.status === "live",
         });
       } else if (leg.kind === "prediction" && leg.questionId) {
         const q = predMap.get(Number(leg.questionId));
@@ -289,6 +294,8 @@ export async function GET(req: NextRequest) {
           selection: leg.selection,
           selectionLabel: freshLabel,
           odds: freshOdds,
+          startsAt: q.resolvesAt ? q.resolvesAt.toISOString() : null,
+          isLive: false,
         });
       }
     }
@@ -302,7 +309,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       code: row.code,
-      legs: hydrated,
+      legs: sortSlipSelectionsChronologically(hydrated),
       skippedClosedCount,
     });
   } catch (err) {
