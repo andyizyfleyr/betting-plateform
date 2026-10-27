@@ -1,5 +1,11 @@
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
+import {
+  calibrateServerClockOffset,
+  registerLiveClockMatch,
+  registerLiveClockMatches,
+  type LiveClockSource,
+} from "./live-clock";
 
 export const ODDS_CHANGED_CODE = "ODDS_CHANGED" as const;
 export const CASHOUT_CHANGED_CODE = "CASHOUT_CHANGED" as const;
@@ -259,6 +265,7 @@ export async function requestJson<T>(
         headers["If-None-Match"] = cachedEtag.etag;
       }
 
+      const sentAtMs = Date.now();
       const res = await Promise.race([
         fetch(url, {
           method,
@@ -267,6 +274,7 @@ export async function requestJson<T>(
         }),
         timeoutPromise,
       ]);
+      const rttMs = Math.max(0, Date.now() - sentAtMs);
 
       if (res.status === 304 && cachedEtag) {
         cachedEtag.at = Date.now();
@@ -325,6 +333,23 @@ export async function requestJson<T>(
             suspended: typeof data.suspended === "boolean" ? data.suspended : undefined,
           }
         );
+      }
+
+      const serverTimeStr =
+        typeof data.serverTime === "string" ? data.serverTime : null;
+      if (serverTimeStr || res.headers.get("date")) {
+        calibrateServerClockOffset({
+          serverTimeIso: serverTimeStr,
+          ageHeader: res.headers.get("age"),
+          dateHeader: res.headers.get("date"),
+          rttMs,
+        });
+      }
+      if (Array.isArray(data.matches)) {
+        registerLiveClockMatches(data.matches as LiveClockSource[]);
+      }
+      if (data.match && typeof data.match === "object") {
+        registerLiveClockMatch(data.match as LiveClockSource);
       }
 
       if (isGet) {

@@ -613,6 +613,7 @@ export function MarketSheet() {
                           <Text style={styles.finSmall}>Terminé</Text>
                         ) : (
                           <LiveStatusBadge
+                            match={effectiveSource}
                             minute={effectiveSource.minute}
                             suspended={suspended}
                           />

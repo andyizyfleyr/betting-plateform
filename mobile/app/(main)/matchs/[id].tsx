@@ -192,7 +192,11 @@ export default function MatchDetailScreen() {
         {match ? (
           <View style={styles.headerRight}>
             {isLive ? (
-              <LiveStatusBadge minute={match.minute} suspended={suspended} />
+              <LiveStatusBadge
+                match={match}
+                minute={match.minute}
+                suspended={suspended}
+              />
             ) : isFinished ? (
               <View style={styles.finBadge}>
                 <Text style={styles.finBadgeText}>TERMINÉ</Text>

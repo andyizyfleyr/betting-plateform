@@ -29,6 +29,7 @@ import {
   Users,
   X,
 } from "lucide-react-native";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
@@ -555,7 +556,17 @@ export default function AdminScreen() {
               <View key={m.id} style={styles.card}>
                 <View style={styles.rowBetween}>
                   <Text numberOfLines={1} style={styles.leagueMeta}>
-                    {m.league} · {m.status === "live" ? (m.minute ?? "LIVE") : formatKickoff(m.startsAt)}
+                    {m.league} ·{" "}
+                    {m.status === "live" ? (
+                      <LiveMatchClock
+                        match={m}
+                        fallback={m.minute ?? "LIVE"}
+                        prefix="Direct "
+                        style={styles.leagueMeta}
+                      />
+                    ) : (
+                      formatKickoff(m.startsAt)
+                    )}
                   </Text>
                   <View
                     style={[

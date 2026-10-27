@@ -19,6 +19,7 @@ import {
   resolveEspnSlugForLeague,
   TOP_DISCOVERY_LEAGUE_SLUGS,
 } from "@/lib/real-leagues";
+import { normalizeEspnLiveClockSeconds } from "@/lib/live-clock";
 import { teamLogo } from "@/lib/team-logos";
 
 const ESPN_SOCCER_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer";
@@ -494,7 +495,9 @@ function buildRealStatsFromMaps(
   awayMap: Map<string, string>,
   htHomeScore: number | null,
   htAwayScore: number | null,
-  nowIso: string
+  nowIso: string,
+  clockSeconds: number | null = null,
+  clockPeriod: number | null = null
 ): RealMatchStats | null {
   const numFrom = (map: Map<string, string>, keys: string[]): number | null => {
     for (const k of keys) {
@@ -538,7 +541,8 @@ function buildRealStatsFromMaps(
     cornersHome != null ||
     foulsHome != null ||
     savesHome != null ||
-    htHomeScore != null;
+    htHomeScore != null ||
+    clockSeconds != null;
 
   if (!hasAny) return null;
 
@@ -561,6 +565,8 @@ function buildRealStatsFromMaps(
     yellowCardsAway,
     htHomeScore,
     htAwayScore,
+    clockSeconds,
+    clockPeriod,
     updatedAt: nowIso,
   };
 }
@@ -832,6 +838,7 @@ export function parseEspnScoreboardEvent(
   const completed = statusType?.completed === true;
   const period = asNum(statusObj?.period) ?? 1;
   const displayClock = asStr(statusObj?.displayClock);
+  const rawClockSeconds = asNum(statusObj?.clock);
 
   const isPostponedOrCancelled =
     statusName.includes("POSTPONED") ||
@@ -911,11 +918,6 @@ export function parseEspnScoreboardEvent(
   const statRedH = asNum(homeStatMap.get("redcards")) ?? 0;
   const statRedA = asNum(awayStatMap.get("redcards")) ?? 0;
 
-  const realStats =
-    status === "upcoming"
-      ? null
-      : buildRealStatsFromMaps(homeStatMap, awayStatMap, htHomeScore, htAwayScore, nowIso);
-
   const minute =
     status === "finished"
       ? "Terminé"
@@ -926,6 +928,24 @@ export function parseEspnScoreboardEvent(
             ? "MT"
             : normalizeDisplayMinute(displayClock)
           : null;
+
+  const liveClockSeconds =
+    status === "live" && minute && minute !== "MT"
+      ? normalizeEspnLiveClockSeconds(rawClockSeconds, period, minute)
+      : null;
+
+  const realStats =
+    status === "upcoming"
+      ? null
+      : buildRealStatsFromMaps(
+          homeStatMap,
+          awayStatMap,
+          htHomeScore,
+          htAwayScore,
+          nowIso,
+          liveClockSeconds,
+          status === "live" ? period : null
+        );
 
   const venueObj = asRec(comp.venue);
   const venue = asStr(venueObj?.fullName) || null;
@@ -1048,7 +1068,9 @@ export function parseEspnSummaryPayload(
       aMap,
       base.htHomeScore,
       base.htAwayScore,
-      nowIso
+      nowIso,
+      base.realStats?.clockSeconds ?? null,
+      base.realStats?.clockPeriod ?? null
     );
     if (richStats) {
       base.realStats = richStats;

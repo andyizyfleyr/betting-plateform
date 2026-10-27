@@ -23,6 +23,7 @@ import {
   notifyNewBetPlaced,
   setCachedUserBetsResponse,
 } from "@/lib/active-state-cache";
+import { buildServerClockAnchor } from "@/lib/live-clock";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut, resolveComboLegStatus } from "@/lib/combo";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
@@ -272,6 +273,7 @@ export async function GET(req: NextRequest) {
           : String(match.startsAt)
         : null,
       matchSource: match ? (match.source === "manual" ? "manual" : "virtual") : null,
+      matchClockAnchor: match ? buildServerClockAnchor(match) : null,
     };
   });
 
@@ -436,6 +438,7 @@ export async function GET(req: NextRequest) {
         matchMinute: m?.minute ?? null,
         matchStartsAt: startsAtIso,
         matchSource: m ? (m.source === "manual" ? "manual" : "virtual") : null,
+        matchClockAnchor: m ? buildServerClockAnchor(m) : null,
       };
     });
     const legs = sortComboBetLegsChronologically(rawLegs);
@@ -480,6 +483,16 @@ export async function GET(req: NextRequest) {
       matchAwayScore: null,
       matchMinute: liveMatch?.minute ?? null,
       matchStartsAt: firstActiveStartsAt,
+      liveMatchId: liveMatch?.id ?? null,
+      liveMatchStartsAt: liveMatch?.startsAt
+        ? liveMatch.startsAt instanceof Date
+          ? liveMatch.startsAt.toISOString()
+          : String(liveMatch.startsAt)
+        : null,
+      liveMatchSource: liveMatch
+        ? (liveMatch.source === "manual" ? "manual" : "virtual")
+        : null,
+      matchClockAnchor: liveMatch ? buildServerClockAnchor(liveMatch) : null,
     };
   });
 
@@ -494,7 +507,11 @@ export async function GET(req: NextRequest) {
         ? combined.filter((b) => b.status !== "pending")
         : combined;
 
-  const payload = { bets: filtered, balance: user?.balance ?? null };
+  const payload = {
+    bets: filtered,
+    balance: user?.balance ?? null,
+    serverTime: new Date().toISOString(),
+  };
   const entry = setCachedUserBetsResponse(uid, filter, payload);
   return jsonWithEtag(req, null, entry);
   } catch (err) {

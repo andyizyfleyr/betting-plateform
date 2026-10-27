@@ -48,6 +48,8 @@ import {
 import { getCachedBet } from "@/lib/client-entity-cache";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
+import { LiveMatchClock } from "@/components/live-match-clock";
+import type { LiveClockSource } from "@/lib/live-clock";
 
 const POLL_INTERVAL = 5_000;
 const MAX_RETRIES = 3;
@@ -57,10 +59,12 @@ function LegStatusBadge({
   status,
   live,
   minute,
+  clockSource,
 }: {
   status: ClientComboLeg["status"];
   live: boolean;
   minute?: string | null;
+  clockSource?: LiveClockSource | null;
 }) {
   if (status === "won") {
     return (
@@ -88,9 +92,9 @@ function LegStatusBadge({
   }
   if (live) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
         <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-        {minute ?? "LIVE"}
+        <LiveMatchClock match={clockSource} fallback={minute ?? "LIVE"} />
       </span>
     );
   }
@@ -386,6 +390,26 @@ export default function ComboDetailPage() {
                 status={bet.status}
                 live={Boolean(anyLive)}
                 minute={bet.matchMinute}
+                clockSource={
+                  anyLive
+                    ? (() => {
+                        const liveLeg = (bet.legs ?? []).find(
+                          (l) => l.status === "pending" && l.matchStatus === "live"
+                        );
+                        return {
+                          matchId: bet.liveMatchId ?? liveLeg?.matchId ?? null,
+                          status: "live",
+                          minute: bet.matchMinute ?? liveLeg?.matchMinute ?? null,
+                          startsAt:
+                            bet.liveMatchStartsAt ?? liveLeg?.matchStartsAt ?? null,
+                          source:
+                            bet.liveMatchSource ?? liveLeg?.matchSource ?? null,
+                          clockAnchor:
+                            bet.matchClockAnchor ?? liveLeg?.matchClockAnchor ?? null,
+                        };
+                      })()
+                    : null
+                }
               />
             </div>
           )}
@@ -704,6 +728,18 @@ export default function ComboDetailPage() {
                             status={leg.status}
                             live={legLive}
                             minute={leg.matchMinute}
+                            clockSource={
+                              legLive
+                                ? {
+                                    matchId: leg.matchId,
+                                    status: "live",
+                                    minute: leg.matchMinute,
+                                    startsAt: leg.matchStartsAt,
+                                    source: leg.matchSource ?? null,
+                                    clockAnchor: leg.matchClockAnchor ?? null,
+                                  }
+                                : null
+                            }
                           />
                         </div>
                       </div>

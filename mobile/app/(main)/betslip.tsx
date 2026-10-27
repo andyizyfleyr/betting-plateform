@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react-native";
 import { CouponCodeBox } from "@/components/coupon-code-box";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { OddsLockControls } from "@/components/odds-lock-controls";
 import {
   OddsTrendCorner,
@@ -752,9 +753,18 @@ export default function BetslipScreen() {
                         {leg.isLive ? (
                           <View style={styles.livePill}>
                             <View style={styles.liveDot} />
-                            <Text style={styles.livePillText}>
-                              {leg.matchObj?.minute ?? "LIVE"}
-                            </Text>
+                            <LiveMatchClock
+                              match={
+                                leg.matchObj ?? {
+                                  matchId: leg.matchId,
+                                  status: "live",
+                                  startsAt: leg.startsAt,
+                                  source: leg.matchSource,
+                                }
+                              }
+                              fallback={leg.matchObj?.minute ?? "LIVE"}
+                              style={styles.livePillText}
+                            />
                           </View>
                         ) : null}
                         {!leg.isLive && !leg.closed && leg.startsAt ? (

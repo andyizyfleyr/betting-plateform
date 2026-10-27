@@ -30,6 +30,7 @@ import {
   sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import {
   generateBetIdempotencyKey,
   ODDS_CHANGED_CODE,
@@ -658,7 +659,17 @@ export default function BetslipPage() {
                       {leg.isLive && (
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
                           <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                          {leg.matchObj?.minute ?? "LIVE"}
+                          <LiveMatchClock
+                            match={
+                              leg.matchObj ?? {
+                                matchId: leg.matchId,
+                                status: "live",
+                                startsAt: leg.startsAt,
+                                source: leg.matchSource,
+                              }
+                            }
+                            fallback={leg.matchObj?.minute ?? "LIVE"}
+                          />
                         </span>
                       )}
                       {!leg.isLive && !leg.closed && leg.startsAt && (

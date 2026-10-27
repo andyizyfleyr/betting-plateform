@@ -20,6 +20,7 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { SportIcon } from "@/components/sport-icon";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
 import { cn, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
@@ -88,20 +89,27 @@ function MatchHistoryCard({
           <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
           <span className="truncate">{match.league}</span>
           <span className="text-dim">·</span>
-          <span className="shrink-0 text-dim">
+          <span className="shrink-0 tabular-nums text-dim">
             {isFinished
               ? formatPlacedAt(match.finishedAt ?? match.startsAt)
-              : isLive
-                ? match.minute ?? "LIVE"
+              : isLive ? (
+                  <LiveMatchClock
+                    match={match}
+                    fallback={match.minute ?? "LIVE"}
+                  />
+                )
                 : formatKickoff(match.startsAt)}
           </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
           {isLive ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
               <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-              {match.minute ?? "LIVE"}
+              <LiveMatchClock
+                match={match}
+                fallback={match.minute ?? "LIVE"}
+              />
             </span>
           ) : isFinished && match.winnerCode ? (
             <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-bold text-ink">

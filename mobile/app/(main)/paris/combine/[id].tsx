@@ -27,6 +27,7 @@ import {
   StatusPill,
   TicketTeamRow,
 } from "@/components/bet-ticket";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
 import { SportIcon } from "@/components/sport-icon";
@@ -272,7 +273,41 @@ export default function ComboDetailScreen() {
 
           {bet ? (
             <View style={styles.headerRight}>
-              <StatusPill status={bet.status} />
+              <StatusPill
+                status={bet.status}
+                live={
+                  bet.status === "pending" &&
+                  Boolean(
+                    bet.matchStatus === "live" ||
+                      bet.legs?.some(
+                        (l) => l.status === "pending" && l.matchStatus === "live"
+                      )
+                  )
+                }
+                minute={bet.matchMinute}
+                clockSource={(() => {
+                  const liveLeg = bet.legs?.find(
+                    (l) => l.status === "pending" && l.matchStatus === "live"
+                  );
+                  if (
+                    bet.status !== "pending" ||
+                    (bet.matchStatus !== "live" && !liveLeg)
+                  ) {
+                    return null;
+                  }
+                  return {
+                    matchId: bet.liveMatchId ?? liveLeg?.matchId ?? null,
+                    status: "live",
+                    minute: bet.matchMinute ?? liveLeg?.matchMinute ?? null,
+                    startsAt:
+                      bet.liveMatchStartsAt ?? liveLeg?.matchStartsAt ?? null,
+                    source:
+                      bet.liveMatchSource ?? liveLeg?.matchSource ?? null,
+                    clockAnchor:
+                      bet.matchClockAnchor ?? liveLeg?.matchClockAnchor ?? null,
+                  };
+                })()}
+              />
               {bet.status === "pending" ? (
                 <Pressable
                   onPress={() => setSharingBet(bet)}
@@ -527,7 +562,18 @@ function ComboLegCard({
           {leg.matchStatus === "live" && leg.status === "pending" ? (
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveBadgeText}>{leg.minute ?? "LIVE"}</Text>
+              <LiveMatchClock
+                match={{
+                  matchId: leg.matchId,
+                  status: "live",
+                  minute: leg.minute ?? leg.matchMinute,
+                  startsAt: leg.startsAt ?? leg.matchStartsAt,
+                  source: leg.matchSource ?? null,
+                  clockAnchor: leg.matchClockAnchor ?? null,
+                }}
+                fallback={leg.minute ?? "LIVE"}
+                style={styles.liveBadgeText}
+              />
             </View>
           ) : null}
 

@@ -37,6 +37,7 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { TeamAvatar } from "@/components/team-avatar";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
 import { OFFICIAL_SOCCER_LEAGUES } from "@/lib/real-leagues";
@@ -1997,11 +1998,14 @@ function AdminMatchCard({
               )
             )}
           </div>
-          <p className="truncate text-[11.5px] text-mist">
+          <p className="truncate text-[11.5px] tabular-nums text-mist">
             {m.league} ·{" "}
-            {m.status === "live"
-              ? `Direct ${m.minute ?? ""}`
-              : m.status === "finished"
+            {m.status === "live" ? (
+              <>
+                Direct{" "}
+                <LiveMatchClock match={m} fallback={m.minute ?? "LIVE"} />
+              </>
+            ) : m.status === "finished"
                 ? m.feedStatusNote === "VOIDED"
                   ? "Annulé / Remboursé"
                   : "Terminé"
@@ -4784,9 +4788,13 @@ function ScoresPrevusTab({
                 <div className="flex items-center justify-between gap-2 text-[11px]">
                   <div className="flex min-w-0 items-center gap-1.5">
                     {m.status === "live" ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
                         <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                        Direct {m.minute ?? ""}
+                        Direct{" "}
+                        <LiveMatchClock
+                          match={m}
+                          fallback={m.minute ?? "LIVE"}
+                        />
                       </span>
                     ) : (
                       <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-bold text-ink">

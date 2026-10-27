@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { AnimatedNumber } from "@/components/animated-number";
 import { CouponCodeBox } from "@/components/coupon-code-box";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { OddsLockControls } from "@/components/odds-lock-controls";
 import {
   OddsTrendCorner,
@@ -751,11 +752,12 @@ export function DesktopBetslipSidebar() {
                               (leg.kind === "prediction" ? "Prédiction" : "Match")}
                           </span>
                           {leg.liveMatch?.status === "live" && (
-                            <span className="inline-flex items-center gap-1 font-display font-bold text-betclic-red">
+                            <span className="inline-flex items-center gap-1 font-display font-bold tabular-nums text-betclic-red">
                               <span className="live-dot !h-1.5 !w-1.5" />
-                              {leg.liveMatch.minute != null
-                                ? `${leg.liveMatch.minute}'`
-                                : "LIVE"}{" "}
+                              <LiveMatchClock
+                                match={leg.liveMatch}
+                                fallback={leg.liveMatch.minute ?? "LIVE"}
+                              />{" "}
                               · {leg.liveMatch.homeScore}-{leg.liveMatch.awayScore}
                             </span>
                           )}

@@ -321,7 +321,11 @@ export function MarketSheet() {
                           {isFinished ? (
                             <span className="text-[10px] font-bold text-dim">Terminé</span>
                           ) : (
-                            <LiveStatusBadge minute={match.minute} suspended={suspended} />
+                            <LiveStatusBadge
+                              match={match}
+                              minute={match.minute}
+                              suspended={suspended}
+                            />
                           )}
                         </div>
                       </>

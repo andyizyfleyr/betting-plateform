@@ -15,7 +15,9 @@ import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { KickoffCountdown } from "./kickoff-countdown";
+import { useLiveMatchClock } from "./live-match-clock";
 import { LiveMatchTracker } from "./live-match-tracker";
+import type { LiveClockSource } from "@/lib/live-clock";
 import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { formatGoalSummaryStrings } from "@/lib/match-events";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
@@ -23,17 +25,21 @@ import { cn, formatKickoff, formatOdds } from "@/lib/format";
 export function LiveStatusBadge({
   minute,
   suspended,
+  match,
 }: {
   minute: string | null;
   suspended?: boolean;
+  match?: LiveClockSource | null;
 }) {
-  const isHalfTime = minute === "MT" || minute === "HT";
+  const clockLabel = useLiveMatchClock(match, minute, "badge");
+  const isHalfTime =
+    clockLabel === "Mi-temps" || clockLabel === "MT" || clockLabel === "HT";
 
   if (suspended) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10.5px] font-bold text-amber-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-amber-700">
         <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
-        Suspendu · {minute ?? "LIVE"}
+        Suspendu · {clockLabel || "LIVE"}
       </span>
     );
   }
@@ -49,7 +55,7 @@ export function LiveStatusBadge({
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red">
       <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-      {minute ?? "LIVE"}
+      {clockLabel || "LIVE"}
     </span>
   );
 }
@@ -147,7 +153,11 @@ function MatchCardInner({
                   2D
                 </button>
               )}
-              <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
+              <LiveStatusBadge
+                match={match}
+                minute={match.minute}
+                suspended={match.suspended}
+              />
             </>
           ) : isFinished ? (
             <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-semibold text-dim">

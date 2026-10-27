@@ -24,6 +24,7 @@ import {
   InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
@@ -86,22 +87,30 @@ function MatchHistoryCard({
             {match.league}
           </Text>
           <Text style={styles.dotSep}>·</Text>
-          <Text style={styles.timeText}>
-            {isFinished
-              ? formatPlacedAt(match.finishedAt ?? match.startsAt)
-              : isLive
-                ? (match.minute ?? "LIVE")
-                : formatKickoff(match.startsAt)}
-          </Text>
+          {isFinished ? (
+            <Text style={styles.timeText}>
+              {formatPlacedAt(match.finishedAt ?? match.startsAt)}
+            </Text>
+          ) : isLive ? (
+            <LiveMatchClock
+              match={match}
+              fallback={match.minute ?? "LIVE"}
+              style={styles.timeText}
+            />
+          ) : (
+            <Text style={styles.timeText}>{formatKickoff(match.startsAt)}</Text>
+          )}
         </View>
 
         <View style={styles.cardTopRight}>
           {isLive ? (
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveBadgeText}>
-                {match.minute ?? "LIVE"}
-              </Text>
+              <LiveMatchClock
+                match={match}
+                fallback={match.minute ?? "LIVE"}
+                style={styles.liveBadgeText}
+              />
             </View>
           ) : isFinished && match.winnerCode ? (
             <View style={styles.winnerBadge}>

@@ -23,8 +23,10 @@ import {
 } from "@/lib/api";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
+import type { LiveClockSource } from "@/lib/live-clock";
 import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
+import { LiveMatchClock } from "./live-match-clock";
 import { SlideToCashOut } from "./slide-to-cashout";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
@@ -104,10 +106,12 @@ export function StatusPill({
   status,
   live = false,
   minute,
+  clockSource,
 }: {
   status: BetStatus;
   live?: boolean;
   minute?: string | null;
+  clockSource?: LiveClockSource | null;
 }) {
   if (status === "won") {
     return (
@@ -146,9 +150,12 @@ export function StatusPill({
     return (
       <View style={[styles.statusPill, styles.statusLost]}>
         <View style={styles.liveDot} />
-        <Text style={[styles.statusText, { color: COLORS.betclicRed }]}>
-          {minute ?? "LIVE"}
-        </Text>
+        <LiveMatchClock
+          match={clockSource}
+          fallback={minute ?? "LIVE"}
+          prefix="Direct "
+          style={[styles.statusText, { color: COLORS.betclicRed }]}
+        />
       </View>
     );
   }
@@ -487,6 +494,26 @@ function ComboBetTicket({
               status={bet.status}
               live={Boolean(anyLive)}
               minute={bet.matchMinute}
+              clockSource={
+                anyLive
+                  ? (() => {
+                      const liveLeg = legs.find(
+                        (l) => l.status === "pending" && l.matchStatus === "live"
+                      );
+                      return {
+                        matchId: bet.liveMatchId ?? liveLeg?.matchId ?? null,
+                        status: "live",
+                        minute: bet.matchMinute ?? liveLeg?.matchMinute ?? null,
+                        startsAt:
+                          bet.liveMatchStartsAt ?? liveLeg?.matchStartsAt ?? null,
+                        source:
+                          bet.liveMatchSource ?? liveLeg?.matchSource ?? null,
+                        clockAnchor:
+                          bet.matchClockAnchor ?? liveLeg?.matchClockAnchor ?? null,
+                      };
+                    })()
+                  : null
+              }
             />
           </View>
         </View>
@@ -788,6 +815,18 @@ function SingleBetTicket({
               status={bet.status}
               live={live}
               minute={bet.matchMinute}
+              clockSource={
+                live
+                  ? {
+                      matchId: bet.matchId,
+                      status: "live",
+                      minute: bet.matchMinute,
+                      startsAt: bet.matchStartsAt,
+                      source: bet.matchSource ?? null,
+                      clockAnchor: bet.matchClockAnchor ?? null,
+                    }
+                  : null
+              }
             />
           </View>
         </View>

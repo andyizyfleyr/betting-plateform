@@ -107,7 +107,11 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
                     </span>
                   </div>
                   <div className="mt-2">
-                    <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
+                    <LiveStatusBadge
+                      match={match}
+                      minute={match.minute}
+                      suspended={match.suspended}
+                    />
                   </div>
                 </>
               ) : isReal && match.kickoffReached ? (

@@ -3,11 +3,13 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronRight, Lock } from "lucide-react-native";
 import { useApp, type ComboSelection } from "@/context/app-context";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
+import type { LiveClockSource } from "@/lib/live-clock";
 import { formatKickoff, formatOdds } from "@/lib/format";
 import { formatGoalSummaryStrings } from "@/lib/match-events";
 import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 import { KickoffCountdown } from "./kickoff-countdown";
+import { useLiveMatchClock } from "./live-match-clock";
 import {
   OddsTrendCorner,
   oddsTrendTextColor,
@@ -19,18 +21,22 @@ import { TeamAvatar } from "./team-avatar";
 export function LiveStatusBadge({
   minute,
   suspended,
+  match,
 }: {
   minute: string | null | undefined;
   suspended?: boolean;
+  match?: LiveClockSource | null;
 }) {
-  const isHalfTime = minute === "MT" || minute === "HT";
+  const clockLabel = useLiveMatchClock(match, minute, "badge");
+  const isHalfTime =
+    clockLabel === "Mi-temps" || clockLabel === "MT" || clockLabel === "HT";
 
   if (suspended) {
     return (
       <View style={styles.suspendedPill}>
         <Lock size={10} color="#b45309" strokeWidth={2.5} />
-        <Text style={styles.suspendedText}>
-          Suspendu · {minute ?? "LIVE"}
+        <Text style={[styles.suspendedText, { fontVariant: ["tabular-nums"] }]}>
+          Suspendu · {clockLabel || "LIVE"}
         </Text>
       </View>
     );
@@ -47,7 +53,9 @@ export function LiveStatusBadge({
   return (
     <View style={styles.livePill}>
       <View style={styles.liveDot} />
-      <Text style={styles.liveText}>{minute ?? "LIVE"}</Text>
+      <Text style={[styles.liveText, { fontVariant: ["tabular-nums"] }]}>
+        {clockLabel || "LIVE"}
+      </Text>
     </View>
   );
 }
@@ -389,6 +397,7 @@ function MatchCardInner({
         <View style={styles.headerRight}>
           {isLive ? (
             <LiveStatusBadge
+              match={match}
               minute={match.minute}
               suspended={match.suspended}
             />
