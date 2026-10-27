@@ -33,6 +33,8 @@ export interface RealMatchStats {
   yellowCardsAway: number | null;
   htHomeScore: number | null;
   htAwayScore: number | null;
+  clockSeconds?: number | null;
+  clockPeriod?: number | null;
   updatedAt: string;
 }
 

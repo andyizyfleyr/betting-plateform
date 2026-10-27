@@ -10,6 +10,7 @@ import {
 } from "@/lib/active-state-cache";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
+import { buildServerClockAnchor } from "@/lib/live-clock";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import {
@@ -139,6 +140,7 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
     events: m.events ?? [],
     telemetry,
     realStats: isReal ? (m.realStats ?? null) : null,
+    clockAnchor: m.status === "live" ? buildServerClockAnchor(m) : null,
     winnerCode,
     htWinnerCode,
     totalGoals: hasScore ? h + a : null,

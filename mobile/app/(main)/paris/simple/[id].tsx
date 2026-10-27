@@ -22,6 +22,7 @@ import {
   StatusPill,
   TicketTeamRow,
 } from "@/components/bet-ticket";
+import { LiveMatchClock } from "@/components/live-match-clock";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
 import { SportIcon } from "@/components/sport-icon";
@@ -280,7 +281,23 @@ export default function SingleBetDetailScreen() {
 
           {bet ? (
             <View style={styles.headerRight}>
-              <StatusPill status={bet.status} />
+              <StatusPill
+                status={bet.status}
+                live={bet.status === "pending" && bet.matchStatus === "live"}
+                minute={bet.minute ?? bet.matchMinute}
+                clockSource={
+                  bet.status === "pending" && bet.matchStatus === "live"
+                    ? {
+                        matchId: bet.matchId,
+                        status: "live",
+                        minute: bet.minute ?? bet.matchMinute,
+                        startsAt: bet.startsAt ?? bet.matchStartsAt,
+                        source: bet.matchSource ?? null,
+                        clockAnchor: bet.matchClockAnchor ?? null,
+                      }
+                    : null
+                }
+              />
               {canShare ? (
                 <Pressable
                   onPress={() => setSharingBet(bet)}
@@ -432,9 +449,18 @@ export default function SingleBetDetailScreen() {
                     {bet.matchStatus === "live" ? (
                       <View style={styles.liveBadge}>
                         <View style={styles.liveDot} />
-                        <Text style={styles.liveBadgeText}>
-                          {bet.minute ?? "LIVE"}
-                        </Text>
+                        <LiveMatchClock
+                          match={{
+                            matchId: bet.matchId,
+                            status: "live",
+                            minute: bet.minute ?? bet.matchMinute,
+                            startsAt: bet.startsAt ?? bet.matchStartsAt,
+                            source: bet.matchSource ?? null,
+                            clockAnchor: bet.matchClockAnchor ?? null,
+                          }}
+                          fallback={bet.minute ?? "LIVE"}
+                          style={styles.liveBadgeText}
+                        />
                       </View>
                     ) : null}
                     {bet.matchStatus === "upcoming" && bet.startsAt ? (

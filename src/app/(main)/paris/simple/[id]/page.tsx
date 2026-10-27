@@ -350,6 +350,18 @@ export default function SingleBetDetailPage() {
               status={bet.status}
               live={live}
               minute={linkedMatch?.minute ?? bet.matchMinute}
+              clockSource={
+                live
+                  ? (linkedMatch ?? {
+                      matchId: bet.matchId,
+                      status: "live",
+                      minute: bet.matchMinute,
+                      startsAt: bet.matchStartsAt,
+                      source: bet.matchSource ?? null,
+                      clockAnchor: bet.matchClockAnchor ?? null,
+                    })
+                  : null
+              }
             />
           </div>
         )}
@@ -643,8 +655,21 @@ export default function SingleBetDetailPage() {
                       )}
                       {matchStatus === "live" && linkedMatch ? (
                         <LiveStatusBadge
+                          match={linkedMatch}
                           minute={linkedMatch.minute}
                           suspended={linkedMatch.suspended}
+                        />
+                      ) : matchStatus === "live" ? (
+                        <LiveStatusBadge
+                          match={{
+                            matchId: bet.matchId,
+                            status: "live",
+                            minute: bet.matchMinute,
+                            startsAt: bet.matchStartsAt,
+                            source: bet.matchSource ?? null,
+                            clockAnchor: bet.matchClockAnchor ?? null,
+                          }}
+                          minute={bet.matchMinute}
                         />
                       ) : matchStatus === "finished" ? (
                         <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wider text-mist">

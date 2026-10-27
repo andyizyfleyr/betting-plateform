@@ -27,8 +27,10 @@ import {
   type CashoutChangedDetails,
 } from "@/lib/odds-lock";
 import { SlideToCashOut } from "./slide-to-cashout";
+import { LiveMatchClock } from "./live-match-clock";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
+import type { LiveClockSource } from "@/lib/live-clock";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 import { useApp } from "./providers";
 
@@ -275,7 +277,31 @@ function ComboBetTicket({
               Flex
             </button>
           )}
-          <StatusPill status={bet.status} live={anyLive} minute={bet.matchMinute} />
+          <StatusPill
+            status={bet.status}
+            live={anyLive}
+            minute={bet.matchMinute}
+            clockSource={
+              anyLive
+                ? (() => {
+                    const liveLeg = legs.find(
+                      (l) => l.status === "pending" && l.matchStatus === "live"
+                    );
+                    return {
+                      matchId: bet.liveMatchId ?? liveLeg?.matchId ?? null,
+                      status: "live",
+                      minute: bet.matchMinute ?? liveLeg?.matchMinute ?? null,
+                      startsAt:
+                        bet.liveMatchStartsAt ?? liveLeg?.matchStartsAt ?? null,
+                      source:
+                        bet.liveMatchSource ?? liveLeg?.matchSource ?? null,
+                      clockAnchor:
+                        bet.matchClockAnchor ?? liveLeg?.matchClockAnchor ?? null,
+                    };
+                  })()
+                : null
+            }
+          />
         </div>
       </div>
 
@@ -628,7 +654,23 @@ function SingleBetTicket({
               Flex
             </button>
           )}
-          <StatusPill status={bet.status} live={live} minute={bet.matchMinute} />
+          <StatusPill
+            status={bet.status}
+            live={live}
+            minute={bet.matchMinute}
+            clockSource={
+              live
+                ? {
+                    matchId: bet.matchId,
+                    status: "live",
+                    minute: bet.matchMinute,
+                    startsAt: bet.matchStartsAt,
+                    source: bet.matchSource ?? null,
+                    clockAnchor: bet.matchClockAnchor ?? null,
+                  }
+                : null
+            }
+          />
         </div>
       </div>
 
@@ -828,10 +870,12 @@ export function StatusPill({
   status,
   live,
   minute,
+  clockSource,
 }: {
   status: ClientBet["status"];
   live: boolean;
   minute: string | null;
+  clockSource?: LiveClockSource | null;
 }) {
   if (status === "won") {
     return (
@@ -864,9 +908,13 @@ export function StatusPill({
   }
   if (live) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-betclic-red/10 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-betclic-red">
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-betclic-red/10 px-2.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red">
         <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-        Direct {minute ?? ""}
+        Direct{" "}
+        <LiveMatchClock
+          match={clockSource}
+          fallback={minute ?? "LIVE"}
+        />
       </span>
     );
   }

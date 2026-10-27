@@ -26,6 +26,7 @@ import {
 } from "@/lib/live-telemetry";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { COLORS } from "@/theme/tokens";
+import { useLiveMatchClockSnapshot } from "./live-match-clock";
 
 type TrackerTab = "pitch" | "momentum" | "stats";
 
@@ -911,9 +912,19 @@ function MatchTimelineStrip({
   activePinnedEvent: ClientMatchEvent | null;
   onSelectPin: (idx: number) => void;
 }) {
+  const liveClock = useLiveMatchClockSnapshot(match, match.minute);
   const progressPct = isFinished
     ? 100
-    : Math.min(100, Math.max(2, (minute / 90) * 100));
+    : match.status === "live"
+      ? Math.min(100, Math.max(2, liveClock.progressPct))
+      : Math.min(100, Math.max(2, (minute / 90) * 100));
+  const rightClockLabel = isFinished
+    ? "90'"
+    : match.status === "live"
+      ? liveClock.display
+      : isHalfTime
+        ? "MT"
+        : `${minute}'`;
 
   return (
     <View>
@@ -979,8 +990,8 @@ function MatchTimelineStrip({
             );
           })}
         </View>
-        <Text style={styles.timelineEdgeText}>
-          {isFinished ? "90'" : isHalfTime ? "MT" : `${minute}'`}
+        <Text style={[styles.timelineEdgeText, { fontVariant: ["tabular-nums"] }]}>
+          {rightClockLabel}
         </Text>
       </View>
     </View>

@@ -22,6 +22,7 @@ import { eur, formatOdds } from "@/lib/format";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 import { OddsLockControls } from "./odds-lock-controls";
+import { LiveMatchClock } from "./live-match-clock";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
 import { TouchStakePad } from "./touch-stake-pad";
@@ -210,9 +211,11 @@ export function BetModal() {
               {liveMatch.status === "live" ? (
                 <View style={styles.liveBadge}>
                   <View style={styles.liveDot} />
-                  <Text style={styles.liveText}>
-                    {liveMatch.minute ?? "LIVE"}
-                  </Text>
+                  <LiveMatchClock
+                    match={liveMatch}
+                    fallback={liveMatch.minute ?? "LIVE"}
+                    style={styles.liveText}
+                  />
                 </View>
               ) : null}
             </View>

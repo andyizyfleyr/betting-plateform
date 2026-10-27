@@ -1,5 +1,12 @@
 import type { LiveMatchTelemetry } from "@/lib/live-telemetry";
 import {
+  calibrateServerClockOffset,
+  registerLiveClockMatch,
+  registerLiveClockMatches,
+  type LiveClockAnchor,
+  type LiveClockSource,
+} from "@/lib/live-clock";
+import {
   rememberBets,
   rememberMatches,
   rememberMatchHistory,
@@ -41,6 +48,7 @@ export interface ClientComboLeg {
   matchMinute?: string | null;
   matchStartsAt?: string | null;
   matchSource?: "virtual" | "manual" | null;
+  matchClockAnchor?: LiveClockAnchor | null;
 }
 
 export interface MarketOutcome {
@@ -90,6 +98,8 @@ export interface ClientRealMatchStats {
   yellowCardsAway: number | null;
   htHomeScore: number | null;
   htAwayScore: number | null;
+  clockSeconds?: number | null;
+  clockPeriod?: number | null;
   updatedAt: string;
 }
 
@@ -122,6 +132,7 @@ export interface ClientMatch {
   events?: ClientMatchEvent[];
   telemetry?: LiveMatchTelemetry;
   realStats?: ClientRealMatchStats | null;
+  clockAnchor?: LiveClockAnchor | null;
   marketCount?: number;
   markets: MarketGroup[];
 }
@@ -159,6 +170,10 @@ export interface ClientBet {
   matchMinute: string | null;
   matchStartsAt: string | null;
   matchSource?: "virtual" | "manual" | null;
+  matchClockAnchor?: LiveClockAnchor | null;
+  liveMatchId?: number | null;
+  liveMatchStartsAt?: string | null;
+  liveMatchSource?: "virtual" | "manual" | null;
 }
 
 export interface PredictionOptionClient {
@@ -343,7 +358,9 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
     clientEtagCache.clear();
   }
 
+  const sentAtMs = Date.now();
   const res = await fetch(url, mergedInit);
+  const rttMs = Math.max(0, Date.now() - sentAtMs);
   if (res.status === 304 && cached) {
     const nowIso = new Date().toISOString();
     if (url === "/api/matches") lastPublicServerTime.matches = nowIso;
@@ -356,6 +373,8 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
     code?: string;
     details?: OddsChangedDetails & CashoutChangedDetails;
     serverTime?: string;
+    matches?: LiveClockSource[];
+    match?: LiveClockSource;
   };
   if (!res.ok) {
     if (
@@ -386,6 +405,21 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
       isCashoutChanged ? undefined : data.details,
       isCashoutChanged ? data.details : undefined
     );
+  }
+
+  if (typeof data.serverTime === "string" || res.headers.get("date")) {
+    calibrateServerClockOffset({
+      serverTimeIso: data.serverTime ?? null,
+      ageHeader: res.headers.get("age"),
+      dateHeader: res.headers.get("date"),
+      rttMs,
+    });
+  }
+  if (Array.isArray(data.matches)) {
+    registerLiveClockMatches(data.matches);
+  }
+  if (data.match && typeof data.match === "object") {
+    registerLiveClockMatch(data.match);
   }
 
   if (isGet) {
@@ -454,6 +488,7 @@ export interface ClientMatchHistoryItem {
   events: ClientMatchEvent[];
   telemetry?: LiveMatchTelemetry;
   realStats?: ClientRealMatchStats | null;
+  clockAnchor?: LiveClockAnchor | null;
   winnerCode: "V1" | "X" | "V2" | null;
   htWinnerCode: "V1" | "X" | "V2" | null;
   totalGoals: number | null;

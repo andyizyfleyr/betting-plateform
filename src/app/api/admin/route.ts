@@ -988,7 +988,9 @@ async function handleAdminPost(
           oddsDraw: dynOdds.oddsDraw,
           oddsAway: dynOdds.oddsAway,
           ...(isReal
-            ? {}
+            ? m.externalId
+              ? {}
+              : { feedSyncedAt: new Date() }
             : { startsAt: backdateStartsAtForMinute(target, Date.now(), m.source, m.id) }),
         })
         .where(eq(matches.id, matchId))
@@ -1037,7 +1039,11 @@ async function handleAdminPost(
           awayScore: m.awayScore ?? 0,
           minute: "1'",
           suspended: false,
-          ...(isReal ? {} : { startsAt: new Date() }),
+          ...(isReal
+            ? m.externalId
+              ? {}
+              : { feedSyncedAt: new Date() }
+            : { startsAt: new Date() }),
           lastGoalAt: null,
         })
         .where(eq(matches.id, matchId))

@@ -7,6 +7,7 @@ import {
   seedPredictionsSnapshot,
   setCachedWalletSnapshot,
 } from "./entity-cache";
+import type { LiveClockAnchor } from "./live-clock";
 import {
   ApiHttpError,
   CASHOUT_CHANGED_CODE,
@@ -114,6 +115,8 @@ export interface ClientRealMatchStats {
   yellowCardsAway: number | null;
   htHomeScore: number | null;
   htAwayScore: number | null;
+  clockSeconds?: number | null;
+  clockPeriod?: number | null;
   updatedAt?: string;
 }
 
@@ -146,6 +149,7 @@ export interface ClientMatch {
   events?: ClientMatchEvent[];
   telemetry?: LiveMatchTelemetry;
   realStats?: ClientRealMatchStats | null;
+  clockAnchor?: LiveClockAnchor | null;
   marketCount?: number;
   markets: MarketGroup[];
 }
@@ -175,6 +179,7 @@ export interface ClientMatchHistoryItem {
   events: ClientMatchEvent[];
   telemetry?: LiveMatchTelemetry;
   realStats?: ClientRealMatchStats | null;
+  clockAnchor?: LiveClockAnchor | null;
   winnerCode: "V1" | "X" | "V2" | null;
   htWinnerCode: "V1" | "X" | "V2" | null;
   totalGoals: number | null;
@@ -206,6 +211,7 @@ export interface ClientComboLeg {
   matchMinute?: string | null;
   matchStartsAt?: string | null;
   matchSource?: MatchSource | null;
+  matchClockAnchor?: LiveClockAnchor | null;
   startsAt?: string | null;
   minute?: string | null;
   homeScore?: number | null;
@@ -247,6 +253,10 @@ export interface ClientBet {
   matchMinute: string | null;
   matchStartsAt: string | null;
   matchSource?: MatchSource | null;
+  matchClockAnchor?: LiveClockAnchor | null;
+  liveMatchId?: number | null;
+  liveMatchStartsAt?: string | null;
+  liveMatchSource?: MatchSource | null;
   homeScore?: number | null;
   awayScore?: number | null;
   minute?: string | null;

@@ -1,5 +1,6 @@
 import type { MatchRow } from "@/db/schema";
 import type { ClientMatch } from "@/lib/api";
+import { buildServerClockAnchor } from "@/lib/live-clock";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import {
   buildLiveMarkets,
@@ -94,6 +95,8 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
     void _feedFinishedAt;
     void _feedStatusNote;
 
+    const clockAnchor = buildServerClockAnchor(m, now);
+
     return {
       ...cleanRealMatch,
       status: normalizedStatus,
@@ -115,6 +118,7 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
       htAwayScore: m.htAwayScore ?? m.realStats?.htAwayScore ?? null,
       externalId: m.externalId ?? null,
       autoSync: Boolean(m.autoSync ?? true),
+      ...(clockAnchor ? { clockAnchor } : {}),
       markets,
       marketCount: markets.length,
     };
@@ -155,6 +159,7 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
     resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
 
   const telemetry = m.status === "live" ? computeMatchTelemetry(m) : undefined;
+  const clockAnchor = buildServerClockAnchor(m, now);
 
   return {
     ...publicMatch,
@@ -172,6 +177,7 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
     redAway: m.redAway ?? 0,
     events: m.events ?? [],
     ...(telemetry ? { telemetry } : {}),
+    ...(clockAnchor ? { clockAnchor } : {}),
     markets,
     marketCount: markets.length,
   };

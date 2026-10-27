@@ -14,6 +14,7 @@ import {
 } from "@/lib/odds-lock";
 import { useApp, type BetTarget } from "./providers";
 import { OddsLockControls } from "./odds-lock-controls";
+import { LiveMatchClock } from "./live-match-clock";
 import { TeamAvatar } from "./team-avatar";
 import { AnimatedNumber } from "./animated-number";
 import { TouchStakePad } from "./touch-stake-pad";
@@ -380,7 +381,13 @@ function BetModalSheet({
                     <span className="truncate font-semibold text-mist">{target.match.league}</span>
                     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display font-bold tabular-nums text-betclic-red">
                       <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                      {liveMinute ?? "LIVE"}
+                      <LiveMatchClock
+                        match={{
+                          ...(sharedFreshMatch ?? target.match),
+                          minute: liveMinute ?? target.match.minute,
+                        }}
+                        fallback={liveMinute ?? "LIVE"}
+                      />
                     </span>
                   </div>
                 )}
