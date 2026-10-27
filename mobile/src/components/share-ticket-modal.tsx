@@ -1,114 +1,92 @@
 import React from "react";
-import {
-  Modal,
-  Pressable,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import * as Clipboard from "expo-clipboard";
-import { LinearGradient } from "expo-linear-gradient";
-import { Copy, Share2, X, Zap } from "@/components/icons";
-import { eur, formatOdds } from "@/lib/format";
-import { colors } from "@/theme/tokens";
+import { Modal, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { Share2, X, Zap } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import { eur, formatFullDateTime, formatOdds } from "@/lib/format";
+import { COLORS } from "@/theme/tokens";
+import { BetStatusBadge } from "./bet-ticket";
 
-/**
- * Modale « Flex » de partage de ticket (`ShareTicketModal`) avec partage Android natif (`Share.share`).
- */
 export function ShareTicketModal() {
-  const { shareTicketBet, closeShareTicket, oddsFormat, toast } = useApp();
-
+  const { shareTicketBet, closeShareTicket, oddsFormat } = useApp();
   if (!shareTicketBet) return null;
 
+  const bet = shareTicketBet;
   const title =
-    shareTicketBet.kind === "combo"
-      ? `Combiné (${shareTicketBet.legs?.length ?? 2})`
-      : shareTicketBet.kind === "prediction"
-        ? (shareTicketBet.question ?? "Prédiction")
-        : `${shareTicketBet.homeTeam} – ${shareTicketBet.awayTeam}`;
+    bet.kind === "combo"
+      ? `Combiné PULSE (${bet.legs?.length ?? 2} sélections)`
+      : bet.kind === "prediction"
+        ? bet.question || bet.homeTeam
+        : `${bet.homeTeam} – ${bet.awayTeam}`;
 
-  const shareText = `⚡ PULSE · ${title}\nSélection : ${shareTicketBet.selectionLabel}\nCote : ×${formatOdds(shareTicketBet.odds, oddsFormat)} · Mise : ${eur(shareTicketBet.stake)}\n${shareTicketBet.status === "won" ? `Gain remporté : ${eur(shareTicketBet.potentialWin)}` : `Gain potentiel : ${eur(shareTicketBet.potentialWin)}`}\nhttps://be-plateform.vercel.app`;
+  const handleNativeShare = async () => {
+    try {
+      await Share.share({
+        message: `Ticket PULSE #${bet.id}\n${title}\n${bet.selectionLabel} @ ${formatOdds(bet.odds, oddsFormat)}\nMise : ${eur(bet.stake)} · Gain potentiel : ${eur(bet.potentialWin)}\nhttps://be-plateform.vercel.app`,
+      });
+    } catch {
+      /* annulé */
+    }
+  };
 
   return (
     <Modal
-      visible={Boolean(shareTicketBet)}
+      visible
       transparent
       animationType="fade"
       onRequestClose={closeShareTicket}
     >
       <Pressable style={styles.backdrop} onPress={closeShareTicket}>
-        <Pressable style={styles.dialog} onPress={(e) => e.stopPropagation()}>
-          <LinearGradient
-            colors={["#111827", "#1f2937", "#be0011"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.flexCard}
-          >
-            <View style={styles.flexTop}>
-              <View style={styles.brandRow}>
-                <View style={styles.logoDot}>
-                  <Zap size={13} color={colors.white} fill={colors.white} />
-                </View>
-                <Text style={styles.brandText}>PULSE TICKET</Text>
+        <Pressable
+          style={styles.card}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={styles.topRow}>
+            <View style={styles.brand}>
+              <View style={styles.brandIcon}>
+                <Zap size={13} color="#ffffff" fill="#ffffff" strokeWidth={2.5} />
               </View>
-              <Pressable onPress={closeShareTicket} style={styles.closeIcon}>
-                <X size={16} color={colors.white} />
-              </Pressable>
+              <Text style={styles.brandText}>PULSE · TICKET #{bet.id}</Text>
+            </View>
+            <Pressable onPress={closeShareTicket} style={styles.closeBtn}>
+              <X size={16} color={COLORS.mist} strokeWidth={2.2} />
+            </Pressable>
+          </View>
+
+          <View style={styles.receipt}>
+            <View style={styles.receiptHead}>
+              <Text style={styles.dateText}>
+                {formatFullDateTime(bet.placedAt)}
+              </Text>
+              <BetStatusBadge status={bet.status} />
             </View>
 
-            <Text style={styles.eventTitle}>{title}</Text>
-            <Text style={styles.selText}>{shareTicketBet.selectionLabel}</Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.pick}>{bet.selectionLabel}</Text>
 
-            <View style={styles.metricsRow}>
+            <View style={styles.metrics}>
+              <View>
+                <Text style={styles.metricLabel}>Mise</Text>
+                <Text style={styles.metricVal}>{eur(bet.stake)}</Text>
+              </View>
               <View>
                 <Text style={styles.metricLabel}>Cote</Text>
                 <Text style={styles.metricVal}>
-                  ×{formatOdds(shareTicketBet.odds, oddsFormat)}
+                  {formatOdds(bet.odds, oddsFormat)}
                 </Text>
               </View>
-              <View>
-                <Text style={styles.metricLabel}>Mise</Text>
-                <Text style={styles.metricVal}>{eur(shareTicketBet.stake)}</Text>
-              </View>
-              <View>
-                <Text style={styles.metricLabel}>
-                  {shareTicketBet.status === "won" ? "Gain" : "Gain max"}
-                </Text>
-                <Text style={[styles.metricVal, { color: "#6ee7b7" }]}>
-                  {eur(shareTicketBet.potentialWin)}
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.metricLabel}>Gain max</Text>
+                <Text style={[styles.metricVal, { color: COLORS.win }]}>
+                  {eur(bet.potentialWin)}
                 </Text>
               </View>
             </View>
-          </LinearGradient>
-
-          <View style={styles.actionsRow}>
-            <Pressable
-              onPress={async () => {
-                void Clipboard.setStringAsync(shareText);
-                toast({ kind: "success", title: "Ticket copié dans le presse-papiers" });
-              }}
-              style={styles.copyBtn}
-            >
-              <Copy size={15} color={colors.ink} strokeWidth={2.3} />
-              <Text style={styles.copyText}>Copier</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={async () => {
-                try {
-                  await Share.share({ message: shareText });
-                } catch {
-                  // Annulé par l'utilisateur
-                }
-              }}
-              style={styles.shareBtn}
-            >
-              <Share2 size={15} color={colors.white} strokeWidth={2.3} />
-              <Text style={styles.shareText}>Partager sur Android</Text>
-            </Pressable>
           </View>
+
+          <Pressable onPress={handleNativeShare} style={styles.shareBtn}>
+            <Share2 size={16} color="#ffffff" strokeWidth={2.4} />
+            <Text style={styles.shareBtnText}>Partager le ticket</Text>
+          </Pressable>
         </Pressable>
       </Pressable>
     </Modal>
@@ -118,117 +96,107 @@ export function ShareTicketModal() {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(17, 24, 39, 0.58)",
+    backgroundColor: "rgba(17, 24, 39, 0.55)",
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: 18,
   },
-  dialog: {
+  card: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: colors.white,
     borderRadius: 22,
-    padding: 14,
-    gap: 12,
-  },
-  flexCard: {
-    borderRadius: 16,
+    backgroundColor: "#ffffff",
     padding: 16,
-    gap: 10,
+    gap: 14,
   },
-  flexTop: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brandRow: {
+  brand: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 7,
   },
-  logoDot: {
+  brandIcon: {
     width: 24,
     height: 24,
     borderRadius: 7,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
   },
   brandText: {
-    fontSize: 11.5,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-    color: colors.white,
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.ink,
   },
-  closeIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.14)",
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
   },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.white,
+  receipt: {
+    borderRadius: 16,
+    backgroundColor: COLORS.elev,
+    padding: 14,
+    gap: 8,
   },
-  selText: {
+  receiptHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dateText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.dim,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  pick: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#fca5a5",
+    color: COLORS.betclicRed,
   },
-  metricsRow: {
+  metrics: {
     marginTop: 6,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.16)",
+    borderTopColor: COLORS.edge,
     flexDirection: "row",
     justifyContent: "space-between",
   },
   metricLabel: {
-    fontSize: 10.5,
-    color: "rgba(255,255,255,0.7)",
+    fontSize: 11,
     fontWeight: "600",
+    color: COLORS.dim,
   },
   metricVal: {
-    marginTop: 2,
-    fontSize: 15,
-    fontWeight: "900",
-    color: colors.white,
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
-  actionsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  copyBtn: {
-    height: 42,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: colors.elev,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  copyText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.ink,
-  },
   shareBtn: {
-    flex: 1,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: colors.betclicRed,
+    height: 46,
+    borderRadius: 13,
+    backgroundColor: COLORS.betclicRed,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 8,
   },
-  shareText: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: colors.white,
+  shareBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
   },
 });

@@ -1,62 +1,64 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { colors } from "@/theme/tokens";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
+import { COLORS } from "@/theme/tokens";
 
-export const INFINITE_BATCH_STEP = 10;
+export const INFINITE_BATCH_SIZE = 10;
 
-export function useInfiniteBatch(
-  totalCount: number,
-  resetKey: string,
-  step = INFINITE_BATCH_STEP
+export function useInfiniteBatch<T>(
+  items: readonly T[],
+  batchSize = INFINITE_BATCH_SIZE,
+  resetKey?: string
 ) {
-  const [visibleCount, setVisibleCount] = useState(step);
+  const [visibleCount, setVisibleCount] = useState(batchSize);
 
   useEffect(() => {
-    setVisibleCount(step);
-  }, [resetKey, step]);
+    setVisibleCount(batchSize);
+  }, [batchSize, resetKey]);
 
-  const hasMore = visibleCount < totalCount;
+  const hasMore = visibleCount < items.length;
+  const visibleItems = items.slice(0, visibleCount);
 
   const loadMore = useCallback(() => {
-    setVisibleCount((prev) => {
-      if (prev >= totalCount) return prev;
-      return Math.min(totalCount, prev + step);
-    });
-  }, [step, totalCount]);
+    setVisibleCount((prev) =>
+      prev < items.length ? Math.min(items.length, prev + batchSize) : prev
+    );
+  }, [batchSize, items.length]);
 
-  return { visibleCount, hasMore, loadMore };
-}
+  const onScrollCheck = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!hasMore) return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 260) {
+        loadMore();
+      }
+    },
+    [hasMore, loadMore]
+  );
 
-export function sliceThreeSections<A, B, C>(
-  a: readonly A[],
-  b: readonly B[],
-  c: readonly C[],
-  budget: number
-): { aSlice: A[]; bSlice: B[]; cSlice: C[] } {
-  let rem = Math.max(0, budget);
-  const aSlice = a.slice(0, rem);
-  rem -= aSlice.length;
-  const bSlice = b.slice(0, rem);
-  rem -= bSlice.length;
-  const cSlice = c.slice(0, rem);
-  return { aSlice, bSlice, cSlice };
+  return { visibleItems, hasMore, loadMore, onScrollCheck };
 }
 
 /**
- * Uniquement le spinner nu (sans texte « Chargement… »), conformément à la règle UX stricte.
+ * Spinner pur sans texte « Chargement… » (par bon de 10).
  */
-export function BareInfiniteSpinner({ visible = true }: { visible?: boolean }) {
-  if (!visible) return null;
+export function InfiniteScrollLoader({ hasMore }: { hasMore: boolean }) {
+  if (!hasMore) return null;
   return (
-    <View style={styles.wrap} accessibilityLabel="Chargement">
-      <ActivityIndicator size="small" color={colors.betclicRed} />
+    <View style={styles.wrap} accessibilityLabel="Chargement de la suite">
+      <ActivityIndicator size="small" color={COLORS.betclicRed} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: "center",
     justifyContent: "center",
   },

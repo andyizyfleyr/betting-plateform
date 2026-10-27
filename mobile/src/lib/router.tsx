@@ -60,7 +60,7 @@ interface RouterContextValue {
   current: RouteEntry;
   push: (href: string) => void;
   replace: (href: string) => void;
-  back: () => void;
+  back: (fallbackHref?: string) => void;
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null);
@@ -104,11 +104,12 @@ export function RouterProvider({
     });
   }, []);
 
-  const back = useCallback(() => {
+  const back = useCallback((fallbackHref?: string) => {
     setStack((prev) => {
       if (prev.length <= 1) {
-        if (prev[0]?.pathname !== "/matchs") {
-          return [{ pathname: "/matchs", params: {} }];
+        const fb = fallbackHref || "/matchs";
+        if (prev[0]?.pathname !== fb) {
+          return [parseHref(fb)];
         }
         return prev;
       }

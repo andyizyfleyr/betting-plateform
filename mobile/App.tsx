@@ -3,10 +3,11 @@ import { StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider } from "@/context/app-context";
-import { Redirect, RouterProvider, usePathname } from "@/lib/router";
-import { colors } from "@/theme/tokens";
+import { RouterProvider, usePathname } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 import { ToastHost } from "@/components/toast-host";
 
+import IndexRedirect from "./app/index";
 import MainShellLayout from "./app/(main)/_layout";
 import AuthScreen from "./app/auth";
 import MatchsHomeScreen from "./app/(main)/matchs/index";
@@ -32,14 +33,21 @@ import AdminScreen from "./app/(main)/admin";
 
 function ActiveScreenSwitch() {
   const pathname = usePathname();
+  const isDarkGame = pathname === "/tap" || pathname === "/accelerator";
 
   if (pathname === "/" || pathname === "") {
-    return <Redirect href="/matchs" />;
+    return (
+      <>
+        <StatusBar style="dark" backgroundColor={COLORS.white} />
+        <IndexRedirect />
+      </>
+    );
   }
 
   if (pathname === "/auth") {
     return (
       <View style={styles.authRoot}>
+        <StatusBar style="dark" backgroundColor={COLORS.deep} />
         <AuthScreen />
         <ToastHost />
       </View>
@@ -92,16 +100,23 @@ function ActiveScreenSwitch() {
     screen = <MatchsHomeScreen />;
   }
 
-  return <MainShellLayout>{screen}</MainShellLayout>;
+  return (
+    <>
+      <StatusBar
+        style={isDarkGame ? "light" : "dark"}
+        backgroundColor={isDarkGame ? "#020617" : COLORS.white}
+      />
+      <MainShellLayout>{screen}</MainShellLayout>
+    </>
+  );
 }
 
 export default function App() {
   return (
     <View style={styles.root}>
       <SafeAreaProvider>
-        <RouterProvider initialHref="/matchs">
+        <RouterProvider initialHref="/">
           <AppProvider>
-            <StatusBar style="dark" backgroundColor={colors.white} />
             <ActiveScreenSwitch />
           </AppProvider>
         </RouterProvider>
@@ -113,10 +128,10 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
   authRoot: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
 });

@@ -1,37 +1,16 @@
 {
-  "id": "b2de1d6f-e120-43f0-ae94-f9dab2ca495d",
-  "createdAt": "2026-10-27T11:18:05.219Z",
+  "id": "906a2e11-4647-4e9b-ab9d-63a9e12f208f",
+  "createdAt": "2026-10-27T12:03:39.365Z",
   "runtimeVersion": "exposdk:52.0.0",
   "sdkVersion": "52.0.0",
   "launchAsset": {
-    "hash": "HHo2Gn3cicamhbBwjtjJVMccbSg4Cr7GynIDU5VzOB4",
-    "key": "b2de1d6fe12013f04e94f9dab2ca495d",
+    "hash": "eT625hMEXVmwMo9AS9cbsyznxki0zo6q4leyqbcQY-Q",
+    "key": "906a2e1146479e9bab9d63a9e12f208f",
     "contentType": "application/javascript",
     "fileExtension": ".hbc",
-    "relativePath": "/expo-sdk52/AppEntry-b2de1d6fe120.hbc"
+    "relativePath": "/expo-sdk52/AppEntry-906a2e114647.hbc"
   },
   "assets": [
-    {
-      "hash": "V1mTYPybgLzkc7Nk9_JVtVIBnsR0YkKAGMsOD4OEYrQ",
-      "key": "a76d309774d33d9856f650bed4292a23",
-      "contentType": "font/ttf",
-      "fileExtension": ".ttf",
-      "relativePath": "/expo-sdk52/assets/a76d309774d33d9856f650bed4292a23"
-    },
-    {
-      "hash": "nH-5BxpsKFgsa4RGjL_yx6ceArF-OjtFSKFZk40ikWs",
-      "key": "6148e7019854f3bde85b633cb88f3c25",
-      "contentType": "font/ttf",
-      "fileExtension": ".ttf",
-      "relativePath": "/expo-sdk52/assets/6148e7019854f3bde85b633cb88f3c25"
-    },
-    {
-      "hash": "npTU2-LofqSV8NQth5FGvHTExOkQd2pJFUoV7vo371k",
-      "key": "b62641afc9ab487008e996a5c5865e56",
-      "contentType": "font/ttf",
-      "fileExtension": ".ttf",
-      "relativePath": "/expo-sdk52/assets/b62641afc9ab487008e996a5c5865e56"
-    },
     {
       "hash": "OAX65o1CJsZ9hO0hzRIeQsOzoJWJVBevjZodxkYlwYg",
       "key": "43a2a6300d8f3ae6ec22199810977028",

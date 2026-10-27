@@ -1,117 +1,233 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  FlatList,
+  ActivityIndicator,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "@/lib/router";
-import { ChevronRight, Search, X } from "@/components/icons";
-import { api, type ClientFinishedMatch } from "@/lib/api";
-import { getCachedFinishedMatchesList } from "@/lib/entity-cache";
-import { formatPlacedAt } from "@/lib/format";
-import { deduplicateLeagueNames } from "@/lib/matches-catalog";
-import { useSmartPolling } from "@/lib/polling";
-import { TeamAvatar } from "@/components/team-avatar";
+import { ArrowLeft, ChevronRight, Search, X } from "lucide-react-native";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
-  BareInfiniteSpinner,
-  INFINITE_BATCH_STEP,
+  InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
-import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
-import { useApp } from "@/context/app-context";
+import { SportIcon } from "@/components/sport-icon";
+import { TeamAvatar } from "@/components/team-avatar";
+import { api, type ClientMatchHistoryItem } from "@/lib/api";
+import { getCachedFinishedMatchesList } from "@/lib/entity-cache";
+import { formatMatchDateTimeShort } from "@/lib/format";
+import { sanitizeMatchEvents } from "@/lib/match-events";
+import { deduplicateLeagueNames } from "@/lib/matches-catalog";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-/**
- * Page `/resultats` fidèle à `src/app/(main)/resultats/page.tsx` :
- * - Requête canonique sans paramètre d'abord (`/api/matches/history`)
- * - Sélecteur `Matchs réels | Matchs virtuels`
- * - Tri du plus récent au plus ancien (`finishedAt` décroissant)
- * - Clic direct sur carte -> `/resultats/[id]` + infinite scroll 10 par 10 avec spinner nu.
- */
-export default function ResultatsScreen() {
+function sortResultsNewestFirst(
+  list: ClientMatchHistoryItem[]
+): ClientMatchHistoryItem[] {
+  return [...list].sort((a, b) => {
+    const tA = Date.parse(a.finishedAt || a.startsAt) || 0;
+    const tB = Date.parse(b.finishedAt || b.startsAt) || 0;
+    return tB - tA || b.id - a.id;
+  });
+}
+
+function ResultCard({
+  item,
+  highlighted = false,
+}: {
+  item: ClientMatchHistoryItem;
+  highlighted?: boolean;
+}) {
   const router = useRouter();
-  const params = useLocalSearchParams<{ match?: string }>();
-  const focusedId = params.match ? Number(params.match) : null;
-  const { dataSaverMode, hapticsEnabled } = useApp();
-
-  const [items, setItems] = useState<ClientFinishedMatch[] | null>(() =>
-    getCachedFinishedMatchesList()
+  const goals = useMemo(
+    () =>
+      sanitizeMatchEvents(item.events, item.homeScore, item.awayScore).filter(
+        (e) => e.type === "goal"
+      ),
+    [item.awayScore, item.events, item.homeScore]
   );
-  const [sourceTab, setSourceTab] = useState<"manual" | "virtual">("manual");
-  const [userPickedSource, setUserPickedSource] = useState(false);
-  const [leagueFilter, setLeagueFilter] = useState<string>("all");
-  const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState("");
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/resultats/${item.id}`)}
+      style={[styles.card, highlighted && styles.cardHighlighted]}
+    >
+      <View style={styles.cardHead}>
+        <View style={styles.leagueWrap}>
+          <SportIcon sport={item.sport} size={13.5} color={COLORS.dim} />
+          <Text numberOfLines={1} style={styles.leagueText}>
+            {item.league}
+          </Text>
+        </View>
+        <View style={styles.headRight}>
+          <Text style={styles.dateText}>
+            {formatMatchDateTimeShort(item.finishedAt || item.startsAt)}
+          </Text>
+          <View style={styles.finBadge}>
+            <Text style={styles.finBadgeText}>Terminé</Text>
+          </View>
+          <ChevronRight size={14} color={COLORS.dim} strokeWidth={2.2} />
+        </View>
+      </View>
+
+      <View style={styles.teamsBlock}>
+        <View style={styles.teamRow}>
+          <View style={styles.teamLeft}>
+            <TeamAvatar
+              name={item.homeTeam}
+              logo={item.homeLogo}
+              size="sm"
+            />
+            <Text numberOfLines={1} style={styles.teamName}>
+              {item.homeTeam}
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.scoreVal,
+              item.winnerCode === "V1" && { color: COLORS.win },
+            ]}
+          >
+            {item.homeScore ?? 0}
+          </Text>
+        </View>
+
+        <View style={styles.teamRow}>
+          <View style={styles.teamLeft}>
+            <TeamAvatar
+              name={item.awayTeam}
+              logo={item.awayLogo}
+              size="sm"
+            />
+            <Text numberOfLines={1} style={styles.teamName}>
+              {item.awayTeam}
+            </Text>
+          </View>
+          <Text
+            style={[
+              styles.scoreVal,
+              item.winnerCode === "V2" && { color: COLORS.win },
+            ]}
+          >
+            {item.awayScore ?? 0}
+          </Text>
+        </View>
+      </View>
+
+      {goals.length > 0 ? (
+        <Text numberOfLines={1} style={styles.goalsLine}>
+          ⚽{" "}
+          {goals
+            .map((g) => `${g.minute}'${g.player ? ` ${g.player}` : ""}`)
+            .join(" · ")}
+        </Text>
+      ) : null}
+
+      <View style={styles.chipsRow}>
+        {item.winnerCode ? (
+          <View style={styles.outcomeChip}>
+            <Text style={styles.outcomeChipText}>1X2 : {item.winnerCode}</Text>
+          </View>
+        ) : null}
+        {item.htHome !== null && item.htAway !== null ? (
+          <View style={styles.metaChip}>
+            <Text style={styles.metaChipText}>
+              MT {item.htHome} - {item.htAway}
+            </Text>
+          </View>
+        ) : null}
+        {item.totalGoals !== null ? (
+          <View style={styles.metaChip}>
+            <Text style={styles.metaChipText}>
+              {item.totalGoals} but{item.totalGoals > 1 ? "s" : ""}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
+export default function ResultatsListScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ match?: string; source?: string }>();
+  const focusedId = params.match ? Number(params.match) : null;
+
+  const [items, setItems] = useState<ClientMatchHistoryItem[]>(() =>
+    sortResultsNewestFirst(getCachedFinishedMatchesList() ?? [])
+  );
+  const [focusedItem, setFocusedItem] =
+    useState<ClientMatchHistoryItem | null>(null);
+  const [loading, setLoading] = useState<boolean>(
+    () => getCachedFinishedMatchesList() === null
+  );
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadHistory = useCallback(async () => {
+  const [query, setQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<
+    "all" | "manual" | "virtual"
+  >(
+    params.source === "virtual"
+      ? "virtual"
+      : params.source === "manual"
+        ? "manual"
+        : "all"
+  );
+  const [leagueFilter, setLeagueFilter] = useState<string>("all");
+  const [winnerFilter, setWinnerFilter] = useState<"all" | "V1" | "X" | "V2">(
+    "all"
+  );
+
+  // Contrainte stricte : requête canonique sans paramètre d'abord (cache CDN Edge), puis ?matchId= si nécessaire
+  const load = useCallback(async () => {
     try {
-      const base = await api.finishedMatches();
-      let list = base.matches;
-      if (focusedId && !list.some((m) => m.id === focusedId)) {
-        const focusedRes = await api.finishedMatches(focusedId).catch(() => null);
-        if (focusedRes?.focusedMatch) {
-          list = [focusedRes.focusedMatch, ...list];
+      const canonical = await api.matchHistory();
+      const sorted = sortResultsNewestFirst(canonical.matches);
+      setItems(sorted);
+
+      if (focusedId && Number.isInteger(focusedId) && focusedId > 0) {
+        const inList = sorted.find((m) => m.id === focusedId) ?? null;
+        if (inList) {
+          setFocusedItem(inList);
+        } else {
+          const single = await api.matchHistory(focusedId);
+          setFocusedItem(single.focusedMatch);
         }
+      } else {
+        setFocusedItem(null);
       }
-      setItems(list);
     } catch {
-      // Conserve le snapshot
+      /* garde snapshot */
+    } finally {
+      setLoading(false);
     }
   }, [focusedId]);
 
-  useSmartPolling(loadHistory, 16_000, {
-    enabled: true,
-    dataSaver: dataSaverMode,
-    runImmediately: true,
-  });
-
-  // Si `?match=<id>` est passé, ouvrir directement sa fiche dédiée ou basculer sur son onglet
   useEffect(() => {
-    if (focusedId && items) {
-      const target = items.find((m) => m.id === focusedId);
-      if (target && !userPickedSource) {
-        setSourceTab(target.source === "manual" ? "manual" : "virtual");
-      }
-    }
-  }, [focusedId, items, userPickedSource]);
+    void load();
+  }, [load]);
 
-  useEffect(() => {
-    if (!userPickedSource && items) {
-      const realCount = items.filter((m) => m.source === "manual").length;
-      if (realCount === 0 && items.length > 0) {
-        setSourceTab("virtual");
-      }
-    }
-  }, [items, userPickedSource]);
-
-  const scopedBySource = useMemo(
-    () =>
-      (items ?? []).filter((m) =>
-        sourceTab === "manual" ? m.source === "manual" : m.source !== "manual"
-      ),
-    [items, sourceTab]
-  );
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
 
   const leagues = useMemo(
-    () => deduplicateLeagueNames(scopedBySource.map((m) => m.league)),
-    [scopedBySource]
+    () => deduplicateLeagueNames(items.map((m) => m.league)),
+    [items]
   );
 
-  const qNorm = search.trim().toLowerCase();
-
-  const sortedFiltered = useMemo(() => {
-    const filtered = scopedBySource.filter((m) => {
+  const filtered = useMemo(() => {
+    const qNorm = query.trim().toLowerCase();
+    const list = items.filter((m) => {
+      if (sourceFilter !== "all" && m.source !== sourceFilter) return false;
       if (leagueFilter !== "all" && m.league !== leagueFilter) return false;
-      if (outcomeFilter === "home" && m.winner !== "home") return false;
-      if (outcomeFilter === "draw" && m.winner !== "draw") return false;
-      if (outcomeFilter === "away" && m.winner !== "away") return false;
-      if (outcomeFilter === "over25" && m.totalGoals < 3) return false;
+      if (winnerFilter !== "all" && m.winnerCode !== winnerFilter) return false;
       if (
         qNorm &&
         !m.homeTeam.toLowerCase().includes(qNorm) &&
@@ -122,292 +238,194 @@ export default function ResultatsScreen() {
       }
       return true;
     });
+    return sortResultsNewestFirst(list);
+  }, [items, leagueFilter, query, sourceFilter, winnerFilter]);
 
-    return [...filtered].sort(
-      (a, b) =>
-        (Date.parse(b.finishedAt) || 0) - (Date.parse(a.finishedAt) || 0) ||
-        b.id - a.id
-    );
-  }, [leagueFilter, outcomeFilter, qNorm, scopedBySource]);
-
-  const resetKey = `${sourceTab}|${leagueFilter}|${outcomeFilter}|${qNorm}`;
-  const { visibleCount, hasMore, loadMore } = useInfiniteBatch(
-    sortedFiltered.length,
-    resetKey,
-    INFINITE_BATCH_STEP
-  );
-
-  const visibleItems = useMemo(
-    () => sortedFiltered.slice(0, visibleCount),
-    [sortedFiltered, visibleCount]
+  const resetKey = `${sourceFilter}|${leagueFilter}|${winnerFilter}|${query}`;
+  const { visibleItems, hasMore, onScrollCheck } = useInfiniteBatch(
+    filtered,
+    10,
+    resetKey
   );
 
   return (
-    <View style={styles.root}>
-      <View style={styles.topHeader}>
-        <Text style={styles.pageTitle}>Résultats</Text>
-        <Pressable
-          onPress={() => setSearchOpen((v) => !v)}
-          style={styles.iconBtn}
-        >
-          {searchOpen ? (
-            <X size={17} color={colors.ink} strokeWidth={2.4} />
-          ) : (
-            <Search size={17} color={colors.ink} strokeWidth={2.4} />
-          )}
-        </Pressable>
-      </View>
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={[1]}
+      onScroll={onScrollCheck}
+      scrollEventThrottle={16}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[COLORS.betclicRed]}
+          tintColor={COLORS.betclicRed}
+        />
+      }
+    >
+      <View style={styles.topSection}>
+        <View style={styles.titleRow}>
+          <Pressable
+            onPress={() => router.back("/matchs")}
+            style={styles.backBtn}
+          >
+            <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
+          </Pressable>
+          <Text style={styles.pageTitle}>Résultats officiels</Text>
+        </View>
 
-      {searchOpen && (
-        <View style={styles.searchWrap}>
-          <Search size={15} color={colors.dim} />
+        <View style={styles.searchBar}>
+          <Search size={16} color={COLORS.dim} strokeWidth={2.2} />
           <TextInput
-            value={search}
-            onChangeText={setSearch}
-            autoFocus
-            placeholder="Club ou compétition…"
-            placeholderTextColor={colors.dim}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Rechercher un score ou un club…"
+            placeholderTextColor={COLORS.dim}
             style={styles.searchInput}
           />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")}>
-              <X size={15} color={colors.dim} />
+          {query.length > 0 ? (
+            <Pressable hitSlop={8} onPress={() => setQuery("")}>
+              <X size={16} color={COLORS.dim} strokeWidth={2.2} />
             </Pressable>
-          )}
+          ) : null}
+        </View>
+      </View>
+
+      <FilterDropdownRow
+        filters={[
+          {
+            id: "source",
+            label: "Type de compétition",
+            value: sourceFilter,
+            defaultValue: "all",
+            onChange: setSourceFilter,
+            options: [
+              { value: "all", label: "Tous les résultats", count: items.length },
+              {
+                value: "manual",
+                label: "Matchs officiels",
+                count: items.filter((m) => m.source === "manual").length,
+              },
+              {
+                value: "virtual",
+                label: "Matchs virtuels",
+                count: items.filter((m) => m.source === "virtual").length,
+              },
+            ],
+          },
+          {
+            id: "league",
+            label: "Ligue",
+            value: leagueFilter,
+            defaultValue: "all",
+            onChange: setLeagueFilter,
+            options: [
+              { value: "all", label: "Toutes les ligues" },
+              ...leagues.map((l) => ({ value: l, label: l })),
+            ],
+          },
+          {
+            id: "winner",
+            label: "Issue 1X2",
+            value: winnerFilter,
+            defaultValue: "all",
+            onChange: setWinnerFilter,
+            options: [
+              { value: "all", label: "Toutes issues" },
+              { value: "V1", label: "Victoire domicile (V1)" },
+              { value: "X", label: "Match nul (X)" },
+              { value: "V2", label: "Victoire extérieur (V2)" },
+            ],
+          },
+        ]}
+        onReset={() => {
+          setSourceFilter("all");
+          setLeagueFilter("all");
+          setWinnerFilter("all");
+          setQuery("");
+        }}
+      />
+
+      <Text style={styles.countLine}>
+        {filtered.length} résultat{filtered.length > 1 ? "s" : ""} (du plus
+        récent au plus ancien)
+      </Text>
+
+      {focusedItem ? (
+        <View style={styles.focusedWrap}>
+          <Text style={styles.focusedTitle}>Match sélectionné</Text>
+          <ResultCard item={focusedItem} highlighted />
+        </View>
+      ) : null}
+
+      {loading && items.length === 0 ? (
+        <View style={styles.loader}>
+          <ActivityIndicator size="small" color={COLORS.betclicRed} />
+        </View>
+      ) : visibleItems.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>
+            Aucun résultat ne correspond à ces filtres.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {visibleItems.map((m) => (
+            <ResultCard
+              key={m.id}
+              item={m}
+              highlighted={focusedId === m.id}
+            />
+          ))}
+          <InfiniteScrollLoader hasMore={hasMore} />
         </View>
       )}
-
-      {/* Sélecteur Matchs réels | Matchs virtuels */}
-      <View style={styles.segmentWrap}>
-        <Pressable
-          onPress={() => {
-            setUserPickedSource(true);
-            setSourceTab("manual");
-            setLeagueFilter("all");
-          }}
-          style={[
-            styles.segmentBtn,
-            sourceTab === "manual" && styles.segmentBtnActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              sourceTab === "manual" && styles.segmentTextActive,
-            ]}
-          >
-            Matchs réels
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            setUserPickedSource(true);
-            setSourceTab("virtual");
-            setLeagueFilter("all");
-          }}
-          style={[
-            styles.segmentBtn,
-            sourceTab === "virtual" && styles.segmentBtnActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              sourceTab === "virtual" && styles.segmentTextActive,
-            ]}
-          >
-            Matchs virtuels
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={{ paddingHorizontal: 16 }}>
-        <FilterDropdownRow
-          filters={[
-            {
-              id: "league",
-              label: "Compétition",
-              value: leagueFilter,
-              options: [
-                { value: "all", label: "Toutes les ligues" },
-                ...leagues.map((lg) => ({ value: lg, label: lg })),
-              ],
-              onChange: setLeagueFilter,
-            },
-            {
-              id: "outcome",
-              label: "Issue",
-              value: outcomeFilter,
-              options: [
-                { value: "all", label: " Tous les scores" },
-                { value: "home", label: "Victoire domicile (1)" },
-                { value: "draw", label: "Match nul (X)" },
-                { value: "away", label: "Victoire extérieur (2)" },
-                { value: "over25", label: "3 buts ou plus (+2,5)" },
-              ],
-              onChange: setOutcomeFilter,
-            },
-          ]}
-          onReset={() => {
-            setLeagueFilter("all");
-            setOutcomeFilter("all");
-            setSearch("");
-          }}
-          resultCountLabel={`${sortedFiltered.length} résultat${sortedFiltered.length > 1 ? "s" : ""}`}
-        />
-      </View>
-
-      <FlatList<ClientFinishedMatch>
-        data={visibleItems}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.listContent}
-        windowSize={7}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        onEndReached={() => {
-          if (hasMore) loadMore();
-        }}
-        onEndReachedThreshold={0.4}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await loadHistory();
-              setRefreshing(false);
-            }}
-            tintColor={colors.betclicRed}
-            colors={[colors.betclicRed]}
-          />
-        }
-        ListEmptyComponent={
-          !items ? (
-            <BareInfiniteSpinner visible />
-          ) : (
-            <View style={[cardSurface.glassCard, styles.emptyCard]}>
-              <Text style={styles.emptyText}>
-                Aucun résultat terminé pour cette sélection.
-              </Text>
-            </View>
-          )
-        }
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => {
-              triggerHaptic("light", hapticsEnabled);
-              router.push(`/resultats/${item.id}`);
-            }}
-            style={[
-              cardSurface.glassCard,
-              styles.resultCard,
-              focusedId === item.id && {
-                borderColor: colors.betclicRed,
-              },
-            ]}
-          >
-            <View style={styles.cardTop}>
-              <Text numberOfLines={1} style={styles.leagueText}>
-                {item.league}
-              </Text>
-              <View style={styles.topRight}>
-                <Text style={styles.timeText}>
-                  {formatPlacedAt(item.finishedAt)}
-                </Text>
-                <ChevronRight size={13} color={colors.dim} strokeWidth={2.4} />
-              </View>
-            </View>
-
-            <View style={styles.teamLine}>
-              <View style={styles.teamLeft}>
-                <TeamAvatar name={item.homeTeam} logo={item.homeLogo} size="xs" />
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.teamName,
-                    item.winner === "home" && styles.winnerText,
-                  ]}
-                >
-                  {item.homeTeam}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.scoreNum,
-                  item.winner === "home" && styles.winnerText,
-                ]}
-              >
-                {item.homeScore}
-              </Text>
-            </View>
-
-            <View style={styles.teamLine}>
-              <View style={styles.teamLeft}>
-                <TeamAvatar name={item.awayTeam} logo={item.awayLogo} size="xs" />
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.teamName,
-                    item.winner === "away" && styles.winnerText,
-                  ]}
-                >
-                  {item.awayTeam}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.scoreNum,
-                  item.winner === "away" && styles.winnerText,
-                ]}
-              >
-                {item.awayScore}
-              </Text>
-            </View>
-          </Pressable>
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: 9 }} />}
-        ListFooterComponent={<BareInfiniteSpinner visible={hasMore} />}
-      />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  page: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
-  topHeader: {
+  content: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 24,
+  },
+  topSection: {
+    gap: 10,
+    marginBottom: 4,
+  },
+  titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 6,
+    gap: 10,
   },
-  pageTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    color: colors.ink,
-    letterSpacing: -0.3,
-  },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.white,
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edge,
+    borderColor: COLORS.edge,
     alignItems: "center",
     justifyContent: "center",
   },
-  searchWrap: {
-    marginHorizontal: 16,
-    marginBottom: 6,
+  pageTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  searchBar: {
     height: 40,
     borderRadius: 12,
-    backgroundColor: colors.white,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edge,
+    borderColor: COLORS.edge,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -416,99 +434,161 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 13.5,
-    color: colors.ink,
+    fontWeight: "500",
+    color: COLORS.ink,
+    paddingVertical: 0,
   },
-  segmentWrap: {
-    marginHorizontal: 16,
-    marginBottom: 4,
-    flexDirection: "row",
-    backgroundColor: colors.elev,
-    borderRadius: 12,
-    padding: 3,
+  countLine: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.dim,
+    marginTop: 4,
+    marginBottom: 8,
   },
-  segmentBtn: {
-    flex: 1,
-    height: 35,
-    borderRadius: 9,
+  focusedWrap: {
+    gap: 6,
+    marginBottom: 14,
+  },
+  focusedTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.betclicRed,
+    textTransform: "uppercase",
+  },
+  loader: {
+    paddingVertical: 36,
     alignItems: "center",
-    justifyContent: "center",
   },
-  segmentBtnActive: {
-    backgroundColor: colors.white,
+  list: {
+    gap: 10,
   },
-  segmentText: {
+  emptyCard: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 24,
+    alignItems: "center",
+  },
+  emptyText: {
     fontSize: 13,
-    fontWeight: "700",
-    color: colors.dim,
+    fontWeight: "600",
+    color: COLORS.dim,
+    textAlign: "center",
   },
-  segmentTextActive: {
-    color: colors.ink,
-    fontWeight: "900",
+  card: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 14,
+    gap: 9,
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+  cardHighlighted: {
+    borderColor: COLORS.betclicRed,
+    borderWidth: 1.5,
   },
-  resultCard: {
-    padding: 13,
-    gap: 7,
-  },
-  cardTop: {
+  cardHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  leagueText: {
-    flex: 1,
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: colors.mist,
-  },
-  topRight: {
+  leagueWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 6,
+    flex: 1,
   },
-  timeText: {
-    fontSize: 11,
+  leagueText: {
+    fontSize: 12,
     fontWeight: "600",
-    color: colors.dim,
+    color: COLORS.mist,
+    flexShrink: 1,
   },
-  teamLine: {
+  headRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  dateText: {
+    fontSize: 10.5,
+    fontWeight: "600",
+    color: COLORS.dim,
+    fontVariant: ["tabular-nums"],
+  },
+  finBadge: {
+    borderRadius: 6,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  finBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.dim,
+  },
+  teamsBlock: {
+    gap: 7,
+  },
+  teamRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
   teamLeft: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 9,
+    flex: 1,
   },
   teamName: {
-    flex: 1,
-    fontSize: 13.5,
-    fontWeight: "600",
-    color: colors.ink,
-  },
-  winnerText: {
-    fontWeight: "900",
-  },
-  scoreNum: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
-    color: colors.ink,
+    color: COLORS.ink,
+    flexShrink: 1,
+  },
+  scoreVal: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
-  emptyCard: {
-    padding: 20,
-    alignItems: "center",
+  goalsLine: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: COLORS.dim,
   },
-  emptyText: {
-    fontSize: 13,
+  chipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.edgeSoft,
+    paddingTop: 8,
+  },
+  outcomeChip: {
+    borderRadius: 7,
+    backgroundColor: COLORS.winSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  outcomeChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.win,
+  },
+  metaChip: {
+    borderRadius: 7,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  metaChipText: {
+    fontSize: 11,
     fontWeight: "600",
-    color: colors.mist,
+    color: COLORS.mist,
+    fontVariant: ["tabular-nums"],
   },
 });

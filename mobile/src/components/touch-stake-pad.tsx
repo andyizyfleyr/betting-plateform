@@ -1,149 +1,210 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Delete, Keyboard as KeyboardIcon } from "@/components/icons";
-import { eur } from "@/lib/format";
-import { colors, triggerHaptic } from "@/theme/tokens";
-import { useApp } from "@/context/app-context";
+import { Delete } from "lucide-react-native";
+import { COLORS, triggerHaptic } from "@/theme/tokens";
 
-const KEYPAD_ROWS = [
-  ["1", "2", "3"],
-  ["4", "5", "6"],
-  ["7", "8", "9"],
-  [",", "0", "DEL"],
-] as const;
+const QUICK_AMOUNTS = [5, 10, 25, 50] as const;
 
-/**
- * Pavé de mise tactile (`TouchStakePad`) fidèle à `src/components/touch-stake-pad.tsx` :
- * - Chips rapides (`5 €`, `10 €`, `25 €`, `50 €` ou presets personnalisés) + `Tout`
- * - Pavé numérique repliable sans déclencher le clavier système Android.
- */
 export function TouchStakePad({
-  stake,
-  onChangeStake,
-  maxBalance,
-  presets,
+  value,
+  onChange,
+  balance,
+  isLoggedIn,
   defaultExpanded = false,
+  compact = false,
+  dark = false,
 }: {
-  stake: number;
-  onChangeStake: (val: number) => void;
-  maxBalance: number;
-  presets: number[];
+  value: string;
+  onChange: (next: string) => void;
+  balance: number;
+  isLoggedIn: boolean;
   defaultExpanded?: boolean;
+  compact?: boolean;
+  dark?: boolean;
 }) {
-  const { hapticsEnabled } = useApp();
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [rawStr, setRawStr] = useState<string>(
-    stake > 0 ? String(stake).replace(".", ",") : "10"
-  );
+  const [padOpen, setPadOpen] = useState(defaultExpanded);
 
-  const applyValue = (next: number) => {
-    const clamped = Math.max(0, Math.min(10_000, Math.round(next * 100) / 100));
-    onChangeStake(clamped);
-    setRawStr(clamped > 0 ? String(clamped).replace(".", ",") : "");
-  };
+  const numericValue = parseFloat((value || "0").replace(",", ".")) || 0;
+  const maxBalance = Math.max(0, Math.floor(balance * 100) / 100);
 
-  const handleKeyPress = (k: string) => {
-    triggerHaptic("light", hapticsEnabled);
-    if (k === "DEL") {
-      const nextStr = rawStr.slice(0, -1);
-      setRawStr(nextStr);
-      const num = parseFloat(nextStr.replace(",", ".")) || 0;
-      onChangeStake(Math.min(10_000, Math.round(num * 100) / 100));
+  const appendKey = (key: string) => {
+    triggerHaptic("light");
+    const clean = value.replace(",", ".");
+    if (key === "BACK") {
+      onChange(value.slice(0, -1));
       return;
     }
-    if (k === ",") {
-      if (rawStr.includes(",")) return;
-      const nextStr = (rawStr || "0") + ",";
-      setRawStr(nextStr);
+    if (key === ",") {
+      if (clean.includes(".")) return;
+      onChange((value || "0") + ",");
       return;
     }
-    const parts = rawStr.split(",");
-    if (parts[1] && parts[1].length >= 2) return;
-    const nextStr = rawStr === "0" ? k : rawStr + k;
-    const num = parseFloat(nextStr.replace(",", ".")) || 0;
-    if (num > 10_000) return;
-    setRawStr(nextStr);
-    onChangeStake(Math.round(num * 100) / 100);
+    const nextRaw = value === "0" ? key : value + key;
+    const parts = nextRaw.replace(",", ".").split(".");
+    if (parts[0].length > 5) return;
+    if (parts[1] && parts[1].length > 2) return;
+    onChange(nextRaw);
   };
 
   return (
     <View style={styles.wrap}>
+      <View style={styles.topRow}>
+        <Text style={[styles.label, dark && { color: "rgba(255,255,255,0.72)" }]}>
+          Mise (€)
+        </Text>
+        <View style={styles.chipsRow}>
+          {QUICK_AMOUNTS.map((amt) => {
+            const active = Math.abs(numericValue - amt) < 0.005;
+            return (
+              <Pressable
+                key={amt}
+                onPress={() => {
+                  triggerHaptic("light");
+                  onChange(String(amt));
+                }}
+                style={[
+                  styles.chip,
+                  dark ? styles.chipDark : styles.chipLight,
+                  active && styles.chipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    dark && { color: "#ffffff" },
+                    active && styles.chipTextActive,
+                  ]}
+                >
+                  {amt} €
+                </Text>
+              </Pressable>
+            );
+          })}
+          {isLoggedIn && maxBalance > 0 ? (
+            <Pressable
+              onPress={() => {
+                triggerHaptic("light");
+                onChange(
+                  Number.isInteger(maxBalance)
+                    ? String(maxBalance)
+                    : maxBalance.toFixed(2).replace(".", ",")
+                );
+              }}
+              style={[
+                styles.chip,
+                dark ? styles.chipDark : styles.chipLight,
+                Math.abs(numericValue - maxBalance) < 0.01 && styles.chipActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  dark && { color: "#ffffff" },
+                  Math.abs(numericValue - maxBalance) < 0.01 &&
+                    styles.chipTextActive,
+                ]}
+              >
+                MAX
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+
       <Pressable
         onPress={() => {
-          triggerHaptic("light", hapticsEnabled);
-          setExpanded((v) => !v);
+          triggerHaptic("light");
+          setPadOpen((o) => !o);
         }}
-        style={styles.displayBox}
+        style={[
+          styles.displayBox,
+          compact && { height: 44 },
+          dark ? styles.displayBoxDark : styles.displayBoxLight,
+          padOpen && styles.displayBoxFocused,
+        ]}
       >
-        <View>
-          <Text style={styles.displayLabel}>Votre mise</Text>
-          <Text style={styles.displayValue}>
-            {rawStr ? `${rawStr} €` : eur(stake)}
+        <Text
+          style={[
+            styles.displayVal,
+            !value && styles.displayPlaceholder,
+            dark && { color: value ? "#ffffff" : "rgba(255,255,255,0.4)" },
+          ]}
+        >
+          {value || "0"}
+        </Text>
+        <View style={styles.displayRight}>
+          <Text
+            style={[
+              styles.euroSign,
+              dark && { color: "rgba(255,255,255,0.65)" },
+            ]}
+          >
+            €
           </Text>
-        </View>
-        <View style={styles.kbdToggle}>
-          <KeyboardIcon size={15} color={colors.ink} strokeWidth={2.2} />
-          <Text style={styles.kbdToggleText}>
-            {expanded ? "Masquer" : "Clavier"}
+          <Text style={styles.toggleHint}>
+            {padOpen ? "Masquer" : "Modifier"}
           </Text>
         </View>
       </Pressable>
 
-      <View style={styles.presetsRow}>
-        {presets.slice(0, 4).map((p) => {
-          const active = Math.abs(stake - p) < 0.005;
-          return (
-            <Pressable
-              key={p}
-              onPress={() => {
-                triggerHaptic("light", hapticsEnabled);
-                applyValue(p);
-              }}
-              style={[styles.presetChip, active && styles.presetChipActive]}
-            >
-              <Text
-                style={[styles.presetText, active && styles.presetTextActive]}
-              >
-                {p} €
-              </Text>
-            </Pressable>
-          );
-        })}
-
-        {maxBalance > 0 && (
-          <Pressable
-            onPress={() => {
-              triggerHaptic("light", hapticsEnabled);
-              applyValue(Math.min(maxBalance, 5_000));
-            }}
-            style={styles.allInChip}
-          >
-            <Text style={styles.allInText}>Tout</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {expanded && (
-        <View style={styles.keypad}>
-          {KEYPAD_ROWS.map((row, ri) => (
-            <View key={ri} style={styles.keypadRow}>
-              {row.map((key) => (
-                <Pressable
-                  key={key}
-                  onPress={() => handleKeyPress(key)}
-                  style={styles.keyBtn}
-                >
-                  {key === "DEL" ? (
-                    <Delete size={17} color={colors.ink} strokeWidth={2.3} />
-                  ) : (
-                    <Text style={styles.keyText}>{key}</Text>
-                  )}
-                </Pressable>
-              ))}
+      {padOpen ? (
+        <View style={[styles.padGrid, dark && styles.padGridDark]}>
+          {[
+            ["1", "2", "3", "BACK"],
+            ["4", "5", "6", "00"],
+            ["7", "8", "9", ","],
+            ["C", "0", "OK"],
+          ].map((row, rIdx) => (
+            <View key={rIdx} style={styles.padRow}>
+              {row.map((k) => {
+                const isOk = k === "OK";
+                const isClear = k === "C";
+                const isBack = k === "BACK";
+                return (
+                  <Pressable
+                    key={k}
+                    onPress={() => {
+                      if (isOk) {
+                        triggerHaptic("light");
+                        setPadOpen(false);
+                      } else if (isClear) {
+                        triggerHaptic("light");
+                        onChange("");
+                      } else {
+                        appendKey(k);
+                      }
+                    }}
+                    style={[
+                      styles.keyBtn,
+                      isOk && { flex: 2, backgroundColor: COLORS.outerSpace },
+                      !isOk && (dark ? styles.keyBtnDark : styles.keyBtnLight),
+                    ]}
+                  >
+                    {isBack ? (
+                      <Delete
+                        size={17}
+                        color={dark ? "#ffffff" : COLORS.ink}
+                        strokeWidth={2.2}
+                      />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.keyText,
+                          dark && { color: "#ffffff" },
+                          isClear && { color: COLORS.betclicRed },
+                          isOk && { color: "#ffffff", fontSize: 13.5 },
+                        ]}
+                      >
+                        {isClear ? "Effacer" : k}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
             </View>
           ))}
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -152,87 +213,102 @@ const styles = StyleSheet.create({
   wrap: {
     gap: 8,
   },
-  displayBox: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.elev,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    gap: 8,
+    flexWrap: "wrap",
   },
-  displayLabel: {
-    fontSize: 10.5,
-    fontWeight: "600",
-    color: colors.dim,
+  label: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.mist,
   },
-  displayValue: {
-    marginTop: 1,
-    fontSize: 17,
-    fontWeight: "900",
-    color: colors.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  kbdToggle: {
+  chipsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
   },
-  kbdToggleText: {
+  chip: {
+    height: 28,
+    paddingHorizontal: 9,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipLight: {
+    backgroundColor: COLORS.elev,
+  },
+  chipDark: {
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  chipActive: {
+    backgroundColor: COLORS.betclicRed,
+  },
+  chipText: {
     fontSize: 11.5,
     fontWeight: "700",
-    color: colors.ink,
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
   },
-  presetsRow: {
+  chipTextActive: {
+    color: "#ffffff",
+  },
+  displayBox: {
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1.5,
+  },
+  displayBoxLight: {
+    backgroundColor: COLORS.elev,
+    borderColor: COLORS.edge,
+  },
+  displayBoxDark: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  displayBoxFocused: {
+    borderColor: COLORS.betclicRed,
+  },
+  displayVal: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  displayPlaceholder: {
+    color: COLORS.dim,
+  },
+  displayRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  euroSign: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.mist,
+  },
+  toggleHint: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+  },
+  padGrid: {
+    borderRadius: 14,
+    backgroundColor: COLORS.elev,
+    padding: 7,
     gap: 6,
   },
-  presetChip: {
-    flex: 1,
-    height: 34,
-    borderRadius: 9,
-    backgroundColor: colors.elev,
-    alignItems: "center",
-    justifyContent: "center",
+  padGridDark: {
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
-  presetChipActive: {
-    backgroundColor: colors.ink,
-  },
-  presetText: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  presetTextActive: {
-    color: colors.white,
-  },
-  allInChip: {
-    height: 34,
-    paddingHorizontal: 11,
-    borderRadius: 9,
-    backgroundColor: "rgba(225, 0, 20, 0.10)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  allInText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.betclicRed,
-  },
-  keypad: {
-    gap: 6,
-    marginTop: 2,
-  },
-  keypadRow: {
+  padRow: {
     flexDirection: "row",
     gap: 6,
   },
@@ -240,13 +316,19 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     borderRadius: 10,
-    backgroundColor: colors.elev,
     alignItems: "center",
     justifyContent: "center",
   },
+  keyBtnLight: {
+    backgroundColor: "#ffffff",
+  },
+  keyBtnDark: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
   keyText: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
   },
 });

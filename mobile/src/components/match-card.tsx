@@ -1,68 +1,33 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "@/lib/router";
-import { ChevronRight, Lock } from "@/components/icons";
-import type { ClientMatch } from "@/lib/api";
-import { formatKickoff, formatOdds } from "@/lib/format";
-import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
+import { Check, ChevronRight, Clock, Lock } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
-import { TeamAvatar } from "./team-avatar";
-import { SportIcon } from "./sport-icon";
+import type { ClientMatch } from "@/lib/api";
+import { formatOdds } from "@/lib/format";
+import { sanitizeMatchEvents } from "@/lib/match-events";
+import { useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 import { KickoffCountdown } from "./kickoff-countdown";
 import {
   OddsTrendCorner,
-  oddsTextColor,
+  oddsTrendTextColor,
   useOddsTrend,
 } from "./odds-trend-corner";
+import { SportIcon } from "./sport-icon";
+import { TeamAvatar } from "./team-avatar";
 
-function LiveStatusBadge({
-  minute,
-  suspended,
-}: {
-  minute: string | null;
-  suspended?: boolean;
-}) {
-  const isHalfTime = minute === "MT" || minute === "HT";
-
-  if (suspended) {
-    return (
-      <View style={styles.suspendedBadge}>
-        <Lock size={10} color={colors.amber} strokeWidth={2.5} />
-        <Text style={styles.suspendedText}>Suspendu · {minute ?? "LIVE"}</Text>
-      </View>
-    );
-  }
-
-  if (isHalfTime) {
-    return (
-      <View style={styles.suspendedBadge}>
-        <Text style={styles.suspendedText}>Mi-temps</Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.liveBadge}>
-      <View style={styles.liveDot} />
-      <Text style={styles.liveText}>{minute ?? "LIVE"}</Text>
-    </View>
-  );
-}
-
-function OddsPill({
-  label,
+function OddsCell({
+  shortLabel,
   odds,
-  selected,
-  disabled,
   oddsFormat,
+  inCombo,
   onPress,
   onLongPress,
 }: {
-  label: string;
+  shortLabel: string;
   odds: number;
-  selected: boolean;
-  disabled: boolean;
   oddsFormat: "decimal" | "fractional";
+  inCombo: boolean;
   onPress: () => void;
   onLongPress: () => void;
 }) {
@@ -73,343 +38,333 @@ function OddsPill({
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={260}
-      disabled={disabled}
       style={[
         styles.oddsBtn,
-        selected && styles.oddsBtnSelected,
-        disabled && styles.oddsBtnDisabled,
+        inCombo
+          ? styles.oddsBtnCombo
+          : trend === "up"
+            ? styles.oddsBtnUp
+            : trend === "down"
+              ? styles.oddsBtnDown
+              : styles.oddsBtnIdle,
       ]}
     >
-      <OddsTrendCorner trend={trend} selected={selected} />
-      <Text style={[styles.oddsLabel, selected && styles.oddsLabelSelected]}>
-        {label}
-      </Text>
-      {disabled ? (
-        <Lock
-          size={12}
-          color={selected ? colors.white : colors.dim}
-          strokeWidth={2.4}
-        />
-      ) : (
+      <OddsTrendCorner trend={trend} inverted={inCombo} />
+      <View style={styles.oddsLeft}>
+        {inCombo ? (
+          <Check size={12} color="#ffffff" strokeWidth={3} />
+        ) : null}
         <Text
           style={[
-            styles.oddsVal,
-            { color: oddsTextColor(trend, selected) },
+            styles.oddsLabel,
+            inCombo && { color: "rgba(255,255,255,0.85)" },
           ]}
         >
-          {formatOdds(odds, oddsFormat)}
+          {shortLabel}
         </Text>
-      )}
+      </View>
+      <Text
+        style={[
+          styles.oddsVal,
+          { color: oddsTrendTextColor(trend, inCombo) },
+        ]}
+      >
+        {formatOdds(odds, oddsFormat)}
+      </Text>
     </Pressable>
   );
 }
 
-/**
- * Carte match mobile identique à `src/components/match-card.tsx` :
- * - Aucun liseré latéral gauche
- * - Aucun badge « Virtuel » à côté de la ligue
- * - Clic sur la carte -> `/matchs/[id]` (ou `/resultats/[id]` si terminé)
- * - Clic court sur cote -> `BetModal` (ou ajout direct au Betslip si ≥ 1 sélection déjà présente)
- * - Appui long sur cote -> bascule la sélection dans le Betslip combiné.
- */
 export function MatchCard({
   match,
-  nextUp = false,
   width,
 }: {
   match: ClientMatch;
-  nextUp?: boolean;
   width?: number;
 }) {
   const router = useRouter();
   const {
-    oddsFormat,
-    comboLegs,
-    isInCombo,
-    toggleComboLeg,
     openBet,
     openMarkets,
-    hapticsEnabled,
+    oddsFormat,
+    toggleComboLeg,
+    isInCombo,
+    comboQuickMode,
     toast,
   } = useApp();
 
-  const isReal = match.source === "manual";
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
-  const marketCount = match.marketCount ?? match.markets.length;
-  const locked =
-    isFinished ||
-    Boolean(match.suspended) ||
-    (isReal && Boolean(match.kickoffReached) && !isLive);
+  const isPostGameVerifying =
+    match.source === "manual" &&
+    isLive &&
+    Boolean(match.suspended) &&
+    match.minute === "Fin · Vérif.";
 
-  const handleOutcomeTap = (
-    selection: "home" | "draw" | "away",
-    selectionLabel: string,
-    odds: number
-  ) => {
-    if (locked) return;
-    if (comboLegs.length >= 1) {
-      const res = toggleComboLeg({
-        kind: "sport",
-        matchId: match.id,
-        title: `${match.homeTeam} – ${match.awayTeam}`,
-        league: match.league,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        homeLogo: match.homeLogo ?? null,
-        awayLogo: match.awayLogo ?? null,
-        market: "result",
-        selection,
-        selectionLabel,
-        odds,
-        startsAt: match.startsAt,
-        isLive,
-        source: match.source ?? "virtual",
-      });
-      if (res === "full") {
-        toast({ kind: "error", title: "Maximum 8 sélections dans le Betslip" });
-      }
-      return;
-    }
+  const resultMarket = match.markets.find((g) => g.key === "result");
+  const outcomes =
+    resultMarket?.outcomes ?? [
+      {
+        key: "home",
+        label: match.homeTeam,
+        short: "V1",
+        odds: match.oddsHome,
+      },
+      ...(match.oddsDraw
+        ? [{ key: "draw", label: "Match nul", short: "X", odds: match.oddsDraw }]
+        : []),
+      {
+        key: "away",
+        label: match.awayTeam,
+        short: "V2",
+        odds: match.oddsAway,
+      },
+    ];
 
-    openBet({
-      match,
-      market: "result",
-      marketLabel: "Résultat 1X2",
-      selection,
-      selectionLabel,
-      odds,
-    });
-  };
+  const totalMarkets = match.marketCount ?? Math.max(18, match.markets.length);
+  const extraMarkets = Math.max(0, totalMarkets - 1);
+  const uid = `sport-${match.id}`;
+  const redHome = match.redHome ?? 0;
+  const redAway = match.redAway ?? 0;
 
-  const handleOutcomeLongPress = (
-    selection: "home" | "draw" | "away",
-    selectionLabel: string,
-    odds: number
-  ) => {
-    if (locked) return;
+  const recentGoals = useMemo(
+    () =>
+      sanitizeMatchEvents(match.events, match.homeScore, match.awayScore)
+        .filter((e) => e.type === "goal")
+        .slice(-3),
+    [match.events, match.homeScore, match.awayScore]
+  );
+
+  const handleToggleCombo = (o: {
+    key: string;
+    label: string;
+    short?: string;
+    odds: number;
+  }) => {
     const res = toggleComboLeg({
+      uid,
       kind: "sport",
       matchId: match.id,
+      matchSource: match.source,
       title: `${match.homeTeam} – ${match.awayTeam}`,
-      league: match.league,
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
       homeLogo: match.homeLogo ?? null,
       awayLogo: match.awayLogo ?? null,
+      league: match.league,
       market: "result",
-      selection,
-      selectionLabel,
-      odds,
+      selection: o.key,
+      selectionLabel: `${o.short ?? o.label} · ${o.label}`,
+      odds: o.odds,
       startsAt: match.startsAt,
-      isLive,
-      source: match.source ?? "virtual",
+      isLive: match.status === "live",
     });
-    if (res === "added") {
+    if (res === "full") {
       toast({
-        kind: "info",
-        title: "Ajouté au Betslip",
-        subtitle: `${match.homeTeam} – ${match.awayTeam} · ${selectionLabel}`,
+        kind: "error",
+        title: "Combiné complet",
+        description: "Maximum 8 sélections par ticket combiné.",
       });
-    } else if (res === "full") {
-      toast({ kind: "error", title: "Maximum 8 sélections dans le Betslip" });
+    } else if (res === "source_conflict") {
+      toast({
+        kind: "error",
+        title: "Mélange interdit",
+        description:
+          "Impossible de combiner un match officiel et un match virtuel sur le même ticket.",
+      });
     }
   };
 
+  const detailHref = isFinished
+    ? `/resultats/${match.id}`
+    : `/matchs/${match.id}`;
+
   return (
-    <Pressable
-      onPress={() => {
-        triggerHaptic("light", hapticsEnabled);
-        if (isFinished) {
-          router.push(`/resultats/${match.id}`);
-        } else {
-          router.push(`/matchs/${match.id}`);
-        }
-      }}
-      style={[
-        cardSurface.glassCard,
-        styles.card,
-        !isFinished && styles.cardMinHeight,
-        width ? { width } : null,
-      ]}
-    >
-      {/* En-tête : ligue + statut */}
+    <View style={[styles.card, width ? { width } : null]}>
       <View style={styles.headerRow}>
-        <View style={styles.leagueRow}>
-          <SportIcon sport={match.sport} size={14} color={colors.dim} />
+        <Pressable
+          onPress={() => router.push(detailHref)}
+          style={styles.leaguePress}
+        >
+          <SportIcon sport={match.sport} size={14} color={COLORS.dim} />
           <Text numberOfLines={1} style={styles.leagueText}>
             {match.league}
           </Text>
-        </View>
+        </Pressable>
 
-        <View style={styles.statusRow}>
-          {isLive ? (
-            <LiveStatusBadge minute={match.minute} suspended={match.suspended} />
+        <View style={styles.headerRight}>
+          {isPostGameVerifying ? (
+            <View style={styles.verifyPill}>
+              <Clock size={11} color={COLORS.amber} strokeWidth={2.3} />
+              <Text style={styles.verifyText}>Fin · Vérif.</Text>
+            </View>
+          ) : isLive ? (
+            <View style={styles.livePill}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>{match.minute ?? "LIVE"}</Text>
+            </View>
           ) : isFinished ? (
-            <View style={styles.finishedPill}>
-              <Text style={styles.finishedText}>Terminé</Text>
-              <ChevronRight size={12} color={colors.dim} strokeWidth={2.3} />
-            </View>
-          ) : isReal && match.kickoffReached ? (
-            <View style={styles.suspendedBadge}>
-              <Lock size={10} color={colors.amber} strokeWidth={2.4} />
-              <Text style={styles.suspendedText}>Coup d&apos;envoi atteint</Text>
-            </View>
-          ) : isReal ? (
-            <View style={styles.kickoffPill}>
-              <Text style={styles.kickoffText}>
-                {formatKickoff(match.startsAt)}
-              </Text>
+            <View style={styles.finPill}>
+              <Text style={styles.finText}>Terminé</Text>
             </View>
           ) : (
-            <>
-              {nextUp && (
-                <View style={styles.nextPill}>
-                  <Text style={styles.nextText}>Suivant</Text>
-                </View>
-              )}
-              <KickoffCountdown startsAt={match.startsAt} />
-            </>
+            <KickoffCountdown startsAt={match.startsAt} />
           )}
 
-          {!isFinished && marketCount > 1 && (
+          {!isFinished && extraMarkets > 0 ? (
             <Pressable
-              hitSlop={8}
-              onPress={(e) => {
-                e.stopPropagation();
-                openMarkets(match);
+              onPress={() => {
+                if (match.markets.length > 1) {
+                  openMarkets(match);
+                } else {
+                  router.push(`/matchs/${match.id}`);
+                }
               }}
-              style={styles.moreMarketsPill}
+              style={styles.moreMarketsBtn}
             >
-              <Text style={styles.moreMarketsText}>+{marketCount - 1}</Text>
-              <ChevronRight
-                size={11}
-                color={colors.betclicRed}
-                strokeWidth={2.6}
-              />
+              <Text style={styles.moreMarketsText}>+{extraMarkets}</Text>
+              <ChevronRight size={12} color={COLORS.mist} strokeWidth={2.4} />
             </Pressable>
-          )}
+          ) : null}
         </View>
       </View>
 
-      {/* Équipes & scores */}
-      <View style={styles.teamsBlock}>
+      <Pressable
+        onPress={() => router.push(detailHref)}
+        style={styles.teamsBlock}
+      >
         <View style={styles.teamRow}>
           <View style={styles.teamLeft}>
-            <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" />
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.teamName,
-                isFinished &&
-                  (match.homeScore ?? 0) > (match.awayScore ?? 0) &&
-                  styles.teamWinner,
-              ]}
-            >
+            <TeamAvatar
+              name={match.homeTeam}
+              logo={match.homeLogo}
+              size="sm"
+            />
+            <Text numberOfLines={1} style={styles.teamName}>
               {match.homeTeam}
             </Text>
-            {(match.redHome ?? 0) > 0 && (
+            {redHome > 0 ? (
               <View style={styles.redCardBadge}>
-                <Text style={styles.redCardText}>{match.redHome}</Text>
+                <Text style={styles.redCardText}>{redHome}</Text>
               </View>
-            )}
+            ) : null}
           </View>
-          {(isLive || isFinished) && (
-            <Text style={[styles.score, isLive && styles.scoreLive]}>
-              {match.homeScore ?? 0}
+          {(isLive || isFinished) && match.homeScore !== null ? (
+            <Text
+              style={[
+                styles.scoreNum,
+                isLive ? { color: COLORS.ink } : { color: COLORS.mist },
+              ]}
+            >
+              {match.homeScore}
             </Text>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.teamRow}>
           <View style={styles.teamLeft}>
-            <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="sm" />
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.teamName,
-                isFinished &&
-                  (match.awayScore ?? 0) > (match.homeScore ?? 0) &&
-                  styles.teamWinner,
-              ]}
-            >
+            <TeamAvatar
+              name={match.awayTeam}
+              logo={match.awayLogo}
+              size="sm"
+            />
+            <Text numberOfLines={1} style={styles.teamName}>
               {match.awayTeam}
             </Text>
-            {(match.redAway ?? 0) > 0 && (
+            {redAway > 0 ? (
               <View style={styles.redCardBadge}>
-                <Text style={styles.redCardText}>{match.redAway}</Text>
+                <Text style={styles.redCardText}>{redAway}</Text>
               </View>
-            )}
+            ) : null}
           </View>
-          {(isLive || isFinished) && (
-            <Text style={[styles.score, isLive && styles.scoreLive]}>
-              {match.awayScore ?? 0}
+          {(isLive || isFinished) && match.awayScore !== null ? (
+            <Text
+              style={[
+                styles.scoreNum,
+                isLive ? { color: COLORS.ink } : { color: COLORS.mist },
+              ]}
+            >
+              {match.awayScore}
             </Text>
-          )}
+          ) : null}
         </View>
-      </View>
 
-      {/* Grille de cotes 1 / X / 2 */}
-      {!isFinished && (
-        <View style={styles.oddsRow}>
-          <OddsPill
-            label="1"
-            odds={match.oddsHome}
-            selected={isInCombo("sport", match.id, "result", "home")}
-            disabled={locked}
-            oddsFormat={oddsFormat}
-            onPress={() =>
-              handleOutcomeTap("home", match.homeTeam, match.oddsHome)
-            }
-            onLongPress={() =>
-              handleOutcomeLongPress("home", match.homeTeam, match.oddsHome)
-            }
-          />
-          {match.oddsDraw !== null && (
-            <OddsPill
-              label="X"
-              odds={match.oddsDraw}
-              selected={isInCombo("sport", match.id, "result", "draw")}
-              disabled={locked}
-              oddsFormat={oddsFormat}
-              onPress={() =>
-                handleOutcomeTap("draw", "Match nul", match.oddsDraw ?? 3.1)
-              }
-              onLongPress={() =>
-                handleOutcomeLongPress(
-                  "draw",
-                  "Match nul",
-                  match.oddsDraw ?? 3.1
-                )
-              }
-            />
-          )}
-          <OddsPill
-            label="2"
-            odds={match.oddsAway}
-            selected={isInCombo("sport", match.id, "result", "away")}
-            disabled={locked}
-            oddsFormat={oddsFormat}
-            onPress={() =>
-              handleOutcomeTap("away", match.awayTeam, match.oddsAway)
-            }
-            onLongPress={() =>
-              handleOutcomeLongPress("away", match.awayTeam, match.oddsAway)
-            }
-          />
-        </View>
-      )}
-    </Pressable>
+        {isLive && recentGoals.length > 0 ? (
+          <Text numberOfLines={1} style={styles.goalsSummary}>
+            ⚽{" "}
+            {recentGoals
+              .map(
+                (g) => `${g.minute}'${g.player ? ` ${g.player}` : ""}`
+              )
+              .join(" · ")}
+          </Text>
+        ) : null}
+      </Pressable>
+
+      <View style={styles.bottomArea}>
+        {isPostGameVerifying ? (
+          <View style={styles.verifyBanner}>
+            <Clock size={13} color={COLORS.amber} strokeWidth={2.2} />
+            <Text numberOfLines={1} style={styles.verifyBannerText}>
+              Fin du match · vérification du score officiel…
+            </Text>
+          </View>
+        ) : match.suspended ? (
+          <View style={styles.suspendedBanner}>
+            <Lock size={13} color={COLORS.dim} strokeWidth={2.2} />
+            <Text style={styles.suspendedText}>Marchés suspendus</Text>
+          </View>
+        ) : isFinished ? (
+          <View style={styles.suspendedBanner}>
+            <Text style={styles.suspendedText}>Marché clôturé</Text>
+          </View>
+        ) : (
+          <View style={styles.oddsGrid}>
+            {outcomes.map((o) => {
+              const shortLabel = o.short ?? o.shortLabel ?? o.label;
+              const selected = isInCombo(uid, "result", o.key);
+              return (
+                <OddsCell
+                  key={o.key}
+                  shortLabel={shortLabel}
+                  odds={o.odds}
+                  oddsFormat={oddsFormat}
+                  inCombo={selected}
+                  onPress={() => {
+                    if (comboQuickMode) {
+                      handleToggleCombo(o);
+                    } else {
+                      openBet({
+                        match,
+                        selection: o.key,
+                        odds: o.odds,
+                        label: o.label,
+                        market: "result",
+                        marketLabel: resultMarket?.label ?? "Résultat 1X2",
+                      });
+                    }
+                  }}
+                  onLongPress={() => handleToggleCombo(o)}
+                />
+              );
+            })}
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
+    minHeight: 194,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
     padding: 15,
     justifyContent: "space-between",
-  },
-  cardMinHeight: {
-    minHeight: 192,
+    gap: 11,
   },
   headerRow: {
     flexDirection: "row",
@@ -417,111 +372,89 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  leagueRow: {
-    flex: 1,
+  leaguePress: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flex: 1,
+    minWidth: 0,
   },
   leagueText: {
-    flexShrink: 1,
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: "600",
-    color: colors.mist,
+    color: COLORS.mist,
+    flexShrink: 1,
   },
-  statusRow: {
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  livePill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-  },
-  liveBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "rgba(225, 0, 20, 0.12)",
+    backgroundColor: "rgba(225, 0, 20, 0.10)",
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
   },
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.betclicRed,
   },
   liveText: {
     fontSize: 10.5,
     fontWeight: "800",
-    color: colors.betclicRed,
+    color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
-  suspendedBadge: {
+  verifyPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: colors.amberSoft,
+    backgroundColor: COLORS.amberSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
   },
-  suspendedText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.amber,
+  verifyText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: COLORS.amber,
   },
-  finishedPill: {
+  finPill: {
+    borderRadius: 6,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+  },
+  finText: {
+    fontSize: 10.5,
+    fontWeight: "600",
+    color: COLORS.dim,
+  },
+  moreMarketsBtn: {
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    paddingLeft: 7,
+    paddingRight: 4,
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 7,
-    backgroundColor: colors.elev,
-  },
-  finishedText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.dim,
-  },
-  kickoffPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: colors.elev,
-  },
-  kickoffText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: colors.ink,
-  },
-  nextPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: "rgba(17, 24, 39, 0.08)",
-  },
-  nextText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  moreMarketsPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: colors.elev,
+    gap: 1,
   },
   moreMarketsText: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.ink,
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: COLORS.mist,
+    fontVariant: ["tabular-nums"],
   },
   teamsBlock: {
-    marginTop: 13,
-    gap: 9,
+    gap: 8,
   },
   teamRow: {
     flexDirection: "row",
@@ -530,81 +463,119 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   teamLeft: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
+    flex: 1,
+    minWidth: 0,
   },
   teamName: {
-    flexShrink: 1,
     fontSize: 14,
     fontWeight: "700",
-    color: colors.ink,
-  },
-  teamWinner: {
-    fontWeight: "900",
+    color: COLORS.ink,
+    flexShrink: 1,
   },
   redCardBadge: {
     minWidth: 14,
-    height: 17,
-    paddingHorizontal: 3,
+    height: 16,
     borderRadius: 3,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 3.5,
     alignItems: "center",
     justifyContent: "center",
   },
   redCardText: {
     fontSize: 9.5,
-    fontWeight: "900",
-    color: colors.white,
+    fontWeight: "800",
+    color: "#ffffff",
   },
-  score: {
+  scoreNum: {
     fontSize: 16,
-    fontWeight: "900",
-    color: colors.ink,
+    fontWeight: "800",
     fontVariant: ["tabular-nums"],
+    minWidth: 20,
+    textAlign: "right",
   },
-  scoreLive: {
-    color: colors.betclicRed,
+  goalsSummary: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: COLORS.dim,
+    marginTop: 1,
   },
-  oddsRow: {
-    marginTop: 14,
+  bottomArea: {
+    marginTop: 2,
+  },
+  oddsGrid: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 7,
   },
   oddsBtn: {
     flex: 1,
     height: 44,
-    borderRadius: 11,
-    backgroundColor: colors.elev,
-    borderWidth: 1,
-    borderColor: colors.edgeSoft,
-    paddingHorizontal: 9,
+    borderRadius: 12,
+    paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     position: "relative",
     overflow: "hidden",
   },
-  oddsBtnSelected: {
-    backgroundColor: colors.betclicRed,
-    borderColor: colors.betclicRed,
+  oddsBtnIdle: {
+    backgroundColor: COLORS.elev,
   },
-  oddsBtnDisabled: {
-    opacity: 0.55,
+  oddsBtnUp: {
+    backgroundColor: "rgba(21, 128, 61, 0.09)",
+  },
+  oddsBtnDown: {
+    backgroundColor: "rgba(225, 0, 20, 0.08)",
+  },
+  oddsBtnCombo: {
+    backgroundColor: COLORS.outerSpace,
+  },
+  oddsLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   oddsLabel: {
     fontSize: 11.5,
-    fontWeight: "700",
-    color: colors.dim,
-  },
-  oddsLabelSelected: {
-    color: "rgba(255,255,255,0.85)",
+    fontWeight: "600",
+    color: COLORS.dim,
   },
   oddsVal: {
     fontSize: 13.5,
     fontWeight: "800",
     fontVariant: ["tabular-nums"],
+  },
+  suspendedBanner: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  suspendedText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.dim,
+  },
+  verifyBanner: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.amberSoft,
+    borderWidth: 1,
+    borderColor: COLORS.amberBorder,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  verifyBannerText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: COLORS.amber,
   },
 });

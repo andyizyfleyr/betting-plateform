@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,214 +9,256 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as WebBrowser from "expo-web-browser";
-import { useRouter } from "@/lib/router";
 import {
   ArrowLeft,
   CreditCard,
-  Landmark,
   Smartphone,
   Wallet,
-} from "@/components/icons";
-import { api } from "@/lib/api";
-import { eur } from "@/lib/format";
-import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
+} from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import {
+  api,
+  ApiHttpError,
+  generateIdempotencyKey,
+  type PaymentProvider,
+} from "@/lib/api";
+import { eur } from "@/lib/format";
+import { Redirect, useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-const PRESETS = [10, 25, 50, 100, 250];
+const AMOUNTS = [10, 25, 50, 100, 250, 500] as const;
 
-/**
- * Page dédiée `/parametres/depot` fidèle à `src/app/(main)/parametres/depot/page.tsx`.
- */
 export default function DepotScreen() {
   const router = useRouter();
-  const { setBalance, paymentProviders, hapticsEnabled, toast } = useApp();
+  const { user, authReady, balance, paymentProviders, toast } = useApp();
 
-  const [amount, setAmount] = useState<number>(25);
-  const [provider, setProvider] = useState<
-    "stripe" | "paypal" | "mobile_money" | "sepa"
-  >("stripe");
-  const [senderRef, setSenderRef] = useState("");
-  const [phoneOrIban, setPhoneOrIban] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [providers, setProviders] =
+    useState<PaymentProvider[]>(paymentProviders);
+  const [amount, setAmount] = useState("25");
+  const [method, setMethod] = useState<
+    "mobile_money" | "sepa" | "stripe" | "paypal"
+  >("mobile_money");
+  const [reference, setReference] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const info = paymentProviders.find((p) => p.id === provider);
+  useEffect(() => {
+    api.payments
+      .providers()
+      .then((r) => setProviders(r.providers))
+      .catch(() => {});
+  }, []);
 
-  const submit = async () => {
-    if (amount < 5 || loading) return;
-    setLoading(true);
+  if (authReady && !user) {
+    return <Redirect href="/auth" />;
+  }
+
+  const numAmount = Math.max(
+    0,
+    Math.round((parseFloat(amount.replace(",", ".")) || 0) * 100) / 100
+  );
+
+  const stripeOn = providers.some((p) => p.id === "stripe" && p.enabled);
+  const paypalOn = providers.some((p) => p.id === "paypal" && p.enabled);
+
+  const handleSubmit = async () => {
+    if (numAmount < 5) {
+      toast({ kind: "error", title: "Montant minimum : 5,00 €" });
+      return;
+    }
+    setSubmitting(true);
     try {
-      if (provider === "stripe") {
-        const res = await api.payments.stripeCheckout(amount);
-        if (res.mode === "live_redirect" && res.url) {
-          await WebBrowser.openBrowserAsync(res.url);
-        } else if (typeof res.balance === "number") {
-          setBalance(res.balance);
-          toast({ kind: "win", title: `+${eur(amount)} crédités` });
-          router.back();
-        }
-      } else if (provider === "paypal") {
-        const res = await api.payments.paypalOrder(amount);
-        if (res.mode === "live_redirect" && res.url) {
-          await WebBrowser.openBrowserAsync(res.url);
-        } else if (typeof res.balance === "number") {
-          setBalance(res.balance);
-          toast({ kind: "win", title: `+${eur(amount)} crédités via PayPal` });
-          router.back();
-        }
+      const idem = generateIdempotencyKey("dep");
+      if (method === "stripe" || method === "paypal") {
+        const res = await api.payments.create(method, numAmount, idem);
+        if (res.url) await Linking.openURL(res.url);
       } else {
-        if (!senderRef.trim()) {
-          toast({ kind: "error", title: "Indiquez la référence du transfert" });
-          setLoading(false);
+        if (reference.trim().length < 4) {
+          toast({
+            kind: "error",
+            title: "Référence requise",
+            description: "Indiquez la référence du transfert (4 caractères min.).",
+          });
+          setSubmitting(false);
           return;
         }
-        const res = await api.payments.manualRequest({
-          provider,
-          amount,
-          senderRef: senderRef.trim(),
-          phoneOrIban: phoneOrIban.trim() || undefined,
+        await api.payments.manual({
+          method,
+          reference: reference.trim(),
+          amount: numAmount,
+          idempotencyKey: idem,
         });
+        setReference("");
         toast({
           kind: "success",
           title: "Dépôt enregistré",
-          subtitle: res.message,
+          description: `Demande de ${eur(numAmount)} transmise pour validation.`,
         });
-        router.back();
+        router.push("/parametres/transactions");
       }
     } catch (err) {
       toast({
         kind: "error",
-        title: "Échec du dépôt",
-        subtitle: err instanceof Error ? err.message : undefined,
+        title: "Dépôt impossible",
+        description:
+          err instanceof ApiHttpError ? err.message : "Veuillez réessayer.",
       });
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
     <ScrollView
-      style={styles.root}
+      style={styles.page}
       contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
     >
-      <View style={styles.topRow}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft size={18} color={colors.ink} strokeWidth={2.4} />
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back("/parametres")}
+          style={styles.backBtn}
+        >
+          <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
         </Pressable>
-        <Text style={styles.pageTitle}>Déposer des fonds</Text>
+        <Text style={styles.navTitle}>Dépôt</Text>
+        <View style={{ width: 36 }} />
       </View>
 
-      <View style={[cardSurface.glassCard, styles.card]}>
-        <Text style={styles.label}>Montant à déposer</Text>
-        <View style={styles.presetsRow}>
-          {PRESETS.map((p) => {
-            const active = amount === p;
+      <View style={styles.balanceBanner}>
+        <Text style={styles.balanceLabel}>Solde actuel</Text>
+        <Text style={styles.balanceVal}>{eur(balance)}</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>1. Choisir un montant (€)</Text>
+        <View style={styles.chipsWrap}>
+          {AMOUNTS.map((a) => {
+            const active = Math.abs(numAmount - a) < 0.01;
             return (
               <Pressable
-                key={p}
-                onPress={() => {
-                  triggerHaptic("light", hapticsEnabled);
-                  setAmount(p);
-                }}
-                style={[styles.presetBtn, active && styles.presetBtnActive]}
+                key={a}
+                onPress={() => setAmount(String(a))}
+                style={[styles.chip, active && styles.chipActive]}
               >
                 <Text
-                  style={[styles.presetText, active && { color: colors.white }]}
+                  style={[styles.chipText, active && styles.chipTextActive]}
                 >
-                  {p} €
+                  {a} €
                 </Text>
               </Pressable>
             );
           })}
         </View>
-
         <TextInput
-          value={String(amount)}
-          onChangeText={(t) => {
-            const n = parseFloat(t.replace(",", "."));
-            setAmount(Number.isFinite(n) ? n : 0);
-          }}
+          value={amount}
+          onChangeText={setAmount}
           keyboardType="decimal-pad"
+          placeholder="Autre montant (min. 5 €)"
+          placeholderTextColor={COLORS.dim}
           style={styles.input}
         />
 
-        <Text style={styles.label}>Méthode de paiement</Text>
-        <View style={styles.methodsGrid}>
-          {(
-            [
-              { id: "stripe", label: "Carte Stripe", Icon: CreditCard },
-              { id: "paypal", label: "PayPal", Icon: Wallet },
-              { id: "mobile_money", label: "Mobile Money", Icon: Smartphone },
-              { id: "sepa", label: "Virement SEPA", Icon: Landmark },
-            ] as const
-          ).map((m) => {
-            const active = provider === m.id;
-            return (
-              <Pressable
-                key={m.id}
-                onPress={() => setProvider(m.id)}
-                style={[styles.methodBtn, active && styles.methodBtnActive]}
-              >
-                <m.Icon
-                  size={16}
-                  color={active ? colors.betclicRed : colors.mist}
-                  strokeWidth={2.3}
-                />
-                <Text
-                  style={[
-                    styles.methodText,
-                    active && { color: colors.betclicRed, fontWeight: "800" },
-                  ]}
-                >
-                  {m.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+        <Text style={styles.sectionTitle}>2. Moyen de paiement</Text>
+        <View style={styles.methodsList}>
+          <Pressable
+            onPress={() => setMethod("mobile_money")}
+            style={[
+              styles.methodRow,
+              method === "mobile_money" && styles.methodRowActive,
+            ]}
+          >
+            <Smartphone
+              size={18}
+              color={
+                method === "mobile_money" ? COLORS.betclicRed : COLORS.mist
+              }
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.mTitle}>Mobile Money (MTN / Moov / Wave)</Text>
+              <Text style={styles.mSub}>Validation rapide par référence</Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setMethod("sepa")}
+            style={[
+              styles.methodRow,
+              method === "sepa" && styles.methodRowActive,
+            ]}
+          >
+            <Wallet
+              size={18}
+              color={method === "sepa" ? COLORS.betclicRed : COLORS.mist}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.mTitle}>Virement bancaire SEPA</Text>
+              <Text style={styles.mSub}>Sans frais — référence requise</Text>
+            </View>
+          </Pressable>
+
+          {stripeOn ? (
+            <Pressable
+              onPress={() => setMethod("stripe")}
+              style={[
+                styles.methodRow,
+                method === "stripe" && styles.methodRowActive,
+              ]}
+            >
+              <CreditCard
+                size={18}
+                color={method === "stripe" ? COLORS.betclicRed : COLORS.mist}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mTitle}>Carte Bancaire (Stripe)</Text>
+                <Text style={styles.mSub}>Crédit instantané 24h/24</Text>
+              </View>
+            </Pressable>
+          ) : null}
+
+          {paypalOn ? (
+            <Pressable
+              onPress={() => setMethod("paypal")}
+              style={[
+                styles.methodRow,
+                method === "paypal" && styles.methodRowActive,
+              ]}
+            >
+              <CreditCard
+                size={18}
+                color={method === "paypal" ? COLORS.betclicRed : COLORS.mist}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mTitle}>PayPal</Text>
+                <Text style={styles.mSub}>Paiement sécurisé instantané</Text>
+              </View>
+            </Pressable>
+          ) : null}
         </View>
 
-        {(provider === "mobile_money" || provider === "sepa") && (
-          <View style={{ gap: 8 }}>
-            {info?.manualInstructions && (
-              <Text style={styles.manualNote}>
-                {info.manualInstructions.beneficiary} ·{" "}
-                {info.manualInstructions.account}
-              </Text>
-            )}
+        {method === "mobile_money" || method === "sepa" ? (
+          <View style={{ gap: 6 }}>
+            <Text style={styles.sectionTitle}>3. Référence du transfert</Text>
             <TextInput
-              value={phoneOrIban}
-              onChangeText={setPhoneOrIban}
-              placeholder={
-                provider === "mobile_money"
-                  ? "Numéro émetteur (optionnel)"
-                  : "IBAN émetteur (optionnel)"
-              }
-              placeholderTextColor={colors.dim}
-              style={styles.input}
-            />
-            <TextInput
-              value={senderRef}
-              onChangeText={setSenderRef}
-              placeholder="Référence du transfert *"
-              placeholderTextColor={colors.dim}
+              value={reference}
+              onChangeText={setReference}
+              placeholder="Ex. MOMO-8472910 ou SEPA-PULSE"
+              placeholderTextColor={COLORS.dim}
               style={styles.input}
             />
           </View>
-        )}
+        ) : null}
 
         <Pressable
-          disabled={loading || amount < 5}
-          onPress={() => void submit()}
-          style={[
-            styles.submitBtn,
-            (loading || amount < 5) && { opacity: 0.55 },
-          ]}
+          disabled={submitting}
+          onPress={handleSubmit}
+          style={[styles.submitBtn, submitting && { opacity: 0.65 }]}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color={colors.white} />
+          {submitting ? (
+            <ActivityIndicator size="small" color="#ffffff" />
           ) : (
-            <Text style={styles.submitText}>Créditer {eur(amount)}</Text>
+            <Text style={styles.submitText}>
+              Confirmer le dépôt · {eur(numAmount)}
+            </Text>
           )}
         </Pressable>
       </View>
@@ -224,75 +267,104 @@ export default function DepotScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.deep },
-  content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 28, gap: 12 },
-  topRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  page: { flex: 1, backgroundColor: COLORS.deep },
+  content: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 28, gap: 12 },
+  navBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pageTitle: { fontSize: 17, fontWeight: "900", color: colors.ink },
-  card: { padding: 15, gap: 11 },
-  label: { fontSize: 12, fontWeight: "800", color: colors.mist },
-  presetsRow: { flexDirection: "row", gap: 6 },
-  presetBtn: {
-    flex: 1,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: colors.elev,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  presetBtnActive: { backgroundColor: colors.ink },
-  presetText: { fontSize: 12.5, fontWeight: "800", color: colors.ink },
-  input: {
-    height: 42,
+    width: 36,
+    height: 36,
     borderRadius: 11,
-    backgroundColor: colors.elev,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edgeSoft,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.ink,
+    borderColor: COLORS.edge,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  methodsGrid: {
+  navTitle: { fontSize: 17, fontWeight: "800", color: COLORS.ink },
+  balanceBanner: {
+    borderRadius: 16,
+    backgroundColor: COLORS.ink,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  balanceLabel: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.75)",
+  },
+  balanceVal: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#ffffff",
+    fontVariant: ["tabular-nums"],
+  },
+  card: {
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 15,
+    gap: 12,
+  },
+  sectionTitle: { fontSize: 13.5, fontWeight: "800", color: COLORS.ink },
+  chipsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     rowGap: 8,
   },
-  methodBtn: {
-    width: "48.6%",
-    height: 46,
+  chip: {
+    width: "31.5%",
+    height: 40,
     borderRadius: 11,
+    backgroundColor: COLORS.elev,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipActive: { backgroundColor: COLORS.betclicRed },
+  chipText: { fontSize: 13.5, fontWeight: "800", color: COLORS.ink },
+  chipTextActive: { color: "#ffffff" },
+  input: {
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
     borderWidth: 1,
-    borderColor: colors.edge,
-    backgroundColor: colors.elev,
-    paddingHorizontal: 10,
+    borderColor: COLORS.edge,
+    paddingHorizontal: 13,
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.ink,
+  },
+  methodsList: { gap: 8 },
+  methodRow: {
+    borderRadius: 13,
+    backgroundColor: COLORS.elev,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    padding: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 11,
   },
-  methodBtnActive: {
-    borderColor: colors.betclicRed,
-    backgroundColor: "rgba(225,0,20,0.08)",
+  methodRowActive: {
+    borderColor: COLORS.betclicRed,
+    backgroundColor: "rgba(225, 0, 20, 0.06)",
   },
-  methodText: { fontSize: 12.5, fontWeight: "700", color: colors.ink },
-  manualNote: { fontSize: 11.5, fontWeight: "600", color: colors.mist },
+  mTitle: { fontSize: 13.5, fontWeight: "800", color: COLORS.ink },
+  mSub: { fontSize: 11.5, color: COLORS.dim, marginTop: 1 },
   submitBtn: {
-    height: 46,
+    height: 48,
     borderRadius: 13,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
   },
-  submitText: { fontSize: 14.5, fontWeight: "900", color: colors.white },
+  submitText: { fontSize: 14.5, fontWeight: "800", color: "#ffffff" },
 });

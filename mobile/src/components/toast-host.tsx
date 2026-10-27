@@ -1,104 +1,106 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AlertCircle, CheckCircle2, Info, Sparkles, X } from "@/components/icons";
-import { colors } from "@/theme/tokens";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Info,
+  Trophy,
+  X,
+} from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import { COLORS } from "@/theme/tokens";
 
 export function ToastHost() {
-  const insets = useSafeAreaInsets();
   const { toasts, dismissToast } = useApp();
 
   if (toasts.length === 0) return null;
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.host, { top: insets.top + 58 }]}
-    >
-      {toasts.map((t) => {
-        const isWin = t.kind === "win";
-        const isErr = t.kind === "error";
-        const isOk = t.kind === "success";
-        return (
-          <Pressable
-            key={t.id}
-            onPress={() => dismissToast(t.id)}
-            style={[
-              styles.card,
-              isWin && styles.cardWin,
-              isErr && styles.cardErr,
-            ]}
-          >
-            {isWin ? (
-              <Sparkles size={18} color={colors.win} strokeWidth={2.4} />
-            ) : isErr ? (
-              <AlertCircle size={18} color={colors.betclicRed} strokeWidth={2.4} />
-            ) : isOk ? (
-              <CheckCircle2 size={18} color={colors.win} strokeWidth={2.4} />
-            ) : (
-              <Info size={18} color={colors.ink} strokeWidth={2.4} />
-            )}
-            <View style={styles.body}>
-              <Text style={styles.title}>{t.title}</Text>
-              {t.subtitle ? (
-                <Text numberOfLines={2} style={styles.sub}>
-                  {t.subtitle}
+    <SafeAreaView pointerEvents="box-none" edges={["top"]} style={styles.host}>
+      <View pointerEvents="box-none" style={styles.stack}>
+        {toasts.map((t) => {
+          const desc = t.description ?? t.subtitle;
+          const Icon =
+            t.kind === "win"
+              ? Trophy
+              : t.kind === "success"
+                ? CheckCircle2
+                : t.kind === "error"
+                  ? AlertCircle
+                  : Info;
+          const accent =
+            t.kind === "win" || t.kind === "success"
+              ? COLORS.win
+              : t.kind === "error"
+                ? COLORS.betclicRed
+                : COLORS.ink;
+
+          return (
+            <Pressable
+              key={t.id}
+              onPress={() => dismissToast(t.id)}
+              style={styles.toast}
+            >
+              <Icon size={18} color={accent} strokeWidth={2.4} />
+              <View style={styles.textCol}>
+                <Text numberOfLines={1} style={styles.title}>
+                  {t.title}
                 </Text>
-              ) : null}
-            </View>
-            <X size={15} color={colors.dim} strokeWidth={2.3} />
-          </Pressable>
-        );
-      })}
-    </View>
+                {desc ? (
+                  <Text numberOfLines={2} style={styles.desc}>
+                    {desc}
+                  </Text>
+                ) : null}
+              </View>
+              <X size={14} color={COLORS.dim} strokeWidth={2.2} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   host: {
     position: "absolute",
+    top: 52,
     left: 12,
     right: 12,
-    zIndex: 99,
-    gap: 8,
+    zIndex: 999,
   },
-  card: {
+  stack: {
+    gap: 6,
+  },
+  toast: {
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    elevation: 5,
-    shadowColor: "#111827",
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    shadowColor: "#000000",
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
   },
-  cardWin: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "rgba(21, 128, 61, 0.35)",
-  },
-  cardErr: {
-    backgroundColor: "#fef2f2",
-    borderColor: "rgba(225, 0, 20, 0.30)",
-  },
-  body: {
+  textCol: {
     flex: 1,
+    gap: 1,
   },
   title: {
     fontSize: 13,
     fontWeight: "800",
-    color: colors.ink,
+    color: COLORS.ink,
   },
-  sub: {
-    marginTop: 2,
+  desc: {
     fontSize: 11.5,
     fontWeight: "500",
-    color: colors.mist,
+    color: COLORS.mist,
   },
 });

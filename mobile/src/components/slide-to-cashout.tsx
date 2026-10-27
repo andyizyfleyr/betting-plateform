@@ -3,22 +3,19 @@ import {
   ActivityIndicator,
   Animated,
   PanResponder,
-  Pressable,
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronsRight, Sparkles } from "@/components/icons";
+import { Check, ChevronsRight } from "lucide-react-native";
 import { eur } from "@/lib/format";
-import { colors, triggerHaptic } from "@/theme/tokens";
-import { useApp } from "@/context/app-context";
+import { triggerHaptic } from "@/theme/tokens";
 
-/**
- * `SlideToCashOut` vert créatif émeraude (`#10b981 -> #059669 -> #047857`)
- * fidèle à 100 % à `src/components/slide-to-cashout.tsx` :
- * - Glisser horizontalement sur Android (seuil 80 %) OU appui franc sur le bouton « Vendre ».
- */
+const THUMB_SIZE = 38;
+const TRACK_PAD = 4;
+
 export function SlideToCashOut({
   amount,
   loading = false,
@@ -30,159 +27,181 @@ export function SlideToCashOut({
   disabled?: boolean;
   onConfirm: () => Promise<void> | void;
 }) {
-  const { hapticsEnabled } = useApp();
-  const [trackWidth, setTrackWidth] = useState(260);
+  const [trackWidth, setTrackWidth] = useState(0);
+  const [completed, setCompleted] = useState(false);
   const dragX = useRef(new Animated.Value(0)).current;
-  const maxSlide = Math.max(48, trackWidth - 54);
+  const maxTravelRef = useRef(0);
+  const triggeredRef = useRef(false);
+
+  const maxTravel = Math.max(0, trackWidth - THUMB_SIZE - TRACK_PAD * 2);
+  maxTravelRef.current = maxTravel;
+
+  const resetSlider = () => {
+    triggeredRef.current = false;
+    setCompleted(false);
+    Animated.spring(dragX, {
+      toValue: 0,
+      useNativeDriver: false,
+      bounciness: 5,
+    }).start();
+  };
+
+  const triggerSell = async () => {
+    if (triggeredRef.current || loading || disabled) return;
+    triggeredRef.current = true;
+    setCompleted(true);
+    triggerHaptic("success");
+    Animated.timing(dragX, {
+      toValue: maxTravelRef.current,
+      duration: 90,
+      useNativeDriver: false,
+    }).start();
+    try {
+      await onConfirm();
+    } finally {
+      setTimeout(() => {
+        resetSlider();
+      }, 450);
+    }
+  };
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !loading && !disabled,
+        onStartShouldSetPanResponder: () =>
+          !loading && !disabled && !triggeredRef.current,
         onMoveShouldSetPanResponder: (_, g) =>
-          !loading && !disabled && Math.abs(g.dx) > 6 && Math.abs(g.dx) > Math.abs(g.dy),
-        onPanResponderMove: (_, g) => {
-          const clamped = Math.max(0, Math.min(maxSlide, g.dx));
-          dragX.setValue(clamped);
+          !loading &&
+          !disabled &&
+          !triggeredRef.current &&
+          Math.abs(g.dx) > Math.abs(g.dy) &&
+          g.dx > 3,
+        onPanResponderGrant: () => {
+          triggerHaptic("light");
         },
-        onPanResponderRelease: (_, g) => {
-          if (g.dx >= maxSlide * 0.78) {
-            triggerHaptic("success", hapticsEnabled);
-            Animated.spring(dragX, {
-              toValue: maxSlide,
-              useNativeDriver: true,
-            }).start(() => {
-              dragX.setValue(0);
-              void onConfirm();
-            });
-          } else {
-            Animated.spring(dragX, {
-              toValue: 0,
-              useNativeDriver: true,
-            }).start();
+        onPanResponderMove: (_, g) => {
+          const max = maxTravelRef.current;
+          if (max <= 0 || triggeredRef.current) return;
+          const clamped = Math.max(0, Math.min(max, g.dx));
+          dragX.setValue(clamped);
+          if (clamped / max >= 0.94) {
+            void triggerSell();
           }
         },
+        onPanResponderRelease: (_, g) => {
+          const max = maxTravelRef.current;
+          if (max <= 0 || triggeredRef.current) return;
+          const ratio = Math.max(0, Math.min(max, g.dx)) / max;
+          if (ratio >= 0.78) {
+            void triggerSell();
+          } else {
+            resetSlider();
+          }
+        },
+        onPanResponderTerminate: () => {
+          if (!triggeredRef.current) resetSlider();
+        },
       }),
-    [disabled, dragX, hapticsEnabled, loading, maxSlide, onConfirm]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [disabled, loading]
   );
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    setTrackWidth(e.nativeEvent.layout.width);
+  };
 
   return (
     <View
-      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-      style={[styles.outer, disabled && styles.outerDisabled]}
+      onLayout={onLayout}
+      style={[styles.trackOuter, (disabled || loading) && { opacity: 0.78 }]}
     >
       <LinearGradient
-        colors={["#10b981", "#059669", "#047857"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.track}
+        colors={["#059669", "#10b981", "#0d9488"]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.fillHighlight,
+          {
+            width: Animated.add(dragX, THUMB_SIZE + TRACK_PAD),
+          },
+        ]}
+      />
+
+      <View pointerEvents="none" style={styles.centerCopy}>
+        <Text numberOfLines={1} style={styles.label}>
+          {loading || completed
+            ? "Validation du Cash Out…"
+            : `Glisser pour vendre · ${eur(amount)}`}
+        </Text>
+      </View>
+
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[
+          styles.thumb,
+          {
+            transform: [{ translateX: dragX }],
+          },
+        ]}
       >
-        <View style={styles.centerContent}>
-          <View style={styles.labelRow}>
-            <Sparkles size={13} color="#d1fae5" strokeWidth={2.4} />
-            <Text style={styles.titleText}>
-              {loading ? "Encaissement…" : `Vendre · ${eur(amount)}`}
-            </Text>
-          </View>
-          <Text style={styles.hintText}>Glisser ou appuyer pour encaisser</Text>
-        </View>
-
-        <Pressable
-          disabled={loading || disabled}
-          onPress={() => {
-            triggerHaptic("medium", hapticsEnabled);
-            void onConfirm();
-          }}
-          style={styles.quickBtn}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color="#047857" />
-          ) : (
-            <Text style={styles.quickBtnText}>Vendre</Text>
-          )}
-        </Pressable>
-
-        <Animated.View
-          {...panResponder.panHandlers}
-          style={[
-            styles.thumb,
-            {
-              transform: [{ translateX: dragX }],
-            },
-          ]}
-        >
-          <ChevronsRight size={20} color="#047857" strokeWidth={2.8} />
-        </Animated.View>
-      </LinearGradient>
+        {loading ? (
+          <ActivityIndicator size="small" color="#059669" />
+        ) : completed ? (
+          <Check size={18} color="#059669" strokeWidth={2.8} />
+        ) : (
+          <ChevronsRight size={19} color="#059669" strokeWidth={2.6} />
+        )}
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  outer: {
+  trackOuter: {
+    height: 46,
     borderRadius: 14,
+    padding: TRACK_PAD,
+    justifyContent: "center",
     overflow: "hidden",
-    elevation: 2,
-    shadowColor: "#047857",
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-  },
-  outerDisabled: {
-    opacity: 0.55,
-  },
-  track: {
-    height: 48,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingLeft: 54,
-    paddingRight: 8,
     position: "relative",
   },
-  thumb: {
+  fillHighlight: {
     position: "absolute",
-    left: 4,
-    top: 4,
-    width: 40,
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: colors.white,
+    top: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+  },
+  centerCopy: {
+    position: "absolute",
+    left: THUMB_SIZE + 12,
+    right: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  centerContent: {
-    flex: 1,
-    paddingHorizontal: 6,
-  },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  titleText: {
-    fontSize: 13.5,
-    fontWeight: "900",
-    color: colors.white,
+  label: {
+    fontSize: 12.5,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.1,
     fontVariant: ["tabular-nums"],
   },
-  hintText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "rgba(236, 253, 245, 0.85)",
-  },
-  quickBtn: {
-    height: 32,
-    paddingHorizontal: 11,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.94)",
+  thumb: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: 11,
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
-  },
-  quickBtnText: {
-    fontSize: 11.5,
-    fontWeight: "900",
-    color: "#047857",
+    elevation: 3,
+    shadowColor: "#000000",
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
 });

@@ -1,25 +1,53 @@
 import React from "react";
-import { CircleDot, Flame, Sparkles, Trophy } from "@/components/icons";
-import { colors } from "@/theme/tokens";
+import Svg, { Circle, Path } from "react-native-svg";
+import { COLORS } from "@/theme/tokens";
 
 export function SportIcon({
   sport,
-  size = 15,
-  color = colors.dim,
+  size = 16,
+  color = COLORS.dim,
 }: {
-  sport?: string | null;
+  sport: string;
   size?: number;
   color?: string;
 }) {
-  const s = (sport ?? "football").toLowerCase();
-  if (s.includes("prédiction") || s.includes("prediction")) {
-    return <Sparkles size={size} color={color} strokeWidth={2.2} />;
+  if (sport === "football") {
+    return (
+      <Svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <Circle cx="12" cy="12" r="9" />
+        <Path
+          d="M12 8.2 15.4 10.7 14.1 14.7H9.9L8.6 10.7 12 8.2Z"
+          fill={color}
+          stroke="none"
+          opacity={0.9}
+        />
+        <Path d="M12 3v5.2M15.4 10.7l4.4-1.6M14.1 14.7l2.7 4M9.9 14.7l-2.7 4M8.6 10.7 4.2 9.1" />
+      </Svg>
+    );
   }
-  if (s.includes("combiné") || s.includes("combo")) {
-    return <Flame size={size} color={color} strokeWidth={2.2} />;
-  }
-  if (s.includes("coupe") || s.includes("champion")) {
-    return <Trophy size={size} color={color} strokeWidth={2.2} />;
-  }
-  return <CircleDot size={size} color={color} strokeWidth={2.2} />;
+
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Circle cx="12" cy="12" r="9" />
+      <Circle cx="12" cy="12" r="3.5" />
+    </Svg>
+  );
 }

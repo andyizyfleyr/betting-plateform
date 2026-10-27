@@ -1,15 +1,12 @@
-import React, { useCallback, useState } from "react";
+import React from "react";
 import {
-  ActivityIndicator,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
 } from "react-native";
-import { useRouter } from "@/lib/router";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -20,650 +17,572 @@ import {
   ShieldCheck,
   Trophy,
   User as UserIcon,
-} from "@/components/icons";
-import { api, type ClientWalletResponse } from "@/lib/api";
-import { getCachedWalletSnapshot } from "@/lib/entity-cache";
-import { eur } from "@/lib/format";
-import { useSmartPolling } from "@/lib/polling";
-import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
+} from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import { api } from "@/lib/api";
+import { eur, initials } from "@/lib/format";
+import { useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-/**
- * Page `/parametres` (`Compte`) épurée fidèle à `src/app/(main)/parametres/page.tsx` :
- * - Onglets `Portefeuille | Réglages`
- * - Carte solde unique + actions `Déposer` / `Retirer`
- * - Annulation des retraits en attente (`canCancel && rawId != null`)
- * - Lien unique vers `/parametres/transactions` (sans doublon d'historique en ligne)
- * - Accès rapides `Mini-jeux`, `Résultats` (+ `Administration` si admin)
- * - Réglages : format des cotes (`1,85` / `17/20`), Sons, Vibrations Android, Mode économie 3G, Déconnexion.
- */
 export default function CompteScreen() {
   const router = useRouter();
   const {
     user,
     balance,
-    setBalance,
     applyUser,
-    clearCombo,
-    oddsFormat,
-    soundEnabled,
-    hapticsEnabled,
+    oddsPolicy,
+    setOddsPolicy,
     dataSaverMode,
     setDataSaverMode,
     toast,
   } = useApp();
 
-  const [tab, setTab] = useState<"wallet" | "settings">("wallet");
-  const [wallet, setWallet] = useState<ClientWalletResponse | null>(() =>
-    getCachedWalletSnapshot()
-  );
-  const [refreshing, setRefreshing] = useState(false);
-  const [cancellingId, setCancellingId] = useState<number | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
-
-  const loadWallet = useCallback(async () => {
+  const togglePref = async (
+    key: "notifications" | "sound" | "haptics",
+    nextVal: boolean
+  ) => {
     if (!user) return;
+    applyUser({ ...user, [key]: nextVal });
     try {
-      const res = await api.wallet();
-      setWallet(res);
-      setBalance(res.balance);
+      const res = await api.patchSettings({ [key]: nextVal });
+      applyUser(res.user);
     } catch {
-      // Conserve le snapshot
+      toast({
+        kind: "error",
+        title: "Impossible d'enregistrer le réglage",
+      });
     }
-  }, [setBalance, user]);
+  };
 
-  useSmartPolling(loadWallet, 18_000, {
-    enabled: Boolean(user),
-    dataSaver: dataSaverMode,
-    runImmediately: true,
-  });
+  const toggleOddsFormat = async (fmt: "decimal" | "fractional") => {
+    if (!user || user.oddsFormat === fmt) return;
+    applyUser({ ...user, oddsFormat: fmt });
+    try {
+      const res = await api.patchSettings({ oddsFormat: fmt });
+      applyUser(res.user);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleLogout = async () => {
+    await api.auth.logout();
+    applyUser(null);
+    router.replace("/auth");
+  };
 
   if (!user) {
     return (
-      <View style={[styles.root, { justifyContent: "center", padding: 20 }]}>
-        <View style={[cardSurface.glassCard, styles.guestCard]}>
-          <UserIcon size={28} color={colors.dim} />
-          <Text style={styles.guestTitle}>Votre espace Compte & Portefeuille</Text>
-          <Text style={styles.guestSub}>
-            Connectez-vous pour déposer, retirer vos gains et personnaliser vos cotes.
+      <ScrollView
+        style={styles.page}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.guestCard}>
+          <View style={styles.guestAvatar}>
+            <UserIcon size={24} color={COLORS.betclicRed} strokeWidth={2.2} />
+          </View>
+          <Text style={styles.guestTitle}>Espace Compte PULSE</Text>
+          <Text style={styles.guestDesc}>
+            Connectez-vous ou créez un compte gratuit pour déposer, retirer vos
+            gains et personnaliser vos cotes.
           </Text>
           <Pressable
             onPress={() => router.push("/auth")}
             style={styles.loginBtn}
           >
-            <Text style={styles.loginBtnText}>Connexion / Inscription</Text>
+            <Text style={styles.loginText}>Se connecter / S&apos;inscrire</Text>
           </Pressable>
         </View>
-      </View>
+
+        <Pressable
+          onPress={() => router.push("/jeux")}
+          style={styles.gamesPromoCard}
+        >
+          <View style={styles.gamesIconBox}>
+            <Gamepad2 size={20} color="#ffffff" strokeWidth={2.3} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.gamesPromoTitle}>Mini-jeux instantanés</Text>
+            <Text style={styles.gamesPromoSub}>
+              Tap & Win · Accelerator Pro
+            </Text>
+          </View>
+          <ChevronRight size={17} color={COLORS.dim} strokeWidth={2.3} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push("/resultats")}
+          style={styles.linkCard}
+        >
+          <Trophy size={17} color={COLORS.betclicRed} strokeWidth={2.2} />
+          <Text style={styles.linkTitle}>Résultats officiels des matchs</Text>
+          <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+        </Pressable>
+      </ScrollView>
     );
   }
 
-  const pendingWithdrawals = (wallet?.entries ?? []).filter(
-    (e) => e.canCancel && e.rawId != null
-  );
-
-  const handleCancelWithdrawal = async (rawId: number) => {
-    setCancellingId(rawId);
-    try {
-      const res = await api.withdrawals.cancel(rawId);
-      setBalance(res.balance);
-      await loadWallet();
-      toast({
-        kind: "success",
-        title: "Retrait annulé",
-        subtitle: "Le montant a été recrédité sur votre solde",
-      });
-    } catch (err) {
-      toast({
-        kind: "error",
-        title: "Annulation impossible",
-        subtitle: err instanceof Error ? err.message : undefined,
-      });
-    } finally {
-      setCancellingId(null);
-    }
-  };
-
-  const handlePatchSetting = async (
-    patch: Parameters<typeof api.updateSettings>[0]
-  ) => {
-    try {
-      const res = await api.updateSettings(patch);
-      applyUser(res.user);
-    } catch {
-      toast({ kind: "error", title: "Impossible d'enregistrer ce réglage" });
-    }
-  };
-
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    try {
-      await api.auth.logout();
-      clearCombo();
-      applyUser(null);
-      router.replace("/auth");
-    } finally {
-      setLoggingOut(false);
-    }
-  };
-
   return (
     <ScrollView
-      style={styles.root}
+      style={styles.page}
       contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            await loadWallet();
-            setRefreshing(false);
-          }}
-          tintColor={colors.betclicRed}
-          colors={[colors.betclicRed]}
-        />
-      }
+      showsVerticalScrollIndicator={false}
     >
-      {/* Profil compact */}
-      <View style={styles.profileRow}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarInitial}>
-            {(user.name || "J").slice(0, 1).toUpperCase()}
-          </Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.userName}>{user.name}</Text>
-          <Text style={styles.userEmail}>{user.email}</Text>
-        </View>
-      </View>
-
-      {/* Onglets Portefeuille / Réglages */}
-      <View style={styles.segmentWrap}>
-        <Pressable
-          onPress={() => setTab("wallet")}
-          style={[
-            styles.segmentBtn,
-            tab === "wallet" && styles.segmentBtnActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              tab === "wallet" && styles.segmentTextActive,
-            ]}
-          >
-            Portefeuille
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setTab("settings")}
-          style={[
-            styles.segmentBtn,
-            tab === "settings" && styles.segmentBtnActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              tab === "settings" && styles.segmentTextActive,
-            ]}
-          >
-            Réglages
-          </Text>
-        </Pressable>
-      </View>
-
-      {tab === "wallet" ? (
-        <>
-          <View style={[cardSurface.glassCard, styles.walletCard]}>
-            <Text style={styles.walletLabel}>Solde disponible</Text>
-            <Text style={styles.walletAmount}>{eur(balance)}</Text>
-
-            {wallet && wallet.summary.bonusLocked > 0 && (
-              <Text style={styles.retirableNote}>
-                Retirable immédiatement : {eur(wallet.summary.withdrawable)}
+      {/* Profil & Solde */}
+      <View style={styles.profileCard}>
+        <View style={styles.profileTop}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials(user.name)}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text numberOfLines={1} style={styles.userName}>
+              {user.name}
+            </Text>
+            {user.email ? (
+              <Text numberOfLines={1} style={styles.userEmail}>
+                {user.email}
               </Text>
-            )}
-
-            <View style={styles.walletActions}>
-              <Pressable
-                onPress={() => {
-                  triggerHaptic("light", hapticsEnabled);
-                  router.push("/parametres/depot");
-                }}
-                style={styles.depositBtn}
-              >
-                <ArrowDownLeft size={16} color={colors.white} strokeWidth={2.5} />
-                <Text style={styles.depositBtnText}>Déposer</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  triggerHaptic("light", hapticsEnabled);
-                  router.push("/parametres/retrait");
-                }}
-                style={styles.withdrawBtn}
-              >
-                <ArrowUpRight size={16} color={colors.ink} strokeWidth={2.5} />
-                <Text style={styles.withdrawBtnText}>Retirer</Text>
-              </Pressable>
-            </View>
+            ) : null}
           </View>
-
-          {/* Retraits en attente annulables */}
-          {pendingWithdrawals.map((w) => (
-            <View key={w.id} style={[cardSurface.glassCard, styles.pendingCard]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pendingTitle}>
-                  {w.title} · {eur(Math.abs(w.amount))}
-                </Text>
-                <Text style={styles.pendingSub}>{w.subtitle}</Text>
-              </View>
-              <Pressable
-                disabled={cancellingId === w.rawId}
-                onPress={() => {
-                  if (w.rawId != null) void handleCancelWithdrawal(w.rawId);
-                }}
-                style={styles.cancelWdBtn}
-              >
-                <Text style={styles.cancelWdText}>Annuler</Text>
-              </Pressable>
-            </View>
-          ))}
-
-          {/* Liens de navigation épurés */}
-          <View style={[cardSurface.glassCard, styles.navGroup]}>
-            <NavRow
-              Icon={History}
-              label="Historique des mouvements"
-              onPress={() => router.push("/parametres/transactions")}
-            />
-            <View style={styles.rowSep} />
-            <NavRow
-              Icon={Trophy}
-              label="Résultats des matchs"
-              onPress={() => router.push("/resultats")}
-            />
-            <View style={styles.rowSep} />
-            <NavRow
-              Icon={Gamepad2}
-              label="Mini-jeux instantanés"
-              onPress={() => router.push("/jeux")}
-            />
-            {user.role === "admin" && (
-              <>
-                <View style={styles.rowSep} />
-                <NavRow
-                  Icon={ShieldCheck}
-                  label="Console d'administration"
-                  onPress={() => router.push("/admin")}
-                />
-              </>
-            )}
+          <View style={styles.balanceBox}>
+            <Text style={styles.balanceCaption}>Solde disponible</Text>
+            <Text style={styles.balanceVal}>{eur(balance)}</Text>
           </View>
-        </>
-      ) : (
-        <>
-          <View style={[cardSurface.glassCard, styles.settingsCard]}>
-            <View style={styles.settingLine}>
-              <Text style={styles.settingTitle}>Format d&apos;affichage des cotes</Text>
-              <View style={styles.oddsSwitchRow}>
-                {(["decimal", "fractional"] as const).map((fmt) => {
-                  const active = oddsFormat === fmt;
-                  return (
-                    <Pressable
-                      key={fmt}
-                      onPress={() => void handlePatchSetting({ oddsFormat: fmt })}
-                      style={[
-                        styles.fmtPill,
-                        active && styles.fmtPillActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.fmtPillText,
-                          active && { color: colors.white },
-                        ]}
-                      >
-                        {fmt === "decimal" ? "1,85" : "17/20"}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+        </View>
 
-            <View style={styles.rowSep} />
-
-            <View style={styles.settingLine}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingTitle}>Effets sonores</Text>
-                <Text style={styles.settingSub}>Sons des mini-jeux & gains</Text>
-              </View>
-              <Switch
-                value={soundEnabled}
-                onValueChange={(v) => void handlePatchSetting({ soundEnabled: v })}
-                trackColor={{ false: colors.edge, true: colors.betclicRed }}
-              />
-            </View>
-
-            <View style={styles.rowSep} />
-
-            <View style={styles.settingLine}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingTitle}>Vibrations haptiques Android</Text>
-                <Text style={styles.settingSub}>Retour tactile sur cotes et Cash Out</Text>
-              </View>
-              <Switch
-                value={hapticsEnabled}
-                onValueChange={(v) =>
-                  void handlePatchSetting({ hapticsEnabled: v })
-                }
-                trackColor={{ false: colors.edge, true: colors.betclicRed }}
-              />
-            </View>
-
-            <View style={styles.rowSep} />
-
-            <View style={styles.settingLine}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingTitle}>Mode économie 3G / Données</Text>
-                <Text style={styles.settingSub}>
-                  Réduit la fréquence de rafraîchissement réseau
-                </Text>
-              </View>
-              <Switch
-                value={dataSaverMode}
-                onValueChange={setDataSaverMode}
-                trackColor={{ false: colors.edge, true: colors.win }}
-              />
-            </View>
-          </View>
+        <View style={styles.walletGrid}>
+          <Pressable
+            onPress={() => router.push("/parametres/depot")}
+            style={[styles.walletTile, styles.walletTilePrimary]}
+          >
+            <ArrowDownLeft size={16} color="#ffffff" strokeWidth={2.5} />
+            <Text style={[styles.walletTileText, { color: "#ffffff" }]}>
+              Dépôt
+            </Text>
+          </Pressable>
 
           <Pressable
-            disabled={loggingOut}
-            onPress={() => void handleLogout()}
-            style={styles.logoutFullBtn}
+            onPress={() => router.push("/parametres/retrait")}
+            style={styles.walletTile}
           >
-            {loggingOut ? (
-              <ActivityIndicator size="small" color={colors.betclicRed} />
-            ) : (
-              <>
-                <LogOut size={16} color={colors.betclicRed} strokeWidth={2.4} />
-                <Text style={styles.logoutFullText}>Se déconnecter</Text>
-              </>
-            )}
+            <ArrowUpRight size={16} color={COLORS.ink} strokeWidth={2.4} />
+            <Text style={styles.walletTileText}>Retrait</Text>
           </Pressable>
-        </>
-      )}
+
+          <Pressable
+            onPress={() => router.push("/parametres/transactions")}
+            style={styles.walletTile}
+          >
+            <History size={16} color={COLORS.ink} strokeWidth={2.3} />
+            <Text style={styles.walletTileText}>Historique</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Accès Jeux & Résultats & Admin */}
+      <Pressable
+        onPress={() => router.push("/jeux")}
+        style={styles.gamesPromoCard}
+      >
+        <View style={styles.gamesIconBox}>
+          <Gamepad2 size={20} color="#ffffff" strokeWidth={2.3} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.gamesPromoTitle}>Jeux instantanés</Text>
+          <Text style={styles.gamesPromoSub}>
+            Tap & Win · Accelerator Pro
+          </Text>
+        </View>
+        <ChevronRight size={17} color={COLORS.dim} strokeWidth={2.3} />
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.push("/resultats")}
+        style={styles.linkCard}
+      >
+        <Trophy size={17} color={COLORS.betclicRed} strokeWidth={2.2} />
+        <Text style={styles.linkTitle}>Résultats officiels des matchs</Text>
+        <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+      </Pressable>
+
+      {user.role === "admin" ? (
+        <Pressable
+          onPress={() => router.push("/admin")}
+          style={[styles.linkCard, styles.adminCard]}
+        >
+          <ShieldCheck size={18} color={COLORS.amber} strokeWidth={2.3} />
+          <Text style={styles.linkTitle}>Console d&apos;administration</Text>
+          <ChevronRight size={16} color={COLORS.amber} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
+
+      {/* Préférences de jeu */}
+      <View style={styles.prefsCard}>
+        <Text style={styles.sectionTitle}>Préférences de cotes & confort</Text>
+
+        <View style={styles.fmtRow}>
+          <Text style={styles.prefLabel}>Format des cotes</Text>
+          <View style={styles.fmtSwitch}>
+            <Pressable
+              onPress={() => toggleOddsFormat("decimal")}
+              style={[
+                styles.fmtPill,
+                user.oddsFormat === "decimal" && styles.fmtPillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.fmtText,
+                  user.oddsFormat === "decimal" && styles.fmtTextActive,
+                ]}
+              >
+                1,85
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => toggleOddsFormat("fractional")}
+              style={[
+                styles.fmtPill,
+                user.oddsFormat === "fractional" && styles.fmtPillActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.fmtText,
+                  user.oddsFormat === "fractional" && styles.fmtTextActive,
+                ]}
+              >
+                17/20
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.prefItem}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.prefLabel}>Accepter les hausses de cotes</Text>
+            <Text style={styles.prefSub}>
+              Valide sans reconfirmation quand la cote augmente
+            </Text>
+          </View>
+          <Switch
+            value={oddsPolicy === "accept_higher"}
+            onValueChange={(v) =>
+              setOddsPolicy(v ? "accept_higher" : "confirm_all")
+            }
+            trackColor={{ false: COLORS.edge, true: COLORS.betclicRed }}
+            thumbColor="#ffffff"
+          />
+        </View>
+
+        <View style={styles.prefItem}>
+          <Text style={styles.prefLabel}>Notifications de gains</Text>
+          <Switch
+            value={user.notifications}
+            onValueChange={(v) => togglePref("notifications", v)}
+            trackColor={{ false: COLORS.edge, true: COLORS.betclicRed }}
+            thumbColor="#ffffff"
+          />
+        </View>
+
+        <View style={styles.prefItem}>
+          <Text style={styles.prefLabel}>Vibrations haptiques</Text>
+          <Switch
+            value={user.haptics}
+            onValueChange={(v) => togglePref("haptics", v)}
+            trackColor={{ false: COLORS.edge, true: COLORS.betclicRed }}
+            thumbColor="#ffffff"
+          />
+        </View>
+
+        <View style={styles.prefItem}>
+          <Text style={styles.prefLabel}>Effets sonores</Text>
+          <Switch
+            value={user.sound}
+            onValueChange={(v) => togglePref("sound", v)}
+            trackColor={{ false: COLORS.edge, true: COLORS.betclicRed }}
+            thumbColor="#ffffff"
+          />
+        </View>
+
+        <View style={[styles.prefItem, { borderBottomWidth: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.prefLabel}>Mode Économie de données</Text>
+            <Text style={styles.prefSub}>
+              Espace le rafraîchissement automatique sur réseau mobile
+            </Text>
+          </View>
+          <Switch
+            value={dataSaverMode}
+            onValueChange={setDataSaverMode}
+            trackColor={{ false: COLORS.edge, true: COLORS.betclicRed }}
+            thumbColor="#ffffff"
+          />
+        </View>
+      </View>
+
+      <Pressable onPress={handleLogout} style={styles.logoutBtn}>
+        <LogOut size={16} color={COLORS.betclicRed} strokeWidth={2.3} />
+        <Text style={styles.logoutText}>Se déconnecter</Text>
+      </Pressable>
     </ScrollView>
   );
 }
 
-function NavRow({
-  Icon,
-  label,
-  onPress,
-}: {
-  Icon: typeof History;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.navRow}>
-      <Icon size={17} color={colors.ink} strokeWidth={2.2} />
-      <Text style={styles.navRowText}>{label}</Text>
-      <ChevronRight size={16} color={colors.dim} strokeWidth={2.4} />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  root: {
+  page: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 28,
-    gap: 12,
+    gap: 11,
   },
-  profileRow: {
+  guestCard: {
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 22,
+    alignItems: "center",
+    gap: 10,
+  },
+  guestAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "rgba(225, 0, 20, 0.09)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guestTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  guestDesc: {
+    fontSize: 13,
+    color: COLORS.dim,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  loginBtn: {
+    marginTop: 4,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loginText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  profileCard: {
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 15,
+    gap: 14,
+  },
+  profileTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 11,
   },
-  avatarCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.betclicRed,
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.outerSpace,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarInitial: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: colors.white,
+  avatarText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#ffffff",
   },
   userName: {
-    fontSize: 16.5,
-    fontWeight: "900",
-    color: colors.ink,
+    fontSize: 15.5,
+    fontWeight: "800",
+    color: COLORS.ink,
   },
   userEmail: {
     fontSize: 12,
-    color: colors.dim,
-    fontWeight: "500",
+    color: COLORS.dim,
+    marginTop: 1,
   },
-  segmentWrap: {
-    flexDirection: "row",
-    backgroundColor: colors.elev,
-    borderRadius: 12,
-    padding: 3,
+  balanceBox: {
+    alignItems: "flex-end",
   },
-  segmentBtn: {
-    flex: 1,
-    height: 36,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentBtnActive: {
-    backgroundColor: colors.white,
-  },
-  segmentText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.dim,
-  },
-  segmentTextActive: {
-    color: colors.ink,
-    fontWeight: "900",
-  },
-  walletCard: {
-    padding: 16,
-    gap: 8,
-  },
-  walletLabel: {
-    fontSize: 12,
+  balanceCaption: {
+    fontSize: 10.5,
     fontWeight: "600",
-    color: colors.dim,
+    color: COLORS.dim,
   },
-  walletAmount: {
-    fontSize: 28,
+  balanceVal: {
+    fontSize: 17,
     fontWeight: "900",
-    color: colors.ink,
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
-  retirableNote: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: colors.mist,
-  },
-  walletActions: {
-    marginTop: 6,
+  walletGrid: {
     flexDirection: "row",
     gap: 8,
   },
-  depositBtn: {
+  walletTile: {
     flex: 1,
-    height: 44,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.elev,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  depositBtnText: {
-    fontSize: 13.5,
-    fontWeight: "900",
-    color: colors.white,
+  walletTilePrimary: {
+    backgroundColor: COLORS.betclicRed,
   },
-  withdrawBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: colors.elev,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  withdrawBtnText: {
-    fontSize: 13.5,
+  walletTileText: {
+    fontSize: 12.5,
     fontWeight: "800",
-    color: colors.ink,
+    color: COLORS.ink,
   },
-  pendingCard: {
-    padding: 12,
+  gamesPromoCard: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  gamesIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.betclicRed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gamesPromoTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  gamesPromoSub: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.dim,
+    marginTop: 1,
+  },
+  linkCard: {
+    borderRadius: 15,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  pendingTitle: {
-    fontSize: 13,
+  adminCard: {
+    backgroundColor: COLORS.amberSoft,
+    borderColor: COLORS.amberBorder,
+  },
+  linkTitle: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+    flex: 1,
+  },
+  prefsCard: {
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 15,
+    gap: 4,
+  },
+  sectionTitle: {
+    fontSize: 14,
     fontWeight: "800",
-    color: colors.ink,
+    color: COLORS.ink,
+    marginBottom: 6,
   },
-  pendingSub: {
-    fontSize: 11.5,
-    color: colors.dim,
-  },
-  cancelWdBtn: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 9,
-    backgroundColor: "rgba(225,0,20,0.10)",
-  },
-  cancelWdText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.betclicRed,
-  },
-  navGroup: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-  },
-  navRow: {
-    height: 48,
+  fmtRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.edgeSoft,
   },
-  navRowText: {
-    flex: 1,
-    fontSize: 14,
+  fmtSwitch: {
+    flexDirection: "row",
+    borderRadius: 10,
+    backgroundColor: COLORS.elev,
+    padding: 3,
+    gap: 3,
+  },
+  fmtPill: {
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  fmtPillActive: {
+    backgroundColor: COLORS.betclicRed,
+  },
+  fmtText: {
+    fontSize: 12,
     fontWeight: "700",
-    color: colors.ink,
+    color: COLORS.ink,
   },
-  rowSep: {
-    height: 1,
-    backgroundColor: colors.edgeSoft,
+  fmtTextActive: {
+    color: "#ffffff",
   },
-  settingsCard: {
-    padding: 14,
-    gap: 11,
-  },
-  settingLine: {
+  prefItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.edgeSoft,
   },
-  settingTitle: {
+  prefLabel: {
     fontSize: 13.5,
-    fontWeight: "800",
-    color: colors.ink,
+    fontWeight: "600",
+    color: COLORS.ink,
   },
-  settingSub: {
-    fontSize: 11.5,
-    color: colors.dim,
+  prefSub: {
+    fontSize: 11,
+    color: COLORS.dim,
     marginTop: 1,
   },
-  oddsSwitchRow: {
-    flexDirection: "row",
-    gap: 5,
-  },
-  fmtPill: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: colors.elev,
-  },
-  fmtPillActive: {
-    backgroundColor: colors.ink,
-  },
-  fmtPillText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  logoutFullBtn: {
+  logoutBtn: {
     height: 46,
-    borderRadius: 13,
-    backgroundColor: colors.white,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "rgba(225,0,20,0.28)",
+    borderColor: "rgba(225, 0, 20, 0.25)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 7,
-  },
-  logoutFullText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.betclicRed,
-  },
-  guestCard: {
-    padding: 22,
-    alignItems: "center",
     gap: 8,
   },
-  guestTitle: {
-    fontSize: 15.5,
-    fontWeight: "900",
-    color: colors.ink,
-    textAlign: "center",
-  },
-  guestSub: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: colors.mist,
-    textAlign: "center",
-  },
-  loginBtn: {
-    marginTop: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: colors.betclicRed,
-  },
-  loginBtnText: {
+  logoutText: {
     fontSize: 13.5,
     fontWeight: "800",
-    color: colors.white,
+    color: COLORS.betclicRed,
   },
 });

@@ -1,69 +1,63 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "@/lib/router";
-import { ChevronRight, Share2 } from "@/components/icons";
-import { api, ApiHttpError, type ClientBet } from "@/lib/api";
-import { eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
-import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
+import { ChevronRight, Layers, Share2, Sparkles } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
-import { SportIcon } from "./sport-icon";
+import {
+  api,
+  ApiHttpError,
+  CASHOUT_CHANGED_CODE,
+  generateIdempotencyKey,
+  type BetStatus,
+  type ClientBet,
+} from "@/lib/api";
+import { eur, formatOdds, formatPlacedAt } from "@/lib/format";
+import { useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 import { SlideToCashOut } from "./slide-to-cashout";
+import { SportIcon } from "./sport-icon";
+import { TeamAvatar } from "./team-avatar";
 
-function StatusBadge({ bet }: { bet: ClientBet }) {
-  if (bet.status === "won") {
+export function BetStatusBadge({ status }: { status: BetStatus }) {
+  if (status === "won") {
     return (
       <View style={[styles.badge, styles.badgeWon]}>
-        <Text style={[styles.badgeText, styles.badgeTextWon]}>Gagné</Text>
+        <Text style={[styles.badgeText, { color: COLORS.win }]}>Gagné</Text>
       </View>
     );
   }
-  if (bet.status === "lost") {
-    // Règle stricte utilisateur : le statut « Perdu » doit être ROUGE
+  if (status === "lost") {
+    // Perdu en ROUGE (contrainte explicite)
     return (
       <View style={[styles.badge, styles.badgeLost]}>
-        <Text style={[styles.badgeText, styles.badgeTextLost]}>Perdu</Text>
+        <Text style={[styles.badgeText, { color: COLORS.betclicRed }]}>
+          Perdu
+        </Text>
       </View>
     );
   }
-  if (bet.status === "cashed_out") {
+  if (status === "cashed") {
     return (
-      <View style={[styles.badge, styles.badgeCashout]}>
-        <Text style={[styles.badgeText, styles.badgeTextCashout]}>Vendu</Text>
+      <View style={[styles.badge, styles.badgeCashed]}>
+        <Text style={[styles.badgeText, { color: "#059669" }]}>Vendu</Text>
       </View>
     );
   }
-  if (bet.status === "void") {
+  if (status === "void") {
     return (
       <View style={[styles.badge, styles.badgeVoid]}>
-        <Text style={[styles.badgeText, styles.badgeTextVoid]}>Remboursé</Text>
-      </View>
-    );
-  }
-  if (bet.matchStatus === "live") {
-    return (
-      <View style={[styles.badge, styles.badgeLive]}>
-        <View style={styles.liveDot} />
-        <Text style={[styles.badgeText, styles.badgeTextLost]}>
-          {bet.matchMinute ?? "EN DIRECT"}
+        <Text style={[styles.badgeText, { color: COLORS.mist }]}>
+          Remboursé
         </Text>
       </View>
     );
   }
   return (
     <View style={[styles.badge, styles.badgePending]}>
-      <Text style={[styles.badgeText, styles.badgeTextPending]}>En cours</Text>
+      <Text style={[styles.badgeText, { color: COLORS.ink }]}>En cours</Text>
     </View>
   );
 }
 
-/**
- * Carte ticket unifiée (`BetTicket`) fidèle à `src/components/bet-ticket.tsx` :
- * - Clic sur un pari simple -> `/paris/simple/[id]`
- * - Clic sur un pari combiné -> `/paris/combine/[id]` (intitulé sobre « Combiné » sans « n sélections »)
- * - Statut `Perdu` en rouge
- * - Montants en bas en ligne (`Mise : N`, `Cote : ×N`, `Gain max / Gain : N`) avec libellés discrets et chiffres gras
- * - `SlideToCashOut` vert créatif émeraude.
- */
 export function BetTicket({
   bet,
   onCashedOut,
@@ -75,62 +69,64 @@ export function BetTicket({
   const {
     oddsFormat,
     setBalance,
-    refreshPulseNow,
+    bumpBets,
     openShareTicket,
-    hapticsEnabled,
     toast,
   } = useApp();
+
   const [cashingOut, setCashingOut] = useState(false);
+  const [liveCashoutOffer, setLiveCashoutOffer] = useState<number | null>(null);
+
+  const cashOutOffer = liveCashoutOffer ?? bet.cashOut;
+  const canCashOut =
+    bet.status === "pending" &&
+    typeof cashOutOffer === "number" &&
+    cashOutOffer > 0;
 
   const isCombo = bet.kind === "combo";
   const isPrediction = bet.kind === "prediction";
-  const href = isCombo ? `/paris/combine/${bet.id}` : `/paris/simple/${bet.id}`;
-
-  const topTitle = isCombo
-    ? "Combiné"
-    : isPrediction
-      ? bet.league || "Prédiction"
-      : bet.league;
-
-  const mainTitle = isCombo
-    ? (bet.legs ?? [])
-        .slice(0, 2)
-        .map((l) => l.title)
-        .join(" • ") +
-      ((bet.legs?.length ?? 0) > 2 ? ` +${(bet.legs?.length ?? 0) - 2}` : "")
-    : isPrediction
-      ? (bet.question ?? "Prédiction")
-      : `${bet.homeTeam} – ${bet.awayTeam}`;
+  const detailHref = isCombo
+    ? `/paris/combine/${bet.id}`
+    : `/paris/simple/${bet.id}`;
 
   const handleCashOut = async () => {
-    if (!bet.cashOut || cashingOut) return;
+    if (!canCashOut || cashOutOffer === null || cashingOut) return;
     setCashingOut(true);
     try {
-      const res = await api.cashOut(bet.id, bet.kind, bet.cashOut);
+      const res = await api.cashOut({
+        betId: bet.id,
+        kind: bet.kind,
+        expectedCashout: Math.round(cashOutOffer * 100) / 100,
+        idempotencyKey: generateIdempotencyKey("co"),
+      });
       setBalance(res.balance);
-      void refreshPulseNow();
+      bumpBets();
+      onCashedOut?.();
       toast({
         kind: "win",
-        title: `Ticket vendu · +${eur(res.cashOutAmount)}`,
-        subtitle: "Montant crédité immédiatement sur votre solde",
+        title: `Cash Out validé : +${eur(res.value)}`,
+        description: "Montant crédité immédiatement sur votre solde.",
       });
-      onCashedOut?.();
     } catch (err) {
-      if (err instanceof ApiHttpError && err.code === "CASHOUT_CHANGED") {
-        toast({
-          kind: "info",
-          title: "Montant Cash Out actualisé",
-          subtitle:
-            typeof err.currentCashOut === "number"
-              ? `Nouvelle offre : ${eur(err.currentCashOut)}`
-              : err.message,
-        });
-        onCashedOut?.();
+      if (err instanceof ApiHttpError && err.code === CASHOUT_CHANGED_CODE) {
+        const nextOffer =
+          err.cashoutDetails?.currentCashout ?? err.currentCashOut ?? null;
+        if (typeof nextOffer === "number" && nextOffer > 0) {
+          setLiveCashoutOffer(nextOffer);
+          toast({
+            kind: "info",
+            title: "Offre Cash Out actualisée",
+            description: `Nouveau montant disponible : ${eur(nextOffer)}. Glissez à nouveau pour confirmer.`,
+          });
+        }
       } else {
         toast({
           kind: "error",
           title: "Cash Out indisponible",
-          subtitle: err instanceof Error ? err.message : "Réessayez dans un instant",
+          description:
+            err instanceof ApiHttpError
+              ? err.message
+              : "Action momentanément suspendue.",
         });
       }
     } finally {
@@ -138,283 +134,346 @@ export function BetTicket({
     }
   };
 
-  const finalAmountLabel =
-    bet.status === "won"
-      ? "Gain :"
-      : bet.status === "cashed_out"
-        ? "Encaissé :"
-        : bet.status === "void"
-          ? "Remboursé :"
-          : "Gain max :";
-
-  const finalAmountValue =
-    bet.status === "cashed_out"
-      ? (bet.cashOutAmount ?? bet.stake)
-      : bet.status === "void"
-        ? bet.stake
-        : bet.potentialWin;
+  const firstComboLeg = isCombo ? bet.legs?.[0] : null;
+  const extraComboCount = isCombo
+    ? Math.max(0, (bet.legs?.length ?? 0) - 1)
+    : 0;
 
   return (
-    <Pressable
-      onPress={() => {
-        triggerHaptic("light", hapticsEnabled);
-        router.push(href);
-      }}
-      style={[
-        bet.status === "won" ? cardSurface.ticketWon : cardSurface.glassCard,
-        styles.card,
-      ]}
-    >
-      {/* Ligne 1 : Catégorie + Statut */}
-      <View style={styles.topRow}>
-        <View style={styles.catLeft}>
-          <SportIcon sport={bet.sport} size={13.5} color={colors.dim} />
-          <Text numberOfLines={1} style={styles.catText}>
-            {topTitle}
-          </Text>
-          <Text style={styles.dotSep}>·</Text>
-          <Text style={styles.dateText}>
-            {bet.status === "pending" && bet.matchStartsAt
-              ? formatKickoff(bet.matchStartsAt)
-              : formatPlacedAt(bet.settledAt ?? bet.placedAt)}
-          </Text>
-        </View>
-
-        <View style={styles.topRight}>
-          <StatusBadge bet={bet} />
-          <ChevronRight size={14} color={colors.dim} strokeWidth={2.4} />
-        </View>
-      </View>
-
-      {/* Ligne 2 : Intitulé principal + Sélection */}
-      <View style={styles.midBlock}>
-        <View style={styles.titleScoreRow}>
-          <Text numberOfLines={1} style={styles.mainTitle}>
-            {mainTitle}
-          </Text>
-          {!isCombo &&
-            !isPrediction &&
-            typeof bet.matchHomeScore === "number" &&
-            typeof bet.matchAwayScore === "number" && (
-              <Text style={styles.liveScore}>
-                {bet.matchHomeScore} - {bet.matchAwayScore}
-              </Text>
+    <View style={styles.card}>
+      <Pressable
+        onPress={() => router.push(detailHref)}
+        style={styles.cardPress}
+      >
+        {/* Ligne supérieure : Type / Ligue (sans texte « n sélections » à côté de Combiné) + Statut */}
+        <View style={styles.headRow}>
+          <View style={styles.headLeft}>
+            {isCombo ? (
+              <View style={styles.comboTag}>
+                <Layers size={11.5} color={COLORS.betclicRed} strokeWidth={2.5} />
+                <Text style={styles.comboTagText}>Combiné</Text>
+              </View>
+            ) : isPrediction ? (
+              <View style={styles.predTag}>
+                <Sparkles size={11.5} color={COLORS.betclicRed} strokeWidth={2.3} />
+                <Text numberOfLines={1} style={styles.leagueText}>
+                  {bet.league || "Prédiction"}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.sportTag}>
+                <SportIcon sport={bet.sport} size={13} color={COLORS.dim} />
+                <Text numberOfLines={1} style={styles.leagueText}>
+                  {bet.league}
+                </Text>
+              </View>
             )}
-        </View>
-        <Text numberOfLines={1} style={styles.selectionLine}>
-          {bet.selectionLabel}
-        </Text>
-      </View>
-
-      {/* Ligne 3 : Montants en ligne (petits libellés discrets + chiffres gras) + Flex */}
-      <View style={styles.amountsRow}>
-        <View style={styles.amountsInline}>
-          <View style={styles.metricInline}>
-            <Text style={styles.metricLabel}>Mise :</Text>
-            <Text style={styles.metricVal}>{eur(bet.stake)}</Text>
-          </View>
-          <View style={styles.metricInline}>
-            <Text style={styles.metricLabel}>Cote :</Text>
-            <Text style={styles.metricVal}>
-              ×{formatOdds(bet.odds, oddsFormat)}
+            <Text style={styles.dot}>·</Text>
+            <Text numberOfLines={1} style={styles.placedAt}>
+              {formatPlacedAt(bet.placedAt)}
             </Text>
           </View>
-          <View style={styles.metricInline}>
-            <Text style={styles.metricLabel}>{finalAmountLabel}</Text>
+
+          <View style={styles.headRight}>
+            <BetStatusBadge status={bet.status} />
+            <Pressable
+              hitSlop={8}
+              onPress={() => openShareTicket(bet)}
+              style={styles.shareIconBtn}
+            >
+              <Share2 size={13.5} color={COLORS.dim} strokeWidth={2.2} />
+            </Pressable>
+            <ChevronRight size={15} color={COLORS.dim} strokeWidth={2.2} />
+          </View>
+        </View>
+
+        {/* Corps compact uniforme (Simple & Combiné alignés) */}
+        {isCombo ? (
+          <View style={styles.bodyBlock}>
+            <Text numberOfLines={1} style={styles.eventTitle}>
+              {firstComboLeg?.title ?? "Ticket combiné"}
+              {extraComboCount > 0 ? ` + ${extraComboCount}` : ""}
+            </Text>
+            <Text numberOfLines={1} style={styles.selectionLine}>
+              {firstComboLeg?.selectionLabel ?? bet.selectionLabel}
+              {bet.boostPct && bet.boostPct > 0
+                ? ` · Boost +${bet.boostPct} %`
+                : ""}
+            </Text>
+          </View>
+        ) : isPrediction ? (
+          <View style={styles.bodyBlock}>
+            <Text numberOfLines={2} style={styles.eventTitle}>
+              {bet.question || bet.homeTeam}
+            </Text>
+            <Text numberOfLines={1} style={styles.selectionLine}>
+              Choix : {bet.selectionLabel}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.bodyBlock}>
+            <View style={styles.matchRow}>
+              <View style={styles.teamsInline}>
+                <TeamAvatar
+                  name={bet.homeTeam}
+                  logo={bet.homeLogo}
+                  size="2xs"
+                />
+                <Text numberOfLines={1} style={styles.eventTitle}>
+                  {bet.homeTeam} – {bet.awayTeam}
+                </Text>
+                <TeamAvatar
+                  name={bet.awayTeam}
+                  logo={bet.awayLogo}
+                  size="2xs"
+                />
+              </View>
+              {bet.matchHomeScore !== null && bet.matchAwayScore !== null ? (
+                <View style={styles.liveScorePill}>
+                  {bet.matchStatus === "live" ? (
+                    <View style={styles.liveDot} />
+                  ) : null}
+                  <Text style={styles.liveScoreText}>
+                    {bet.matchHomeScore} - {bet.matchAwayScore}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text numberOfLines={1} style={styles.selectionLine}>
+              {bet.selectionLabel}
+            </Text>
+          </View>
+        )}
+
+        {/* Pied en ligne : petits libellés discrets + grandes valeurs grasses (« Mise : N », « Cote : N », « Gain max : N ») */}
+        <View style={styles.amountsRow}>
+          <View style={styles.amountItem}>
+            <Text style={styles.amountLabel}>Mise : </Text>
+            <Text style={styles.amountVal}>{eur(bet.stake)}</Text>
+          </View>
+
+          <View style={styles.amountItem}>
+            <Text style={styles.amountLabel}>Cote : </Text>
+            <Text style={styles.amountVal}>
+              {formatOdds(bet.odds, oddsFormat)}
+            </Text>
+          </View>
+
+          <View style={[styles.amountItem, { justifyContent: "flex-end" }]}>
+            <Text style={styles.amountLabel}>
+              {bet.status === "cashed"
+                ? "Vendu : "
+                : bet.status === "won"
+                  ? "Gain : "
+                  : "Gain max : "}
+            </Text>
             <Text
               style={[
-                styles.metricVal,
-                bet.status === "won" && { color: colors.win },
-                bet.status === "lost" && { color: colors.bittersweet },
+                styles.amountVal,
+                bet.status === "won" && { color: COLORS.win },
+                bet.status === "cashed" && { color: "#059669" },
+                bet.status === "lost" && { color: COLORS.dim },
               ]}
             >
-              {bet.status === "lost" ? eur(0) : eur(finalAmountValue)}
+              {eur(
+                bet.status === "cashed" && bet.cashOutAmount !== null
+                  ? bet.cashOutAmount
+                  : bet.potentialWin
+              )}
             </Text>
           </View>
         </View>
+      </Pressable>
 
-        {(bet.status === "won" || bet.status === "pending") && (
-          <Pressable
-            hitSlop={8}
-            onPress={(e) => {
-              e.stopPropagation();
-              openShareTicket(bet);
-            }}
-            style={styles.shareBtn}
-          >
-            <Share2 size={13.5} color={colors.ink} strokeWidth={2.3} />
-          </Pressable>
-        )}
-      </View>
-
-      {/* Cash Out vert créatif émeraude */}
-      {bet.status === "pending" && typeof bet.cashOut === "number" && bet.cashOut > 0 && (
-        <Pressable onPress={(e) => e.stopPropagation()} style={styles.cashoutWrap}>
+      {canCashOut && cashOutOffer !== null ? (
+        <View style={styles.cashoutWrap}>
           <SlideToCashOut
-            amount={bet.cashOut}
+            amount={cashOutOffer}
             loading={cashingOut}
             onConfirm={handleCashOut}
           />
-        </Pressable>
-      )}
-    </Pressable>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
     padding: 13,
+    gap: 10,
+  },
+  cardPress: {
     gap: 9,
   },
-  topRow: {
+  headRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  catLeft: {
-    flex: 1,
+  headLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
+    flex: 1,
+    minWidth: 0,
   },
-  catText: {
-    flexShrink: 1,
-    fontSize: 11.5,
-    fontWeight: "800",
-    color: colors.mist,
-  },
-  dotSep: {
-    fontSize: 11,
-    color: colors.dim,
-  },
-  dateText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.dim,
-  },
-  topRight: {
+  comboTag: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    borderRadius: 6,
+    backgroundColor: "rgba(225, 0, 20, 0.09)",
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+  },
+  comboTagText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.betclicRed,
+  },
+  predTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 1,
+  },
+  sportTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flexShrink: 1,
+  },
+  leagueText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: COLORS.mist,
+    flexShrink: 1,
+  },
+  dot: {
+    fontSize: 11,
+    color: COLORS.dim,
+  },
+  placedAt: {
+    fontSize: 11,
+    color: COLORS.dim,
+    flexShrink: 0,
+  },
+  headRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  shareIconBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: COLORS.elev,
+    alignItems: "center",
+    justifyContent: "center",
   },
   badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 2.5,
-    borderRadius: 999,
+  },
+  badgePending: {
+    backgroundColor: COLORS.elev,
+  },
+  badgeWon: {
+    backgroundColor: COLORS.winSoft,
+  },
+  badgeLost: {
+    backgroundColor: "rgba(225, 0, 20, 0.10)",
+  },
+  badgeCashed: {
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+  },
+  badgeVoid: {
+    backgroundColor: COLORS.elev,
   },
   badgeText: {
     fontSize: 10.5,
     fontWeight: "800",
   },
-  badgeWon: {
-    backgroundColor: "rgba(21, 128, 61, 0.14)",
+  bodyBlock: {
+    gap: 3,
   },
-  badgeTextWon: {
-    color: colors.win,
-  },
-  badgeLost: {
-    backgroundColor: "rgba(220, 38, 38, 0.13)",
-  },
-  badgeTextLost: {
-    color: colors.bittersweet,
-  },
-  badgeCashout: {
-    backgroundColor: "rgba(5, 150, 105, 0.14)",
-  },
-  badgeTextCashout: {
-    color: "#047857",
-  },
-  badgeVoid: {
-    backgroundColor: colors.elev,
-  },
-  badgeTextVoid: {
-    color: colors.mist,
-  },
-  badgeLive: {
-    backgroundColor: "rgba(225, 0, 20, 0.12)",
-  },
-  liveDot: {
-    width: 5.5,
-    height: 5.5,
-    borderRadius: 3,
-    backgroundColor: colors.betclicRed,
-  },
-  badgePending: {
-    backgroundColor: colors.elev,
-  },
-  badgeTextPending: {
-    color: colors.ink,
-  },
-  midBlock: {
-    gap: 2,
-  },
-  titleScoreRow: {
+  matchRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  mainTitle: {
+  teamsInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.ink,
+    minWidth: 0,
   },
-  liveScore: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: colors.betclicRed,
+  eventTitle: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: COLORS.ink,
+    flexShrink: 1,
+  },
+  liveScorePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 6,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  liveDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: COLORS.betclicRed,
+  },
+  liveScoreText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   selectionLine: {
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: "700",
-    color: colors.betclicRed,
+    color: COLORS.betclicRed,
   },
   amountsRow: {
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.edgeSoft,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "baseline",
     justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: COLORS.edgeSoft,
+    paddingTop: 8,
     gap: 6,
   },
-  amountsInline: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    columnGap: 12,
-    rowGap: 4,
-  },
-  metricInline: {
+  amountItem: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 3.5,
+    flexShrink: 1,
   },
-  metricLabel: {
-    fontSize: 11,
+  amountLabel: {
+    fontSize: 10.5,
     fontWeight: "500",
-    color: colors.dim,
+    color: COLORS.dim,
   },
-  metricVal: {
+  amountVal: {
     fontSize: 13.5,
-    fontWeight: "900",
-    color: colors.ink,
+    fontWeight: "800",
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
-  },
-  shareBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.elev,
-    alignItems: "center",
-    justifyContent: "center",
   },
   cashoutWrap: {
     marginTop: 2,
