@@ -92,7 +92,7 @@ export function CouponCodeBox({
     try {
       const res = await api.coupons.save(comboLegs, defaultStake);
       setSavedCode(res.code);
-      Clipboard.setString(res.code);
+      void Clipboard.setStringAsync(res.code);
       toast({
         kind: "success",
         title: `Code ${res.code} copié`,
@@ -144,7 +144,7 @@ export function CouponCodeBox({
           {savedCode ? (
             <Pressable
               onPress={async () => {
-                Clipboard.setString(savedCode);
+                void Clipboard.setStringAsync(savedCode);
                 toast({ kind: "info", title: `Code ${savedCode} copié` });
               }}
               style={styles.codePill}

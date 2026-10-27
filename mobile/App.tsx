@@ -1,4 +1,3 @@
-import "./src/lib/sdk42-compat";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";

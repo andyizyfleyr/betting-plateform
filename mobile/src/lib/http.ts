@@ -13,7 +13,16 @@ import Constants from "expo-constants";
 const TOKEN_STORE_KEY = "pulse_android_jwt_v1";
 
 function resolveApiBaseUrl(): string {
-  const extra = (Constants.manifest?.extra ?? {}) as { apiBaseUrl?: string };
+  const cAny = Constants as unknown as {
+    expoConfig?: { extra?: { apiBaseUrl?: string } };
+    manifest2?: { extra?: { expoClient?: { extra?: { apiBaseUrl?: string } } } };
+    manifest?: { extra?: { apiBaseUrl?: string } };
+  };
+  const extra =
+    cAny.expoConfig?.extra ??
+    cAny.manifest2?.extra?.expoClient?.extra ??
+    cAny.manifest?.extra ??
+    {};
   if (extra.apiBaseUrl && extra.apiBaseUrl.trim().length > 0) {
     return extra.apiBaseUrl.trim().replace(/\/+$/, "");
   }

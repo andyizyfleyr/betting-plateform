@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import sdk42Meta from "@/lib/expo-sdk42-meta.json";
-
-export const runtime = "edge";
+import sdk52Meta from "@/lib/expo-sdk52-meta.json";
 
 function resolvePublicOrigin(req: NextRequest): {
   origin: string;
@@ -13,21 +11,22 @@ function resolvePublicOrigin(req: NextRequest): {
     xfHost?.split(",")[0]?.trim() ||
     req.headers.get("host")?.trim() ||
     "be-plateform.vercel.app";
+  const cleanHost = rawHost.replace(/:443$/, "");
   const xfProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
   const isHttps =
-    rawHost.endsWith(".vercel.app") ||
-    rawHost.endsWith(".e2b.app") ||
+    cleanHost.endsWith(".vercel.app") ||
+    cleanHost.endsWith(".e2b.app") ||
     xfProto === "https" ||
     req.nextUrl.protocol === "https:";
   const scheme = isHttps ? "https" : "http";
   return {
-    origin: `${scheme}://${rawHost}`,
-    host: rawHost,
+    origin: `${scheme}://${cleanHost}`,
+    host: cleanHost,
     isHttps,
   };
 }
 
-function isExpoGoClient(req: NextRequest): boolean {
+function isExpoUpdatesClient(req: NextRequest): boolean {
   const sp = req.nextUrl.searchParams;
   if (sp.get("format") === "json" || sp.get("platform") === "android") {
     return true;
@@ -37,11 +36,12 @@ function isExpoGoClient(req: NextRequest): boolean {
   if (
     h.get("expo-platform") ||
     h.get("exponent-platform") ||
+    h.get("expo-protocol-version") ||
+    h.get("expo-runtime-version") ||
     h.get("expo-sdk-version") ||
     h.get("exponent-sdk-version") ||
     h.get("expo-updates-environment") ||
-    h.get("expo-accept-signature") ||
-    h.get("exponent-accept-signature")
+    h.get("eas-client-id")
   ) {
     return true;
   }
@@ -53,7 +53,8 @@ function isExpoGoClient(req: NextRequest): boolean {
 
   const accept = (h.get("accept") || "").toLowerCase();
   if (
-    (accept.includes("application/expo+json") ||
+    (accept.includes("multipart/mixed") ||
+      accept.includes("application/expo+json") ||
       accept.includes("application/json")) &&
     !accept.includes("text/html")
   ) {
@@ -66,66 +67,95 @@ function isExpoGoClient(req: NextRequest): boolean {
 export async function GET(req: NextRequest) {
   const { origin, host, isHttps } = resolvePublicOrigin(req);
 
-  if (isExpoGoClient(req)) {
+  if (isExpoUpdatesClient(req)) {
+    const reqProtocol = req.headers.get("expo-protocol-version") === "1" ? "1" : "0";
     const manifest = {
-      name: "PulseBets",
-      slug: "pulsebets-android",
-      version: "1.0.0",
-      sdkVersion: "42.0.0",
-      platforms: ["android"],
-      orientation: "portrait",
-      primaryColor: "#e10014",
-      userInterfaceStyle: "light",
-      backgroundColor: "#f4f5f7",
-      id: "@anonymous/pulsebets-android",
-      scopeKey: "@anonymous/pulsebets-android",
-      releaseId: sdk42Meta.releaseId,
-      revisionId: sdk42Meta.revisionId,
-      commitTime: sdk42Meta.commitTime,
-      publishedTime: sdk42Meta.publishedTime,
-      bundleUrl: `${origin}${sdk42Meta.bundlePath}`,
-      bundleKey: sdk42Meta.bundleKey,
-      bundledAssets: sdk42Meta.bundledAssets,
-      assetUrlOverride: "/expo-sdk42/assets",
-      icon: "./assets/icon.png",
-      iconUrl: `${origin}/expo-sdk42/icon.png`,
-      splash: {
-        image: "./assets/splash-icon.png",
-        resizeMode: "contain",
-        backgroundColor: "#ffffff",
-        imageUrl: `${origin}/expo-sdk42/splash-icon.png`,
+      id: sdk52Meta.id,
+      createdAt: sdk52Meta.createdAt,
+      runtimeVersion: sdk52Meta.runtimeVersion,
+      launchAsset: {
+        hash: sdk52Meta.launchAsset.hash,
+        key: sdk52Meta.launchAsset.key,
+        contentType: sdk52Meta.launchAsset.contentType,
+        fileExtension: sdk52Meta.launchAsset.fileExtension,
+        url: `${origin}${sdk52Meta.launchAsset.relativePath}`,
       },
-      android: {
-        package: "app.pulsebets.android",
-        versionCode: 1,
-        adaptiveIcon: {
-          foregroundImage: "./assets/adaptive-icon.png",
-          backgroundColor: "#e10014",
-          foregroundImageUrl: `${origin}/expo-sdk42/adaptive-icon.png`,
-        },
-      },
+      assets: sdk52Meta.assets.map((asset) => ({
+        hash: asset.hash,
+        key: asset.key,
+        contentType: asset.contentType,
+        fileExtension: asset.fileExtension,
+        url: `${origin}${asset.relativePath}`,
+      })),
+      metadata: {},
       extra: {
-        apiBaseUrl: origin,
+        eas: {},
+        expoClient: {
+          name: "PulseBets",
+          slug: "pulsebets-android",
+          version: "1.0.0",
+          sdkVersion: "52.0.0",
+          platforms: ["android"],
+          orientation: "portrait",
+          primaryColor: "#e10014",
+          userInterfaceStyle: "light",
+          backgroundColor: "#f4f5f7",
+          jsEngine: "hermes",
+          hostUri: `${host}/api/expo`,
+          icon: "./assets/icon.png",
+          iconUrl: `${origin}/expo-sdk52/icon.png`,
+          splash: {
+            image: "./assets/splash-icon.png",
+            resizeMode: "contain",
+            backgroundColor: "#ffffff",
+            imageUrl: `${origin}/expo-sdk52/splash-icon.png`,
+          },
+          android: {
+            package: "app.pulsebets.android",
+            versionCode: 1,
+            adaptiveIcon: {
+              foregroundImage: "./assets/adaptive-icon.png",
+              backgroundColor: "#e10014",
+              foregroundImageUrl: `${origin}/expo-sdk52/adaptive-icon.png`,
+            },
+          },
+          extra: {
+            apiBaseUrl: origin,
+          },
+        },
+        expoGo: {
+          debuggerHost: `${host}:443`,
+          mainModuleName: "node_modules/expo/AppEntry",
+          packagerOpts: {
+            dev: false,
+          },
+        },
+        scopeKey: "@anonymous/pulsebets-android",
       },
     };
 
     return new NextResponse(JSON.stringify(manifest), {
       status: 200,
       headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "public, max-age=0, must-revalidate",
+        "Content-Type": "application/expo+json; charset=utf-8",
+        "expo-protocol-version": reqProtocol,
+        "expo-sfv-version": "0",
+        "Cache-Control": "private, max-age=0",
         "Access-Control-Allow-Origin": "*",
       },
     });
   }
 
-  const expoUrl = `${isHttps ? "exps" : "exp"}://${host}/api/expo`;
+  const expoUrl = isHttps
+    ? `exp://${host}:443/api/expo`
+    : `exp://${host}/api/expo`;
+
   const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PulseBets Android · Expo Go SDK 42 (24h/24)</title>
+  <title>PulseBets Android · Expo Go SDK 52 (24h/24)</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -255,24 +285,24 @@ export async function GET(req: NextRequest) {
         <span class="brand-dot">⚡</span>
         <span>PulseBets Android</span>
       </div>
-      <span class="sdk-pill">Expo Go SDK 42 · 24h/24</span>
+      <span class="sdk-pill">Expo Go SDK 52 · Hermes</span>
     </div>
 
-    <span class="badge">● En ligne en permanence 24h/24 (aucune expiration de sandbox)</span>
+    <span class="badge">● En ligne 24h/24 · Compatible Supported version 52</span>
 
-    <div class="qr-box">${sdk42Meta.qrSvg}</div>
+    <div class="qr-box">${sdk52Meta.qrSvg}</div>
 
     <div class="url-box" id="expoUrl">${expoUrl}</div>
 
     <div class="actions">
       <a class="btn btn-primary" href="${expoUrl}">Ouvrir dans Expo Go</a>
-      <button class="btn btn-secondary" id="copyBtn" type="button">Copier l'URL exps://</button>
+      <button class="btn btn-secondary" id="copyBtn" type="button">Copier l'URL exp://</button>
     </div>
 
     <ol class="steps">
-      <li>Ouvrez <strong>Expo Go (SDK 42)</strong> sur votre téléphone Android.</li>
+      <li>Ouvrez <strong>Expo Go (Supported version 52)</strong> sur votre Android.</li>
       <li>Scannez le <strong>QR Code</strong> ci-dessus ou appuyez sur <strong>« Enter URL manually »</strong> et collez <code>${expoUrl}</code>.</li>
-      <li>Ce lien permanent ne s'éteint jamais (0 erreur <code>502</code> ni <code>Remote update request not successful</code>).</li>
+      <li>Le bundle Hermes SDK 52 et les assets sont servis en permanence 24h/24.</li>
     </ol>
   </div>
   <script>
@@ -283,7 +313,7 @@ export async function GET(req: NextRequest) {
       }
       this.textContent = "URL copiée ✓";
       var self = this;
-      setTimeout(function () { self.textContent = "Copier l'URL exps://"; }, 1800);
+      setTimeout(function () { self.textContent = "Copier l'URL exp://"; }, 1800);
     });
   </script>
 </body>

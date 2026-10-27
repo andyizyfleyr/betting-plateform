@@ -86,7 +86,7 @@ export function ShareTicketModal() {
           <View style={styles.actionsRow}>
             <Pressable
               onPress={async () => {
-                Clipboard.setString(shareText);
+                void Clipboard.setStringAsync(shareText);
                 toast({ kind: "success", title: "Ticket copié dans le presse-papiers" });
               }}
               style={styles.copyBtn}
