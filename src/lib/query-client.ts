@@ -82,54 +82,50 @@ export function getBrowserQueryClient(): QueryClient {
 }
 
 /**
- * Fusionne un snapshot léger `MATCHES_SNAPSHOT` (PartyKit) dans le cache `matches` complet
- * en préservant les groupes de marchés détaillés (`markets`) déjà chargés pour chaque match.
+ * Fusionne un match léger `MATCHES_SNAPSHOT` dans un `ClientMatch` complet existant
+ * sans jamais écraser les 18–19 groupes de marchés (`markets`), `realStats` ni `telemetry`
+ * par le tableau réduit `[result]` (longueur 1) du snapshot slim.
  */
-export function mergeSlimIntoFullMatches(
-  prevMatches: ClientMatch[] | undefined,
-  slimList: ClientMatch[]
-): {
-  merged: ClientMatch[];
-  hasNewMatch: boolean;
-  newlyFinishedIds: number[];
-} {
-  if (!prevMatches || prevMatches.length === 0) {
+export function mergeSingleSlimIntoFullMatch(
+  existing: ClientMatch,
+  slim: ClientMatch
+): ClientMatch {
+  if (slim.status === "finished") {
     return {
-      merged: slimList,
-      hasNewMatch: slimList.length > 0,
-      newlyFinishedIds: [],
+      ...existing,
+      ...slim,
+      markets: [],
+      marketCount: 0,
+      realStats: slim.realStats ?? existing.realStats,
     };
   }
 
-  const prevById = new Map<number, ClientMatch>();
-  for (const m of prevMatches) {
-    prevById.set(m.id, m);
-  }
+  const slimHasFullMarkets =
+    Array.isArray(slim.markets) && slim.markets.length > 1;
+  const existingHasFullMarkets =
+    Array.isArray(existing.markets) && existing.markets.length > 1;
 
-  let hasNewMatch = false;
-  const newlyFinishedIds: number[] = [];
+  let nextMarkets = slimHasFullMarkets
+    ? slim.markets
+    : existingHasFullMarkets
+      ? existing.markets
+      : (slim.markets ?? existing.markets);
 
-  const merged = slimList.map((slim) => {
-    const existing = prevById.get(slim.id);
-    if (!existing) {
-      hasNewMatch = true;
-      return slim;
-    }
-    if (existing.status !== "finished" && slim.status === "finished") {
-      newlyFinishedIds.push(slim.id);
-    }
-
-    // Met à jour également les cotes 1X2 du groupe principal dans `existing.markets` si présent
-    let nextMarkets = existing.markets;
-    if (
-      Array.isArray(existing.markets) &&
-      existing.markets.length > 0 &&
-      (existing.oddsHome !== slim.oddsHome ||
-        existing.oddsDraw !== slim.oddsDraw ||
-        existing.oddsAway !== slim.oddsAway)
+  if (!slimHasFullMarkets && existingHasFullMarkets) {
+    const slimResGroup = slim.markets?.find(
+      (g) => g.key === "result" || g.key === "1x2"
+    );
+    if (slimResGroup) {
+      nextMarkets = existing.markets.map((group) =>
+        group.key === "result" || group.key === "1x2" ? slimResGroup : group
+      );
+    } else if (
+      existing.oddsHome !== slim.oddsHome ||
+      existing.oddsDraw !== slim.oddsDraw ||
+      existing.oddsAway !== slim.oddsAway
     ) {
       nextMarkets = existing.markets.map((group) => {
-        if (group.key !== "1x2") return group;
+        if (group.key !== "result" && group.key !== "1x2") return group;
         return {
           ...group,
           outcomes: group.outcomes.map((o) => {
@@ -143,14 +139,89 @@ export function mergeSlimIntoFullMatches(
         };
       });
     }
+  }
 
+  return {
+    ...existing,
+    ...slim,
+    markets: nextMarkets,
+    marketCount:
+      slim.marketCount ??
+      existing.marketCount ??
+      (Array.isArray(nextMarkets) ? nextMarkets.length : 0),
+    realStats: slim.realStats ?? existing.realStats,
+    ...(slim.telemetry
+      ? { telemetry: slim.telemetry }
+      : existing.telemetry && slim.status === "live"
+        ? { telemetry: existing.telemetry }
+        : {}),
+  };
+}
+
+/**
+ * Fusionne un snapshot léger `MATCHES_SNAPSHOT` (PartyKit) dans le cache `matches` complet
+ * en préservant les groupes de marchés détaillés (`markets`) déjà chargés pour chaque match.
+ */
+export function mergeSlimIntoFullMatches(
+  prevMatches: ClientMatch[] | undefined,
+  slimList: ClientMatch[]
+): {
+  merged: ClientMatch[];
+  hasNewMatch: boolean;
+  needsFullMarkets: boolean;
+  newlyFinishedIds: number[];
+} {
+  if (!prevMatches || prevMatches.length === 0) {
+    const needsFullMarkets = slimList.some(
+      (m) =>
+        m.status !== "finished" &&
+        (m.marketCount ?? 0) > 1 &&
+        (m.markets?.length ?? 0) <= 1
+    );
     return {
-      ...existing,
-      ...slim,
-      markets: slim.markets ?? nextMarkets,
-      realStats: slim.realStats ?? existing.realStats,
+      merged: slimList,
+      hasNewMatch: slimList.length > 0,
+      needsFullMarkets: slimList.length > 0 || needsFullMarkets,
+      newlyFinishedIds: [],
     };
+  }
+
+  const prevById = new Map<number, ClientMatch>();
+  for (const m of prevMatches) {
+    prevById.set(m.id, m);
+  }
+
+  let hasNewMatch = false;
+  let needsFullMarkets = false;
+  const newlyFinishedIds: number[] = [];
+
+  const merged = slimList.map((slim) => {
+    const existing = prevById.get(slim.id);
+    if (!existing) {
+      hasNewMatch = true;
+      if (
+        slim.status !== "finished" &&
+        (slim.marketCount ?? 0) > 1 &&
+        (slim.markets?.length ?? 0) <= 1
+      ) {
+        needsFullMarkets = true;
+      }
+      return slim;
+    }
+    if (existing.status !== "finished" && slim.status === "finished") {
+      newlyFinishedIds.push(slim.id);
+    }
+
+    const combined = mergeSingleSlimIntoFullMatch(existing, slim);
+    if (
+      combined.status !== "finished" &&
+      (combined.marketCount ?? 0) > 1 &&
+      (combined.markets?.length ?? 0) <= 1
+    ) {
+      needsFullMarkets = true;
+    }
+    return combined;
   });
 
-  return { merged, hasNewMatch, newlyFinishedIds };
+  return { merged, hasNewMatch, needsFullMarkets, newlyFinishedIds };
 }

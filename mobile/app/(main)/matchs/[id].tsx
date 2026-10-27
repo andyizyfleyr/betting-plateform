@@ -66,6 +66,9 @@ export default function MatchDetailScreen() {
   const [initializedMatchId, setInitializedMatchId] = useState<number | null>(
     null
   );
+  const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
+    null
+  );
   const [showTracker, setShowTracker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -73,6 +76,7 @@ export default function MatchDetailScreen() {
     setPrevId(matchId);
     setCategory("all");
     setInitializedMatchId(null);
+    setFullMarketsOpenedId(null);
     setOpenMap({});
     setShowTracker(false);
   }
@@ -122,6 +126,7 @@ export default function MatchDetailScreen() {
 
   if (match && match.id !== initializedMatchId && groups.length > 0) {
     setInitializedMatchId(match.id);
+    if (groups.length > 1) setFullMarketsOpenedId(match.id);
     const initial: Record<string, boolean> = {};
     for (const k of ["result", "total_ou"]) {
       if (groups.some((g) => g.key === k)) initial[k] = true;
@@ -130,6 +135,17 @@ export default function MatchDetailScreen() {
       for (const g of groups.slice(0, 2)) initial[g.key] = true;
     }
     setOpenMap(initial);
+  } else if (
+    match &&
+    groups.length > 1 &&
+    fullMarketsOpenedId !== match.id
+  ) {
+    setFullMarketsOpenedId(match.id);
+    const defaults: Record<string, boolean> = {};
+    for (const k of ["result", "total_ou"]) {
+      if (groups.some((g) => g.key === k)) defaults[k] = true;
+    }
+    setOpenMap((prev) => ({ ...defaults, ...prev }));
   }
 
   const filteredGroups = useMemo(() => {

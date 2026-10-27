@@ -777,13 +777,13 @@ function MultiOptionButton({
       {...handlers}
       style={style}
       className={cn(
-        "relative flex min-h-[44px] w-full items-center justify-between gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition-all active:scale-[0.99]",
+        "relative flex min-h-[44px] w-full items-center justify-between gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition-colors",
         inCombo
           ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
           : selected
             ? "border-betclic-red bg-betclic-red/[0.06]"
             : "border-edge bg-elev/55 active:bg-elev",
-        pressing && !expired && "scale-[0.98] ring-2 ring-betclic-red/50",
+        pressing && !expired && "ring-2 ring-betclic-red/50",
         expired && "cursor-not-allowed"
       )}
     >
@@ -876,13 +876,13 @@ function SideButton({
       {...handlers}
       style={style}
       className={cn(
-        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98]",
+        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-colors",
         selected
           ? "border-betclic-red bg-betclic-red text-white"
           : inCombo
             ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
             : "border-edge bg-elev text-ink active:bg-edge/60",
-        pressing && !disabled && "scale-[0.96] ring-2 ring-betclic-red/50",
+        pressing && !disabled && "ring-2 ring-betclic-red/50",
         disabled && "cursor-not-allowed"
       )}
     >

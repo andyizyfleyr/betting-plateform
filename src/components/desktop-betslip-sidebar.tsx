@@ -110,12 +110,13 @@ function splitMatchTitle(
 function resolveLiveMatchSelectionOdds(
   match: ClientMatch,
   market: string,
-  selection: string
+  selection: string,
+  fallbackOdds?: number
 ): { odds: number | null; closed: boolean; suspended: boolean } {
   if (match.status === "finished") {
     return { odds: null, closed: true, suspended: false };
   }
-  if (match.suspended) {
+  if (match.suspended || match.kickoffReached) {
     return { odds: null, closed: false, suspended: true };
   }
   const grp = match.markets?.find((m) => m.key === market);
@@ -132,7 +133,18 @@ function resolveLiveMatchSelectionOdds(
           : selection === "away"
             ? match.oddsAway
             : null;
-    return { odds, closed: odds == null, suspended: false };
+    return {
+      odds,
+      closed: grp ? true : odds == null,
+      suspended: false,
+    };
+  }
+  // Si le flux temps réel (`MATCHES_SNAPSHOT`) ne transporte que le groupe 1x2 (`markets.length <= 1`),
+  // ne jamais marquer à tort un marché secondaire comme clôturé avant l'hydratation complète.
+  const isSlimSnapshot =
+    (match.markets?.length ?? 0) <= 1 && (match.marketCount ?? 2) > 1;
+  if (!grp && isSlimSnapshot) {
+    return { odds: fallbackOdds ?? null, closed: false, suspended: false };
   }
   return { odds: null, closed: true, suspended: false };
 }
@@ -318,7 +330,8 @@ export function DesktopBetslipSidebar() {
         const resolved = resolveLiveMatchSelectionOdds(
           m,
           leg.market,
-          leg.selection
+          leg.selection,
+          leg.odds
         );
         return {
           ...leg,

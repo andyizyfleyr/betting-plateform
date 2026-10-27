@@ -58,16 +58,22 @@ export function mergeSlimIntoMobileMatch(
   existing: ClientMatch,
   slim: ClientMatch
 ): ClientMatch {
-  let nextMarkets = existing.markets;
-  if (
-    Array.isArray(existing.markets) &&
-    existing.markets.length > 0 &&
-    (existing.oddsHome !== slim.oddsHome ||
-      existing.oddsDraw !== slim.oddsDraw ||
-      existing.oddsAway !== slim.oddsAway)
-  ) {
+  const existingHasFullMarkets = (existing.markets?.length ?? 0) > 1;
+  const incomingIsSlim = (slim.markets?.length ?? 0) <= 1;
+
+  let nextMarkets = slim.markets ?? existing.markets;
+  if (existingHasFullMarkets && incomingIsSlim) {
+    const slimResultGroup = slim.markets?.find(
+      (g) => g.key === "result" || g.key === "1x2"
+    );
     nextMarkets = existing.markets.map((group) => {
-      if (group.key !== "1x2") return group;
+      if (group.key !== "result" && group.key !== "1x2") return group;
+      if (slimResultGroup) {
+        return {
+          ...group,
+          outcomes: slimResultGroup.outcomes,
+        };
+      }
       return {
         ...group,
         outcomes: group.outcomes.map((o) => {
@@ -85,7 +91,25 @@ export function mergeSlimIntoMobileMatch(
   return {
     ...existing,
     ...slim,
-    markets: slim.markets ?? nextMarkets,
+    markets: nextMarkets,
+    marketCount:
+      slim.marketCount ??
+      existing.marketCount ??
+      Math.max(nextMarkets?.length ?? 0, existing.markets?.length ?? 0),
     realStats: slim.realStats ?? existing.realStats,
+    telemetry: slim.telemetry ?? existing.telemetry,
   };
+}
+
+export function mergeSlimIntoMobileMatches(
+  prevMatches: ClientMatch[] | undefined,
+  incomingMatches: ClientMatch[]
+): ClientMatch[] {
+  if (!prevMatches || prevMatches.length === 0) return incomingMatches;
+  const prevById = new Map(prevMatches.map((m) => [m.id, m]));
+  return incomingMatches.map((incoming) => {
+    const prev = prevById.get(incoming.id);
+    if (!prev) return incoming;
+    return mergeSlimIntoMobileMatch(prev, incoming);
+  });
 }

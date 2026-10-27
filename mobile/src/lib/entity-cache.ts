@@ -64,18 +64,24 @@ export function seedMatchSnapshot(m: ClientMatch | null | undefined) {
   const prev = matchCache.get(m.id);
   if (
     prev &&
-    prev.markets.length > 1 &&
-    m.markets.length <= 1 &&
-    m.status === prev.status
+    (prev.markets?.length ?? 0) > 1 &&
+    (m.markets?.length ?? 0) <= 1
   ) {
-    const updatedResGroup = m.markets.find((g) => g.key === "result");
+    const updatedResGroup = m.markets?.find(
+      (g) => g.key === "result" || g.key === "1x2"
+    );
     matchCache.set(m.id, {
       ...prev,
       ...m,
+      marketCount: m.marketCount ?? prev.marketCount ?? prev.markets.length,
       realStats: m.realStats ?? prev.realStats ?? null,
       telemetry: m.telemetry ?? prev.telemetry,
       markets: updatedResGroup
-        ? prev.markets.map((g) => (g.key === "result" ? updatedResGroup : g))
+        ? prev.markets.map((g) =>
+            g.key === "result" || g.key === "1x2"
+              ? { ...g, outcomes: updatedResGroup.outcomes }
+              : g
+          )
         : prev.markets,
     });
     return;
@@ -84,8 +90,8 @@ export function seedMatchSnapshot(m: ClientMatch | null | undefined) {
 }
 
 export function seedMatchesSnapshot(list: ClientMatch[], persist = true) {
-  latestMatchesList = list;
   for (const m of list) seedMatchSnapshot(m);
+  latestMatchesList = list.map((m) => matchCache.get(m.id) ?? m);
   if (persist) scheduleDiskSnapshotPersist();
 }
 

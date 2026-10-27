@@ -119,11 +119,9 @@ export function RechargeModal() {
       animationType="slide"
       onRequestClose={closeRecharge}
     >
-      <Pressable style={styles.backdrop} onPress={closeRecharge}>
-        <Pressable
-          style={styles.sheet}
-          onPress={(e) => e.stopPropagation()}
-        >
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={closeRecharge} />
+        <View style={styles.sheet}>
           <View style={styles.grabber} />
           <View style={styles.topRow}>
             <View>
@@ -275,8 +273,8 @@ export function RechargeModal() {
               <ArrowUpRight size={14} color={COLORS.mist} strokeWidth={2.2} />
             </Pressable>
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

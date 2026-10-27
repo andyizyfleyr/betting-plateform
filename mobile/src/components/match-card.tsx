@@ -138,7 +138,7 @@ function OddsCell({
           : inCombo
             ? styles.oddsBtnCombo
             : styles.oddsBtnIdle,
-        pressed && !suspended && { transform: [{ scale: 0.98 }] },
+        pressed && !suspended && { opacity: 0.85 },
         suspended && { opacity: 0.5 },
       ]}
     >
@@ -376,94 +376,97 @@ function MatchCardInner({
   };
 
   return (
-    <Pressable
-      onPress={navigateDetail}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.card,
         !isFinished && styles.cardActiveMinHeight,
         width ? { width } : null,
-        pressed && { backgroundColor: "#fafbfc" },
       ]}
     >
-      {/* En-tête : ligue + statut + compteur marchés */}
-      <View style={styles.headerRow}>
-        <View style={styles.leagueRow}>
-          <SportIcon sport={match.sport} size={16} color={COLORS.dim} />
-          <Text numberOfLines={1} style={styles.leagueText}>
-            {match.league}
-          </Text>
-        </View>
+      <Pressable
+        onPress={navigateDetail}
+        style={({ pressed }) => [pressed && { opacity: 0.82 }]}
+      >
+        {/* En-tête : ligue + statut + compteur marchés */}
+        <View style={styles.headerRow}>
+          <View style={styles.leagueRow}>
+            <SportIcon sport={match.sport} size={16} color={COLORS.dim} />
+            <Text numberOfLines={1} style={styles.leagueText}>
+              {match.league}
+            </Text>
+          </View>
 
-        <View style={styles.headerRight}>
-          {isLive ? (
-            <LiveStatusBadge
-              match={match}
-              minute={match.minute}
-              suspended={match.suspended}
-            />
-          ) : isFinished ? (
-            <View style={styles.finishedPill}>
-              <Text style={styles.finishedText}>Terminé</Text>
-              <ChevronRight size={12} color={COLORS.dim} strokeWidth={2.3} />
-            </View>
-          ) : isReal && match.kickoffReached ? (
-            <View style={styles.suspendedPill}>
-              <Lock size={10} color="#b45309" strokeWidth={2.4} />
-              <Text style={styles.suspendedText}>Coup d&apos;envoi atteint</Text>
-            </View>
-          ) : isReal ? (
-            <View style={styles.kickoffPill}>
-              <Text style={styles.kickoffText}>
-                {formatKickoff(match.startsAt)}
-              </Text>
-            </View>
-          ) : (
-            <>
-              {nextUp ? (
-                <View style={styles.nextUpPill}>
-                  <Text style={styles.nextUpText}>Suivant</Text>
-                </View>
-              ) : null}
-              <KickoffCountdown startsAt={match.startsAt} />
-            </>
-          )}
-
-          {!isFinished && marketCount > 1 ? (
-            <View style={styles.marketCountPill}>
-              <Text style={styles.marketCountText}>+{marketCount - 1}</Text>
-              <ChevronRight
-                size={10}
-                color={COLORS.betclicRed}
-                strokeWidth={2.6}
+          <View style={styles.headerRight}>
+            {isLive ? (
+              <LiveStatusBadge
+                match={match}
+                minute={match.minute}
+                suspended={match.suspended}
               />
-            </View>
-          ) : null}
-        </View>
-      </View>
+            ) : isFinished ? (
+              <View style={styles.finishedPill}>
+                <Text style={styles.finishedText}>Terminé</Text>
+                <ChevronRight size={12} color={COLORS.dim} strokeWidth={2.3} />
+              </View>
+            ) : isReal && match.kickoffReached ? (
+              <View style={styles.suspendedPill}>
+                <Lock size={10} color="#b45309" strokeWidth={2.4} />
+                <Text style={styles.suspendedText}>Coup d&apos;envoi atteint</Text>
+              </View>
+            ) : isReal ? (
+              <View style={styles.kickoffPill}>
+                <Text style={styles.kickoffText}>
+                  {formatKickoff(match.startsAt)}
+                </Text>
+              </View>
+            ) : (
+              <>
+                {nextUp ? (
+                  <View style={styles.nextUpPill}>
+                    <Text style={styles.nextUpText}>Suivant</Text>
+                  </View>
+                ) : null}
+                <KickoffCountdown startsAt={match.startsAt} />
+              </>
+            )}
 
-      {/* Équipes & scores */}
-      <View style={styles.teamsBlock}>
-        <TeamRow
-          name={match.homeTeam}
-          logo={match.homeLogo}
-          score={match.homeScore}
-          redCards={match.redHome ?? 0}
-          winner={
-            isFinished && (match.homeScore ?? 0) > (match.awayScore ?? 0)
-          }
-          isLive={isLive}
-        />
-        <TeamRow
-          name={match.awayTeam}
-          logo={match.awayLogo}
-          score={match.awayScore}
-          redCards={match.redAway ?? 0}
-          winner={
-            isFinished && (match.awayScore ?? 0) > (match.homeScore ?? 0)
-          }
-          isLive={isLive}
-        />
-      </View>
+            {!isFinished && marketCount > 1 ? (
+              <View style={styles.marketCountPill}>
+                <Text style={styles.marketCountText}>+{marketCount - 1}</Text>
+                <ChevronRight
+                  size={10}
+                  color={COLORS.betclicRed}
+                  strokeWidth={2.6}
+                />
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Équipes & scores */}
+        <View style={styles.teamsBlock}>
+          <TeamRow
+            name={match.homeTeam}
+            logo={match.homeLogo}
+            score={match.homeScore}
+            redCards={match.redHome ?? 0}
+            winner={
+              isFinished && (match.homeScore ?? 0) > (match.awayScore ?? 0)
+            }
+            isLive={isLive}
+          />
+          <TeamRow
+            name={match.awayTeam}
+            logo={match.awayLogo}
+            score={match.awayScore}
+            redCards={match.redAway ?? 0}
+            winner={
+              isFinished && (match.awayScore ?? 0) > (match.homeScore ?? 0)
+            }
+            isLive={isLive}
+          />
+        </View>
+      </Pressable>
 
       {/* Cotes 1X2 (V1 / X / V2) */}
       {!isFinished ? (
@@ -471,7 +474,7 @@ function MatchCardInner({
           <ResultOdds match={match} />
         </View>
       ) : null}
-    </Pressable>
+    </View>
   );
 }
 

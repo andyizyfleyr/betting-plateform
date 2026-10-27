@@ -25,14 +25,43 @@ function betCacheKey(kind: BetKind, id: number): string {
   return `${kind}:${id}`;
 }
 
-export function rememberMatches(list: readonly ClientMatch[]): void {
-  for (const m of list) {
-    matchMap.set(m.id, m);
+export function rememberSingleMatch(m: ClientMatch): void {
+  const prev = matchMap.get(m.id);
+  if (
+    prev &&
+    m.status !== "finished" &&
+    Array.isArray(prev.markets) &&
+    prev.markets.length > 1 &&
+    (!Array.isArray(m.markets) || m.markets.length <= 1)
+  ) {
+    const slimResGroup = m.markets?.find(
+      (g) => g.key === "result" || g.key === "1x2"
+    );
+    matchMap.set(m.id, {
+      ...prev,
+      ...m,
+      markets: slimResGroup
+        ? prev.markets.map((g) =>
+            g.key === "result" || g.key === "1x2" ? slimResGroup : g
+          )
+        : prev.markets,
+      marketCount: m.marketCount ?? prev.marketCount ?? prev.markets.length,
+      realStats: m.realStats ?? prev.realStats ?? null,
+      ...(m.telemetry
+        ? { telemetry: m.telemetry }
+        : prev.telemetry && m.status === "live"
+          ? { telemetry: prev.telemetry }
+          : {}),
+    });
+    return;
   }
+  matchMap.set(m.id, m);
 }
 
-export function rememberSingleMatch(m: ClientMatch): void {
-  matchMap.set(m.id, m);
+export function rememberMatches(list: readonly ClientMatch[]): void {
+  for (const m of list) {
+    rememberSingleMatch(m);
+  }
 }
 
 export function getCachedClientMatch(id: number): ClientMatch | undefined {

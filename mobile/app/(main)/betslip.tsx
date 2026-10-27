@@ -24,6 +24,7 @@ import {
 import { CouponCodeBox } from "@/components/coupon-code-box";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { OddsLockControls } from "@/components/odds-lock-controls";
+import { mergeSlimIntoMobileMatch } from "@/lib/query-client";
 import {
   OddsTrendCorner,
   oddsTrendTextColor,
@@ -133,9 +134,14 @@ export default function BetslipScreen() {
 
   useEffect(() => {
     if (!feedMatches) return;
-    const mMap: Record<number, ClientMatch> = {};
-    for (const m of feedMatches) mMap[m.id] = m;
-    setMatchesMap((prev) => ({ ...prev, ...mMap }));
+    setMatchesMap((prev) => {
+      const next = { ...prev };
+      for (const m of feedMatches) {
+        const existing = next[m.id];
+        next[m.id] = existing ? mergeSlimIntoMobileMatch(existing, m) : m;
+      }
+      return next;
+    });
   }, [feedMatches]);
 
   useEffect(() => {

@@ -46,11 +46,9 @@ export function ShareTicketModal({
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <Pressable style={styles.backdrop} onPress={handleClose}>
-        <Pressable
-          style={styles.card}
-          onPress={(e) => e.stopPropagation()}
-        >
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+        <View style={styles.card}>
           <View style={styles.topRow}>
             <View style={styles.brand}>
               <PulseMark size={22} />
@@ -96,8 +94,8 @@ export function ShareTicketModal({
             <Share2 size={16} color="#ffffff" strokeWidth={2.4} />
             <Text style={styles.shareBtnText}>Partager le ticket</Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

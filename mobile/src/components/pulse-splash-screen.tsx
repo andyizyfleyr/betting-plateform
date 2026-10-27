@@ -39,6 +39,9 @@ export function PulseSplashScreen({
   const dot0 = useRef(new Animated.Value(0)).current;
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
+  const onExitedRef = useRef(onExited);
+  onExitedRef.current = onExited;
+  const didNotifyExitRef = useRef(false);
 
   useEffect(() => {
     const haloLoop = Animated.loop(
@@ -97,6 +100,12 @@ export function PulseSplashScreen({
 
   useEffect(() => {
     if (!exiting) return;
+    const notifyOnce = () => {
+      if (didNotifyExitRef.current) return;
+      didNotifyExitRef.current = true;
+      onExitedRef.current?.();
+    };
+    const safetyTimer = setTimeout(notifyOnce, 340);
     Animated.parallel([
       Animated.timing(containerOpacity, {
         toValue: 0,
@@ -110,12 +119,13 @@ export function PulseSplashScreen({
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
-    ]).start(({ finished }) => {
-      if (finished && onExited) {
-        onExited();
-      }
+    ]).start(() => {
+      notifyOnce();
     });
-  }, [containerOpacity, containerScale, exiting, onExited]);
+    return () => {
+      clearTimeout(safetyTimer);
+    };
+  }, [containerOpacity, containerScale, exiting]);
 
   const haloScale = haloPulse.interpolate({
     inputRange: [0, 1],
