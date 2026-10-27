@@ -73,7 +73,7 @@ export function useSmartPolling(
       }
     };
 
-    AppState.addEventListener("change", handleAppStateChange);
+    const sub = AppState.addEventListener("change", handleAppStateChange);
 
     if (runImmediately && appState === "active") {
       void tick();
@@ -84,7 +84,7 @@ export function useSmartPolling(
     return () => {
       cancelled = true;
       clearTimer();
-      AppState.removeEventListener("change", handleAppStateChange);
+      sub.remove();
     };
   }, [baseIntervalMs, dataSaver, enabled, runImmediately]);
 }
