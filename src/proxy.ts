@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractAuthToken, verifyJwt } from "@/lib/jwt";
 
-const STATIC_RE = /\.(?:svg|png|jpg|jpeg|gif|webp|mp3|wav|ogg|woff2?|ttf|otf|hbc|ico|txt|json|css|js)$/i;
+const STATIC_RE = /\.(?:svg|png|jpg|jpeg|gif|webp|mp3|wav|ogg|woff2?|ttf|otf|hbc|apk|ico|txt|json|css|js)$/i;
 
 function withPrivateApiSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set("CDN-Cache-Control", "private, no-store");

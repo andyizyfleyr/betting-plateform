@@ -55,3 +55,6 @@ next-env.d.ts
 .dev.vars
 .wrangler-secrets*.json
 .wrangler-deploy*.jsonl
+
+# Root APK copy (canonical downloadable copy lives in public/Pulse-Bet-Android.apk)
+/Pulse-Bet-Android.apk
