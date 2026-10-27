@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
+import { rememberSingleMatch } from "@/lib/client-entity-cache";
 import { TeamAvatar } from "./team-avatar";
 import { formatGoalSummary, LiveStatusBadge, ResultOdds } from "./match-card";
 import { KickoffCountdown } from "./kickoff-countdown";
@@ -12,7 +13,6 @@ import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { cn, formatKickoff } from "@/lib/format";
 
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
-  const router = useRouter();
   const [showTracker, setShowTracker] = useState(true);
   const isLive = match.status === "live";
   const isReal = match.source === "manual";
@@ -30,7 +30,6 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
 
   return (
     <section
-      onClick={() => router.push(`/matchs/${match.id}`)}
       className="glass-card relative cursor-pointer overflow-hidden rounded-2xl border-edge p-4 transition-colors hover:border-ink/15 active:bg-elev/40 lg:p-6"
     >
       <div className="flex items-center justify-between gap-2">
@@ -50,12 +49,9 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
           {isLive && (isReal ? realStatsAvailable : true) && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowTracker((s) => !s);
-              }}
+              onClick={() => setShowTracker((s) => !s)}
               className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display text-[10.5px] font-bold transition-colors",
+                "relative z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display text-[10.5px] font-bold transition-colors",
                 showTracker
                   ? "bg-emerald-700 text-white"
                   : "bg-elev text-mist"
@@ -87,7 +83,11 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
         )}
       >
         <div>
-          <div className="my-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 xl:my-3">
+          <Link
+            href={`/matchs/${match.id}`}
+            onClick={() => rememberSingleMatch(match)}
+            className="my-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 after:absolute after:inset-0 after:z-0 after:content-[''] xl:my-3"
+          >
             <TeamCol
               name={match.homeTeam}
               logo={match.homeLogo}
@@ -148,7 +148,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
               logo={match.awayLogo}
               redCards={match.redAway ?? 0}
             />
-          </div>
+          </Link>
 
           {isLive && hasGoals && (
             <div className="mb-3 hidden grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10.5px] text-mist lg:grid">

@@ -137,12 +137,15 @@ export default function SingleBetDetailPage() {
     if (isOffline) return;
 
     try {
-      const r = await api.allBets();
+      let r = await api.betById(parsed.kind, parsed.id);
+      if (!r.bet && !/^(sport|pred)-/i.test(String(params?.id ?? ""))) {
+        r = await api.betById(
+          parsed.kind === "sport" ? "prediction" : "sport",
+          parsed.id
+        );
+      }
       if (typeof r.balance === "number") setBalance(r.balance);
-      const found =
-        r.bets.find((b) => b.kind === parsed.kind && b.id === parsed.id) ??
-        r.bets.find((b) => b.kind !== "combo" && b.id === parsed.id) ??
-        null;
+      const found = r.bet;
       setFetchedBet(found);
       setLoadError(null);
 
@@ -169,7 +172,7 @@ export default function SingleBetDetailPage() {
           : "Impossible de charger ce pari. Réessayez."
       );
     }
-  }, [parsed.valid, parsed.kind, parsed.id, isOffline, setBalance]);
+  }, [parsed.valid, parsed.kind, parsed.id, params?.id, isOffline, setBalance]);
 
   const isPending = bet?.status === "pending";
 

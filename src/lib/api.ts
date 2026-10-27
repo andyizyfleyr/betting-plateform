@@ -567,6 +567,16 @@ export const api = {
         return res;
       }
     ),
+  betById: (kind: "sport" | "prediction" | "combo", id: number) =>
+    request<{ bets: ClientBet[]; balance: number | null }>(
+      `/api/bets?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(String(id))}`
+    ).then((res) => {
+      rememberBets(res.bets);
+      return {
+        bet: res.bets.find((b) => (b.kind ?? "sport") === kind && b.id === id) ?? null,
+        balance: res.balance,
+      };
+    }),
   pulse: () =>
     request<{
       balance: number;

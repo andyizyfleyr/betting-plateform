@@ -743,12 +743,24 @@ export default function BetslipScreen() {
                   leg.matchObj.homeScore != null &&
                   leg.matchObj.awayScore != null;
 
+                const sportMatchId = leg.matchObj?.id ?? leg.matchId;
+                const legHref =
+                  leg.kind === "sport" && sportMatchId
+                    ? leg.matchObj?.status === "finished"
+                      ? `/resultats/${sportMatchId}`
+                      : `/matchs/${sportMatchId}`
+                    : leg.kind === "prediction" && leg.questionId
+                      ? `/predictions/${leg.questionId}`
+                      : "/predictions";
+
                 return (
-                  <View
+                  <Pressable
                     key={leg.uid}
-                    style={[
+                    onPress={() => router.push(legHref)}
+                    style={({ pressed }) => [
                       styles.legCard,
                       leg.closed && styles.legCardClosed,
+                      pressed && { opacity: 0.94 },
                     ]}
                   >
                     <View style={styles.legTopRow}>
@@ -796,29 +808,17 @@ export default function BetslipScreen() {
 
                       <Pressable
                         hitSlop={8}
-                        onPress={() => removeComboLeg(leg.uid)}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          removeComboLeg(leg.uid);
+                        }}
                         style={styles.removeLegBtn}
                       >
                         <X size={14} color={COLORS.mist} strokeWidth={2.2} />
                       </Pressable>
                     </View>
 
-                    <Pressable
-                      onPress={() => {
-                        if (leg.kind === "sport" && leg.matchObj) {
-                          if (leg.matchObj.status === "finished") {
-                            router.push(`/resultats?match=${leg.matchObj.id}`);
-                          } else {
-                            openMarkets(leg.matchObj);
-                          }
-                        } else if (leg.kind === "sport" && leg.matchId) {
-                          router.push(`/resultats?match=${leg.matchId}`);
-                        } else {
-                          router.push("/predictions");
-                        }
-                      }}
-                      style={{ marginTop: 10 }}
-                    >
+                    <View style={{ marginTop: 10 }}>
                       {hasSportTeams ? (
                         <View style={{ gap: 6 }}>
                           <View style={styles.teamRow}>
@@ -897,8 +897,8 @@ export default function BetslipScreen() {
                           oddsFormat={oddsFormat}
                         />
                       </View>
-                    </Pressable>
-                  </View>
+                    </View>
+                  </Pressable>
                 );
               })}
             </View>

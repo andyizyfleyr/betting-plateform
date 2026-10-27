@@ -82,16 +82,19 @@ export default function SingleBetDetailScreen() {
   const fetchSingle = useCallback(async () => {
     if (!user || !parsed) return;
     try {
-      const r = await api.bets.list();
+      let r = await api.bets.byId(parsed.kind, parsed.id);
+      if (!r.bet && !/^(sport|pred)-/i.test(params.id ?? "")) {
+        r = await api.bets.byId(
+          parsed.kind === "sport" ? "prediction" : "sport",
+          parsed.id
+        );
+      }
       if (r.balance != null) setBalance(r.balance);
-      const found =
-        r.bets.find((b) => b.kind === parsed.kind && b.id === parsed.id) ??
-        null;
-      setBet(found);
+      setBet(r.bet);
     } catch {
       /* garde l'état courant */
     }
-  }, [user, parsed, setBalance]);
+  }, [user, parsed, params.id, setBalance]);
 
   const hasLive = Boolean(
     bet && bet.status === "pending" && bet.matchStatus === "live"

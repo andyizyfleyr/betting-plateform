@@ -518,7 +518,10 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
   }, [q]);
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      onPress={() => router.push(`/predictions/${q.id}`)}
+      style={({ pressed }) => [styles.card, pressed && { opacity: 0.94 }]}
+    >
       <View style={styles.cardTopRow}>
         <View style={styles.catBadge}>
           <Text style={styles.catBadgeText}>{q.category}</Text>
@@ -528,9 +531,7 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
         </Text>
       </View>
 
-      <Pressable onPress={() => router.push(`/predictions/${q.id}`)}>
-        <Text style={styles.questionTextBold}>{q.question}</Text>
-      </Pressable>
+      <Text style={styles.questionTextBold}>{q.question}</Text>
 
       <View style={styles.winnerBox}>
         <View style={styles.winnerLeft}>
@@ -543,7 +544,7 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
           </Text>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -595,29 +596,32 @@ function MultiChoiceQuestionCard({
 
   return (
     <View style={[styles.card, expired && { opacity: 0.7 }]}>
-      <View style={styles.cardTopRow}>
-        <View style={styles.catBadge}>
-          <Text style={styles.catBadgeText}>{q.category}</Text>
+      <Pressable
+        onPress={() => router.push(`/predictions/${q.id}`)}
+        style={({ pressed }) => (pressed ? { opacity: 0.9 } : undefined)}
+      >
+        <View style={styles.cardTopRow}>
+          <View style={styles.catBadge}>
+            <Text style={styles.catBadgeText}>{q.category}</Text>
+          </View>
+          <View style={styles.timeRow}>
+            <Clock size={12} color={COLORS.dim} strokeWidth={2.2} />
+            <Text style={styles.cardTimeText}>
+              {expired ? "Clos" : formatResolves(q.resolvesAt, nowMs)}
+            </Text>
+          </View>
         </View>
-        <View style={styles.timeRow}>
-          <Clock size={12} color={COLORS.dim} strokeWidth={2.2} />
-          <Text style={styles.cardTimeText}>
-            {expired ? "Clos" : formatResolves(q.resolvesAt, nowMs)}
-          </Text>
-        </View>
-      </View>
 
-      <Pressable onPress={() => router.push(`/predictions/${q.id}`)}>
         <Text style={styles.questionTextBold}>{q.question}</Text>
-      </Pressable>
 
-      {q.myBet && myBetLabel ? (
-        <View style={styles.myBetBanner}>
-          <Text style={styles.myBetBannerText}>
-            Votre mise : {myBetLabel} · {eur(q.myBet.stake)}
-          </Text>
-        </View>
-      ) : null}
+        {q.myBet && myBetLabel ? (
+          <View style={styles.myBetBanner}>
+            <Text style={styles.myBetBannerText}>
+              Votre mise : {myBetLabel} · {eur(q.myBet.stake)}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
 
       <View style={styles.multiOptionsStack}>
         {displayed.map((opt) => {
@@ -818,30 +822,33 @@ function BinaryQuestionCard({
 
   return (
     <View style={[styles.card, expired && { opacity: 0.7 }]}>
-      <View style={styles.cardTopRow}>
-        <View style={styles.catBadge}>
-          <Text style={styles.catBadgeText}>{q.category}</Text>
+      <Pressable
+        onPress={() => router.push(`/predictions/${q.id}`)}
+        style={({ pressed }) => (pressed ? { opacity: 0.9 } : undefined)}
+      >
+        <View style={styles.cardTopRow}>
+          <View style={styles.catBadge}>
+            <Text style={styles.catBadgeText}>{q.category}</Text>
+          </View>
+          <View style={styles.timeRow}>
+            <Clock size={12} color={COLORS.dim} strokeWidth={2.2} />
+            <Text style={styles.cardTimeText}>
+              {expired ? "Clos" : formatResolves(q.resolvesAt, nowMs)}
+            </Text>
+          </View>
         </View>
-        <View style={styles.timeRow}>
-          <Clock size={12} color={COLORS.dim} strokeWidth={2.2} />
-          <Text style={styles.cardTimeText}>
-            {expired ? "Clos" : formatResolves(q.resolvesAt, nowMs)}
-          </Text>
-        </View>
-      </View>
 
-      <Pressable onPress={() => router.push(`/predictions/${q.id}`)}>
         <Text style={styles.questionTextSemi}>{q.question}</Text>
-      </Pressable>
 
-      {q.myBet ? (
-        <View style={styles.myBetBanner}>
-          <Text style={styles.myBetBannerText}>
-            Votre mise : {q.myBet.selection === "yes" ? "Oui" : "Non"} ·{" "}
-            {eur(q.myBet.stake)}
-          </Text>
-        </View>
-      ) : null}
+        {q.myBet ? (
+          <View style={styles.myBetBanner}>
+            <Text style={styles.myBetBannerText}>
+              Votre mise : {q.myBet.selection === "yes" ? "Oui" : "Non"} ·{" "}
+              {eur(q.myBet.stake)}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
 
       <View style={styles.binaryGrid}>
         {(

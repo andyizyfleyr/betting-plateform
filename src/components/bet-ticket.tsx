@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Check,
@@ -19,6 +18,7 @@ import {
   type ClientBet,
   type ClientComboLeg,
 } from "@/lib/api";
+import { rememberSingleBet } from "@/lib/client-entity-cache";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
@@ -96,8 +96,8 @@ export function BetTicket({
   index?: number;
   onShare?: (bet: ClientBet) => void;
 }) {
-  if (bet.kind === "combo" && bet.legs && bet.legs.length > 0) {
-    return <ComboBetTicket bet={bet} legs={bet.legs} onShare={onShare} />;
+  if (bet.kind === "combo") {
+    return <ComboBetTicket bet={bet} legs={bet.legs ?? []} onShare={onShare} />;
   }
   return <SingleBetTicket bet={bet} onShare={onShare} />;
 }
@@ -115,7 +115,6 @@ function ComboBetTicket({
   legs: ClientComboLeg[];
   onShare?: (bet: ClientBet) => void;
 }) {
-  const router = useRouter();
   const { oddsFormat, setBalance, bumpBets, toast, user } = useApp();
   const [cashing, setCashing] = useState(false);
   const [cashoutChanged, setCashoutChanged] =
@@ -235,9 +234,8 @@ function ComboBetTicket({
 
   return (
     <article
-      onClick={() => router.push(`/paris/combine/${bet.id}`)}
       className={cn(
-        "glass-card cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all active:bg-elev/35",
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/20 active:bg-elev/35",
         won && "ticket-won",
         lost && "border-betclic-red/25"
       )}
@@ -266,12 +264,9 @@ function ComboBetTicket({
           {onShare && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onShare(bet);
-              }}
+              onClick={() => onShare(bet)}
               aria-label="Partager ce combiné"
-              className="inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist active:bg-edge active:text-ink"
+              className="relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
             >
               <Share2 className="h-3 w-3" strokeWidth={2.2} />
               Flex
@@ -305,11 +300,11 @@ function ComboBetTicket({
         </div>
       </div>
 
-      {/* Corps compact cliquable vers la page dédiée `/paris/combine/[id]` */}
+      {/* Lien étendu couvrant l'intégralité du ticket vers `/paris/combine/[id]` */}
       <Link
         href={`/paris/combine/${bet.id}`}
-        onClick={(e) => e.stopPropagation()}
-        className="mt-2.5 block rounded-xl transition-opacity active:opacity-80"
+        onClick={() => rememberSingleBet(bet)}
+        className="mt-2.5 block rounded-xl transition-opacity after:absolute after:inset-0 after:z-0 after:content-[''] active:opacity-85"
       >
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1 space-y-1.5">
@@ -420,7 +415,7 @@ function ComboBetTicket({
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
-          className="mt-3 space-y-2 border-t border-edge/80 pt-3"
+          className="relative z-10 mt-3 space-y-2 border-t border-edge/80 pt-3"
         >
           {cashoutChanged && (
             <div
@@ -501,7 +496,6 @@ function SingleBetTicket({
   bet: ClientBet;
   onShare?: (bet: ClientBet) => void;
 }) {
-  const router = useRouter();
   const { oddsFormat, setBalance, bumpBets, toast, user } = useApp();
   const detailHref = singleBetHref(bet);
   const [cashing, setCashing] = useState(false);
@@ -593,9 +587,8 @@ function SingleBetTicket({
 
   return (
     <article
-      onClick={() => router.push(detailHref)}
       className={cn(
-        "glass-card cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all active:bg-elev/35",
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/20 active:bg-elev/35",
         won && "ticket-won",
         lost && "border-betclic-red/25"
       )}
@@ -643,12 +636,9 @@ function SingleBetTicket({
           {onShare && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onShare(bet);
-              }}
+              onClick={() => onShare(bet)}
               aria-label="Partager ce ticket"
-              className="inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist active:bg-edge active:text-ink"
+              className="relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
             >
               <Share2 className="h-3 w-3" strokeWidth={2.2} />
               Flex
@@ -674,11 +664,11 @@ function SingleBetTicket({
         </div>
       </div>
 
-      {/* Événement cliquable vers la page dédiée du pari simple */}
+      {/* Lien étendu couvrant l'intégralité du ticket vers `/paris/simple/[id]` */}
       <Link
         href={detailHref}
-        onClick={(e) => e.stopPropagation()}
-        className="mt-2.5 block rounded-xl transition-opacity active:opacity-80"
+        onClick={() => rememberSingleBet(bet)}
+        className="mt-2.5 block rounded-xl transition-opacity after:absolute after:inset-0 after:z-0 after:content-[''] active:opacity-85"
       >
         {isPrediction ? (
           <>
@@ -784,7 +774,7 @@ function SingleBetTicket({
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
-          className="mt-3 space-y-2 border-t border-edge/80 pt-3"
+          className="relative z-10 mt-3 space-y-2 border-t border-edge/80 pt-3"
         >
           {cashoutChanged && (
             <div

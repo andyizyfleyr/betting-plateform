@@ -135,6 +135,22 @@ export function seedBetsSnapshot(list: ClientBet[]) {
   }
 }
 
+export function seedSingleBetSnapshot(b: ClientBet | null | undefined) {
+  if (!b || typeof b.id !== "number") return;
+  const k = `${b.kind ?? "sport"}:${b.id}`;
+  betCache.set(k, b);
+  if (latestBetsList) {
+    const idx = latestBetsList.findIndex(
+      (x) => (x.kind ?? "sport") === (b.kind ?? "sport") && x.id === b.id
+    );
+    if (idx >= 0) {
+      const next = [...latestBetsList];
+      next[idx] = b;
+      latestBetsList = next;
+    }
+  }
+}
+
 export function getCachedBetSnapshot(
   kind: "sport" | "prediction" | "combo",
   id: number

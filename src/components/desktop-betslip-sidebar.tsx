@@ -744,12 +744,21 @@ export function DesktopBetslipSidebar() {
                       ? { homeTeam: leg.homeTeam, awayTeam: leg.awayTeam }
                       : splitMatchTitle(leg.title)
                     : null;
+                const sportMatchId = leg.liveMatch?.id ?? leg.matchId;
+                const legHref =
+                  leg.kind === "sport" && sportMatchId
+                    ? leg.liveMatch?.status === "finished"
+                      ? `/resultats/${sportMatchId}`
+                      : `/matchs/${sportMatchId}`
+                    : leg.kind === "prediction" && leg.questionId
+                      ? `/predictions/${leg.questionId}`
+                      : "/predictions";
 
                 return (
                   <article
                     key={leg.uid}
                     className={cn(
-                      "rounded-xl border bg-white p-3 transition-colors",
+                      "relative cursor-pointer rounded-xl border bg-white p-3 transition-colors hover:bg-elev/25",
                       leg.closed
                         ? "border-betclic-red/40 bg-betclic-red/[0.03]"
                         : leg.suspended
@@ -758,7 +767,10 @@ export function DesktopBetslipSidebar() {
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
+                      <Link
+                        href={legHref}
+                        className="min-w-0 flex-1 after:absolute after:inset-0 after:z-0 after:content-['']"
+                      >
                         <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                           <span className="truncate font-display font-bold uppercase text-mist">
                             {leg.league ||
@@ -804,13 +816,13 @@ export function DesktopBetslipSidebar() {
                             {leg.title}
                           </p>
                         )}
-                      </div>
+                      </Link>
 
                       <button
                         type="button"
                         onClick={() => removeComboLeg(leg.uid)}
                         aria-label="Retirer du coupon"
-                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elev text-mist transition-colors hover:bg-betclic-red/12 hover:text-betclic-red"
+                        className="relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elev text-mist transition-colors hover:bg-betclic-red/12 hover:text-betclic-red"
                       >
                         <X className="h-3.5 w-3.5" strokeWidth={2.4} />
                       </button>
