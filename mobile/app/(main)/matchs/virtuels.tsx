@@ -26,6 +26,7 @@ import {
 import { MatchCard } from "@/components/match-card";
 import { useApp } from "@/context/app-context";
 import { api, type ClientMatch } from "@/lib/api";
+import { useMobileMatchesSlimQuery } from "@/lib/party-realtime";
 import {
   matchesSearchAndOdds,
   type OddsProfile,
@@ -39,11 +40,8 @@ const POLL_INTERVAL = 2_000;
 
 export default function VirtualMatchesScreen() {
   const router = useRouter();
-  const { setFeedMatches } = useApp();
+  const { setFeedMatches, dataSaverMode } = useApp();
 
-  const [matches, setMatches] = useState<ClientMatch[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const [filter, setFilter] = useState<StatusFilter>("all");
@@ -53,38 +51,38 @@ export default function VirtualMatchesScreen() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<TextInput | null>(null);
 
-  const fetchList = useCallback(
-    async (isBackground = false) => {
-      try {
-        const r = await api.matches();
-        setMatches(r.matches);
-        setFeedMatches(r.matches);
-        setLoadError(null);
-      } catch (err) {
-        if (!isBackground) {
-          setLoadError(
-            err instanceof Error
-              ? err.message
-              : "Impossible de charger les rencontres virtuelles."
-          );
-          setMatches((prev) => prev ?? []);
-        }
-      }
-    },
-    [setFeedMatches]
+  const matchesQuery = useMobileMatchesSlimQuery({
+    dataSaver: dataSaverMode,
+    baseIntervalMs: POLL_INTERVAL,
+  });
+
+  const matches = useMemo(
+    () => matchesQuery.data?.matches ?? (matchesQuery.isError ? [] : null),
+    [matchesQuery.data, matchesQuery.isError]
   );
 
+  const loadError =
+    !matchesQuery.data && matchesQuery.error instanceof Error
+      ? matchesQuery.error.message
+      : matchesQuery.isError && !matchesQuery.data
+        ? "Impossible de charger les rencontres virtuelles."
+        : null;
+
   useEffect(() => {
-    void fetchList(false);
-    const id = setInterval(() => void fetchList(true), POLL_INTERVAL);
-    return () => clearInterval(id);
-  }, [fetchList, reloadNonce]);
+    if (matchesQuery.data?.matches) {
+      setFeedMatches(matchesQuery.data.matches);
+    }
+  }, [matchesQuery.data, setFeedMatches]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchList(true);
-    setRefreshing(false);
-  }, [fetchList]);
+    try {
+      const r = await matchesQuery.refetch();
+      if (r.data?.matches) setFeedMatches(r.data.matches);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [matchesQuery, setFeedMatches]);
 
   const virtualMatchesAll = useMemo(
     () => (matches ?? []).filter((m) => m.source !== "manual"),
@@ -419,9 +417,7 @@ export default function VirtualMatchesScreen() {
           <Text style={styles.errorSub}>{loadError}</Text>
           <Pressable
             onPress={() => {
-              setMatches(null);
-              setLoadError(null);
-              setReloadNonce((n) => n + 1);
+              void matchesQuery.refetch();
             }}
             style={styles.retryBtn}
           >

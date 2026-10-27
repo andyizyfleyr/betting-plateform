@@ -27,7 +27,10 @@ import {
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
+import { useQuery } from "@tanstack/react-query";
 import { useApp } from "@/context/app-context";
+import { useMobileMatchHistoryQuery } from "@/lib/party-realtime";
+import { mobileQueryKeys } from "@/lib/query-client";
 import { api, type ClientMatchHistoryItem } from "@/lib/api";
 import {
   formatDayHeading,
@@ -222,11 +225,13 @@ export default function ResultatsScreen() {
   const searchParams = useSearchParams();
   const matchParam = searchParams.get("match");
   const universeParam = searchParams.get("universe");
+  const { dataSaverMode } = useApp();
   const requestedMatchId = matchParam ? Number(matchParam) : undefined;
+  const validRequestedId =
+    requestedMatchId && Number.isInteger(requestedMatchId) && requestedMatchId > 0
+      ? requestedMatchId
+      : undefined;
 
-  const [history, setHistory] = useState<ClientMatchHistoryItem[] | null>(null);
-  const [focusedMatch, setFocusedMatch] =
-    useState<ClientMatchHistoryItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(
@@ -243,41 +248,45 @@ export default function ResultatsScreen() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<TextInput | null>(null);
 
-  const loadHistory = useCallback(async () => {
-    try {
-      // Appel canonique sans paramètre en premier (partagé au CDN Edge)
-      const base = await api.matchHistory();
-      setHistory(base.matches);
-      if (requestedMatchId && Number.isInteger(requestedMatchId)) {
-        const inBase =
-          base.matches.find((m) => m.id === requestedMatchId) ?? null;
-        if (inBase) {
-          setFocusedMatch(inBase);
-        } else {
-          const foc = await api
-            .matchHistory(requestedMatchId)
-            .catch(() => null);
-          setFocusedMatch(foc?.focusedMatch ?? null);
-        }
-      } else {
-        setFocusedMatch(null);
-      }
-    } catch {
-      setHistory((prev) => prev ?? []);
-    }
-  }, [requestedMatchId]);
+  const historyQuery = useMobileMatchHistoryQuery({
+    dataSaver: dataSaverMode,
+  });
 
-  useEffect(() => {
-    void loadHistory();
-    const id = setInterval(() => void loadHistory(), 30_000);
-    return () => clearInterval(id);
-  }, [loadHistory]);
+  const history = useMemo(
+    () => historyQuery.data?.matches ?? (historyQuery.isError ? [] : null),
+    [historyQuery.data, historyQuery.isError]
+  );
+
+  const focusedInBase = useMemo(
+    () =>
+      validRequestedId && history
+        ? (history.find((m) => m.id === validRequestedId) ?? null)
+        : null,
+    [history, validRequestedId]
+  );
+
+  const focusedFallbackQuery = useQuery({
+    queryKey: mobileQueryKeys.matchHistoryFocused(validRequestedId ?? 0),
+    queryFn: () => api.matchHistory(validRequestedId),
+    enabled: Boolean(validRequestedId && history && !focusedInBase),
+    staleTime: 60_000,
+  });
+
+  const focusedMatch = validRequestedId
+    ? (focusedInBase ?? focusedFallbackQuery.data?.focusedMatch ?? null)
+    : null;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadHistory();
-    setRefreshing(false);
-  }, [loadHistory]);
+    try {
+      await historyQuery.refetch();
+      if (validRequestedId && !focusedInBase) {
+        await focusedFallbackQuery.refetch();
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [focusedFallbackQuery, focusedInBase, historyQuery, validRequestedId]);
 
   const sortedHistory = useMemo(() => {
     if (!history) return [];

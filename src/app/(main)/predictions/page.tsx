@@ -17,7 +17,10 @@ import {
   oddsTrendTextClass,
   useOddsTrend,
 } from "@/components/odds-trend-corner";
+import { useQuery } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
+import { usePredictionsCatalogQuery } from "@/lib/party-realtime";
+import { pulseQueryKeys } from "@/lib/query-client";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import { cn, eur, formatOdds, formatPlacedAt } from "@/lib/format";
@@ -50,15 +53,7 @@ function formatResolves(iso: string, nowMs: number) {
 
 export default function PredictionsPage() {
   const { user, betsVersion, comboQuickMode, toggleComboLeg, toast } = useApp();
-  const { isOffline, isConstrained } = useNetworkQuality();
-  const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
-
-  const [catalogQuestions, setCatalogQuestions] = useState<ClientPrediction[] | null>(null);
-  const [myBetsMap, setMyBetsMap] = useState<
-    Record<number, NonNullable<ClientPrediction["myBet"]>>
-  >({});
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
+  const { isOffline } = useNetworkQuality();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [statusTab, setStatusTab] = useState<StatusTab>("open");
   const [category, setCategory] = useState<Category>("Tous");
@@ -71,86 +66,45 @@ export default function PredictionsPage() {
     selection: string;
   } | null>(null);
 
-  const handlePullRefresh = useCallback(async () => {
-    try {
-      const [catRes, mineRes] = await Promise.all([
-        api.predictionsCatalog(),
-        user ? api.myPredictionBets().catch(() => null) : Promise.resolve(null),
-      ]);
-      setCatalogQuestions(catRes.questions);
-      if (mineRes) setMyBetsMap(mineRes.myBets);
-      setLoadError(null);
+  // 1) Catalogue public mutualisé via TanStack Query + invalidation temps réel PartyKit
+  const catalogQuery = usePredictionsCatalogQuery();
+  const catalogQuestions = useMemo(
+    () => catalogQuery.data?.questions ?? (catalogQuery.isError ? [] : null),
+    [catalogQuery.data, catalogQuery.isError]
+  );
+  const loadError =
+    !catalogQuery.data && catalogQuery.error instanceof Error
+      ? catalogQuery.error.message
+      : catalogQuery.isError && !catalogQuery.data
+        ? "Impossible de charger les prédictions pour le moment."
+        : null;
+
+  useEffect(() => {
+    if (catalogQuery.dataUpdatedAt > 0) {
       setNowMs(Date.now());
-    } catch {
-      /* conserve la liste en cours si le réseau mobile coupe */
     }
-  }, [user]);
+  }, [catalogQuery.dataUpdatedAt]);
 
-  // 1) Catalogue public mutualisé au CDN Edge (aucun cookie, partagé entre tous les visiteurs)
-  useEffect(() => {
-    let cancelled = false;
+  // 2) Calque privé joueur via TanStack Query (invalidé instantanément par PartyKit `user-<id>`)
+  const myBetsQuery = useQuery({
+    queryKey: [...pulseQueryKeys.myPredictionBets(user?.id), betsVersion],
+    queryFn: () => api.myPredictionBets(),
+    enabled: Boolean(user) && !isOffline,
+    staleTime: 5_000,
+    refetchInterval: false,
+  });
+  const myBetsMap = useMemo(
+    () => myBetsQuery.data?.myBets ?? {},
+    [myBetsQuery.data]
+  );
 
-    async function fetchCatalog(isBackground = false) {
-      if (isBackground && typeof document !== "undefined" && document.hidden) return;
-      if (isBackground && typeof navigator !== "undefined" && navigator.onLine === false) {
-        return;
-      }
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const r = await api.predictionsCatalog();
-          if (cancelled) return;
-          setCatalogQuestions(r.questions);
-          setLoadError(null);
-          setNowMs(Date.now());
-          return;
-        } catch (err) {
-          if (cancelled) return;
-          if (attempt < MAX_RETRIES) {
-            await new Promise((r) => setTimeout(r, RETRY_DELAY * (attempt + 1)));
-            continue;
-          }
-          if (!isBackground && !cancelled) {
-            setLoadError(
-              err instanceof Error
-                ? err.message
-                : "Impossible de charger les prédictions pour le moment."
-            );
-            setCatalogQuestions((prev) => prev ?? []);
-          }
-        }
-      }
-    }
-
-    void fetchCatalog(false);
-    const id = setInterval(() => void fetchCatalog(true), pollIntervalMs);
-    const onVisible = () => {
-      if (!document.hidden) void fetchCatalog(true);
-    };
-    const onOnline = () => void fetchCatalog(true);
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [reloadNonce, pollIntervalMs, isOffline]);
-
-  // 2) Calque privé joueur (~100 octets, zéro polling périodique : chargé au montage et sur action `betsVersion`)
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    api
-      .myPredictionBets()
-      .then((res) => {
-        if (active) setMyBetsMap(res.myBets);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [user, betsVersion, reloadNonce]);
+  const handlePullRefresh = useCallback(async () => {
+    await Promise.all([
+      catalogQuery.refetch(),
+      user ? myBetsQuery.refetch() : Promise.resolve(),
+    ]);
+    setNowMs(Date.now());
+  }, [catalogQuery, myBetsQuery, user]);
 
   const questions = useMemo(() => {
     if (!catalogQuestions) return null;
@@ -456,9 +410,8 @@ export default function PredictionsPage() {
           <button
             type="button"
             onClick={() => {
-              setCatalogQuestions(null);
-              setLoadError(null);
-              setReloadNonce((n) => n + 1);
+              void catalogQuery.refetch();
+              if (user) void myBetsQuery.refetch();
             }}
             className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
           >

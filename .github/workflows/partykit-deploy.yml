@@ -1,0 +1,34 @@
+name: Deploy PartyKit Realtime Server
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "party/**"
+      - "partykit.json"
+      - ".github/workflows/partykit-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Deploy PartyKit (when PARTYKIT_TOKEN is configured)
+        env:
+          PARTYKIT_TOKEN: ${{ secrets.PARTYKIT_TOKEN }}
+          PARTYKIT_LOGIN: ${{ secrets.PARTYKIT_LOGIN }}
+        run: |
+          if [ -z "$PARTYKIT_TOKEN" ] || [ -z "$PARTYKIT_LOGIN" ]; then
+            echo "Secrets PARTYKIT_TOKEN / PARTYKIT_LOGIN non configurés — étape ignorée proprement."
+            exit 0
+          fi
+          npx --yes partykit deploy

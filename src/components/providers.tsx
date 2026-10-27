@@ -10,6 +10,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  QueryClientProvider,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
@@ -27,6 +32,14 @@ import {
   type OddsChangedLegDetail,
   type OddsChangePolicy,
 } from "@/lib/odds-lock";
+import {
+  PartyRealtimeBridge,
+  useRealtimeStatus,
+} from "@/lib/party-realtime";
+import {
+  getBrowserQueryClient,
+  pulseQueryKeys,
+} from "@/lib/query-client";
 import { BetModal } from "./bet-modal";
 import { ComboSheet, type ComboSelection } from "./combo-slip";
 import { MarketSheet } from "./market-sheet";
@@ -119,11 +132,146 @@ export function useApp() {
 }
 
 let toastId = 0;
-const POLL_INTERVAL = 8_000;
 const COMBO_STORAGE_KEY = "pulsebet_combo_v1";
 
 export function Providers({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(() => getBrowserQueryClient());
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ProvidersInner>{children}</ProvidersInner>
+    </QueryClientProvider>
+  );
+}
+
+function ProvidersRealtimeQueries({
+  user,
+  setUser,
+  loggedIn,
+  isAuthRoute,
+  isAdminMode,
+  isMatchsRoute,
+  isParisRoute,
+  needsBackgroundMatchFeed,
+  hasPending,
+  betsVersion,
+  setFeedMatches,
+  setPendingCount,
+  toast,
+}: {
+  user: ClientUser | null;
+  setUser: React.Dispatch<React.SetStateAction<ClientUser | null>>;
+  loggedIn: boolean;
+  isAuthRoute: boolean;
+  isAdminMode: boolean;
+  isMatchsRoute: boolean;
+  isParisRoute: boolean;
+  needsBackgroundMatchFeed: boolean;
+  hasPending: boolean;
+  betsVersion: number;
+  setFeedMatches: (m: ClientMatch[] | null) => void;
+  setPendingCount: (n: number) => void;
+  toast: (t: Omit<Toast, "id">) => void;
+}) {
+  const { wsConnected, userWsConnected } = useRealtimeStatus();
+  const { isConstrained, isOffline } = useNetworkQuality();
+  const bgMatchesIntervalMs = getAdaptiveIntervalMs(15_000, isConstrained);
+  const bgBetsIntervalMs = getAdaptiveIntervalMs(8_000, isConstrained);
+
+  const prevBetStatuses = useRef<Map<string, string> | null>(null);
+  const userRef = useRef<ClientUser | null>(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const isDesktop =
+    typeof window !== "undefined" && window.innerWidth >= 1024;
+  const shouldSyncBgMatches =
+    !isAuthRoute &&
+    !isAdminMode &&
+    !isMatchsRoute &&
+    (isDesktop || needsBackgroundMatchFeed) &&
+    !isOffline;
+
+  const bgMatchesQuery = useQuery({
+    queryKey: pulseQueryKeys.matches,
+    queryFn: () => api.matches(),
+    enabled: shouldSyncBgMatches,
+    refetchInterval: wsConnected ? 60_000 : bgMatchesIntervalMs,
+    refetchIntervalInBackground: false,
+  });
+
+  useEffect(() => {
+    if (bgMatchesQuery.data?.matches) {
+      setFeedMatches(bgMatchesQuery.data.matches);
+    }
+  }, [bgMatchesQuery.data, setFeedMatches]);
+
+  // Synchronisation TanStack Query du solde & tickets (`/api/pulse`) :
+  // - 0 polling continu lorsque le salon privé PartyKit `user-<id>` est connecté !
+  // - Bascule automatique sur `bgBetsIntervalMs` uniquement s'il y a >= 1 pari en cours et pas de WebSocket.
+  const pulseQuery = useQuery({
+    queryKey: [...pulseQueryKeys.userPulse(user?.id), betsVersion],
+    queryFn: () => api.pulse(),
+    enabled: loggedIn && !isOffline,
+    staleTime: 2_000,
+    refetchInterval:
+      userWsConnected || !hasPending || isParisRoute ? false : bgBetsIntervalMs,
+    refetchIntervalInBackground: false,
+  });
+
+  useEffect(() => {
+    const r = pulseQuery.data;
+    if (!r) return;
+
+    setPendingCount(r.pendingCount);
+    if (typeof r.balance === "number") {
+      setUser((u) => (u && u.balance !== r.balance ? { ...u, balance: r.balance } : u));
+    }
+
+    const currentPrefs = userRef.current;
+    const prev = prevBetStatuses.current;
+    if (prev && (currentPrefs?.notifications ?? true)) {
+      for (const b of r.tickets) {
+        const key = `${b.kind}-${b.id}`;
+        if (prev.get(key) !== "pending" || b.status === "pending") continue;
+        if (b.status === "won") {
+          playUiSound(currentPrefs?.sound, "win");
+          triggerHaptic(currentPrefs?.haptics, [25, 35, 55]);
+          toast({
+            kind: "success",
+            title: "Pari gagné !",
+            description: `+${eur(b.potentialWin)} crédités sur votre solde`,
+          });
+        } else if (b.status === "void") {
+          triggerHaptic(currentPrefs?.haptics, 18);
+          toast({
+            kind: "info",
+            title: "Mise remboursée",
+            description: `+${eur(b.stake)} recrédités sur votre solde`,
+          });
+        } else if (b.status === "lost") {
+          triggerHaptic(currentPrefs?.haptics, 18);
+          toast({
+            kind: "info",
+            title: "Pari terminé",
+            description: b.selectionLabel
+              ? `${b.title} · ${b.selectionLabel}`
+              : b.title,
+          });
+        }
+      }
+    }
+    prevBetStatuses.current = new Map(
+      r.tickets.map((b) => [`${b.kind}-${b.id}`, b.status])
+    );
+  }, [pulseQuery.data, setPendingCount, setUser, toast]);
+
+  return null;
+}
+
+function ProvidersInner({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const isAuthRoute = pathname === "/auth" || pathname.startsWith("/auth/");
 
   const [user, setUser] = useState<ClientUser | null>(null);
@@ -144,7 +292,6 @@ export function Providers({ children }: { children: ReactNode }) {
   const [adminTab, setAdminTab] = useState<AdminTabKey>("dashboard");
   const [adminPendingFinance, setAdminPendingFinance] = useState(0);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
-  const prevBetStatuses = useRef<Map<string, string> | null>(null);
   const userRef = useRef<ClientUser | null>(null);
 
   useEffect(() => {
@@ -215,127 +362,11 @@ export function Providers({ children }: { children: ReactNode }) {
   const isAdminMode = isAdminRoute || user?.role === "admin";
   const loggedIn = user !== null && !isAuthRoute && !isAdminMode;
 
-  // Hydratation du flux matchs hors /matchs pour la colonne Ligues, le Betslip et le badge Live desktop
   const isMatchsRoute = pathname === "/matchs" || pathname.startsWith("/matchs/");
   const isParisRoute = pathname === "/paris" || pathname.startsWith("/paris/");
   const needsBackgroundMatchFeed =
     comboLegs.length > 0 || comboOpen || marketMatch !== null || target !== null;
-  const { isConstrained } = useNetworkQuality();
-  const bgMatchesIntervalMs = getAdaptiveIntervalMs(15_000, isConstrained);
-  const bgBetsIntervalMs = getAdaptiveIntervalMs(8_000, isConstrained);
-
-  useEffect(() => {
-    if (isAuthRoute || isAdminMode || isMatchsRoute) return;
-    let active = true;
-
-    const syncMatches = () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-      const isDesktop =
-        typeof window !== "undefined" && window.innerWidth >= 1024;
-      if (!isDesktop && !needsBackgroundMatchFeed) return;
-      api
-        .matches()
-        .then((r) => {
-          if (active) setFeedMatches(r.matches);
-        })
-        .catch(() => undefined);
-    };
-
-    syncMatches();
-    const id = setInterval(syncMatches, bgMatchesIntervalMs);
-    const onVisible = () => {
-      if (!document.hidden) syncMatches();
-    };
-    const onOnline = () => syncMatches();
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-
-    return () => {
-      active = false;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [isAuthRoute, isAdminMode, isMatchsRoute, needsBackgroundMatchFeed, bgMatchesIntervalMs]);
-
   const hasPending = pendingCount > 0;
-
-  const runPulseSync = useCallback(() => {
-    if (typeof document !== "undefined" && document.hidden) return;
-    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-    api
-      .pulse()
-      .then((r) => {
-        setPendingCount(r.pendingCount);
-
-        if (typeof r.balance === "number") {
-          setUser((u) => (u ? { ...u, balance: r.balance } : u));
-        }
-
-        const currentPrefs = userRef.current;
-        const prev = prevBetStatuses.current;
-        if (prev && (currentPrefs?.notifications ?? true)) {
-          for (const b of r.tickets) {
-            const key = `${b.kind}-${b.id}`;
-            if (prev.get(key) !== "pending" || b.status === "pending") continue;
-            if (b.status === "won") {
-              playUiSound(currentPrefs?.sound, "win");
-              triggerHaptic(currentPrefs?.haptics, [25, 35, 55]);
-              toast({
-                kind: "success",
-                title: "Pari gagné !",
-                description: `+${eur(b.potentialWin)} crédités sur votre solde`,
-              });
-            } else if (b.status === "void") {
-              triggerHaptic(currentPrefs?.haptics, 18);
-              toast({
-                kind: "info",
-                title: "Mise remboursée",
-                description: `+${eur(b.stake)} recrédités sur votre solde`,
-              });
-            } else if (b.status === "lost") {
-              triggerHaptic(currentPrefs?.haptics, 18);
-              toast({
-                kind: "info",
-                title: "Pari terminé",
-                description: b.selectionLabel
-                  ? `${b.title} · ${b.selectionLabel}`
-                  : b.title,
-              });
-            }
-          }
-        }
-        prevBetStatuses.current = new Map(
-          r.tickets.map((b) => [`${b.kind}-${b.id}`, b.status])
-        );
-      })
-      .catch(() => undefined);
-  }, [toast]);
-
-  // 1) Synchronisation ponctuelle à la connexion et après toute action joueur (`betsVersion`)
-  useEffect(() => {
-    if (!loggedIn) return;
-    runPulseSync();
-  }, [loggedIn, betsVersion, runPulseSync]);
-
-  // 2) Intervalle de suivi uniquement s'il existe >= 1 pari en cours ET hors page `/paris`
-  useEffect(() => {
-    if (!loggedIn || !hasPending || isParisRoute) return;
-    const id = setInterval(runPulseSync, bgBetsIntervalMs);
-    const onVisible = () => {
-      if (!document.hidden) runPulseSync();
-    };
-    const onOnline = () => runPulseSync();
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-
-    return () => {
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [loggedIn, hasPending, isParisRoute, runPulseSync, bgBetsIntervalMs]);
 
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 
@@ -508,7 +539,12 @@ export function Providers({ children }: { children: ReactNode }) {
       setOddsPolicy,
       toast,
       betsVersion,
-      bumpBets: () => setBetsVersion((v) => v + 1),
+      bumpBets: () => {
+        setBetsVersion((v) => v + 1);
+        void queryClient.invalidateQueries({ queryKey: ["pulse"] });
+        void queryClient.invalidateQueries({ queryKey: ["bets"] });
+        void queryClient.invalidateQueries({ queryKey: ["predictions", "my-bets"] });
+      },
       pendingCount,
       adminTab,
       setAdminTab,
@@ -537,6 +573,7 @@ export function Providers({ children }: { children: ReactNode }) {
       setOddsPolicy,
       toast,
       betsVersion,
+      queryClient,
       pendingCount,
       adminTab,
       adminPendingFinance,
@@ -545,16 +582,37 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={value}>
-      {children}
-      {!isAdminMode && (
-        <>
-          <ComboSheet />
-          <MarketSheet />
-          <BetModal />
-          <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
-        </>
-      )}
-      <Toasts toasts={toasts} />
+      <PartyRealtimeBridge
+        userId={user?.id ?? null}
+        disabled={isAuthRoute}
+        onMatchesUpdated={setFeedMatches}
+      >
+        <ProvidersRealtimeQueries
+          user={user}
+          setUser={setUser}
+          loggedIn={loggedIn}
+          isAuthRoute={isAuthRoute}
+          isAdminMode={isAdminMode}
+          isMatchsRoute={isMatchsRoute}
+          isParisRoute={isParisRoute}
+          needsBackgroundMatchFeed={needsBackgroundMatchFeed}
+          hasPending={hasPending}
+          betsVersion={betsVersion}
+          setFeedMatches={setFeedMatches}
+          setPendingCount={setPendingCount}
+          toast={toast}
+        />
+        {children}
+        {!isAdminMode && (
+          <>
+            <ComboSheet />
+            <MarketSheet />
+            <BetModal />
+            <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
+          </>
+        )}
+        <Toasts toasts={toasts} />
+      </PartyRealtimeBridge>
     </AppContext.Provider>
   );
 }

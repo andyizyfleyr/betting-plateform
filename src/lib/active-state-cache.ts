@@ -14,6 +14,11 @@ import {
   invalidatePublicApiCaches,
   type CachedJsonPayload,
 } from "@/lib/response-cache";
+import {
+  PARTY_LIVE_MATCHES_ROOM,
+  publishPartyRoomEvent,
+  publishUserRealtimeInvalidation,
+} from "@/lib/partykit";
 
 export interface CachedPendingMatchTicket {
   userId: number;
@@ -321,6 +326,11 @@ export function upsertCachedMatches(rows: MatchRow[]): void {
     st.finishedManual = sortFinishedDesc(st.finishedManual, MAX_FINISHED_MANUAL_RAM);
   }
   invalidatePublicApiCaches();
+  publishPartyRoomEvent(PARTY_LIVE_MATCHES_ROOM, {
+    type: "MATCHES_INVALIDATE",
+    matchIds: rows.map((r) => r.id),
+    ts: Date.now(),
+  });
 }
 
 export function removeCachedMatch(matchId: number): void {
@@ -330,6 +340,11 @@ export function removeCachedMatch(matchId: number): void {
   st.finishedVirtual = st.finishedVirtual.filter((m) => m.id !== matchId);
   st.finishedManual = st.finishedManual.filter((m) => m.id !== matchId);
   invalidatePublicApiCaches();
+  publishPartyRoomEvent(PARTY_LIVE_MATCHES_ROOM, {
+    type: "MATCHES_INVALIDATE",
+    matchIds: [matchId],
+    ts: Date.now(),
+  });
 }
 
 export function invalidateAllActiveCaches(purgeEdge = true): void {
@@ -343,6 +358,10 @@ export function invalidateAllActiveCaches(purgeEdge = true): void {
   st.userPulseCache.clear();
   st.userBetsCache.clear();
   invalidatePublicApiCaches(purgeEdge);
+  publishPartyRoomEvent(PARTY_LIVE_MATCHES_ROOM, {
+    type: "MATCHES_INVALIDATE",
+    ts: Date.now(),
+  });
 }
 
 /* ============================================================================
@@ -530,6 +549,10 @@ export function invalidateQuestionScheduleCache(): void {
   const st = getState();
   st.questionScheduleCheckedAt = 0;
   st.nextQuestionResolveAtMs = 0;
+  publishPartyRoomEvent(PARTY_LIVE_MATCHES_ROOM, {
+    type: "PREDICTIONS_INVALIDATE",
+    ts: Date.now(),
+  });
 }
 
 export function invalidateUserCaches(userIds?: number[]): void {
@@ -537,6 +560,7 @@ export function invalidateUserCaches(userIds?: number[]): void {
   if (!userIds || userIds.length === 0) {
     st.userPulseCache.clear();
     st.userBetsCache.clear();
+    publishUserRealtimeInvalidation(undefined, "global_user_cache_reset");
     return;
   }
   for (const uid of userIds) {
@@ -547,6 +571,7 @@ export function invalidateUserCaches(userIds?: number[]): void {
       }
     }
   }
+  publishUserRealtimeInvalidation(userIds, "user_cache_invalidate");
 }
 
 export function notifyNewBetPlaced(opts: {

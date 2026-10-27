@@ -22,7 +22,10 @@ import {
 import { SportIcon } from "@/components/sport-icon";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { TeamAvatar } from "@/components/team-avatar";
+import { useQuery } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
+import { useMatchHistoryQuery } from "@/lib/party-realtime";
+import { pulseQueryKeys } from "@/lib/query-client";
 import { cn, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 
 type Universe = "real" | "virtual";
@@ -207,10 +210,6 @@ function ResultatsContent() {
   const universeParam = searchParams.get("universe");
   const requestedMatchId = matchParam ? Number(matchParam) : undefined;
 
-  const [history, setHistory] = useState<ClientMatchHistoryItem[] | null>(null);
-  const [focusedMatch, setFocusedMatch] = useState<ClientMatchHistoryItem | null>(
-    null
-  );
   const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(
     universeParam === "real" || universeParam === "virtual" ? universeParam : null
   );
@@ -228,34 +227,34 @@ function ResultatsContent() {
       ? requestedMatchId
       : undefined;
 
+  // 1) Historique canonique mutualisé via TanStack Query + invalidation PartyKit dès qu'un match se termine
+  const historyQuery = useMatchHistoryQuery();
+  const history = historyQuery.data?.matches ?? null;
+
+  const focusedInBase = useMemo(
+    () =>
+      validId && history ? (history.find((m) => m.id === validId) ?? null) : null,
+    [history, validId]
+  );
+
+  // 2) Repli ciblé uniquement si `validId` est plus ancien que le lot de base en cache Edge
+  const focusedFallbackQuery = useQuery({
+    queryKey: pulseQueryKeys.matchHistoryFocused(validId ?? 0),
+    queryFn: () => api.matchHistory(validId),
+    enabled: Boolean(validId && history && !focusedInBase),
+    staleTime: 60_000,
+  });
+
+  const focusedMatch = validId
+    ? (focusedInBase ?? focusedFallbackQuery.data?.focusedMatch ?? null)
+    : null;
+
   const load = useCallback(async () => {
-    try {
-      // Appelle systématiquement l'URL canonique `/api/matches/history` en premier (CDN Edge)
-      const baseRes = await api.matchHistory();
-      setHistory(baseRes.matches);
-
-      if (validId) {
-        const inBase = baseRes.matches.find((m) => m.id === validId) ?? null;
-        if (inBase) {
-          setFocusedMatch(inBase);
-        } else {
-          const detailRes = await api.matchHistory(validId);
-          setFocusedMatch(detailRes.focusedMatch);
-        }
-      } else {
-        setFocusedMatch(null);
-      }
-    } catch {
-      /* ignore transient error */
+    await historyQuery.refetch();
+    if (validId && !focusedInBase) {
+      await focusedFallbackQuery.refetch();
     }
-  }, [validId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-    const id = setInterval(() => void load(), 10000);
-    return () => clearInterval(id);
-  }, [load]);
+  }, [focusedFallbackQuery, focusedInBase, historyQuery, validId]);
 
   const realHistory = useMemo(
     () =>

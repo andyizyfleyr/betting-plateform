@@ -593,6 +593,16 @@ export const api = {
       serverTime?: string;
     }>("/api/pulse"),
 
+  realtime: () =>
+    requestJson<{
+      enabled: boolean;
+      host: string | null;
+      protocol: "ws" | "wss";
+      publicRoom: string;
+      userRoom: string | null;
+      userToken: string | null;
+    }>("/api/realtime", { bypassEtag: true }),
+
   bets: Object.assign(
     async (filter: "ongoing" | "finished" | "all" = "all") => {
       const data = await requestJson<{

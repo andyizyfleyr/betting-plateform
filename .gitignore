@@ -48,3 +48,6 @@ next-env.d.ts
 /mobile/android/
 /mobile/ios/
 /mobile/.env.local
+
+# PartyKit local build artifacts
+/.partykit/

@@ -1,5 +1,6 @@
 import { invalidateByTag, waitUntil } from "@vercel/functions";
 import { NextResponse } from "next/server";
+import { PARTY_LIVE_MATCHES_ROOM, publishPartyRoomEvent } from "@/lib/partykit";
 
 /**
  * Empreinte ETag ultra-légère (double FNV-1a 32 bits + taille), caches mémoire, Singleflight
@@ -50,6 +51,7 @@ const TAG_PURGE_COOLDOWN_MS = 2_500;
 interface GlobalResponseCacheStore {
   matchesPayload: CachedJsonPayload | null;
   matchesSlimPayload: CachedJsonPayload | null;
+  lastPublishedSlimEtag: string | null;
   historyBasePayload: CachedJsonPayload | null;
   historyParsedItems: unknown[] | null;
   historyServerTime: string | null;
@@ -67,6 +69,7 @@ function store(): GlobalResponseCacheStore {
     globalCache.__pulseResponseCacheStoreV3 = {
       matchesPayload: null,
       matchesSlimPayload: null,
+      lastPublishedSlimEtag: null,
       historyBasePayload: null,
       historyParsedItems: null,
       historyServerTime: null,
@@ -134,7 +137,20 @@ export function setMatchesSlimPayloadCache(data: unknown): CachedJsonPayload {
     etag: computeWeakEtag(json),
     at: Date.now(),
   };
-  store().matchesSlimPayload = entry;
+  const s = store();
+  s.matchesSlimPayload = entry;
+  if (s.lastPublishedSlimEtag !== entry.etag && data && typeof data === "object") {
+    s.lastPublishedSlimEtag = entry.etag;
+    const candidate = data as { matches?: unknown[]; serverTime?: string };
+    if (Array.isArray(candidate.matches)) {
+      publishPartyRoomEvent(PARTY_LIVE_MATCHES_ROOM, {
+        type: "MATCHES_SNAPSHOT",
+        matches: candidate.matches,
+        serverTime: candidate.serverTime ?? new Date(entry.at).toISOString(),
+        ts: entry.at,
+      });
+    }
+  }
   return entry;
 }
 
