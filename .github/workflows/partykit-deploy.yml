@@ -26,9 +26,15 @@ jobs:
         env:
           PARTYKIT_TOKEN: ${{ secrets.PARTYKIT_TOKEN }}
           PARTYKIT_LOGIN: ${{ secrets.PARTYKIT_LOGIN }}
+          PARTYKIT_SECRET: ${{ secrets.PARTYKIT_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://be-plateform.vercel.app' }}
         run: |
           if [ -z "$PARTYKIT_TOKEN" ] || [ -z "$PARTYKIT_LOGIN" ]; then
             echo "Secrets PARTYKIT_TOKEN / PARTYKIT_LOGIN non configurés — étape ignorée proprement."
             exit 0
           fi
-          npx --yes partykit deploy
+          if [ -n "$PARTYKIT_SECRET" ]; then
+            npx --yes partykit deploy --var "PARTYKIT_SECRET=$PARTYKIT_SECRET" --var "APP_URL=$APP_URL"
+          else
+            npx --yes partykit deploy --var "APP_URL=$APP_URL"
+          fi
