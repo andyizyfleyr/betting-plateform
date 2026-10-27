@@ -2,18 +2,32 @@ import { timingSafeEqual } from "crypto";
 import { count, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { consumeRecentEngineMilestone, runLiveEngine } from "@/db/engine";
 import { ensureSeeded } from "@/db/seed";
 import { appUser, matches, predictionQuestions } from "@/db/schema";
-import { invalidatePublicApiCaches } from "@/lib/response-cache";
+import {
+  ensureMatchStoreHydrated,
+  getCachedActiveVirtualMatches,
+  getCachedOpenManualMatches,
+  invalidateAllActiveCaches,
+} from "@/lib/active-state-cache";
 import { pruneExpiredIdempotencyKeys } from "@/lib/idempotency";
-import { retrainAllMlModels } from "@/lib/ml-engine";
+import { ensureMlLoaded, retrainAllMlModels } from "@/lib/ml-engine";
+import { expireStaleGatewayDeposits } from "@/lib/payments";
+import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
+import { syncRealMatchesThrottled } from "@/lib/real-sports-feed";
+import {
+  invalidatePublicApiCaches,
+  rejectUnexpectedQueryParams,
+} from "@/lib/response-cache";
 import { getAuthUserId } from "@/lib/session";
+import { settleFinishedBets } from "@/lib/settle";
 import { syncPlatformStateThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MIN_UNAUTH_CRON_INTERVAL_MS = 10 * 60_000;
+const MIN_UNAUTH_CRON_INTERVAL_MS = 5 * 60_000;
 let lastCronRunAtMs = 0;
 
 function safeBearerEquals(headerValue: string | null, expectedSecret: string): boolean {
@@ -26,12 +40,79 @@ function safeBearerEquals(headerValue: string | null, expectedSecret: string): b
 }
 
 /**
- * Point d'entrée autonome pour Vercel Cron ou tout moniteur externe (UptimeRobot, etc.).
- * Force une synchronisation complète du moteur de matchs séquentiels, des règlements
- * de paris simples / combinés / prédictions, du vivier de questions et du nettoyage
- * des manches ou sessions de paiement expirées — même avec 0 visiteur humain.
+ * Mode léger (« light ») conçu pour tourner toutes les 20 min (GitHub Actions / cron-job.org)
+ * tout en préservant ~75 % du quota mensuel gratuit de calcul Neon PostgreSQL :
+ *  - Zéro ré-entraînement ML lourd (réservé au cron nocturne 03h00 UTC de `vercel.json`).
+ *  - Zéro requête ESPN si aucun match réel n'est en cours, en attente de fin ou à moins de 3h.
+ *  - Clôture immédiate des matchs terminés, règlement des paris / combinés / prédictions
+ *    et purge ciblée du cache Edge CDN uniquement en cas de changement réel.
+ */
+async function runLightCronTick() {
+  const now = Date.now();
+  await ensureSeeded();
+  await ensureMlLoaded();
+  await ensureMatchStoreHydrated();
+
+  const openManual = getCachedOpenManualMatches().filter((m) => m.autoSync);
+  const hasRelevantRealMatch = openManual.some(
+    (m) =>
+      m.status === "live" ||
+      m.feedFinishedAt != null ||
+      !m.externalId ||
+      !m.feedSyncedAt ||
+      m.startsAt.getTime() <= now + 3 * 3600_000
+  );
+
+  const [, realSummary] = await Promise.all([
+    runLiveEngine(),
+    hasRelevantRealMatch ? syncRealMatchesThrottled(false) : Promise.resolve(null),
+  ]);
+
+  const hadVirtualMilestone = consumeRecentEngineMilestone();
+  const realChanged =
+    Boolean(realSummary) &&
+    ((realSummary?.settledCount ?? 0) > 0 || (realSummary?.syncedCount ?? 0) > 0);
+
+  await Promise.all([settleFinishedBets(), settleResolvedQuestions()]);
+  await Promise.all([ensureOpenPredictions(now), expireStaleGatewayDeposits()]);
+
+  if (hadVirtualMilestone || realChanged) {
+    invalidateAllActiveCaches(true);
+  }
+
+  await ensureMatchStoreHydrated();
+  const activeVirtual = getCachedActiveVirtualMatches();
+  const activeManual = getCachedOpenManualMatches();
+
+  return {
+    ok: true,
+    mode: "light" as const,
+    syncedAt: new Date().toISOString(),
+    realFeedChecked: hasRelevantRealMatch,
+    realSync: realSummary,
+    activeVirtualCount: activeVirtual.length,
+    openRealCount: activeManual.length,
+  };
+}
+
+/**
+ * Point d'entrée autonome pour Vercel Cron (03h00 UTC, mode `full`), GitHub Actions
+ * (toutes les 20 min de 11h00 à 00h15 UTC, mode `light` via `X-Cron-Mode: light`) ou tout
+ * moniteur externe (`cron-job.org`, UptimeRobot).
  */
 export async function GET(req: NextRequest) {
+  const params = req.nextUrl.searchParams;
+  if (params.size > 1 || (params.size === 1 && !params.has("mode"))) {
+    return rejectUnexpectedQueryParams("Seul le paramètre optionnel mode=light|full est autorisé");
+  }
+  const queryMode = params.get("mode");
+  if (queryMode !== null && queryMode !== "light" && queryMode !== "full") {
+    return rejectUnexpectedQueryParams("Valeur mode invalide (attendu : light ou full)");
+  }
+
+  const headerMode = req.headers.get("x-cron-mode")?.trim().toLowerCase();
+  const isLightMode = queryMode === "light" || headerMode === "light";
+
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (cronSecret) {
     if (!safeBearerEquals(req.headers.get("authorization"), cronSecret)) {
@@ -39,7 +120,7 @@ export async function GET(req: NextRequest) {
     }
   } else {
     // Si CRON_SECRET n'est pas défini, n'autorise qu'un admin authentifié ou au maximum
-    // 1 exécution toutes les 10 minutes pour empêcher tout épuisement malveillant du quota Neon.
+    // 1 exécution toutes les 5 minutes pour empêcher tout épuisement malveillant du quota Neon.
     const uid = await getAuthUserId(req);
     let isAdmin = false;
     if (uid) {
@@ -52,14 +133,19 @@ export async function GET(req: NextRequest) {
     const now = Date.now();
     if (!isAdmin && now - lastCronRunAtMs < MIN_UNAUTH_CRON_INTERVAL_MS) {
       return NextResponse.json(
-        { error: "Cron déjà exécuté récemment" },
-        { status: 429 }
+        { ok: true, skipped: true, reason: "Cron déjà exécuté récemment" },
+        { status: 200 }
       );
     }
     lastCronRunAtMs = now;
   }
 
   try {
+    if (isLightMode) {
+      const lightResult = await runLightCronTick();
+      return NextResponse.json(lightResult);
+    }
+
     await ensureSeeded();
     await syncPlatformStateThrottled(true);
     await pruneExpiredIdempotencyKeys();
@@ -91,6 +177,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      mode: "full",
       syncedAt: new Date().toISOString(),
       liveMatch: liveRow ?? null,
       upcomingCount: upcomingCount?.n ?? 0,
