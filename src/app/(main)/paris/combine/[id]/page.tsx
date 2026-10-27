@@ -45,6 +45,7 @@ import {
   generateIdempotencyKey,
   type CashoutChangedDetails,
 } from "@/lib/odds-lock";
+import { getCachedBet } from "@/lib/client-entity-cache";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 
@@ -108,8 +109,8 @@ export default function ComboDetailPage() {
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
 
-  const [fetchedBet, setFetchedBet] = useState<ClientBet | null | undefined>(
-    undefined
+  const [fetchedBet, setFetchedBet] = useState<ClientBet | null | undefined>(() =>
+    invalidId ? null : (getCachedBet("combo", comboId) ?? undefined)
   );
   const bet = invalidId ? null : fetchedBet;
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -529,7 +530,7 @@ export default function ComboDetailPage() {
                   ) : bet.status === "lost" ? (
                     <>
                       <span className="text-[10.5px] font-medium text-dim">Résultat :</span>
-                      <span className="font-display text-[13.5px] font-bold tabular-nums text-mist">
+                      <span className="font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
                         -{eur(bet.stake)}
                       </span>
                     </>
@@ -619,7 +620,9 @@ export default function ComboDetailPage() {
                     leg.kind === "sport" && leg.matchId
                       ? `/resultats?match=${leg.matchId}`
                       : leg.kind === "prediction"
-                        ? "/predictions"
+                        ? leg.questionId
+                          ? `/predictions/${leg.questionId}`
+                          : "/predictions"
                         : null;
 
                   const eventContent = teams ? (
@@ -642,11 +645,6 @@ export default function ComboDetailPage() {
                           isFinished={legFinished}
                         />
                       </div>
-                      {!legHasScore && leg.matchStartsAt && (
-                        <span className="shrink-0 rounded-full bg-elev px-2.5 py-0.5 font-display text-[10.5px] font-semibold tabular-nums text-ink">
-                          {formatKickoff(leg.matchStartsAt)}
-                        </span>
-                      )}
                       {legHref && (
                         <ChevronRight
                           className="h-4 w-4 shrink-0 text-dim"
@@ -674,7 +672,7 @@ export default function ComboDetailPage() {
                       className={cn(
                         "glass-card overflow-hidden rounded-2xl p-3.5",
                         leg.status === "won" && "ticket-won",
-                        leg.status === "lost" && "opacity-80"
+                        leg.status === "lost" && "border-betclic-red/25"
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -694,21 +692,20 @@ export default function ComboDetailPage() {
                             />
                           )}
                           <span className="truncate">{leg.league || "Match"}</span>
-                          {legHasScore && leg.matchStartsAt && (
-                            <>
-                              <span className="shrink-0 text-dim">·</span>
-                              <span className="shrink-0 text-[11px] tabular-nums text-dim">
-                                {formatKickoff(leg.matchStartsAt)}
-                              </span>
-                            </>
-                          )}
                         </div>
 
-                        <LegStatusBadge
-                          status={leg.status}
-                          live={legLive}
-                          minute={leg.matchMinute}
-                        />
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {leg.matchStartsAt && (
+                            <span className="shrink-0 text-[10.5px] font-medium tabular-nums text-dim">
+                              {formatKickoff(leg.matchStartsAt)}
+                            </span>
+                          )}
+                          <LegStatusBadge
+                            status={leg.status}
+                            live={legLive}
+                            minute={leg.matchMinute}
+                          />
+                        </div>
                       </div>
 
                       <div className="mt-2.5">

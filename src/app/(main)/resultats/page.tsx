@@ -254,9 +254,17 @@ function MatchHistoryCard({
           {/* Marchés clés réglés (terminologie 1xBet) */}
           {hasScore && isFinished && (
             <div>
-              <p className="text-[10.5px] font-bold uppercase tracking-wider text-dim">
-                Marchés réglés
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10.5px] font-bold uppercase tracking-wider text-dim">
+                  Marchés réglés
+                </p>
+                <Link
+                  href={`/resultats/${match.id}`}
+                  className="font-display text-[11px] font-bold text-betclic-red hover:underline"
+                >
+                  Fiche complète →
+                </Link>
+              </div>
               <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                 <SettledPill
                   label="1x2"
@@ -540,11 +548,25 @@ function ResultatsContent() {
   };
 
   const realHistory = useMemo(
-    () => (history ?? []).filter((m) => m.source === "manual"),
+    () =>
+      (history ?? [])
+        .filter((m) => m.source === "manual")
+        .sort(
+          (a, b) =>
+            new Date(b.finishedAt ?? b.startsAt).getTime() -
+              new Date(a.finishedAt ?? a.startsAt).getTime() || b.id - a.id
+        ),
     [history]
   );
   const virtualHistory = useMemo(
-    () => (history ?? []).filter((m) => m.source !== "manual"),
+    () =>
+      (history ?? [])
+        .filter((m) => m.source !== "manual")
+        .sort(
+          (a, b) =>
+            new Date(b.finishedAt ?? b.startsAt).getTime() -
+              new Date(a.finishedAt ?? a.startsAt).getTime() || b.id - a.id
+        ),
     [history]
   );
 

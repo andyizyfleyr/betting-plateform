@@ -14,7 +14,7 @@ import {
 } from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useApp } from "@/components/providers";
-import { sortOngoingBetsChronologically } from "@/lib/combo-math";
+import { getAllCachedBets } from "@/lib/client-entity-cache";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur } from "@/lib/format";
 
@@ -53,7 +53,10 @@ export default function ParisPage() {
   const [query, setQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const [bets, setBets] = useState<ClientBet[] | null>(null);
+  const [bets, setBets] = useState<ClientBet[] | null>(() => {
+    const cached = getAllCachedBets();
+    return cached.length > 0 ? cached : null;
+  });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [sharingBet, setSharingBet] = useState<ClientBet | null>(null);
@@ -221,28 +224,26 @@ export default function ParisPage() {
 
   const ongoingAll = useMemo(
     () =>
-      sortOngoingBetsChronologically(
-        searchedBets.filter((b) => b.status === "pending")
-      ),
+      searchedBets
+        .filter((b) => b.status === "pending")
+        .sort(
+          (a, b) =>
+            new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() ||
+            b.id - a.id
+        ),
     [searchedBets]
   );
   const finishedAll = useMemo(
     () =>
       searchedBets
         .filter((b) => b.status !== "pending")
-        .sort((a, b) => {
-          const settledDiff =
+        .sort(
+          (a, b) =>
             new Date(settledOrPlacedIso(b)).getTime() -
-            new Date(settledOrPlacedIso(a)).getTime();
-          if (Math.abs(settledDiff) > 2_000) return settledDiff;
-          const startA = a.matchStartsAt ? Date.parse(a.matchStartsAt) : 0;
-          const startB = b.matchStartsAt ? Date.parse(b.matchStartsAt) : 0;
-          if (startA && startB && startA !== startB) return startA - startB;
-          return (
+              new Date(settledOrPlacedIso(a)).getTime() ||
             new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() ||
             b.id - a.id
-          );
-        }),
+        ),
     [searchedBets]
   );
 

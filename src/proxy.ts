@@ -39,6 +39,7 @@ export async function proxy(req: NextRequest) {
     // Flux publics Edge (également exclus par `config.matcher` ci-dessous)
     if (
       pathname === "/api/matches" ||
+      /^\/api\/matches\/[1-9]\d{0,9}$/.test(pathname) ||
       pathname === "/api/matches/history" ||
       pathname === "/api/predictions/catalog"
     ) {
@@ -107,6 +108,6 @@ export const config = {
   // Vercel serve directement le cache partagé sans exécuter le middleware ni lire les cookies,
   // tout en protégeant 100 % des autres routes (`/api/predictions/my-bets`, `/api/bets`, `/api/admin`, etc.).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/matches$|api/matches/history$|api/predictions/catalog$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/matches$|api/matches/[1-9][0-9]*$|api/matches/history$|api/predictions/catalog$).*)",
   ],
 };

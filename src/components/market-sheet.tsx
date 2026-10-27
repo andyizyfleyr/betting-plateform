@@ -21,9 +21,9 @@ import { cn, formatOdds } from "@/lib/format";
 
 const POLL_INTERVAL = 4_000;
 
-type SheetCategory = "all" | "main" | "halftime" | "goals" | "teams" | "scores";
+export type SheetCategory = "all" | "main" | "halftime" | "goals" | "teams" | "scores";
 
-const CATEGORY_TABS: Array<{ key: SheetCategory; label: string }> = [
+export const CATEGORY_TABS: Array<{ key: SheetCategory; label: string }> = [
   { key: "all", label: "Tous" },
   { key: "main", label: "Principaux" },
   { key: "halftime", label: "1ère mi-temps" },
@@ -46,7 +46,7 @@ const TWO_COL_MARKETS = new Set([
   "away_clean_sheet",
 ]);
 
-function formatMatchDateTime(iso: string | Date): string {
+export function formatMatchDateTime(iso: string | Date): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const day = new Intl.DateTimeFormat("fr-FR", {
@@ -60,7 +60,7 @@ function formatMatchDateTime(iso: string | Date): string {
   return `${day} · ${time}`;
 }
 
-function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
+export function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
   if (g.category) return g.category;
   if (
     [
@@ -82,6 +82,17 @@ function inferCategory(g: MarketGroup): Exclude<SheetCategory, "all"> {
   if (["score_exact", "winning_margin", "ht_ft"].includes(g.key)) return "scores";
   if (["total_exact", "odd_even", "goal_range"].includes(g.key)) return "goals";
   return "teams";
+}
+
+export function sanitizeMatchMarkets(raw: MarketGroup[] | undefined): MarketGroup[] {
+  if (!raw) return [];
+  return raw
+    .map((g) =>
+      g.key === "score_exact"
+        ? { ...g, outcomes: g.outcomes.filter((o) => o.key !== "other") }
+        : g
+    )
+    .filter((g) => (g.rows ? g.rows.length > 0 : g.outcomes.length > 0));
 }
 
 export function MarketSheet() {
@@ -125,10 +136,9 @@ export function MarketSheet() {
     const poll = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
       try {
-        const r = await api.matches();
+        const r = await api.matchById(marketMatch.id);
         if (!active) return;
-        const fresh = r.matches.find((m) => m.id === marketMatch.id);
-        if (fresh) setLiveMatch(fresh);
+        if (r.match) setLiveMatch(r.match);
       } catch {
         /* silencieux */
       }
@@ -169,16 +179,7 @@ export function MarketSheet() {
     };
   }, [match, target]);
 
-  const groups = useMemo(() => {
-    const raw = match?.markets ?? [];
-    return raw
-      .map((g) =>
-        g.key === "score_exact"
-          ? { ...g, outcomes: g.outcomes.filter((o) => o.key !== "other") }
-          : g
-      )
-      .filter((g) => (g.rows ? g.rows.length > 0 : g.outcomes.length > 0));
-  }, [match]);
+  const groups = useMemo(() => sanitizeMatchMarkets(match?.markets), [match]);
 
   const filteredGroups = useMemo(() => {
     if (category === "all") return groups;
@@ -524,7 +525,7 @@ export function MarketSheet() {
   );
 }
 
-function AccordionItem({
+export function AccordionItem({
   match,
   group,
   suspended,

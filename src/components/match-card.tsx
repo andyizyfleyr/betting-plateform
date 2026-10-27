@@ -88,9 +88,9 @@ function MatchCardInner({
     <article
       onClick={() => {
         if (isFinished) {
-          router.push(`/resultats?match=${match.id}`);
+          router.push(`/resultats/${match.id}`);
         } else {
-          openMarkets(match);
+          router.push(`/matchs/${match.id}`);
         }
       }}
       className={cn(

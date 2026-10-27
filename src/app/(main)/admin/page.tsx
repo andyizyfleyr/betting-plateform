@@ -4076,7 +4076,7 @@ function StatusBadge({ status }: { status: string }) {
     rejected: { label: "Refusé", cls: "bg-betclic-red/10 text-betclic-red" },
     cancelled: { label: "Annulé", cls: "bg-elev text-dim" },
     won: { label: "Gagné", cls: "bg-win/12 text-win" },
-    lost: { label: "Perdu", cls: "bg-elev text-dim" },
+    lost: { label: "Perdu", cls: "bg-betclic-red/12 text-betclic-red font-bold" },
     cashed: { label: "Vendu", cls: "bg-sky-500/12 text-sky-700" },
     void: { label: "Remboursé", cls: "bg-amber-500/12 text-amber-800" },
     paid: { label: "Payé", cls: "bg-win/12 text-win" },

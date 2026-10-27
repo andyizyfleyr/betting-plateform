@@ -1,5 +1,13 @@
 import type { LiveMatchTelemetry } from "@/lib/live-telemetry";
 import {
+  rememberBets,
+  rememberMatches,
+  rememberMatchHistory,
+  rememberPredictions,
+  rememberSingleMatch,
+  rememberWallet,
+} from "@/lib/client-entity-cache";
+import {
   CASHOUT_CHANGED_CODE,
   type CashoutChangedDetails,
   type OddsChangePolicy,
@@ -305,6 +313,7 @@ export class ApiRequestError extends Error {
 function isPublicEdgeGetUrl(url: string): boolean {
   return (
     url === "/api/matches" ||
+    /^\/api\/matches\/[1-9]\d{0,9}$/.test(url) ||
     url === "/api/matches/history" ||
     url.startsWith("/api/matches/history?") ||
     url === "/api/predictions/catalog"
@@ -470,7 +479,19 @@ export interface ClientSavedCouponLeg {
 
 export const api = {
   matches: () =>
-    request<{ matches: ClientMatch[]; serverTime?: string }>("/api/matches"),
+    request<{ matches: ClientMatch[]; serverTime?: string }>("/api/matches").then(
+      (res) => {
+        rememberMatches(res.matches);
+        return res;
+      }
+    ),
+  matchById: (id: number) =>
+    request<{ match: ClientMatch; serverTime?: string }>(`/api/matches/${id}`).then(
+      (res) => {
+        rememberSingleMatch(res.match);
+        return res;
+      }
+    ),
   matchHistory: (matchId?: number) =>
     request<{
       matches: ClientMatchHistoryItem[];
@@ -480,10 +501,24 @@ export const api = {
       typeof matchId === "number" && Number.isInteger(matchId) && matchId > 0
         ? `/api/matches/history?matchId=${matchId}`
         : "/api/matches/history"
-    ),
+    ).then((res) => {
+      rememberMatchHistory(res.matches, res.focusedMatch);
+      return res;
+    }),
   bets: (filter: "ongoing" | "finished") =>
-    request<{ bets: ClientBet[]; balance: number | null }>(`/api/bets?filter=${filter}`),
-  allBets: () => request<{ bets: ClientBet[]; balance: number | null }>("/api/bets?filter=all"),
+    request<{ bets: ClientBet[]; balance: number | null }>(
+      `/api/bets?filter=${filter}`
+    ).then((res) => {
+      rememberBets(res.bets);
+      return res;
+    }),
+  allBets: () =>
+    request<{ bets: ClientBet[]; balance: number | null }>("/api/bets?filter=all").then(
+      (res) => {
+        rememberBets(res.bets);
+        return res;
+      }
+    ),
   pulse: () =>
     request<{
       balance: number;
@@ -562,7 +597,11 @@ export const api = {
     request<{ code: string; legs: ClientSavedCouponLeg[]; skippedClosedCount: number }>(
       `/api/coupons?code=${encodeURIComponent(code)}`
     ),
-  wallet: () => request<ClientWalletData>("/api/wallet"),
+  wallet: () =>
+    request<ClientWalletData>("/api/wallet").then((w) => {
+      rememberWallet(w);
+      return w;
+    }),
   requestWithdrawal: (payload: {
     method: string;
     destination: string;
@@ -586,11 +625,20 @@ export const api = {
         body: JSON.stringify({ withdrawalId, idempotencyKey }),
       }
     ),
-  predictions: () => request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100"),
+  predictions: () =>
+    request<{ questions: ClientPrediction[] }>("/api/predictions?limit=100").then(
+      (res) => {
+        rememberPredictions(res.questions);
+        return res;
+      }
+    ),
   predictionsCatalog: () =>
     request<{ questions: ClientPrediction[]; serverTime?: string }>(
       "/api/predictions/catalog"
-    ),
+    ).then((res) => {
+      rememberPredictions(res.questions);
+      return res;
+    }),
   myPredictionBets: () =>
     request<{
       myBets: Record<

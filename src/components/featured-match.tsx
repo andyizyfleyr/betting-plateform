@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
-import { useApp } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { formatGoalSummary, LiveStatusBadge, ResultOdds } from "./match-card";
 import { KickoffCountdown } from "./kickoff-countdown";
@@ -12,7 +12,7 @@ import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { cn, formatKickoff } from "@/lib/format";
 
 export function FeaturedMatch({ match }: { match: ClientMatch }) {
-  const { openMarkets } = useApp();
+  const router = useRouter();
   const [showTracker, setShowTracker] = useState(true);
   const isLive = match.status === "live";
   const isReal = match.source === "manual";
@@ -30,7 +30,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
 
   return (
     <section
-      onClick={() => openMarkets(match)}
+      onClick={() => router.push(`/matchs/${match.id}`)}
       className="glass-card relative cursor-pointer overflow-hidden rounded-2xl border-edge p-4 transition-colors hover:border-ink/15 active:bg-elev/40 lg:p-6"
     >
       <div className="flex items-center justify-between gap-2">
