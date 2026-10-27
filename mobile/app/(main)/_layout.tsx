@@ -1,30 +1,28 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { AppHeader } from "@/components/app-header";
-import { BottomNav } from "@/components/bottom-nav";
-import { MarketSheet } from "@/components/market-sheet";
 import { BetModal } from "@/components/bet-modal";
+import { BottomNav } from "@/components/bottom-nav";
+import { ComboFloatingBar, ComboSheet } from "@/components/combo-slip";
+import { MarketSheet } from "@/components/market-sheet";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { RechargeModal } from "@/components/recharge-modal";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { ToastHost } from "@/components/toast-host";
-import { colors } from "@/theme/tokens";
+import { COLORS } from "@/theme/tokens";
 
-export default function MainShellLayout({
-  children,
-}: {
-  children?: React.ReactNode;
-}) {
+export function MainShellLayout({ children }: { children: React.ReactNode }) {
   return (
     <View style={styles.root}>
       <AppHeader />
       <View style={styles.body}>{children}</View>
+      <ComboFloatingBar />
       <BottomNav />
 
-      {/* Modales et feuilles globales partagées */}
-      <MarketSheet />
       <BetModal />
       <PredictionBetModal />
+      <MarketSheet />
+      <ComboSheet />
       <RechargeModal />
       <ShareTicketModal />
       <ToastHost />
@@ -32,10 +30,12 @@ export default function MainShellLayout({
   );
 }
 
+export default MainShellLayout;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
   body: {
     flex: 1,

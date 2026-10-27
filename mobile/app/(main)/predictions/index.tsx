@@ -1,313 +1,304 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  FlatList,
+  ActivityIndicator,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "@/lib/router";
-import { CheckCircle2, ChevronDown, ChevronRight, Search, X } from "@/components/icons";
-import { api, type ClientPredictionQuestion } from "@/lib/api";
-import { getCachedPredictionsList } from "@/lib/entity-cache";
-import { eur, formatKickoff, formatOdds } from "@/lib/format";
-import { useSmartPolling } from "@/lib/polling";
+import {
+  Check,
+  ChevronRight,
+  Search,
+  Sparkles,
+  X,
+} from "lucide-react-native";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
-  BareInfiniteSpinner,
-  INFINITE_BATCH_STEP,
+  InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
-import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
+import { KickoffCountdown } from "@/components/kickoff-countdown";
+import {
+  OddsTrendCorner,
+  oddsTrendTextColor,
+  useOddsTrend,
+} from "@/components/odds-trend-corner";
 import { useApp } from "@/context/app-context";
+import { api, type ClientPrediction } from "@/lib/api";
+import { getCachedPredictionsList } from "@/lib/entity-cache";
+import { eur, formatOdds } from "@/lib/format";
+import { useSmartPolling } from "@/lib/polling";
+import { useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-export function PredictionCard({
-  q,
-  defaultExpanded = false,
+function OptionOddsBtn({
+  label,
+  odds,
+  oddsFormat,
+  selected,
+  disabled,
+  onPress,
+  onLongPress,
 }: {
-  q: ClientPredictionQuestion;
-  defaultExpanded?: boolean;
+  label: string;
+  odds: number;
+  oddsFormat: "decimal" | "fractional";
+  selected: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
 }) {
-  const router = useRouter();
-  const {
-    oddsFormat,
-    comboLegs,
-    isInCombo,
-    toggleComboLeg,
-    openPredictionBet,
-    hapticsEnabled,
-    toast,
-  } = useApp();
-  const [expanded, setExpanded] = useState(defaultExpanded);
-
-  const isMulti = Boolean(q.options && q.options.length >= 2);
-  const isResolved = q.status === "resolved";
-  const marketKey = isMulti ? "multichoice" : "yesno";
-
-  const handleSelect = (
-    selection: string,
-    selectionLabel: string,
-    odds: number,
-    longPress = false
-  ) => {
-    if (isResolved || q.myBet) return;
-    if (longPress || comboLegs.length >= 1) {
-      const res = toggleComboLeg({
-        kind: "prediction",
-        questionId: q.id,
-        title: q.question,
-        league: q.category,
-        market: marketKey,
-        selection,
-        selectionLabel,
-        odds,
-        startsAt: q.resolvesAt,
-        isLive: false,
-      });
-      if (res === "added" && longPress) {
-        toast({
-          kind: "info",
-          title: "Ajouté au Betslip",
-          subtitle: selectionLabel,
-        });
-      } else if (res === "full") {
-        toast({ kind: "error", title: "Maximum 8 sélections dans le Betslip" });
-      }
-      return;
-    }
-
-    openPredictionBet({
-      question: q,
-      selection,
-      selectionLabel,
-      odds,
-    });
-  };
-
-  const optionsToShow =
-    isMulti && q.options
-      ? expanded || q.options.length <= 2
-        ? q.options
-        : q.options.slice(0, 2)
-      : [];
-
+  const trend = useOddsTrend(odds);
   return (
     <Pressable
-      onPress={() => {
-        triggerHaptic("light", hapticsEnabled);
-        router.push(`/predictions/${q.id}`);
-      }}
-      style={[cardSurface.glassCard, styles.card]}
+      disabled={disabled}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={260}
+      style={[
+        styles.optBtn,
+        selected ? styles.optBtnSelected : styles.optBtnIdle,
+        disabled && { opacity: 0.55 },
+      ]}
     >
-      <View style={styles.cardTop}>
-        <Text style={styles.catBadge}>{q.category}</Text>
-        <View style={styles.topRight}>
-          <Text style={styles.deadlineText}>
-            {isResolved ? "Résolu" : formatKickoff(q.resolvesAt)}
-          </Text>
-          <ChevronRight size={13} color={colors.dim} strokeWidth={2.4} />
-        </View>
+      <OddsTrendCorner trend={trend} inverted={selected} />
+      <View style={styles.optLeft}>
+        {selected ? (
+          <Check size={12} color="#ffffff" strokeWidth={3} />
+        ) : null}
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.optLabel,
+            selected && { color: "rgba(255,255,255,0.88)" },
+          ]}
+        >
+          {label}
+        </Text>
       </View>
-
-      <Text style={styles.questionText}>{q.question}</Text>
-
-      {q.myBet && (
-        <View style={styles.myBetPill}>
-          <CheckCircle2 size={13} color={colors.win} strokeWidth={2.4} />
-          <Text numberOfLines={1} style={styles.myBetText}>
-            Votre pronostic : {q.myBet.selectionLabel} ({eur(q.myBet.stake)} · ×
-            {formatOdds(q.myBet.odds, oddsFormat)})
-          </Text>
-        </View>
-      )}
-
-      {isResolved ? (
-        <View style={styles.resolvedBox}>
-          <Text style={styles.resolvedLabel}>Issue officielle :</Text>
-          <Text style={styles.resolvedOutcome}>
-            {isMulti
-              ? (q.options?.find((o) => o.key === q.outcome)?.label ??
-                q.outcome ??
-                "—")
-              : q.outcome === "yes"
-                ? "OUI"
-                : q.outcome === "no"
-                  ? "NON"
-                  : "Annulé"}
-          </Text>
-        </View>
-      ) : isMulti && q.options ? (
-        <View style={{ gap: 7 }}>
-          {optionsToShow.map((opt) => {
-            const selected = isInCombo(
-              "prediction",
-              q.id,
-              marketKey,
-              opt.key
-            );
-            return (
-              <Pressable
-                key={opt.key}
-                disabled={Boolean(q.myBet)}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleSelect(opt.key, opt.label, opt.odds, false);
-                }}
-                onLongPress={(e) => {
-                  e.stopPropagation();
-                  handleSelect(opt.key, opt.label, opt.odds, true);
-                }}
-                style={[
-                  styles.multiOptBtn,
-                  selected && styles.multiOptBtnSelected,
-                  Boolean(q.myBet) && { opacity: 0.6 },
-                ]}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.multiOptLabel,
-                    selected && { color: colors.white },
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.multiOptOdds,
-                    selected && { color: colors.white },
-                  ]}
-                >
-                  {formatOdds(opt.odds, oddsFormat)}
-                </Text>
-              </Pressable>
-            );
-          })}
-
-          {q.options.length > 2 && !expanded && (
-            <Pressable
-              onPress={(e) => {
-                e.stopPropagation();
-                triggerHaptic("light", hapticsEnabled);
-                setExpanded(true);
-              }}
-              style={styles.showMoreBtn}
-            >
-              <Text style={styles.showMoreText}>
-                Voir tout ({q.options.length} choix)
-              </Text>
-              <ChevronDown
-                size={13.5}
-                color={colors.betclicRed}
-                strokeWidth={2.5}
-              />
-            </Pressable>
-          )}
-        </View>
-      ) : (
-        <View style={styles.binaryRow}>
-          {(
-            [
-              { key: "yes", label: "Oui", odds: q.oddsYes },
-              { key: "no", label: "Non", odds: q.oddsNo },
-            ] as const
-          ).map((side) => {
-            const selected = isInCombo(
-              "prediction",
-              q.id,
-              marketKey,
-              side.key
-            );
-            return (
-              <Pressable
-                key={side.key}
-                disabled={Boolean(q.myBet)}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleSelect(side.key, side.label, side.odds, false);
-                }}
-                onLongPress={(e) => {
-                  e.stopPropagation();
-                  handleSelect(side.key, side.label, side.odds, true);
-                }}
-                style={[
-                  styles.binaryBtn,
-                  selected && styles.multiOptBtnSelected,
-                  Boolean(q.myBet) && { opacity: 0.6 },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.binaryLabel,
-                    selected && { color: "rgba(255,255,255,0.85)" },
-                  ]}
-                >
-                  {side.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.multiOptOdds,
-                    selected && { color: colors.white },
-                  ]}
-                >
-                  {formatOdds(side.odds, oddsFormat)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
+      <Text
+        style={[
+          styles.optOdds,
+          { color: oddsTrendTextColor(trend, selected) },
+        ]}
+      >
+        {formatOdds(odds, oddsFormat)}
+      </Text>
     </Pressable>
   );
 }
 
-export default function PredictionsScreen() {
-  const { user, dataSaverMode } = useApp();
-  const [questions, setQuestions] = useState<ClientPredictionQuestion[] | null>(
-    () => getCachedPredictionsList()
+function PredictionCard({ item }: { item: ClientPrediction }) {
+  const router = useRouter();
+  const {
+    oddsFormat,
+    openPredictionBet,
+    toggleComboLeg,
+    isInCombo,
+    comboQuickMode,
+    toast,
+  } = useApp();
+
+  const uid = `pred-${item.id}`;
+  const isResolved = item.status === "resolved";
+  const allOptions =
+    item.options && item.options.length > 0
+      ? item.options
+      : [
+          { key: "yes", label: "Oui", odds: item.oddsYes },
+          { key: "no", label: "Non", odds: item.oddsNo },
+        ];
+
+  // Contrainte stricte : afficher 2 options par défaut quand > 2 existent, avec « Voir tout »
+  const hasMoreOptions = allOptions.length > 2;
+  const visibleOptions = hasMoreOptions ? allOptions.slice(0, 2) : allOptions;
+
+  const handleCombo = (opt: { key: string; label: string; odds: number }) => {
+    const res = toggleComboLeg({
+      uid,
+      kind: "prediction",
+      questionId: item.id,
+      title: item.question,
+      league: item.category,
+      market: "prediction",
+      selection: opt.key,
+      selectionLabel: opt.label,
+      odds: opt.odds,
+      startsAt: item.resolvesAt,
+      isLive: false,
+    });
+    if (res === "full") {
+      toast({
+        kind: "error",
+        title: "Combiné complet",
+        description: "Maximum 8 sélections par ticket combiné.",
+      });
+    }
+  };
+
+  return (
+    <View style={styles.card}>
+      <Pressable
+        onPress={() => router.push(`/predictions/${item.id}`)}
+        style={styles.cardTop}
+      >
+        <View style={styles.metaRow}>
+          <View style={styles.catTag}>
+            <Sparkles size={11.5} color={COLORS.betclicRed} strokeWidth={2.4} />
+            <Text style={styles.catText}>{item.category}</Text>
+          </View>
+          {isResolved ? (
+            <View style={styles.resolvedPill}>
+              <Text style={styles.resolvedText}>Résolue</Text>
+            </View>
+          ) : (
+            <KickoffCountdown startsAt={item.resolvesAt} />
+          )}
+        </View>
+
+        <Text style={styles.questionText}>{item.question}</Text>
+
+        {item.myBet ? (
+          <View style={styles.myBetPill}>
+            <Text style={styles.myBetText}>
+              Ma mise : {eur(item.myBet.stake)} sur{" "}
+              {item.myBet.selectionLabel ?? item.myBet.selection} @{" "}
+              {formatOdds(item.myBet.odds, oddsFormat)}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+
+      {isResolved ? (
+        <View style={styles.resolutionBar}>
+          <Text style={styles.resolutionText}>
+            Issue officielle :{" "}
+            {allOptions.find((o) => o.key === item.resolution)?.label ??
+              item.resolution ??
+              "—"}
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.optionsBlock}>
+          <View style={styles.optsGrid}>
+            {visibleOptions.map((opt) => (
+              <View key={opt.key} style={{ flex: 1 }}>
+                <OptionOddsBtn
+                  label={opt.label}
+                  odds={opt.odds}
+                  oddsFormat={oddsFormat}
+                  selected={isInCombo(uid, "prediction", opt.key)}
+                  onPress={() => {
+                    if (comboQuickMode) {
+                      handleCombo(opt);
+                    } else {
+                      openPredictionBet({
+                        question: item,
+                        selection: opt.key,
+                      });
+                    }
+                  }}
+                  onLongPress={() => handleCombo(opt)}
+                />
+              </View>
+            ))}
+          </View>
+
+          {hasMoreOptions ? (
+            <Pressable
+              onPress={() => router.push(`/predictions/${item.id}`)}
+              style={styles.seeAllBtn}
+            >
+              <Text style={styles.seeAllText}>
+                Voir tout ({allOptions.length} choix)
+              </Text>
+              <ChevronRight
+                size={13}
+                color={COLORS.betclicRed}
+                strokeWidth={2.5}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+      )}
+    </View>
   );
-  const [statusFilter, setStatusFilter] = useState<string>("open");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [formatFilter, setFormatFilter] = useState<string>("all");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState("");
+}
+
+export default function PredictionsListScreen() {
+  const { user, betsVersion, dataSaverMode } = useApp();
+
+  const [questions, setQuestions] = useState<ClientPrediction[]>(
+    () => getCachedPredictionsList() ?? []
+  );
+  const [loading, setLoading] = useState<boolean>(
+    () => getCachedPredictionsList() === null
+  );
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadPredictions = useCallback(async () => {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"open" | "resolved" | "all">(
+    "open"
+  );
+  const [catFilter, setCatFilter] = useState<string>("all");
+  const [mineFilter, setMineFilter] = useState<"all" | "mine">("all");
+
+  const loadData = useCallback(async () => {
     try {
-      const res = await api.predictions(Boolean(user));
-      setQuestions(res.questions);
+      const [catRes, myRes] = await Promise.all([
+        api.predictionsCatalog(),
+        user
+          ? api.myPredictionBets().catch(() => ({ myBets: {} }))
+          : Promise.resolve({ myBets: {} }),
+      ]);
+      const map = myRes.myBets as Record<number, ClientPrediction["myBet"]>;
+      setQuestions(
+        catRes.questions.map((q) => ({
+          ...q,
+          myBet: map[q.id] ?? q.myBet ?? null,
+        }))
+      );
     } catch {
-      // Conserve le cache
+      /* garde le snapshot */
+    } finally {
+      setLoading(false);
     }
   }, [user]);
 
-  useSmartPolling(loadPredictions, 18_000, {
+  useEffect(() => {
+    void loadData();
+  }, [loadData, betsVersion]);
+
+  useSmartPolling(loadData, 10_000, {
     enabled: true,
     dataSaver: dataSaverMode,
-    runImmediately: true,
+    runImmediately: false,
   });
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }, [loadData]);
+
   const categories = useMemo(() => {
-    const set = new Set<string>();
-    for (const q of questions ?? []) {
-      if (q.category) set.add(q.category);
+    const s = new Set<string>();
+    for (const q of questions) {
+      if (q.category) s.add(q.category);
     }
-    return Array.from(set);
+    return Array.from(s);
   }, [questions]);
 
-  const qNorm = search.trim().toLowerCase();
-
   const filtered = useMemo(() => {
-    return (questions ?? []).filter((q) => {
-      if (statusFilter === "open" && q.status !== "open") return false;
-      if (statusFilter === "resolved" && q.status !== "resolved") return false;
-      if (categoryFilter !== "all" && q.category !== categoryFilter) return false;
-      const isMulti = Boolean(q.options && q.options.length >= 2);
-      if (formatFilter === "multi" && !isMulti) return false;
-      if (formatFilter === "binary" && isMulti) return false;
+    const qNorm = query.trim().toLowerCase();
+    return questions.filter((q) => {
+      if (statusFilter !== "all" && q.status !== statusFilter) return false;
+      if (catFilter !== "all" && q.category !== catFilter) return false;
+      if (mineFilter === "mine" && !q.myBet) return false;
       if (
         qNorm &&
         !q.question.toLowerCase().includes(qNorm) &&
@@ -317,181 +308,159 @@ export default function PredictionsScreen() {
       }
       return true;
     });
-  }, [categoryFilter, formatFilter, qNorm, questions, statusFilter]);
+  }, [catFilter, mineFilter, query, questions, statusFilter]);
 
-  const resetKey = `${statusFilter}|${categoryFilter}|${formatFilter}|${qNorm}`;
-  const { visibleCount, hasMore, loadMore } = useInfiniteBatch(
-    filtered.length,
-    resetKey,
-    INFINITE_BATCH_STEP
-  );
-
-  const visibleItems = useMemo(
-    () => filtered.slice(0, visibleCount),
-    [filtered, visibleCount]
+  const resetKey = `${statusFilter}|${catFilter}|${mineFilter}|${query}`;
+  const { visibleItems, hasMore, onScrollCheck } = useInfiniteBatch(
+    filtered,
+    10,
+    resetKey
   );
 
   return (
-    <View style={styles.root}>
-      <View style={styles.topHeader}>
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={[1]}
+      onScroll={onScrollCheck}
+      scrollEventThrottle={16}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[COLORS.betclicRed]}
+          tintColor={COLORS.betclicRed}
+        />
+      }
+    >
+      <View style={styles.topSection}>
         <Text style={styles.pageTitle}>Prédictions</Text>
-        <Pressable
-          onPress={() => setSearchOpen((v) => !v)}
-          style={styles.iconBtn}
-        >
-          {searchOpen ? (
-            <X size={17} color={colors.ink} strokeWidth={2.4} />
-          ) : (
-            <Search size={17} color={colors.ink} strokeWidth={2.4} />
-          )}
-        </Pressable>
-      </View>
-
-      {searchOpen && (
-        <View style={styles.searchWrap}>
-          <Search size={15} color={colors.dim} />
+        <View style={styles.searchBar}>
+          <Search size={16} color={COLORS.dim} strokeWidth={2.2} />
           <TextInput
-            value={search}
-            onChangeText={setSearch}
-            autoFocus
-            placeholder="Rechercher un pronostic…"
-            placeholderTextColor={colors.dim}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Rechercher une question ou un thème…"
+            placeholderTextColor={COLORS.dim}
             style={styles.searchInput}
           />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")}>
-              <X size={15} color={colors.dim} />
+          {query.length > 0 ? (
+            <Pressable hitSlop={8} onPress={() => setQuery("")}>
+              <X size={16} color={COLORS.dim} strokeWidth={2.2} />
             </Pressable>
-          )}
+          ) : null}
         </View>
-      )}
-
-      <View style={{ paddingHorizontal: 16 }}>
-        <FilterDropdownRow
-          filters={[
-            {
-              id: "status",
-              label: "Statut",
-              value: statusFilter,
-              defaultValue: "open",
-              options: [
-                { value: "open", label: "En cours" },
-                { value: "resolved", label: "Résolues" },
-                { value: "all", label: "Toutes" },
-              ],
-              onChange: setStatusFilter,
-            },
-            {
-              id: "cat",
-              label: "Catégorie",
-              value: categoryFilter,
-              options: [
-                { value: "all", label: "Toutes catégories" },
-                ...categories.map((c) => ({ value: c, label: c })),
-              ],
-              onChange: setCategoryFilter,
-            },
-            {
-              id: "fmt",
-              label: "Format",
-              value: formatFilter,
-              options: [
-                { value: "all", label: "Tous formats" },
-                { value: "multi", label: "Choix multiples" },
-                { value: "binary", label: "Oui / Non" },
-              ],
-              onChange: setFormatFilter,
-            },
-          ]}
-          onReset={() => {
-            setStatusFilter("open");
-            setCategoryFilter("all");
-            setFormatFilter("all");
-            setSearch("");
-          }}
-          resultCountLabel={`${filtered.length} prédiction${filtered.length > 1 ? "s" : ""}`}
-        />
       </View>
 
-      <FlatList<ClientPredictionQuestion>
-        data={visibleItems}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.listContent}
-        windowSize={7}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        onEndReached={() => {
-          if (hasMore) loadMore();
+      <FilterDropdownRow
+        filters={[
+          {
+            id: "status",
+            label: "Statut",
+            value: statusFilter,
+            defaultValue: "open",
+            onChange: setStatusFilter,
+            options: [
+              {
+                value: "open",
+                label: "Ouvertes",
+                count: questions.filter((q) => q.status === "open").length,
+              },
+              {
+                value: "resolved",
+                label: "Résolues",
+                count: questions.filter((q) => q.status === "resolved").length,
+              },
+              { value: "all", label: "Toutes", count: questions.length },
+            ],
+          },
+          {
+            id: "cat",
+            label: "Catégorie",
+            value: catFilter,
+            defaultValue: "all",
+            onChange: setCatFilter,
+            options: [
+              { value: "all", label: "Toutes catégories" },
+              ...categories.map((c) => ({ value: c, label: c })),
+            ],
+          },
+          ...(user
+            ? [
+                {
+                  id: "mine",
+                  label: "Mes mises",
+                  value: mineFilter,
+                  defaultValue: "all" as const,
+                  onChange: setMineFilter,
+                  options: [
+                    { value: "all" as const, label: "Toutes les questions" },
+                    { value: "mine" as const, label: "Avec ma mise" },
+                  ],
+                },
+              ]
+            : []),
+        ]}
+        onReset={() => {
+          setStatusFilter("open");
+          setCatFilter("all");
+          setMineFilter("all");
+          setQuery("");
         }}
-        onEndReachedThreshold={0.4}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await loadPredictions();
-              setRefreshing(false);
-            }}
-            tintColor={colors.betclicRed}
-            colors={[colors.betclicRed]}
-          />
-        }
-        ListEmptyComponent={
-          !questions ? (
-            <BareInfiniteSpinner visible />
-          ) : (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>
-                Aucune prédiction pour ces critères.
-              </Text>
-            </View>
-          )
-        }
-        renderItem={({ item }) => <PredictionCard q={item} />}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        ListFooterComponent={<BareInfiniteSpinner visible={hasMore} />}
       />
-    </View>
+
+      <Text style={styles.countLine}>
+        {filtered.length} prédiction{filtered.length > 1 ? "s" : ""}
+      </Text>
+
+      {loading && questions.length === 0 ? (
+        <View style={styles.loader}>
+          <ActivityIndicator size="small" color={COLORS.betclicRed} />
+        </View>
+      ) : visibleItems.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>
+            Aucune prédiction ne correspond à ces filtres.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {visibleItems.map((q) => (
+            <PredictionCard key={q.id} item={q} />
+          ))}
+          <InfiniteScrollLoader hasMore={hasMore} />
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  page: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
-  topHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
+  content: {
+    paddingHorizontal: 12,
     paddingTop: 10,
-    paddingBottom: 6,
+    paddingBottom: 24,
+  },
+  topSection: {
+    gap: 8,
+    marginBottom: 4,
   },
   pageTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    color: colors.ink,
-    letterSpacing: -0.3,
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.ink,
   },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  searchWrap: {
-    marginHorizontal: 16,
-    marginBottom: 6,
+  searchBar: {
     height: 40,
     borderRadius: 12,
-    backgroundColor: colors.white,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edge,
+    borderColor: COLORS.edge,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -500,151 +469,160 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 13.5,
-    color: colors.ink,
+    fontWeight: "500",
+    color: COLORS.ink,
+    paddingVertical: 0,
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+  countLine: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.dim,
+    marginTop: 4,
+    marginBottom: 8,
   },
-  card: {
-    padding: 14,
+  loader: {
+    paddingVertical: 36,
+    alignItems: "center",
+  },
+  list: {
     gap: 10,
   },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  catBadge: {
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    color: colors.betclicRed,
-    letterSpacing: 0.3,
-  },
-  topRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  deadlineText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.dim,
-  },
-  questionText: {
-    fontSize: 14.5,
-    lineHeight: 19.5,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  myBetPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: "#f0fdf4",
-  },
-  myBetText: {
-    flex: 1,
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: colors.win,
-  },
-  resolvedBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: colors.elev,
-  },
-  resolvedLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.mist,
-  },
-  resolvedOutcome: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  multiOptBtn: {
-    height: 42,
-    borderRadius: 11,
-    backgroundColor: colors.elev,
-    borderWidth: 1,
-    borderColor: colors.edgeSoft,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  multiOptBtnSelected: {
-    backgroundColor: colors.betclicRed,
-    borderColor: colors.betclicRed,
-  },
-  multiOptLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.ink,
-  },
-  multiOptOdds: {
-    fontSize: 13.5,
-    fontWeight: "900",
-    color: colors.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  showMoreBtn: {
-    height: 32,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  showMoreText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.betclicRed,
-  },
-  binaryRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  binaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 11,
-    backgroundColor: colors.elev,
-    borderWidth: 1,
-    borderColor: colors.edgeSoft,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  binaryLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.mist,
-  },
   emptyCard: {
-    padding: 20,
     borderRadius: 16,
-    backgroundColor: colors.white,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edge,
+    borderColor: COLORS.edge,
+    padding: 24,
     alignItems: "center",
   },
   emptyText: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.mist,
+    color: COLORS.dim,
+    textAlign: "center",
+  },
+  card: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 14,
+    gap: 11,
+  },
+  cardTop: {
+    gap: 7,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  catTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  catText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+    textTransform: "uppercase",
+  },
+  resolvedPill: {
+    borderRadius: 6,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+  },
+  resolvedText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: COLORS.dim,
+  },
+  questionText: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: COLORS.ink,
+    lineHeight: 20,
+  },
+  myBetPill: {
+    borderRadius: 9,
+    backgroundColor: "rgba(21, 128, 61, 0.09)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: "flex-start",
+  },
+  myBetText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.win,
+  },
+  optionsBlock: {
+    gap: 7,
+  },
+  optsGrid: {
+    flexDirection: "row",
+    gap: 7,
+  },
+  optBtn: {
+    height: 44,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    position: "relative",
+    overflow: "hidden",
+  },
+  optBtnIdle: {
+    backgroundColor: COLORS.elev,
+  },
+  optBtnSelected: {
+    backgroundColor: COLORS.outerSpace,
+  },
+  optLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flex: 1,
+    minWidth: 0,
+  },
+  optLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.mist,
+    flexShrink: 1,
+  },
+  optOdds: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+  },
+  seeAllBtn: {
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: "rgba(225, 0, 20, 0.07)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  seeAllText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+  },
+  resolutionBar: {
+    borderRadius: 10,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  resolutionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.ink,
   },
 });

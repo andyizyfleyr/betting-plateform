@@ -1,117 +1,137 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { usePathname, useRouter } from "@/lib/router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Flame,
-  ReceiptText,
-  Sparkles,
+  Layers,
+  SlidersHorizontal,
   Ticket,
-  User,
-} from "@/components/icons";
-import { colors, triggerHaptic } from "@/theme/tokens";
+  TrendingUp,
+  Trophy,
+} from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import { usePathname, useRouter } from "@/lib/router";
+import { COLORS, triggerHaptic } from "@/theme/tokens";
 
-const TABS = [
-  { href: "/matchs", label: "Matchs", Icon: Flame },
-  { href: "/predictions", label: "Prédictions", Icon: Sparkles },
-  { href: "/betslip", label: "Betslip", Icon: Ticket, isSlip: true },
-  { href: "/paris", label: "Mes paris", Icon: ReceiptText, isBets: true },
-  { href: "/parametres", label: "Compte", Icon: User },
-] as const;
-
-/**
- * Barre de navigation inférieure `58 px` sur fond blanc plein (`bg-white`),
- * démarrant sur `Matchs` et masquée sur `/tap`, `/accelerator` et `/admin`.
- */
 export function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { user, comboLegs, pendingCount, hapticsEnabled } = useApp();
+  const { pendingCount, comboLegs, hapticsEnabled } = useApp();
 
   if (
-    user?.role === "admin" ||
-    pathname === "/admin" ||
-    pathname.startsWith("/admin/") ||
+    pathname === "/auth" ||
+    pathname.startsWith("/admin") ||
     pathname === "/tap" ||
-    pathname.startsWith("/tap/") ||
-    pathname === "/accelerator" ||
-    pathname.startsWith("/accelerator/")
+    pathname === "/accelerator"
   ) {
     return null;
   }
 
-  return (
-    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 2) }]}>
-      <View style={styles.row}>
-        {TABS.map((t) => {
-          const active =
-            pathname === t.href || pathname.startsWith(`${t.href}/`);
-          const badgeCount =
-            "isSlip" in t && t.isSlip
-              ? comboLegs.length
-              : "isBets" in t && t.isBets
-                ? pendingCount
-                : 0;
+  const tabs = [
+    {
+      href: "/matchs",
+      label: "Matchs",
+      Icon: Trophy,
+      active:
+        pathname === "/" ||
+        pathname.startsWith("/matchs") ||
+        pathname.startsWith("/resultats"),
+      badge: 0,
+      badgeRed: false,
+    },
+    {
+      href: "/predictions",
+      label: "Prédictions",
+      Icon: TrendingUp,
+      active: pathname.startsWith("/predictions"),
+      badge: 0,
+      badgeRed: false,
+    },
+    {
+      href: "/betslip",
+      label: "Betslip",
+      Icon: Layers,
+      active: pathname.startsWith("/betslip"),
+      badge: comboLegs.length,
+      badgeRed: true,
+    },
+    {
+      href: "/paris",
+      label: "Mes paris",
+      Icon: Ticket,
+      active: pathname.startsWith("/paris"),
+      badge: pendingCount,
+      badgeRed: false,
+    },
+    {
+      href: "/parametres",
+      label: "Compte",
+      Icon: SlidersHorizontal,
+      active: pathname.startsWith("/parametres") || pathname === "/jeux",
+      badge: 0,
+      badgeRed: false,
+    },
+  ] as const;
 
+  return (
+    <SafeAreaView edges={["bottom"]} style={styles.safeBottom}>
+      <View style={styles.row}>
+        {tabs.map((tab) => {
+          const { Icon } = tab;
+          const color = tab.active ? COLORS.betclicRed : COLORS.dim;
           return (
             <Pressable
-              key={t.href}
+              key={tab.href}
               onPress={() => {
-                if (!active) {
-                  triggerHaptic("light", hapticsEnabled);
-                  router.push(t.href);
-                }
+                triggerHaptic("light", hapticsEnabled);
+                router.push(tab.href);
               }}
               style={styles.tab}
             >
-              {active && <View style={styles.activeTopIndicator} />}
+              {tab.active ? <View style={styles.activeTopBar} /> : null}
               <View style={styles.iconBox}>
-                <t.Icon
-                  size={20}
-                  color={active ? colors.betclicRed : colors.dim}
-                  strokeWidth={active ? 2.4 : 1.9}
+                <Icon
+                  size={18}
+                  color={color}
+                  strokeWidth={tab.active ? 2.4 : 1.9}
                 />
-                {badgeCount > 0 && (
+                {tab.badge > 0 ? (
                   <View
                     style={[
                       styles.badge,
-                      "isSlip" in t && t.isSlip
+                      tab.badgeRed || tab.active
                         ? styles.badgeRed
-                        : active
-                          ? styles.badgeRed
-                          : styles.badgeInk,
+                        : styles.badgeInk,
                     ]}
                   >
-                    <Text style={styles.badgeText}>{badgeCount}</Text>
+                    <Text style={styles.badgeText}>{tab.badge}</Text>
                   </View>
-                )}
+                ) : null}
               </View>
               <Text
                 numberOfLines={1}
-                style={[styles.label, active && styles.labelActive]}
+                style={[styles.label, tab.active && styles.labelActive]}
               >
-                {t.label}
+                {tab.label}
               </Text>
             </Pressable>
           );
         })}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    backgroundColor: colors.white,
+  safeBottom: {
+    backgroundColor: "#ffffff",
     borderTopWidth: 1,
-    borderTopColor: colors.edge,
+    borderTopColor: COLORS.edge,
   },
   row: {
     height: 58,
     flexDirection: "row",
     alignItems: "stretch",
+    backgroundColor: "#ffffff",
   },
   tab: {
     flex: 1,
@@ -120,24 +140,24 @@ const styles = StyleSheet.create({
     gap: 2,
     position: "relative",
   },
-  activeTopIndicator: {
+  activeTopBar: {
     position: "absolute",
     top: 0,
     width: 28,
     height: 2.5,
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
-    backgroundColor: colors.betclicRed,
+    borderRadius: 999,
+    backgroundColor: COLORS.betclicRed,
   },
   iconBox: {
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 6,
   },
   badge: {
     position: "absolute",
     top: -6,
-    right: -12,
+    right: -6,
     minWidth: 16,
     height: 16,
     borderRadius: 8,
@@ -146,24 +166,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   badgeRed: {
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.betclicRed,
   },
   badgeInk: {
-    backgroundColor: colors.ink,
+    backgroundColor: COLORS.ink,
   },
   badgeText: {
     fontSize: 9.5,
-    fontWeight: "800",
-    color: colors.white,
+    fontWeight: "700",
+    color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
   label: {
     fontSize: 10.5,
-    fontWeight: "500",
-    color: colors.dim,
+    fontWeight: "600",
+    color: COLORS.dim,
   },
   labelActive: {
     fontWeight: "700",
-    color: colors.betclicRed,
+    color: COLORS.betclicRed,
   },
 });

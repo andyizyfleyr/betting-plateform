@@ -1,120 +1,203 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "@/lib/router";
-import { ArrowLeft, Landmark, Smartphone, Wallet } from "@/components/icons";
-import { api, type ClientWalletResponse } from "@/lib/api";
-import { getCachedWalletSnapshot } from "@/lib/entity-cache";
-import { eur } from "@/lib/format";
-import { cardSurface, colors } from "@/theme/tokens";
+import { ArrowLeft, XCircle } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import {
+  api,
+  ApiHttpError,
+  generateIdempotencyKey,
+  type ClientWalletData,
+} from "@/lib/api";
+import { getCachedWalletSnapshot } from "@/lib/entity-cache";
+import { eur, formatPlacedAt } from "@/lib/format";
+import { Redirect, useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-/**
- * Page dédiée `/parametres/retrait` fidèle à `src/app/(main)/parametres/retrait/page.tsx`.
- */
 export default function RetraitScreen() {
   const router = useRouter();
-  const { balance, setBalance, toast } = useApp();
+  const { user, authReady, balance, setBalance, toast } = useApp();
 
-  const [wallet, setWallet] = useState<ClientWalletResponse | null>(() =>
+  const [wallet, setWallet] = useState<ClientWalletData | null>(() =>
     getCachedWalletSnapshot()
   );
-  const [amount, setAmount] = useState("25");
-  const [method, setMethod] = useState<"sepa" | "paypal" | "mobile_money">("sepa");
+  const [refreshing, setRefreshing] = useState(false);
+  const [method, setMethod] = useState<"mobile_money" | "sepa" | "paypal">(
+    "mobile_money"
+  );
   const [destination, setDestination] = useState("");
-  const [accountHolder, setAccountHolder] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [amount, setAmount] = useState("20");
+  const [submitting, setSubmitting] = useState(false);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    if (!user) return;
+    try {
+      const data = await api.wallet();
+      setWallet(data);
+      setBalance(data.balance);
+    } catch {
+      /* ignore */
+    }
+  }, [setBalance, user]);
 
   useEffect(() => {
-    void api
-      .wallet()
-      .then(setWallet)
-      .catch(() => {});
-  }, []);
+    void load();
+  }, [load]);
+
+  if (authReady && !user) {
+    return <Redirect href="/auth" />;
+  }
 
   const withdrawable = wallet?.summary.withdrawable ?? balance;
-  const parsedAmount = parseFloat(amount.replace(",", ".")) || 0;
+  const bonusLocked = wallet?.summary.bonusLocked ?? 0;
+  const numAmount = Math.max(
+    0,
+    Math.round((parseFloat(amount.replace(",", ".")) || 0) * 100) / 100
+  );
 
-  const submit = async () => {
-    if (parsedAmount < 10 || !destination.trim() || loading) return;
-    setLoading(true);
+  const handleRequest = async () => {
+    if (numAmount < 10) {
+      toast({ kind: "error", title: "Retrait minimum : 10,00 €" });
+      return;
+    }
+    if (numAmount > withdrawable + 0.001) {
+      toast({ kind: "error", title: "Montant supérieur au solde retirable" });
+      return;
+    }
+    if (destination.trim().length < 5) {
+      toast({
+        kind: "error",
+        title: "Coordonnées incomplètes",
+        description: "Saisissez votre numéro Mobile Money, IBAN ou PayPal.",
+      });
+      return;
+    }
+
+    setSubmitting(true);
     try {
-      const res = await api.withdrawals.request({
-        amount: parsedAmount,
+      const res = await api.requestWithdrawal({
         method,
         destination: destination.trim(),
-        accountHolder: accountHolder.trim() || undefined,
+        amount: numAmount,
+        idempotencyKey: generateIdempotencyKey("wd"),
       });
       setBalance(res.balance);
+      setDestination("");
+      await load();
       toast({
         kind: "success",
         title: "Demande de retrait enregistrée",
-        subtitle: `${eur(parsedAmount)} en cours de traitement`,
+        description: `${eur(numAmount)} en cours de traitement.`,
       });
-      router.back();
     } catch (err) {
       toast({
         kind: "error",
         title: "Retrait refusé",
-        subtitle: err instanceof Error ? err.message : undefined,
+        description:
+          err instanceof ApiHttpError ? err.message : "Veuillez réessayer.",
       });
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
+  const handleCancel = async (id: number) => {
+    setCancellingId(id);
+    try {
+      const res = await api.cancelWithdrawal(id, generateIdempotencyKey("wdc"));
+      setBalance(res.balance);
+      await load();
+      toast({
+        kind: "info",
+        title: "Retrait annulé",
+        description: "Le montant a été recrédité sur votre solde.",
+      });
+    } catch (err) {
+      toast({
+        kind: "error",
+        title: "Annulation impossible",
+        description:
+          err instanceof ApiHttpError ? err.message : "Veuillez réessayer.",
+      });
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const pendingWithdrawals = (wallet?.withdrawals ?? []).filter(
+    (w) => w.status === "pending"
+  );
+
   return (
     <ScrollView
-      style={styles.root}
+      style={styles.page}
       contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+          colors={[COLORS.betclicRed]}
+          tintColor={COLORS.betclicRed}
+        />
+      }
     >
-      <View style={styles.topRow}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft size={18} color={colors.ink} strokeWidth={2.4} />
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back("/parametres")}
+          style={styles.backBtn}
+        >
+          <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
         </Pressable>
-        <Text style={styles.pageTitle}>Retirer mes gains</Text>
+        <Text style={styles.navTitle}>Retrait</Text>
+        <View style={{ width: 36 }} />
       </View>
 
-      <View style={[cardSurface.glassCard, styles.card]}>
-        <View style={styles.availRow}>
-          <Text style={styles.availLabel}>Montant retirable</Text>
-          <Text style={styles.availVal}>{eur(withdrawable)}</Text>
+      <View style={styles.balanceCard}>
+        <View>
+          <Text style={styles.bLabel}>Solde retirable</Text>
+          <Text style={styles.bVal}>{eur(withdrawable)}</Text>
         </View>
+        {bonusLocked > 0 ? (
+          <View style={styles.bonusBadge}>
+            <Text style={styles.bonusText}>
+              Bonus sous condition : {eur(bonusLocked)}
+            </Text>
+          </View>
+        ) : null}
+      </View>
 
-        <Text style={styles.label}>Mode de réception</Text>
+      <View style={styles.formCard}>
+        <Text style={styles.sectionTitle}>Canal de réception</Text>
         <View style={styles.methodsRow}>
-          {(
-            [
-              { id: "sepa", label: "SEPA", Icon: Landmark },
-              { id: "paypal", label: "PayPal", Icon: Wallet },
-              { id: "mobile_money", label: "Mobile Money", Icon: Smartphone },
-            ] as const
-          ).map((m) => {
-            const active = method === m.id;
+          {[
+            { key: "mobile_money", label: "Mobile Money" },
+            { key: "sepa", label: "IBAN SEPA" },
+            { key: "paypal", label: "PayPal" },
+          ].map((m) => {
+            const active = method === m.key;
             return (
               <Pressable
-                key={m.id}
-                onPress={() => setMethod(m.id)}
-                style={[styles.methodBtn, active && styles.methodBtnActive]}
+                key={m.key}
+                onPress={() =>
+                  setMethod(m.key as "mobile_money" | "sepa" | "paypal")
+                }
+                style={[styles.mPill, active && styles.mPillActive]}
               >
-                <m.Icon
-                  size={15}
-                  color={active ? colors.betclicRed : colors.mist}
-                />
-                <Text
-                  style={[
-                    styles.methodText,
-                    active && { color: colors.betclicRed, fontWeight: "800" },
-                  ]}
-                >
+                <Text style={[styles.mText, active && styles.mTextActive]}>
                   {m.label}
                 </Text>
               </Pressable>
@@ -122,135 +205,184 @@ export default function RetraitScreen() {
           })}
         </View>
 
-        <Text style={styles.label}>Montant (min. 10 €)</Text>
-        <TextInput
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="decimal-pad"
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>
-          {method === "sepa"
-            ? "IBAN bénéficiaire"
-            : method === "paypal"
-              ? "E-mail PayPal"
-              : "Numéro Mobile Money"}
-        </Text>
+        <Text style={styles.sectionTitle}>Bénéficiaire</Text>
         <TextInput
           value={destination}
           onChangeText={setDestination}
           placeholder={
-            method === "sepa"
-              ? "FR76 …"
-              : method === "paypal"
-                ? "vous@exemple.com"
-                : "+229 …"
+            method === "mobile_money"
+              ? "Numéro Mobile Money (+229...)"
+              : method === "sepa"
+                ? "IBAN complet (FR76...)"
+                : "Adresse e-mail PayPal"
           }
-          placeholderTextColor={colors.dim}
-          autoCapitalize="none"
+          placeholderTextColor={COLORS.dim}
           style={styles.input}
         />
 
+        <Text style={styles.sectionTitle}>Montant à retirer (€)</Text>
         <TextInput
-          value={accountHolder}
-          onChangeText={setAccountHolder}
-          placeholder="Nom complet du titulaire (optionnel)"
-          placeholderTextColor={colors.dim}
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="decimal-pad"
+          placeholder="Min. 10,00 €"
+          placeholderTextColor={COLORS.dim}
           style={styles.input}
         />
 
         <Pressable
-          disabled={
-            loading ||
-            parsedAmount < 10 ||
-            parsedAmount > withdrawable ||
-            !destination.trim()
-          }
-          onPress={() => void submit()}
-          style={[
-            styles.submitBtn,
-            (loading ||
-              parsedAmount < 10 ||
-              parsedAmount > withdrawable ||
-              !destination.trim()) && { opacity: 0.5 },
-          ]}
+          disabled={submitting}
+          onPress={handleRequest}
+          style={[styles.submitBtn, submitting && { opacity: 0.65 }]}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color={colors.white} />
+          {submitting ? (
+            <ActivityIndicator size="small" color="#ffffff" />
           ) : (
             <Text style={styles.submitText}>
-              Demander le retrait de {eur(parsedAmount)}
+              Demander le retrait · {eur(numAmount)}
             </Text>
           )}
         </Pressable>
       </View>
+
+      {pendingWithdrawals.length > 0 ? (
+        <View style={styles.pendingSection}>
+          <Text style={styles.sectionTitle}>Retraits en attente</Text>
+          {pendingWithdrawals.map((w) => (
+            <View key={w.id} style={styles.pendingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pendingAmt}>{eur(w.amount)}</Text>
+                <Text numberOfLines={1} style={styles.pendingSub}>
+                  {w.method} · {w.destination} · {formatPlacedAt(w.createdAt)}
+                </Text>
+              </View>
+              <Pressable
+                disabled={cancellingId === w.id}
+                onPress={() => handleCancel(w.id)}
+                style={styles.cancelBtn}
+              >
+                <XCircle size={14} color={COLORS.betclicRed} strokeWidth={2.2} />
+                <Text style={styles.cancelText}>Annuler</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.deep },
-  content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 28, gap: 12 },
-  topRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  pageTitle: { fontSize: 17, fontWeight: "900", color: colors.ink },
-  card: { padding: 15, gap: 10 },
-  availRow: {
+  page: { flex: 1, backgroundColor: COLORS.deep },
+  content: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 28, gap: 12 },
+  navBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 11,
-    borderRadius: 11,
-    backgroundColor: colors.elev,
   },
-  availLabel: { fontSize: 12, fontWeight: "700", color: colors.mist },
-  availVal: { fontSize: 15, fontWeight: "900", color: colors.win },
-  label: { fontSize: 12, fontWeight: "800", color: colors.mist },
-  methodsRow: { flexDirection: "row", gap: 6 },
-  methodBtn: {
-    flex: 1,
-    height: 42,
+  backBtn: {
+    width: 36,
+    height: 36,
     borderRadius: 11,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edge,
-    backgroundColor: colors.elev,
-    flexDirection: "row",
+    borderColor: COLORS.edge,
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
   },
-  methodBtnActive: {
-    borderColor: colors.betclicRed,
-    backgroundColor: "rgba(225,0,20,0.08)",
+  navTitle: { fontSize: 17, fontWeight: "800", color: COLORS.ink },
+  balanceCard: {
+    borderRadius: 16,
+    backgroundColor: COLORS.ink,
+    padding: 16,
+    gap: 8,
   },
-  methodText: { fontSize: 12, fontWeight: "700", color: colors.ink },
-  input: {
-    height: 42,
-    borderRadius: 11,
-    backgroundColor: colors.elev,
+  bLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.72)",
+  },
+  bVal: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#ffffff",
+    fontVariant: ["tabular-nums"],
+  },
+  bonusBadge: {
+    borderRadius: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.18)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: "flex-start",
+  },
+  bonusText: { fontSize: 11.5, fontWeight: "700", color: "#fbbf24" },
+  formCard: {
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edgeSoft,
-    paddingHorizontal: 12,
-    fontSize: 13.5,
-    color: colors.ink,
+    borderColor: COLORS.edge,
+    padding: 15,
+    gap: 11,
+  },
+  sectionTitle: { fontSize: 13.5, fontWeight: "800", color: COLORS.ink },
+  methodsRow: { flexDirection: "row", gap: 7 },
+  mPill: {
+    flex: 1,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: COLORS.elev,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mPillActive: { backgroundColor: COLORS.betclicRed },
+  mText: { fontSize: 12.5, fontWeight: "700", color: COLORS.ink },
+  mTextActive: { color: "#ffffff" },
+  input: {
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    paddingHorizontal: 13,
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.ink,
   },
   submitBtn: {
-    height: 46,
+    height: 48,
     borderRadius: 13,
-    backgroundColor: colors.ink,
+    backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
   },
-  submitText: { fontSize: 14, fontWeight: "900", color: colors.white },
+  submitText: { fontSize: 14.5, fontWeight: "800", color: "#ffffff" },
+  pendingSection: { gap: 8 },
+  pendingRow: {
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  pendingAmt: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  pendingSub: { fontSize: 11.5, color: COLORS.dim, marginTop: 1 },
+  cancelBtn: {
+    height: 34,
+    borderRadius: 9,
+    backgroundColor: "rgba(225, 0, 20, 0.08)",
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  cancelText: { fontSize: 12, fontWeight: "700", color: COLORS.betclicRed },
 });

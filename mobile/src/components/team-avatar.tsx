@@ -1,83 +1,117 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
-import { hslClubBackground, initials } from "@/lib/format";
-import { colors } from "@/theme/tokens";
+import { LinearGradient } from "expo-linear-gradient";
+import { initials, teamHue } from "@/lib/format";
+import { teamLogoCandidates } from "@/lib/team-logos";
 
-const SIZES = {
-  xs: { box: 20, img: 15, font: 8.5, radius: 10 },
-  sm: { box: 26, img: 19, font: 10, radius: 13 },
-  md: { box: 32, img: 24, font: 11.5, radius: 16 },
-  lg: { box: 42, img: 31, font: 14, radius: 21 },
-} as const;
+export type TeamAvatarSize = "2xs" | "xs" | "sm" | "md" | "lg";
+
+const SIZES: Record<
+  TeamAvatarSize,
+  { box: number; radius: number; pad: number; font: number }
+> = {
+  "2xs": { box: 18, radius: 6, pad: 1.5, font: 8 },
+  xs: { box: 24, radius: 8, pad: 2, font: 9.5 },
+  sm: { box: 32, radius: 10, pad: 3, font: 11 },
+  md: { box: 38, radius: 12, pad: 4, font: 12 },
+  lg: { box: 48, radius: 16, pad: 5, font: 14 },
+};
 
 export function TeamAvatar({
   name,
   logo,
-  size = "sm",
+  size = "md",
 }: {
   name: string;
   logo?: string | null;
-  size?: keyof typeof SIZES;
+  size?: TeamAvatarSize;
 }) {
-  const [failed, setFailed] = useState(false);
-  const dim = SIZES[size];
+  const candidates = useMemo(
+    () => teamLogoCandidates(name, logo),
+    [name, logo]
+  );
+  const candidateKey = candidates.join("|");
+  const [idx, setIdx] = useState(0);
 
-  if (logo && !failed) {
+  useEffect(() => {
+    setIdx(0);
+  }, [candidateKey]);
+
+  const spec = SIZES[size];
+  const src = candidates[idx];
+
+  if (src) {
     return (
       <View
         style={[
-          styles.logoWrap,
+          styles.logoBox,
           {
-            width: dim.box,
-            height: dim.box,
-            borderRadius: dim.radius,
+            width: spec.box,
+            height: spec.box,
+            borderRadius: spec.radius,
+            padding: spec.pad,
           },
         ]}
       >
         <Image
-          source={{ uri: logo }}
-          style={{ width: dim.img, height: dim.img }}
+          source={{ uri: src }}
           resizeMode="contain"
-          onError={() => setFailed(true)}
+          style={styles.logoImage}
+          onError={() => setIdx((prev) => prev + 1)}
         />
       </View>
     );
   }
 
+  const hue = teamHue(name);
+  const hue2 = (hue + 35) % 360;
+
   return (
-    <View
+    <LinearGradient
+      colors={[`hsl(${hue}, 70%, 52%)`, `hsl(${hue2}, 75%, 38%)`]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
       style={[
-        styles.fallback,
+        styles.fallbackBox,
         {
-          width: dim.box,
-          height: dim.box,
-          borderRadius: dim.radius,
-          backgroundColor: hslClubBackground(name || "FC"),
+          width: spec.box,
+          height: spec.box,
+          borderRadius: spec.radius,
         },
       ]}
     >
-      <Text style={[styles.fallbackText, { fontSize: dim.font }]}>
+      <Text style={[styles.fallbackText, { fontSize: spec.font }]}>
         {initials(name)}
       </Text>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  logoWrap: {
+  logoBox: {
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: colors.edgeSoft,
+    borderColor: "rgba(0, 0, 0, 0.08)",
+    overflow: "hidden",
+    flexShrink: 0,
   },
-  fallback: {
+  logoImage: {
+    width: "100%",
+    height: "100%",
+  },
+  fallbackBox: {
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.06)",
+    overflow: "hidden",
+    flexShrink: 0,
   },
   fallbackText: {
-    color: colors.white,
-    fontWeight: "800",
-    letterSpacing: -0.2,
+    color: "#ffffff",
+    fontWeight: "700",
+    letterSpacing: -0.3,
   },
 });

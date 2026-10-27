@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -9,105 +10,102 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as WebBrowser from "expo-web-browser";
-import { CreditCard, Landmark, Smartphone, Wallet, X } from "@/components/icons";
-import { api } from "@/lib/api";
-import { eur } from "@/lib/format";
-import { colors, triggerHaptic } from "@/theme/tokens";
+import {
+  ArrowUpRight,
+  CreditCard,
+  Smartphone,
+  Wallet,
+  X,
+} from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import { api, ApiHttpError, generateIdempotencyKey } from "@/lib/api";
+import { eur } from "@/lib/format";
+import { useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-const AMOUNTS = [10, 25, 50, 100, 250];
+const AMOUNTS = [10, 25, 50, 100, 250] as const;
 
 export function RechargeModal() {
+  const router = useRouter();
   const {
     rechargeOpen,
     closeRecharge,
+    balance,
     paymentProviders,
-    setBalance,
-    hapticsEnabled,
     toast,
   } = useApp();
 
-  const [amount, setAmount] = useState<number>(25);
-  const [provider, setProvider] = useState<
+  const [amount, setAmount] = useState("25");
+  const [method, setMethod] = useState<
     "stripe" | "paypal" | "mobile_money" | "sepa"
-  >("stripe");
-  const [senderRef, setSenderRef] = useState("");
-  const [phoneOrIban, setPhoneOrIban] = useState("");
+  >("mobile_money");
+  const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const selectedProviderInfo = paymentProviders.find((p) => p.id === provider);
+  if (!rechargeOpen) return null;
 
-  const handleDeposit = async () => {
-    if (amount < 5 || loading) return;
+  const numAmount = Math.max(
+    0,
+    Math.round((parseFloat(amount.replace(",", ".")) || 0) * 100) / 100
+  );
+
+  const stripeEnabled = paymentProviders.some(
+    (p) => p.id === "stripe" && p.enabled
+  );
+  const paypalEnabled = paymentProviders.some(
+    (p) => p.id === "paypal" && p.enabled
+  );
+
+  const handleSubmit = async () => {
+    if (numAmount < 5) {
+      toast({
+        kind: "error",
+        title: "Montant minimum : 5,00 €",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      if (provider === "stripe") {
-        const res = await api.payments.stripeCheckout(amount);
-        if (res.mode === "live_redirect" && res.url) {
-          await WebBrowser.openBrowserAsync(res.url);
+      const idem = generateIdempotencyKey("dep");
+      if (method === "stripe" || method === "paypal") {
+        const res = await api.payments.create(method, numAmount, idem);
+        if (res.url) {
+          await Linking.openURL(res.url);
           closeRecharge();
-          toast({
-            kind: "info",
-            title: "Paiement Stripe ouvert",
-            subtitle: "Votre solde sera crédité dès confirmation du paiement.",
-          });
-        } else {
-          if (typeof res.balance === "number") setBalance(res.balance);
-          closeRecharge();
-          toast({
-            kind: "win",
-            title: `+${eur(amount)} crédités`,
-            subtitle: "Rechargement instantané effectué",
-          });
-        }
-      } else if (provider === "paypal") {
-        const res = await api.payments.paypalOrder(amount);
-        if (res.mode === "live_redirect" && res.url) {
-          await WebBrowser.openBrowserAsync(res.url);
-          closeRecharge();
-          toast({
-            kind: "info",
-            title: "PayPal ouvert",
-            subtitle: "Validez dans votre navigateur sécurisé.",
-          });
-        } else {
-          if (typeof res.balance === "number") setBalance(res.balance);
-          closeRecharge();
-          toast({
-            kind: "win",
-            title: `+${eur(amount)} crédités via PayPal`,
-          });
+          return;
         }
       } else {
-        if (!senderRef.trim()) {
+        if (reference.trim().length < 4) {
           toast({
             kind: "error",
             title: "Référence requise",
-            subtitle: "Indiquez la référence de votre transfert.",
+            description:
+              "Saisissez la référence de votre transfert (4 caractères min.).",
           });
           setLoading(false);
           return;
         }
-        const res = await api.payments.manualRequest({
-          provider,
-          amount,
-          senderRef: senderRef.trim(),
-          phoneOrIban: phoneOrIban.trim() || undefined,
+        await api.payments.manual({
+          method,
+          reference: reference.trim(),
+          amount: numAmount,
+          idempotencyKey: idem,
         });
-        setSenderRef("");
-        closeRecharge();
         toast({
           kind: "success",
           title: "Demande de dépôt transmise",
-          subtitle: res.message,
+          description: `Votre dépôt de ${eur(numAmount)} sera crédité dès validation.`,
         });
+        setReference("");
+        closeRecharge();
       }
     } catch (err) {
       toast({
         kind: "error",
-        title: "Échec du dépôt",
-        subtitle: err instanceof Error ? err.message : "Réessayez",
+        title: "Dépôt indisponible",
+        description:
+          err instanceof ApiHttpError ? err.message : "Veuillez réessayer.",
       });
     } finally {
       setLoading(false);
@@ -116,39 +114,44 @@ export function RechargeModal() {
 
   return (
     <Modal
-      visible={rechargeOpen}
+      visible
       transparent
       animationType="slide"
       onRequestClose={closeRecharge}
     >
-      <View style={styles.backdrop}>
-        <Pressable style={{ flex: 1 }} onPress={closeRecharge} />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          <ScrollView bounces={false} contentContainerStyle={styles.content}>
-            <View style={styles.headerRow}>
-              <Text style={styles.title}>Déposer des fonds</Text>
-              <Pressable onPress={closeRecharge} style={styles.closeBtn}>
-                <X size={17} color={colors.ink} strokeWidth={2.4} />
-              </Pressable>
+      <Pressable style={styles.backdrop} onPress={closeRecharge}>
+        <Pressable
+          style={styles.sheet}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={styles.grabber} />
+          <View style={styles.topRow}>
+            <View>
+              <Text style={styles.title}>Recharger mon compte</Text>
+              <Text style={styles.sub}>Solde actuel : {eur(balance)}</Text>
             </View>
+            <Pressable onPress={closeRecharge} style={styles.closeBtn}>
+              <X size={17} color={COLORS.mist} strokeWidth={2.2} />
+            </Pressable>
+          </View>
 
-            <View style={styles.amountsGrid}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.body}
+          >
+            <View style={styles.chipsRow}>
               {AMOUNTS.map((a) => {
-                const active = amount === a;
+                const active = Math.abs(numAmount - a) < 0.01;
                 return (
                   <Pressable
                     key={a}
-                    onPress={() => {
-                      triggerHaptic("light", hapticsEnabled);
-                      setAmount(a);
-                    }}
-                    style={[styles.amountBtn, active && styles.amountBtnActive]}
+                    onPress={() => setAmount(String(a))}
+                    style={[styles.chip, active && styles.chipActive]}
                   >
                     <Text
                       style={[
-                        styles.amountBtnText,
-                        active && styles.amountBtnTextActive,
+                        styles.chipText,
+                        active && styles.chipTextActive,
                       ]}
                     >
                       {a} €
@@ -158,89 +161,122 @@ export function RechargeModal() {
               })}
             </View>
 
-            <View style={styles.providersGrid}>
-              {(
-                [
-                  { id: "stripe", label: "Carte bancaire", Icon: CreditCard },
-                  { id: "paypal", label: "PayPal", Icon: Wallet },
-                  { id: "mobile_money", label: "Mobile Money", Icon: Smartphone },
-                  { id: "sepa", label: "Virement SEPA", Icon: Landmark },
-                ] as const
-              ).map((m) => {
-                const active = provider === m.id;
-                return (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => {
-                      triggerHaptic("light", hapticsEnabled);
-                      setProvider(m.id);
-                    }}
-                    style={[styles.methodCard, active && styles.methodCardActive]}
-                  >
-                    <m.Icon
-                      size={17}
-                      color={active ? colors.betclicRed : colors.mist}
-                      strokeWidth={2.3}
-                    />
-                    <Text
-                      style={[
-                        styles.methodLabel,
-                        active && styles.methodLabelActive,
-                      ]}
-                    >
-                      {m.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <TextInput
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              placeholder="Montant en €"
+              placeholderTextColor={COLORS.dim}
+              style={styles.input}
+            />
+
+            <View style={styles.methodsGrid}>
+              <Pressable
+                onPress={() => setMethod("mobile_money")}
+                style={[
+                  styles.methodBtn,
+                  method === "mobile_money" && styles.methodBtnActive,
+                ]}
+              >
+                <Smartphone
+                  size={16}
+                  color={
+                    method === "mobile_money" ? COLORS.betclicRed : COLORS.mist
+                  }
+                />
+                <Text style={styles.methodLabel}>Mobile Money</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setMethod("sepa")}
+                style={[
+                  styles.methodBtn,
+                  method === "sepa" && styles.methodBtnActive,
+                ]}
+              >
+                <Wallet
+                  size={16}
+                  color={method === "sepa" ? COLORS.betclicRed : COLORS.mist}
+                />
+                <Text style={styles.methodLabel}>Virement SEPA</Text>
+              </Pressable>
+
+              {stripeEnabled ? (
+                <Pressable
+                  onPress={() => setMethod("stripe")}
+                  style={[
+                    styles.methodBtn,
+                    method === "stripe" && styles.methodBtnActive,
+                  ]}
+                >
+                  <CreditCard
+                    size={16}
+                    color={
+                      method === "stripe" ? COLORS.betclicRed : COLORS.mist
+                    }
+                  />
+                  <Text style={styles.methodLabel}>Carte bancaire</Text>
+                </Pressable>
+              ) : null}
+
+              {paypalEnabled ? (
+                <Pressable
+                  onPress={() => setMethod("paypal")}
+                  style={[
+                    styles.methodBtn,
+                    method === "paypal" && styles.methodBtnActive,
+                  ]}
+                >
+                  <CreditCard
+                    size={16}
+                    color={
+                      method === "paypal" ? COLORS.betclicRed : COLORS.mist
+                    }
+                  />
+                  <Text style={styles.methodLabel}>PayPal</Text>
+                </Pressable>
+              ) : null}
             </View>
 
-            {(provider === "mobile_money" || provider === "sepa") && (
-              <View style={styles.manualBox}>
-                {selectedProviderInfo?.manualInstructions && (
-                  <Text style={styles.instructionsText}>
-                    Bénéficiaire :{" "}
-                    {selectedProviderInfo.manualInstructions.beneficiary} ·{" "}
-                    {selectedProviderInfo.manualInstructions.account}
-                  </Text>
-                )}
-                <TextInput
-                  value={phoneOrIban}
-                  onChangeText={setPhoneOrIban}
-                  placeholder={
-                    provider === "mobile_money"
-                      ? "Numéro émetteur (optionnel)"
-                      : "IBAN émetteur (optionnel)"
-                  }
-                  placeholderTextColor={colors.dim}
-                  style={styles.input}
-                />
-                <TextInput
-                  value={senderRef}
-                  onChangeText={setSenderRef}
-                  placeholder="Référence / ID de transaction *"
-                  placeholderTextColor={colors.dim}
-                  style={styles.input}
-                />
-              </View>
-            )}
+            {method === "mobile_money" || method === "sepa" ? (
+              <TextInput
+                value={reference}
+                onChangeText={setReference}
+                placeholder="Référence de transaction (ex. TXN-94820)"
+                placeholderTextColor={COLORS.dim}
+                style={styles.input}
+              />
+            ) : null}
 
             <Pressable
-              disabled={loading || amount < 5}
-              onPress={() => void handleDeposit()}
-              style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+              disabled={loading}
+              onPress={handleSubmit}
+              style={[styles.submitBtn, loading && { opacity: 0.65 }]}
             >
               {loading ? (
-                <ActivityIndicator size="small" color={colors.white} />
+                <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <Text style={styles.submitText}>
-                  Créditer {eur(amount)}
+                  Déposer {eur(numAmount)}
                 </Text>
               )}
             </Pressable>
+
+            <Pressable
+              onPress={() => {
+                closeRecharge();
+                router.push("/parametres/depot");
+              }}
+              style={styles.fullPageLink}
+            >
+              <Text style={styles.fullPageText}>
+                Ouvrir la page Dépôt complète
+              </Text>
+              <ArrowUpRight size={14} color={COLORS.mist} strokeWidth={2.2} />
+            </Pressable>
           </ScrollView>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -248,133 +284,136 @@ export function RechargeModal() {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(17, 24, 39, 0.48)",
+    backgroundColor: "rgba(17, 24, 39, 0.45)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: colors.white,
+    backgroundColor: "#ffffff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
     maxHeight: "88%",
   },
-  handle: {
+  grabber: {
     alignSelf: "center",
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.edge,
-    marginBottom: 8,
+    backgroundColor: COLORS.edge,
+    marginBottom: 10,
   },
-  content: {
-    paddingHorizontal: 16,
-    paddingBottom: 28,
-    gap: 13,
-  },
-  headerRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 12,
   },
   title: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  sub: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.dim,
+    marginTop: 1,
   },
   closeBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.elev,
+    borderRadius: 10,
+    backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
   },
-  amountsGrid: {
-    flexDirection: "row",
-    gap: 7,
+  body: {
+    gap: 11,
   },
-  amountBtn: {
+  chipsRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  chip: {
     flex: 1,
-    height: 40,
-    borderRadius: 11,
-    backgroundColor: colors.elev,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
   },
-  amountBtnActive: {
-    backgroundColor: colors.ink,
+  chipActive: {
+    backgroundColor: COLORS.betclicRed,
   },
-  amountBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  amountBtnTextActive: {
-    color: colors.white,
-  },
-  providersGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 8,
-  },
-  methodCard: {
-    width: "48.6%",
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    backgroundColor: colors.elev,
-    paddingHorizontal: 11,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  methodCardActive: {
-    backgroundColor: "rgba(225, 0, 20, 0.08)",
-    borderColor: colors.betclicRed,
-  },
-  methodLabel: {
-    flex: 1,
+  chipText: {
     fontSize: 12.5,
     fontWeight: "700",
-    color: colors.ink,
+    color: COLORS.ink,
   },
-  methodLabelActive: {
-    color: colors.betclicRed,
-    fontWeight: "800",
-  },
-  manualBox: {
-    gap: 8,
-    padding: 11,
-    borderRadius: 12,
-    backgroundColor: colors.elev,
-  },
-  instructionsText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: colors.mist,
+  chipTextActive: {
+    color: "#ffffff",
   },
   input: {
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: colors.white,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
     borderWidth: 1,
-    borderColor: colors.edge,
+    borderColor: COLORS.edge,
+    paddingHorizontal: 13,
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.ink,
+  },
+  methodsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  methodBtn: {
+    width: "48.5%",
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
+    borderWidth: 1.5,
+    borderColor: "transparent",
     paddingHorizontal: 11,
-    fontSize: 13,
-    color: colors.ink,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  methodBtnActive: {
+    borderColor: COLORS.betclicRed,
+    backgroundColor: "rgba(225, 0, 20, 0.06)",
+  },
+  methodLabel: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.ink,
   },
   submitBtn: {
-    height: 46,
+    height: 48,
     borderRadius: 13,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
   },
   submitText: {
     fontSize: 14.5,
-    fontWeight: "900",
-    color: colors.white,
+    fontWeight: "800",
+    color: "#ffffff",
+  },
+  fullPageLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 6,
+  },
+  fullPageText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.mist,
   },
 });

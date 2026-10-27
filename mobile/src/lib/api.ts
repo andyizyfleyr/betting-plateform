@@ -9,105 +9,128 @@ import {
 } from "./entity-cache";
 import {
   ApiHttpError,
+  CASHOUT_CHANGED_CODE,
+  generateBetIdempotencyKey,
   generateIdempotencyKey,
+  ODDS_CHANGED_CODE,
   persistAuthToken,
   requestJson,
+  roundOdds2,
+  type CashoutChangedDetails,
+  type OddsChangedDetails,
+  type OddsChangedLegDetail,
 } from "./http";
 
-export { ApiHttpError, generateIdempotencyKey };
+export {
+  ApiHttpError,
+  CASHOUT_CHANGED_CODE,
+  generateBetIdempotencyKey,
+  generateIdempotencyKey,
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type CashoutChangedDetails,
+  type OddsChangedDetails,
+  type OddsChangedLegDetail,
+};
 
-export type MatchStatus = "upcoming" | "live" | "finished";
+export type MatchStatus = "live" | "upcoming" | "finished";
 export type MatchSource = "virtual" | "manual";
-export type BetStatus = "pending" | "won" | "lost" | "cashed_out" | "void";
+export type BetStatus = "pending" | "won" | "lost" | "cashed" | "void";
 export type BetKind = "sport" | "prediction" | "combo";
-export type OddsLockPolicy = "strict" | "accept_higher" | "accept_any";
+export type OddsChangePolicy = "confirm_all" | "accept_higher";
+export type OddsLockPolicy = OddsChangePolicy;
 
 export interface MarketOutcome {
   key: string;
   label: string;
+  short?: string;
   shortLabel?: string;
   odds: number;
+}
+
+export interface MarketRow {
+  label: string;
+  outcomes: MarketOutcome[];
 }
 
 export interface MarketGroup {
   key: string;
   label: string;
-  category?: "principal" | "buts" | "mi-temps" | "equipes" | "handicap" | "scores";
-  hint?: string;
-  suspended?: boolean;
+  short?: string;
+  category?: "main" | "halftime" | "goals" | "teams" | "scores";
   outcomes: MarketOutcome[];
+  rows?: MarketRow[];
 }
 
 export interface ClientMatchEvent {
-  min: number;
-  team: "home" | "away";
-  type?: "goal" | "red";
-  text: string;
+  type: string;
+  team: string;
+  minute: number;
+  player?: string;
+}
+
+export interface MomentumBucket {
+  minuteEnd: number;
+  value: number;
+  played: boolean;
 }
 
 export interface LiveMatchTelemetry {
-  phase:
-    | "kickoff"
-    | "build_up"
-    | "attack_home"
-    | "attack_away"
-    | "danger_home"
-    | "danger_away"
-    | "goal_home"
-    | "goal_away"
-    | "red_home"
-    | "red_away"
-    | "halftime"
-    | "fulltime";
-  ballX: number;
-  ballY: number;
+  minute: number;
   possessionHome: number;
   possessionAway: number;
-  shotsHome: number;
-  shotsAway: number;
-  shotsOnTargetHome: number;
-  shotsOnTargetAway: number;
-  cornersHome: number;
-  cornersAway: number;
   xgHome: number;
   xgAway: number;
-  momentum: number;
-  commentary: string;
+  shotsTotalHome: number;
+  shotsTotalAway: number;
+  shotsOnTargetHome: number;
+  shotsOnTargetAway: number;
+  dangerousAttacksHome: number;
+  dangerousAttacksAway: number;
+  cornersHome: number;
+  cornersAway: number;
+  savesHome: number;
+  savesAway: number;
+  momentum?: MomentumBucket[];
+  recentHomePressure?: number;
 }
 
 export interface ClientRealMatchStats {
-  possessionHome?: number | null;
-  possessionAway?: number | null;
-  shotsHome?: number | null;
-  shotsAway?: number | null;
-  shotsOnTargetHome?: number | null;
-  shotsOnTargetAway?: number | null;
-  cornersHome?: number | null;
-  cornersAway?: number | null;
-  foulsHome?: number | null;
-  foulsAway?: number | null;
-  yellowHome?: number | null;
-  yellowAway?: number | null;
-  htHomeScore?: number | null;
-  htAwayScore?: number | null;
-  venue?: string | null;
-  statusDetail?: string | null;
+  possessionHome: number | null;
+  possessionAway: number | null;
+  shotsTotalHome: number | null;
+  shotsTotalAway: number | null;
+  shotsOnTargetHome: number | null;
+  shotsOnTargetAway: number | null;
+  cornersHome: number | null;
+  cornersAway: number | null;
+  foulsHome: number | null;
+  foulsAway: number | null;
+  offsidesHome?: number | null;
+  offsidesAway?: number | null;
+  savesHome?: number | null;
+  savesAway?: number | null;
+  yellowCardsHome: number | null;
+  yellowCardsAway: number | null;
+  htHomeScore: number | null;
+  htAwayScore: number | null;
+  updatedAt?: string;
 }
 
 export interface ClientMatch {
   id: number;
   sport: string;
   league: string;
-  source?: MatchSource;
+  source: MatchSource;
   homeTeam: string;
   awayTeam: string;
   homeLogo?: string | null;
   awayLogo?: string | null;
-  status: MatchStatus;
   homeScore: number | null;
   awayScore: number | null;
   htHomeScore?: number | null;
   htAwayScore?: number | null;
+  status: MatchStatus;
   minute: string | null;
   startsAt: string;
   finishedAt?: string | null;
@@ -127,39 +150,46 @@ export interface ClientMatch {
   markets: MarketGroup[];
 }
 
-export interface ClientFinishedMatch {
+export interface ClientMatchHistoryItem {
   id: number;
   sport: string;
   league: string;
   source: MatchSource;
   homeTeam: string;
   awayTeam: string;
-  homeLogo: string | null;
-  awayLogo: string | null;
-  homeScore: number;
-  awayScore: number;
-  htHomeScore: number | null;
-  htAwayScore: number | null;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  htHome: number | null;
+  htAway: number | null;
+  status: MatchStatus;
+  minute: string | null;
   startsAt: string;
-  finishedAt: string;
+  finishedAt?: string | null;
   oddsHome: number;
   oddsDraw: number | null;
   oddsAway: number;
   redHome: number;
   redAway: number;
   events: ClientMatchEvent[];
-  realStats: ClientRealMatchStats | null;
-  winner: "home" | "draw" | "away";
-  totalGoals: number;
-  btts: boolean;
+  telemetry?: LiveMatchTelemetry;
+  realStats?: ClientRealMatchStats | null;
+  winnerCode: "V1" | "X" | "V2" | null;
+  htWinnerCode: "V1" | "X" | "V2" | null;
+  totalGoals: number | null;
+  btts: boolean | null;
 }
+
+export type ClientFinishedMatch = ClientMatchHistoryItem;
 
 export interface ClientComboLeg {
   kind: "sport" | "prediction";
-  matchId?: number;
-  questionId?: number;
-  title: string;
+  matchId?: number | null;
+  questionId?: number | null;
+  sport: string;
   league: string;
+  title: string;
   homeTeam?: string;
   awayTeam?: string;
   homeLogo?: string | null;
@@ -199,76 +229,101 @@ export interface ClientBet {
   stake: number;
   potentialWin: number;
   status: BetStatus;
-  closingOdds?: number | null;
-  clv?: number | null;
-  cashOutAmount?: number | null;
+  cashOutAmount: number | null;
   cashOut: number | null;
   placedAt: string;
-  settledAt: string | null;
+  settledAt?: string | null;
   matchStatus: MatchStatus | null;
   matchHomeScore: number | null;
   matchAwayScore: number | null;
   matchMinute: string | null;
-  matchStartsAt?: string | null;
+  matchStartsAt: string | null;
   matchSource?: MatchSource | null;
 }
 
-export interface ClientPredictionOption {
+export interface PredictionOptionClient {
   key: string;
   label: string;
   odds: number;
-  impliedPct: number;
 }
 
-export interface ClientPredictionQuestion {
+export type ClientPredictionOption = PredictionOptionClient;
+
+export interface ClientPrediction {
   id: number;
-  category: string;
   question: string;
-  description: string | null;
+  category: string;
+  status: "open" | "resolved";
+  resolution: string | null;
   oddsYes: number;
   oddsNo: number;
-  impliedYesPct: number;
-  options: ClientPredictionOption[] | null;
-  status: "open" | "resolved";
-  outcome: string | null;
+  options?: PredictionOptionClient[] | null;
+  volume?: number;
+  yesCount?: number;
+  noCount?: number;
   resolvesAt: string;
   resolvedAt: string | null;
-  resolutionNote: string | null;
-  myBet: {
+  myBet?: {
     questionId?: number;
     selection: string;
-    selectionLabel: string;
+    selectionLabel?: string;
     status: string;
     stake: number;
     potentialWin: number;
     odds: number;
-    cashOutAmount: number | null;
+    cashOutAmount?: number | null;
   } | null;
+}
+
+export type ClientPredictionQuestion = ClientPrediction;
+
+export interface ClientPredictionBet {
+  id: number;
+  questionId: number;
+  question: string;
+  category: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+  stake: number;
+  potentialWin: number;
+  status: BetStatus;
+  placedAt: string;
 }
 
 export interface ClientUser {
   id: number;
-  email: string;
   name: string;
-  role: "user" | "admin";
   balance: number;
+  role: string;
+  notifications: boolean;
+  sound: boolean;
+  haptics: boolean;
   oddsFormat: "decimal" | "fractional";
-  soundEnabled: boolean;
-  hapticsEnabled: boolean;
-  stakePresets: number[];
+  language?: string;
+  liveSim?: boolean;
+  bonusLocked?: number;
+  email?: string | null;
+  createdAt?: string | null;
 }
 
-export interface PaymentProviderInfo {
-  id: "stripe" | "paypal" | "mobile_money" | "sepa";
-  label: string;
-  subtitle: string;
-  instant: boolean;
-  liveConfigured: boolean;
-  manualInstructions?: {
-    beneficiary: string;
-    account: string;
-    note: string;
-  };
+export interface PaymentProvider {
+  id: "stripe" | "paypal";
+  name: string;
+  enabled: boolean;
+  live: boolean;
+}
+
+export interface ClientWithdrawal {
+  id: number;
+  userId: number;
+  method: string;
+  destination: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  adminNote?: string | null;
+  createdAt: string;
+  processedAt?: string | null;
 }
 
 export interface ClientWalletEntry {
@@ -283,19 +338,42 @@ export interface ClientWalletEntry {
   createdAt: string;
 }
 
-export interface ClientWalletResponse {
+export interface ClientWalletData {
   balance: number;
   summary: {
     totalDeposited: number;
     totalWithdrawn: number;
     pendingWithdrawals: number;
-    pendingDeposits: number;
-    withdrawable: number;
-    bonusLocked: number;
-    qualifiedWagered: number;
-    bonusRemaining: number;
+    pendingDeposits?: number;
+    withdrawable?: number;
+    bonusLocked?: number;
+    qualifiedWagered?: number;
+    bonusRemaining?: number;
   };
+  withdrawals?: ClientWithdrawal[];
   entries: ClientWalletEntry[];
+}
+
+export type ClientWalletResponse = ClientWalletData;
+
+export interface ClientSavedCouponLeg {
+  uid: string;
+  kind: "sport" | "prediction";
+  matchId?: number;
+  matchSource?: MatchSource;
+  questionId?: number;
+  title: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeLogo?: string | null;
+  awayLogo?: string | null;
+  league: string;
+  market: string;
+  selection: string;
+  selectionLabel: string;
+  odds: number;
+  startsAt?: string | null;
+  isLive?: boolean;
 }
 
 export interface MobileBootstrapResponse {
@@ -314,14 +392,14 @@ export interface MobileBootstrapResponse {
       cashOutAmount: number | null;
     }
   >;
-  providers: PaymentProviderInfo[];
+  providers: PaymentProvider[];
   serverTime: string;
 }
 
 export interface UserPulseTicket {
   id: number;
   kind: BetKind;
-  status: BetStatus;
+  status: string;
   stake: number;
   potentialWin: number;
   title: string;
@@ -340,12 +418,12 @@ export const api = {
         ignoreUnauthorizedRedirect: true,
         bypassEtag: true,
       }),
-    login: async (email: string, password: string) => {
+    login: async (payload: { email: string; password: string }) => {
       const res = await requestJson<{ user: ClientUser; token?: string }>(
         "/api/auth/login",
         {
           method: "POST",
-          body: { email, password },
+          body: payload,
           ignoreUnauthorizedRedirect: true,
         }
       );
@@ -354,12 +432,12 @@ export const api = {
       }
       return res;
     },
-    register: async (name: string, email: string, password: string) => {
+    register: async (payload: { name: string; email: string; password: string }) => {
       const res = await requestJson<{ user: ClientUser; token?: string }>(
         "/api/auth/register",
         {
           method: "POST",
-          body: { name, email, password },
+          body: payload,
           ignoreUnauthorizedRedirect: true,
         }
       );
@@ -380,20 +458,16 @@ export const api = {
     },
   },
 
-  /**
-   * Flux mobile optimisé (~88 % d'octets économisés) avec repli transparent sur `/api/matches`
-   * au cas où l'instance distante n'a pas encore déployé `/api/matches/slim`.
-   */
-  matchesSlim: async (): Promise<{ matches: ClientMatch[]; serverTime: string }> => {
+  matchesSlim: async (): Promise<{ matches: ClientMatch[]; serverTime?: string }> => {
     try {
-      const data = await requestJson<{ matches: ClientMatch[]; serverTime: string }>(
+      const data = await requestJson<{ matches: ClientMatch[]; serverTime?: string }>(
         "/api/matches/slim"
       );
       seedMatchesSnapshot(data.matches);
       return data;
     } catch (err) {
       if (err instanceof ApiHttpError && err.status === 404) {
-        const fallback = await requestJson<{ matches: ClientMatch[]; serverTime: string }>(
+        const fallback = await requestJson<{ matches: ClientMatch[]; serverTime?: string }>(
           "/api/matches"
         );
         seedMatchesSnapshot(fallback.matches);
@@ -403,20 +477,27 @@ export const api = {
     }
   },
 
-  matchById: async (id: number): Promise<{ match: ClientMatch; serverTime: string }> => {
-    const data = await requestJson<{ match: ClientMatch; serverTime: string }>(
+  matches: async (): Promise<{ matches: ClientMatch[]; serverTime?: string }> => {
+    return api.matchesSlim();
+  },
+
+  matchById: async (id: number): Promise<{ match: ClientMatch; serverTime?: string }> => {
+    const data = await requestJson<{ match: ClientMatch; serverTime?: string }>(
       `/api/matches/${encodeURIComponent(String(id))}`
     );
     seedMatchSnapshot(data.match);
     return data;
   },
 
-  finishedMatches: async (matchId?: number | null) => {
-    const qs = matchId && matchId > 0 ? `?match=${matchId}` : "";
+  matchHistory: async (matchId?: number) => {
+    const qs =
+      typeof matchId === "number" && Number.isInteger(matchId) && matchId > 0
+        ? `?matchId=${matchId}`
+        : "";
     const data = await requestJson<{
-      matches: ClientFinishedMatch[];
-      focusedMatch: ClientFinishedMatch | null;
-      serverTime: string;
+      matches: ClientMatchHistoryItem[];
+      focusedMatch: ClientMatchHistoryItem | null;
+      serverTime?: string;
     }>(`/api/matches/history${qs}`);
     if (!qs) {
       seedFinishedMatchesSnapshot(data.matches);
@@ -431,244 +512,214 @@ export const api = {
       balance: number | null;
       pendingCount: number;
       tickets: UserPulseTicket[];
-      serverTime: string;
+      serverTime?: string;
     }>("/api/pulse"),
 
-  bets: async (filter: "all" | "ongoing" | "finished" = "all") => {
-    const data = await requestJson<{ bets: ClientBet[]; balance: number }>(
+  bets: async (filter: "ongoing" | "finished") => {
+    const data = await requestJson<{ bets: ClientBet[]; balance: number | null }>(
       `/api/bets?filter=${filter}`
     );
     seedBetsSnapshot(data.bets);
     return data;
   },
 
-  placeBet: (body: {
-    matchId: number;
-    market: string;
-    selection: string;
-    selectionLabel?: string;
-    odds: number;
-    expectedOdds?: number;
-    oddsPolicy?: OddsLockPolicy;
-    stake: number;
-    idempotencyKey?: string;
-  }) =>
-    requestJson<{ bet: ClientBet; balance: number }>("/api/bets", {
-      method: "POST",
-      body: {
-        ...body,
-        idempotencyKey: body.idempotencyKey ?? generateIdempotencyKey("bet"),
-      },
-    }),
+  allBets: async () => {
+    const data = await requestJson<{ bets: ClientBet[]; balance: number | null }>(
+      "/api/bets?filter=all"
+    );
+    seedBetsSnapshot(data.bets);
+    return data;
+  },
 
-  placeComboBet: (body: {
+  placeBet: (payload: {
+    matchId: number;
+    selection: string;
+    market?: string;
+    stake: number;
+    expectedOdds: number;
+    oddsPolicy?: OddsChangePolicy;
+    idempotencyKey: string;
+  }) =>
+    requestJson<{ bet: ClientBet; balance: number; deduplicated?: boolean }>(
+      "/api/bets",
+      {
+        method: "POST",
+        body: payload,
+      }
+    ),
+
+  placeComboBet: (payload: {
     legs: Array<{
       kind: "sport" | "prediction";
       matchId?: number;
       questionId?: number;
-      market: string;
+      market?: string;
       selection: string;
-      selectionLabel: string;
-      odds: number;
-      expectedOdds?: number;
+      expectedOdds: number;
     }>;
     stake: number;
-    oddsPolicy?: OddsLockPolicy;
-    idempotencyKey?: string;
+    expectedTotalOdds: number;
+    oddsPolicy?: OddsChangePolicy;
+    idempotencyKey: string;
   }) =>
-    requestJson<{ bet: ClientBet; balance: number }>("/api/bets/combo", {
+    requestJson<{
+      bet: {
+        id: number;
+        totalOdds: number;
+        stake: number;
+        potentialWin: number;
+        boostPct: number;
+      };
+      balance: number;
+      deduplicated?: boolean;
+    }>("/api/bets/combo", {
       method: "POST",
-      body: {
-        ...body,
-        idempotencyKey: body.idempotencyKey ?? generateIdempotencyKey("cmb"),
-      },
+      body: payload,
     }),
 
-  cashOut: (
-    betId: number,
-    kind: BetKind = "sport",
-    expectedCashOut?: number,
-    idempotencyKey?: string
-  ) =>
-    requestJson<{ cashOutAmount: number; balance: number }>("/api/bets/cashout", {
+  cashOut: (payload: {
+    betId: number;
+    kind?: BetKind;
+    expectedCashout: number;
+    idempotencyKey: string;
+  }) =>
+    requestJson<{ balance: number; value: number; deduplicated?: boolean }>(
+      "/api/bets/cashout",
+      {
+        method: "POST",
+        body: payload,
+      }
+    ),
+
+  saveCoupon: (legs: ClientSavedCouponLeg[]) =>
+    requestJson<{ code: string }>("/api/coupons", {
       method: "POST",
-      body: {
-        betId,
-        kind,
-        ...(typeof expectedCashOut === "number" ? { expectedCashOut } : {}),
-        idempotencyKey: idempotencyKey ?? generateIdempotencyKey("co"),
-      },
+      body: { legs },
     }),
 
-  predictions: async (authed = true) => {
-    const [catalog, overlay] = await Promise.all([
-      requestJson<{ questions: ClientPredictionQuestion[] }>(
-        "/api/predictions/catalog"
-      ),
-      authed
-        ? requestJson<{
-            myBets: Record<
-              number,
-              NonNullable<ClientPredictionQuestion["myBet"]>
-            >;
-          }>("/api/predictions/my-bets").catch(() => ({ myBets: {} }))
-        : Promise.resolve({ myBets: {} }),
-    ]);
+  loadCoupon: (code: string) =>
+    requestJson<{
+      code: string;
+      legs: ClientSavedCouponLeg[];
+      skippedClosedCount?: number;
+    }>(`/api/coupons?code=${encodeURIComponent(code)}`, {
+      bypassEtag: true,
+    }),
 
-    const myBetsMap = overlay.myBets as Record<
-      number,
-      NonNullable<ClientPredictionQuestion["myBet"]>
-    >;
-    const enriched = catalog.questions.map((q) => ({
-      ...q,
-      myBet: myBetsMap[q.id] ?? null,
-    }));
-    seedPredictionsSnapshot(enriched);
-    return { questions: enriched };
+  predictionsCatalog: async () => {
+    const res = await requestJson<{
+      questions: ClientPrediction[];
+      serverTime?: string;
+    }>("/api/predictions/catalog");
+    seedPredictionsSnapshot(res.questions);
+    return res;
   },
 
-  placePredictionBet: (body: {
+  myPredictionBets: () =>
+    requestJson<{
+      myBets: Record<
+        number,
+        NonNullable<ClientPrediction["myBet"]> & { questionId: number }
+      >;
+    }>("/api/predictions/my-bets"),
+
+  placePredictionBet: (payload: {
     questionId: number;
     selection: string;
     stake: number;
-    expectedOdds?: number;
-    oddsPolicy?: OddsLockPolicy;
-    idempotencyKey?: string;
+    expectedOdds: number;
+    oddsPolicy?: OddsChangePolicy;
+    idempotencyKey: string;
   }) =>
-    requestJson<{ balance: number; potentialWin: number }>("/api/predictions", {
+    requestJson<{
+      bet: ClientPredictionBet;
+      balance: number;
+      deduplicated?: boolean;
+    }>("/api/predictions", {
       method: "POST",
-      body: {
-        ...body,
-        idempotencyKey: body.idempotencyKey ?? generateIdempotencyKey("prd"),
-      },
+      body: payload,
     }),
 
-  coupons: {
-    save: (legs: unknown[], defaultStake: number) =>
-      requestJson<{ code: string; legsCount: number }>("/api/coupons", {
-        method: "POST",
-        body: { legs, defaultStake },
-      }),
-    load: (code: string) =>
-      requestJson<{
-        code: string;
-        defaultStake: number;
-        legs: Array<{
-          kind: "sport" | "prediction";
-          matchId?: number;
-          questionId?: number;
-          title: string;
-          league: string;
-          homeTeam?: string;
-          awayTeam?: string;
-          homeLogo?: string | null;
-          awayLogo?: string | null;
-          market: string;
-          selection: string;
-          selectionLabel: string;
-          odds: number;
-          liveOdds: number;
-          closed: boolean;
-          startsAt?: string | null;
-          isLive?: boolean;
-        }>;
-      }>(`/api/coupons?code=${encodeURIComponent(code.trim().toUpperCase())}`, {
-        bypassEtag: true,
-      }),
-  },
-
-  payments: {
-    providers: () =>
-      requestJson<{ providers: PaymentProviderInfo[] }>("/api/payments"),
-    stripeCheckout: (amount: number, idempotencyKey?: string) =>
-      requestJson<{
-        mode: "live_redirect" | "simulated_instant";
-        url?: string;
-        depositId: number;
-        balance?: number;
-      }>("/api/payments/stripe", {
-        method: "POST",
-        body: {
-          amount,
-          idempotencyKey: idempotencyKey ?? generateIdempotencyKey("strp"),
-        },
-      }),
-    paypalOrder: (amount: number, idempotencyKey?: string) =>
-      requestJson<{
-        mode: "live_redirect" | "simulated_instant";
-        url?: string;
-        orderId?: string;
-        depositId: number;
-        balance?: number;
-      }>("/api/payments/paypal", {
-        method: "POST",
-        body: {
-          amount,
-          idempotencyKey: idempotencyKey ?? generateIdempotencyKey("ppal"),
-        },
-      }),
-    manualRequest: (body: {
-      provider: "mobile_money" | "sepa";
-      amount: number;
-      senderRef: string;
-      phoneOrIban?: string;
-      idempotencyKey?: string;
-    }) =>
-      requestJson<{ depositId: number; status: string; message: string }>(
-        "/api/payments/manual",
-        {
-          method: "POST",
-          body: {
-            ...body,
-            idempotencyKey: body.idempotencyKey ?? generateIdempotencyKey("mdep"),
-          },
-        }
-      ),
-  },
-
   wallet: async () => {
-    const data = await requestJson<ClientWalletResponse>("/api/wallet");
+    const data = await requestJson<ClientWalletData>("/api/wallet");
     setCachedWalletSnapshot(data);
     return data;
   },
 
-  withdrawals: {
-    request: (body: {
-      amount: number;
-      method: "sepa" | "paypal" | "mobile_money";
-      destination: string;
-      accountHolder?: string;
-      idempotencyKey?: string;
-    }) =>
-      requestJson<{
-        withdrawal: { id: number; amount: number; status: string };
-        balance: number;
-      }>("/api/withdrawals", {
-        method: "POST",
-        body: {
-          ...body,
-          idempotencyKey: body.idempotencyKey ?? generateIdempotencyKey("wd"),
-        },
-      }),
-    cancel: (withdrawalId: number) =>
-      requestJson<{ ok: boolean; balance: number }>("/api/withdrawals", {
-        method: "PATCH",
-        body: { withdrawalId },
-      }),
-  },
+  requestWithdrawal: (payload: {
+    method: string;
+    destination: string;
+    amount: number;
+    idempotencyKey: string;
+  }) =>
+    requestJson<{
+      withdrawal: ClientWithdrawal;
+      balance: number;
+      deduplicated?: boolean;
+    }>("/api/withdrawals", {
+      method: "POST",
+      body: payload,
+    }),
 
-  updateSettings: (
-    patch: Partial<
-      Pick<
-        ClientUser,
-        "name" | "oddsFormat" | "soundEnabled" | "hapticsEnabled" | "stakePresets"
-      >
-    >
-  ) =>
+  cancelWithdrawal: (withdrawalId: number, idempotencyKey: string) =>
+    requestJson<{
+      withdrawal: ClientWithdrawal;
+      balance: number;
+      deduplicated?: boolean;
+    }>("/api/withdrawals", {
+      method: "PATCH",
+      body: { withdrawalId, idempotencyKey },
+    }),
+
+  settings: () => requestJson<{ user: ClientUser }>("/api/settings"),
+
+  patchSettings: (patch: Partial<ClientUser>) =>
     requestJson<{ user: ClientUser }>("/api/settings", {
       method: "PATCH",
       body: patch,
     }),
+
+  payments: {
+    providers: () =>
+      requestJson<{ providers: PaymentProvider[] }>("/api/payments"),
+    create: (
+      provider: "stripe" | "paypal",
+      amount: number,
+      idempotencyKey: string
+    ) =>
+      requestJson<{ url: string; deduplicated?: boolean }>(
+        `/api/payments/${provider}`,
+        {
+          method: "POST",
+          body: { amount, idempotencyKey },
+        }
+      ),
+    manual: (payload: {
+      method: "mobile_money" | "sepa";
+      reference: string;
+      amount: number;
+      idempotencyKey: string;
+    }) =>
+      requestJson<{ ok: boolean; deduplicated?: boolean }>(
+        "/api/payments/manual",
+        {
+          method: "POST",
+          body: payload,
+        }
+      ),
+    capturePayPal: (orderId: string, idempotencyKey: string) =>
+      requestJson<{ user: ClientUser; deduplicated?: boolean }>(
+        "/api/payments/paypal/capture",
+        {
+          method: "POST",
+          body: { orderId, idempotencyKey },
+        }
+      ),
+    status: (ref: string) =>
+      requestJson<{ status: string; credited: boolean }>(
+        `/api/payments/status?ref=${encodeURIComponent(ref)}`
+      ),
+  },
 
   tap: {
     state: () =>
@@ -677,29 +728,33 @@ export const api = {
       }),
     startGame: (bet: number) =>
       requestJson<{
-        status: "success";
-        multiplier: number;
-        factor: number;
-        new_balance: number;
+        status: string;
+        multiplier?: number | string;
+        factor?: number | string;
+        new_balance?: number | string;
+        message?: string;
       }>("/api/tap", {
         method: "POST",
         body: { action: "start_game", bet },
       }),
     tapBatch: (count: number) =>
       requestJson<{
-        status: "ok" | "crashed" | "autocashout";
-        multiplier: number;
-        new_balance?: number;
-        win_amount?: number;
+        status: "ok" | "crashed" | "autocashout" | string;
+        multiplier?: number | string;
+        new_balance?: number | string;
+        win_amount?: number | string;
+        message?: string;
       }>("/api/tap", {
         method: "POST",
         body: { action: "tap_batch", count },
       }),
     cashout: () =>
       requestJson<{
-        status: "success";
-        win_amount: number;
-        new_balance: number;
+        status: string;
+        multiplier?: number | string;
+        win_amount?: number | string;
+        new_balance?: number | string;
+        message?: string;
       }>("/api/tap", {
         method: "POST",
         body: { action: "cashout" },
@@ -709,61 +764,22 @@ export const api = {
   accelerator: {
     state: () =>
       requestJson<{
-        status: "success";
+        status: string;
         balance: number;
-        min_display: number;
-        max_display: number;
+        min_display?: number;
+        max_display?: number;
       }>("/api/accelerator", { bypassEtag: true }),
-    startGame: (bet: number) =>
-      requestJson<{
-        status: "success";
-        round_id: number;
-        new_balance: number;
-        multiplier: number;
-        g_base: number;
-        g_rate: number;
-        m_max: number;
-        seed_hash: string;
-      }>("/api/accelerator", {
+    post: (body: Record<string, unknown>, timeoutMs = 10_000) =>
+      requestJson<Record<string, unknown>>("/api/accelerator", {
         method: "POST",
-        body: { action: "start_game", bet },
-      }),
-    holdStart: () =>
-      requestJson<{
-        status: "ok" | "crashed";
-        multiplier: number;
-        round_id?: number;
-      }>("/api/accelerator", {
-        method: "POST",
-        body: { action: "hold_start" },
-      }),
-    tickHold: (final = false) =>
-      requestJson<{
-        status: "ok" | "crashed" | "cashed";
-        multiplier: number;
-        new_balance?: number;
-        win_amount?: number;
-        round_id?: number;
-      }>("/api/accelerator", {
-        method: "POST",
-        body: { action: final ? "tap_final" : "tap" },
-      }),
-    cashout: (clientMultiplier: number) =>
-      requestJson<{
-        status: "cashed" | "crashed";
-        multiplier: number;
-        new_balance?: number;
-        win_amount?: number;
-        round_id?: number;
-        jackpot?: boolean;
-      }>("/api/accelerator", {
-        method: "POST",
-        body: { action: "cashout", client_multiplier: clientMultiplier },
+        body,
+        timeoutMs,
       }),
   },
 
   admin: {
-    dashboard: () => requestJson<Record<string, unknown>>("/api/admin", { bypassEtag: true }),
+    panel: () =>
+      requestJson<Record<string, unknown>>("/api/admin", { bypassEtag: true }),
     action: (body: Record<string, unknown>) =>
       requestJson<Record<string, unknown>>("/api/admin", {
         method: "POST",

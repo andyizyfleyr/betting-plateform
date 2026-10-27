@@ -1,37 +1,30 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {
   ClientBet,
-  ClientFinishedMatch,
   ClientMatch,
-  ClientPredictionQuestion,
-  ClientWalletResponse,
+  ClientMatchHistoryItem,
+  ClientPrediction,
+  ClientWalletData,
 } from "./api";
 
-/**
- * Cache mémoire 0 ms + persistance disque AsyncStorage (Stale-While-Revalidate).
- * Permet d'afficher instantanément :
- * - les listes (`/matchs`, `/predictions`, `/paris`, `/resultats`, `/parametres`) dès l'ouverture à froid
- * - les pages dédiées (`/matchs/[id]`, `/paris/simple/[id]`, `/paris/combine/[id]`, `/predictions/[id]`, `/resultats/[id]`)
- *   en 0 ms pendant que la revalidation silencieuse met à jour les données en tâche de fond.
- */
 const matchCache = new Map<number, ClientMatch>();
-const finishedCache = new Map<number, ClientFinishedMatch>();
+const finishedCache = new Map<number, ClientMatchHistoryItem>();
 const betCache = new Map<string, ClientBet>();
-const predictionCache = new Map<number, ClientPredictionQuestion>();
+const predictionCache = new Map<number, ClientPrediction>();
 
 let latestMatchesList: ClientMatch[] | null = null;
-let latestPredictionsList: ClientPredictionQuestion[] | null = null;
-let latestFinishedList: ClientFinishedMatch[] | null = null;
+let latestPredictionsList: ClientPrediction[] | null = null;
+let latestFinishedList: ClientMatchHistoryItem[] | null = null;
 let latestBetsList: ClientBet[] | null = null;
-let walletSnapshot: ClientWalletResponse | null = null;
+let walletSnapshot: ClientWalletData | null = null;
 
-const DISK_SNAPSHOT_KEY = "pulse_android_swr_snapshot_v1";
+const DISK_SNAPSHOT_KEY = "pulse_android_swr_snapshot_v2";
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface PersistedSnapshot {
   matches?: ClientMatch[];
-  predictions?: ClientPredictionQuestion[];
-  finished?: ClientFinishedMatch[];
+  predictions?: ClientPrediction[];
+  finished?: ClientMatchHistoryItem[];
 }
 
 function scheduleDiskSnapshotPersist() {
@@ -43,9 +36,7 @@ function scheduleDiskSnapshotPersist() {
       predictions: latestPredictionsList ? latestPredictionsList.slice(0, 40) : undefined,
       finished: latestFinishedList ? latestFinishedList.slice(0, 40) : undefined,
     };
-    void AsyncStorage.setItem(DISK_SNAPSHOT_KEY, JSON.stringify(payload)).catch(() => {
-      // Silencieux si quota disque saturé
-    });
+    void AsyncStorage.setItem(DISK_SNAPSHOT_KEY, JSON.stringify(payload)).catch(() => {});
   }, 1_200);
 }
 
@@ -64,15 +55,13 @@ export async function hydrateEntityCacheFromDisk(): Promise<void> {
       seedFinishedMatchesSnapshot(parsed.finished, false);
     }
   } catch {
-    // Ignore tout snapshot corrompu
+    /* ignore */
   }
 }
 
 export function seedMatchSnapshot(m: ClientMatch | null | undefined) {
   if (!m || typeof m.id !== "number") return;
   const prev = matchCache.get(m.id);
-  // Si le snapshot entrant est "slim" (1 seul groupe `result`) mais que le cache RAM possède déjà
-  // les 18 groupes complets du match, on fusionne en préservant les marchés détaillés jusqu'au prochain refresh.
   if (
     prev &&
     prev.markets.length > 1 &&
@@ -109,7 +98,7 @@ export function getCachedMatchesList(): ClientMatch[] | null {
 }
 
 export function seedFinishedMatchesSnapshot(
-  list: ClientFinishedMatch[],
+  list: ClientMatchHistoryItem[],
   persist = true
 ) {
   latestFinishedList = list;
@@ -119,16 +108,16 @@ export function seedFinishedMatchesSnapshot(
   if (persist) scheduleDiskSnapshotPersist();
 }
 
-export function seedFinishedMatchSnapshot(m: ClientFinishedMatch | null | undefined) {
+export function seedFinishedMatchSnapshot(m: ClientMatchHistoryItem | null | undefined) {
   if (!m || typeof m.id !== "number") return;
   finishedCache.set(m.id, m);
 }
 
-export function getCachedFinishedMatchSnapshot(id: number): ClientFinishedMatch | null {
+export function getCachedFinishedMatchSnapshot(id: number): ClientMatchHistoryItem | null {
   return finishedCache.get(id) ?? null;
 }
 
-export function getCachedFinishedMatchesList(): ClientFinishedMatch[] | null {
+export function getCachedFinishedMatchesList(): ClientMatchHistoryItem[] | null {
   return latestFinishedList;
 }
 
@@ -156,7 +145,7 @@ export function getCachedBetsList(): ClientBet[] | null {
 }
 
 export function seedPredictionsSnapshot(
-  list: ClientPredictionQuestion[],
+  list: ClientPrediction[],
   persist = true
 ) {
   latestPredictionsList = list;
@@ -166,21 +155,19 @@ export function seedPredictionsSnapshot(
   if (persist) scheduleDiskSnapshotPersist();
 }
 
-export function getCachedPredictionSnapshot(
-  id: number
-): ClientPredictionQuestion | null {
+export function getCachedPredictionSnapshot(id: number): ClientPrediction | null {
   return predictionCache.get(id) ?? null;
 }
 
-export function getCachedPredictionsList(): ClientPredictionQuestion[] | null {
+export function getCachedPredictionsList(): ClientPrediction[] | null {
   return latestPredictionsList;
 }
 
-export function setCachedWalletSnapshot(w: ClientWalletResponse | null) {
+export function setCachedWalletSnapshot(w: ClientWalletData | null) {
   walletSnapshot = w;
 }
 
-export function getCachedWalletSnapshot(): ClientWalletResponse | null {
+export function getCachedWalletSnapshot(): ClientWalletData | null {
   return walletSnapshot;
 }
 

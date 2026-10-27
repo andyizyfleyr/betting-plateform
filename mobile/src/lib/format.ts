@@ -1,10 +1,5 @@
-/**
- * Formateurs français déterministes sans dépendance à `Intl`
- * (compatible à 100 % avec le moteur JSC Android d'Expo Go SDK 42).
- */
-
-const WEEKDAYS_SHORT = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
-const WEEKDAYS_LONG = [
+const DAYS_SHORT = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
+const DAYS_LONG = [
   "dimanche",
   "lundi",
   "mardi",
@@ -43,21 +38,29 @@ const MONTHS_LONG = [
 ];
 
 function pad2(n: number): string {
-  return n < 10 ? `0${n}` : `${n}`;
+  return n < 10 ? `0${n}` : String(n);
 }
 
 export function eur(value: number): string {
   const safe = Number.isFinite(value) ? value : 0;
   const sign = safe < 0 ? "-" : "";
   const abs = Math.abs(safe);
-  const fixed = abs.toFixed(2);
-  const [intPart, decPart] = fixed.split(".");
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const [intPart, decPart] = abs.toFixed(2).split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f");
   return `${sign}${grouped},${decPart} €`;
 }
 
+export function formatOdds(
+  odds: number,
+  format: "decimal" | "fractional" = "decimal"
+): string {
+  const safe = Number.isFinite(odds) ? odds : 1;
+  if (format === "fractional") return decimalToFraction(safe);
+  return safe.toFixed(2).replace(".", ",");
+}
+
 export function decimalToFraction(decimal: number): string {
-  const target = decimal - 1;
+  const target = Math.max(0.01, decimal - 1);
   let bestN = 1;
   let bestD = 1;
   let bestErr = Infinity;
@@ -73,18 +76,9 @@ export function decimalToFraction(decimal: number): string {
   return `${bestN}/${bestD}`;
 }
 
-export function formatOdds(
-  odds: number,
-  format: "decimal" | "fractional" = "decimal"
-): string {
-  const safe = Number.isFinite(odds) ? odds : 1;
-  if (format === "fractional") return decimalToFraction(safe);
-  return safe.toFixed(2).replace(".", ",");
-}
-
 export function formatKickoff(iso: string | Date): string {
   const date = typeof iso === "string" ? new Date(iso) : iso;
-  if (Number.isNaN(date.getTime())) return "À venir";
+  if (Number.isNaN(date.getTime())) return "—";
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
 
@@ -104,14 +98,19 @@ export function formatKickoff(iso: string | Date): string {
   if (diffDays === 0) return `Aujourd'hui · ${time}`;
   if (diffDays === 1) return `Demain · ${time}`;
   if (diffDays === -1) return `Hier · ${time}`;
+  return `${DAYS_SHORT[date.getDay()]} ${date.getDate()} ${MONTHS_SHORT[date.getMonth()]} · ${time}`;
+}
 
-  const day = `${WEEKDAYS_SHORT[date.getDay()]} ${date.getDate()} ${MONTHS_SHORT[date.getMonth()]}`;
-  return `${day} · ${time}`;
+export function formatMatchDateTimeShort(iso: string | Date | null | undefined): string {
+  if (!iso) return "";
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "";
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)} · ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 export function formatPlacedAt(iso: string | Date): string {
   const date = typeof iso === "string" ? new Date(iso) : iso;
-  if (Number.isNaN(date.getTime())) return "";
+  if (Number.isNaN(date.getTime())) return "—";
   const diff = Date.now() - date.getTime();
   const mins = Math.floor(diff / 60_000);
   if (mins < 1) return "à l'instant";
@@ -121,8 +120,14 @@ export function formatPlacedAt(iso: string | Date): string {
   return `${date.getDate()} ${MONTHS_SHORT[date.getMonth()]} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
+export function formatFullDateTime(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear()} · ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
 export function initials(team: string): string {
-  const clean = (team || "").replace(/[^A-Za-zÀ-ÿ ]/g, "").trim();
+  const clean = team.replace(/[^A-Za-zÀ-ÿ ]/g, "").trim();
   if (!clean) return "FC";
   const words = clean.split(/\s+/);
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
@@ -137,12 +142,7 @@ export function teamHue(name: string): number {
   return h;
 }
 
-export function hslClubBackground(name: string): string {
-  const h = teamHue(name);
-  return `hsl(${h}, 62%, 42%)`;
-}
-
 export function todayLabel(): string {
   const d = new Date();
-  return `${WEEKDAYS_LONG[d.getDay()]} ${d.getDate()} ${MONTHS_LONG[d.getMonth()]}`;
+  return `${DAYS_LONG[d.getDay()]} ${d.getDate()} ${MONTHS_LONG[d.getMonth()]}`;
 }

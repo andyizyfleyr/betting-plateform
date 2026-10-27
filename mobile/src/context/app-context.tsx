@@ -10,65 +10,78 @@ import React, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   api,
+  roundOdds2,
   type ClientBet,
   type ClientMatch,
-  type ClientPredictionQuestion,
+  type ClientPrediction,
   type ClientUser,
-  type OddsLockPolicy,
-  type PaymentProviderInfo,
+  type MatchSource,
+  type OddsChangePolicy,
+  type OddsChangedLegDetail,
+  type PaymentProvider,
 } from "@/lib/api";
 import { MAX_COMBO_LEGS } from "@/lib/combo-math";
 import {
   clearPrivateEntityCaches,
   getCachedMatchesList,
+  getCachedPredictionsList,
   hydrateEntityCacheFromDisk,
   seedPredictionsSnapshot,
-  getCachedPredictionsList,
 } from "@/lib/entity-cache";
 import { hydrateAuthToken, onUnauthorizedResponse } from "@/lib/http";
 import { useSmartPolling } from "@/lib/polling";
 import { triggerHaptic } from "@/theme/tokens";
 
-export interface BetModalTarget {
+export interface BetTarget {
   match: ClientMatch;
+  selection: string;
+  odds: number;
+  label: string;
   market: string;
   marketLabel: string;
-  selection: string;
-  selectionLabel: string;
-  odds: number;
 }
+
+export type BetModalTarget = BetTarget;
 
 export interface PredictionModalTarget {
-  question: ClientPredictionQuestion;
+  question: ClientPrediction;
   selection: string;
-  selectionLabel: string;
-  odds: number;
 }
 
-export interface ComboSlipLeg {
-  uid: string;
+export interface ComboSelection {
+  uid: string; // "sport-12" ou "pred-5" (1 seule par événement, identique à Next.js)
   kind: "sport" | "prediction";
   matchId?: number;
+  matchSource?: MatchSource;
   questionId?: number;
   title: string;
-  league: string;
   homeTeam?: string;
   awayTeam?: string;
   homeLogo?: string | null;
   awayLogo?: string | null;
+  league: string;
   market: string;
   selection: string;
   selectionLabel: string;
   odds: number;
   startsAt?: string | null;
   isLive?: boolean;
-  source?: "virtual" | "manual";
 }
+
+export type ComboSlipLeg = ComboSelection;
+
+export type ComboToggleResult =
+  | "added"
+  | "removed"
+  | "replaced"
+  | "full"
+  | "source_conflict";
 
 export interface ToastItem {
   id: string;
   kind: "success" | "error" | "info" | "win";
   title: string;
+  description?: string;
   subtitle?: string;
 }
 
@@ -80,36 +93,39 @@ interface AppContextValue {
   applyUser: (u: ClientUser | null) => void;
   pendingCount: number;
   setPendingCount: (n: number) => void;
+  betsVersion: number;
+  bumpBets: () => void;
   feedMatches: ClientMatch[] | null;
+  setFeedMatches: (list: ClientMatch[]) => void;
   refreshFeedMatches: () => Promise<void>;
   refreshPulseNow: () => Promise<void>;
-  comboLegs: ComboSlipLeg[];
-  toggleComboLeg: (leg: Omit<ComboSlipLeg, "uid">) => "added" | "removed" | "replaced" | "full";
+  comboLegs: ComboSelection[];
+  comboOpen: boolean;
+  openCombo: () => void;
+  closeCombo: () => void;
+  comboQuickMode: boolean;
+  setComboQuickMode: (v: boolean) => void;
+  toggleComboLeg: (leg: ComboSelection) => ComboToggleResult;
   removeComboLeg: (uid: string) => void;
   clearCombo: () => void;
-  replaceComboLegs: (legs: ComboSlipLeg[]) => void;
-  isInCombo: (
-    kind: "sport" | "prediction",
-    entityId: number,
-    market: string,
-    selection: string
-  ) => boolean;
-  oddsPolicy: OddsLockPolicy;
-  setOddsPolicy: (p: OddsLockPolicy) => void;
+  loadComboLegs: (legs: ComboSelection[]) => void;
+  applyComboOddsUpdates: (updates?: OddsChangedLegDetail[]) => void;
+  isInCombo: (uid: string, market: string, selection: string) => boolean;
+  oddsPolicy: OddsChangePolicy;
+  setOddsPolicy: (p: OddsChangePolicy) => void;
   dataSaverMode: boolean;
   setDataSaverMode: (v: boolean) => void;
   oddsFormat: "decimal" | "fractional";
   soundEnabled: boolean;
   hapticsEnabled: boolean;
-  stakePresets: number[];
-  paymentProviders: PaymentProviderInfo[];
-  betTarget: BetModalTarget | null;
-  openBet: (target: BetModalTarget) => void;
+  paymentProviders: PaymentProvider[];
+  target: BetTarget | null;
+  openBet: (target: BetTarget) => void;
   closeBet: () => void;
   predictionTarget: PredictionModalTarget | null;
   openPredictionBet: (target: PredictionModalTarget) => void;
   closePredictionBet: () => void;
-  marketMatchId: number | null;
+  marketMatch: ClientMatch | null;
   openMarkets: (match: ClientMatch) => void;
   closeMarkets: () => void;
   rechargeOpen: boolean;
@@ -123,51 +139,44 @@ interface AppContextValue {
   dismissToast: (id: string) => void;
 }
 
-const COMBO_STORAGE_KEY = "pulse_android_combo_v1";
-const POLICY_STORAGE_KEY = "pulse_android_odds_policy_v1";
+const COMBO_STORAGE_KEY = "pulse_android_combo_v2";
+const POLICY_STORAGE_KEY = "pulse_odds_change_policy_v1";
 const DATASAVER_STORAGE_KEY = "pulse_android_datasaver_v1";
 
 const AppContext = createContext<AppContextValue | null>(null);
-
-export function makeComboUid(
-  kind: "sport" | "prediction",
-  entityId: number,
-  market: string,
-  selection: string
-): string {
-  return `${kind}:${entityId}:${market}:${selection}`;
-}
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<ClientUser | null>(null);
   const [balance, setBalanceState] = useState<number>(0);
   const [pendingCount, setPendingCount] = useState<number>(0);
-  const [feedMatches, setFeedMatches] = useState<ClientMatch[] | null>(() =>
+  const [betsVersion, setBetsVersion] = useState<number>(0);
+  const [feedMatches, setFeedMatchesState] = useState<ClientMatch[] | null>(() =>
     getCachedMatchesList()
   );
-  const [comboLegs, setComboLegs] = useState<ComboSlipLeg[]>([]);
-  const [oddsPolicy, setOddsPolicyState] = useState<OddsLockPolicy>("accept_higher");
+  const [comboLegs, setComboLegs] = useState<ComboSelection[]>([]);
+  const [comboOpen, setComboOpen] = useState(false);
+  const [comboQuickMode, setComboQuickMode] = useState(false);
+  const [oddsPolicy, setOddsPolicyState] =
+    useState<OddsChangePolicy>("confirm_all");
   const [dataSaverMode, setDataSaverState] = useState<boolean>(false);
-  const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
+  const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([]);
 
-  const [betTarget, setBetTarget] = useState<BetModalTarget | null>(null);
+  const [target, setTarget] = useState<BetTarget | null>(null);
   const [predictionTarget, setPredictionTarget] =
     useState<PredictionModalTarget | null>(null);
-  const [marketMatchId, setMarketMatchId] = useState<number | null>(null);
+  const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [shareTicketBet, setShareTicketBet] = useState<ClientBet | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const seenSettledTicketIds = useRef<Set<string>>(new Set());
+  const comboLegsRef = useRef<ComboSelection[]>([]);
+  comboLegsRef.current = comboLegs;
 
-  const hapticsEnabled = user?.hapticsEnabled ?? true;
-  const soundEnabled = user?.soundEnabled ?? true;
+  const hapticsEnabled = user?.haptics ?? true;
+  const soundEnabled = user?.sound ?? true;
   const oddsFormat = user?.oddsFormat ?? "decimal";
-  const stakePresets = useMemo(
-    () => (user?.stakePresets?.length ? user.stakePresets : [5, 10, 25, 50]),
-    [user?.stakePresets]
-  );
 
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -184,15 +193,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       setTimeout(() => {
         setToasts((prev) => prev.filter((item) => item.id !== id));
-      }, 3_800);
+      }, 3_600);
     },
     [hapticsEnabled]
   );
 
   const setBalance = useCallback((b: number) => {
     if (Number.isFinite(b)) {
-      setBalanceState(Math.round(b * 100) / 100);
+      const clean = Math.round(b * 100) / 100;
+      setBalanceState(clean);
+      setUser((prev) => (prev ? { ...prev, balance: clean } : prev));
     }
+  }, []);
+
+  const bumpBets = useCallback(() => {
+    setBetsVersion((v) => v + 1);
   }, []);
 
   const applyUser = useCallback((u: ClientUser | null) => {
@@ -207,10 +222,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Hydratation initiale à froid : cache disque 0 ms + jeton Keystore + bootstrap 1-requête
+  const setFeedMatches = useCallback((list: ClientMatch[]) => {
+    setFeedMatchesState(list);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-
     const unsubscribeUnauth = onUnauthorizedResponse(() => {
       if (mounted) applyUser(null);
     });
@@ -226,14 +243,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               AsyncStorage.getItem(DATASAVER_STORAGE_KEY),
             ]);
             if (mounted && rawCombo) {
-              const parsed = JSON.parse(rawCombo) as ComboSlipLeg[];
-              if (Array.isArray(parsed)) setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+              const parsed = JSON.parse(rawCombo) as ComboSelection[];
+              if (Array.isArray(parsed)) {
+                setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+              }
             }
             if (
               mounted &&
-              (rawPolicy === "strict" ||
-                rawPolicy === "accept_higher" ||
-                rawPolicy === "accept_any")
+              (rawPolicy === "confirm_all" || rawPolicy === "accept_higher")
             ) {
               setOddsPolicyState(rawPolicy);
             }
@@ -241,7 +258,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               setDataSaverState(true);
             }
           } catch {
-            // Silencieux
+            /* ignore */
           }
         })(),
       ]);
@@ -249,7 +266,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (mounted) {
         const diskMatches = getCachedMatchesList();
         if (diskMatches && diskMatches.length > 0) {
-          setFeedMatches(diskMatches);
+          setFeedMatchesState(diskMatches);
         }
       }
 
@@ -279,7 +296,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const me = await api.auth.me();
             if (mounted) applyUser(me.user);
           } catch {
-            // Mode hors-ligne temporaire : conserve l'UI disponible
+            /* hors-ligne */
           }
         }
       }
@@ -296,9 +313,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const refreshFeedMatches = useCallback(async () => {
     try {
       const res = await api.matchesSlim();
-      setFeedMatches(res.matches);
+      setFeedMatchesState(res.matches);
     } catch {
-      // Conserve le dernier snapshot mémoire
+      /* conserve l'affichage */
     }
   }, []);
 
@@ -315,161 +332,189 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const key = `${tk.kind}:${tk.id}:${tk.status}`;
         if (seenSettledTicketIds.current.has(key)) continue;
         seenSettledTicketIds.current.add(key);
-        if (tk.status === "won") {
+        if (tk.status === "won" && (user.notifications ?? true)) {
           toast({
             kind: "win",
             title: `Pari gagné ! +${tk.potentialWin.toFixed(2).replace(".", ",")} €`,
-            subtitle: `${tk.title} · ${tk.selectionLabel}`,
+            description: `${tk.title} · ${tk.selectionLabel}`,
           });
-        } else if (tk.status === "void") {
+        } else if (tk.status === "void" && (user.notifications ?? true)) {
           toast({
             kind: "info",
             title: "Pari remboursé",
-            subtitle: `${tk.title} · Mise restituée`,
+            description: `${tk.title} · Mise restituée`,
           });
         }
       }
     } catch {
-      // Silencieux en cas de micro-coupure réseau
+      /* silencieux */
     }
   }, [setBalance, toast, user]);
 
-  // Polling global des matchs (5.5s, pause auto en arrière-plan, ×2.4 en mode économie 3G)
-  useSmartPolling(refreshFeedMatches, 5_500, {
+  useSmartPolling(refreshFeedMatches, 5_000, {
     enabled: authReady,
     dataSaver: dataSaverMode,
     runImmediately: true,
   });
 
-  // Pulsation légère joueur connecté (14s, 304 ETag si inchangé)
-  useSmartPolling(refreshPulseNow, 14_000, {
+  useSmartPolling(refreshPulseNow, 12_000, {
     enabled: authReady && Boolean(user) && user?.role !== "admin",
     dataSaver: dataSaverMode,
     runImmediately: true,
   });
 
-  const persistCombo = useCallback((next: ComboSlipLeg[]) => {
+  const persistCombo = useCallback((next: ComboSelection[]) => {
     setComboLegs(next);
-    void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+    void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(
+      () => {}
+    );
   }, []);
 
   const toggleComboLeg = useCallback(
-    (leg: Omit<ComboSlipLeg, "uid">): "added" | "removed" | "replaced" | "full" => {
-      const entityId = leg.kind === "sport" ? (leg.matchId ?? 0) : (leg.questionId ?? 0);
-      const uid = makeComboUid(leg.kind, entityId, leg.market, leg.selection);
-      let outcome: "added" | "removed" | "replaced" | "full" = "added";
+    (leg: ComboSelection): ComboToggleResult => {
+      const prev = comboLegsRef.current;
 
-      setComboLegs((prev) => {
-        const exactIdx = prev.findIndex((l) => l.uid === uid);
-        if (exactIdx !== -1) {
-          outcome = "removed";
-          const next = prev.filter((l) => l.uid !== uid);
-          void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-          return next;
-        }
-        const sameEventIdx = prev.findIndex((l) =>
-          leg.kind === "sport"
-            ? l.kind === "sport" && l.matchId === leg.matchId
-            : l.kind === "prediction" && l.questionId === leg.questionId
+      const exactIdx = prev.findIndex(
+        (l) =>
+          l.uid === leg.uid &&
+          l.market === leg.market &&
+          l.selection === leg.selection
+      );
+      if (exactIdx !== -1) {
+        const next = prev.filter((_, i) => i !== exactIdx);
+        persistCombo(next);
+        triggerHaptic("light", hapticsEnabled);
+        return "removed";
+      }
+
+      // Interdit le mélange Match réel ("manual") + Match virtuel ("virtual")
+      if (leg.kind === "sport" && leg.matchSource) {
+        const otherSport = prev.filter(
+          (l) => l.kind === "sport" && l.uid !== leg.uid && l.matchSource
         );
-        if (sameEventIdx !== -1) {
-          outcome = "replaced";
-          const next = [...prev];
-          next[sameEventIdx] = { ...leg, uid };
-          void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-          return next;
+        if (otherSport.some((l) => l.matchSource !== leg.matchSource)) {
+          triggerHaptic("error", hapticsEnabled);
+          return "source_conflict";
         }
-        if (prev.length >= MAX_COMBO_LEGS) {
-          outcome = "full";
-          return prev;
-        }
-        outcome = "added";
-        const next = [...prev, { ...leg, uid }];
-        void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-        return next;
-      });
+      }
 
+      const sameEventIdx = prev.findIndex((l) => l.uid === leg.uid);
+      if (sameEventIdx !== -1) {
+        const next = [...prev];
+        next[sameEventIdx] = leg;
+        persistCombo(next);
+        triggerHaptic("light", hapticsEnabled);
+        return "replaced";
+      }
+
+      if (prev.length >= MAX_COMBO_LEGS) {
+        triggerHaptic("warning", hapticsEnabled);
+        return "full";
+      }
+
+      const next = [...prev, leg];
+      persistCombo(next);
       triggerHaptic("light", hapticsEnabled);
-      return outcome;
+      return "added";
     },
-    [hapticsEnabled]
+    [hapticsEnabled, persistCombo]
   );
 
   const removeComboLeg = useCallback(
     (uid: string) => {
-      setComboLegs((prev) => {
-        const next = prev.filter((l) => l.uid !== uid);
-        void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
-        return next;
-      });
+      const next = comboLegsRef.current.filter((l) => l.uid !== uid);
+      persistCombo(next);
       triggerHaptic("light", hapticsEnabled);
     },
-    [hapticsEnabled]
+    [hapticsEnabled, persistCombo]
   );
 
   const clearCombo = useCallback(() => {
     persistCombo([]);
   }, [persistCombo]);
 
-  const replaceComboLegs = useCallback(
-    (legs: ComboSlipLeg[]) => {
+  const loadComboLegs = useCallback(
+    (legs: ComboSelection[]) => {
       persistCombo(legs.slice(0, MAX_COMBO_LEGS));
     },
     [persistCombo]
   );
 
+  const applyComboOddsUpdates = useCallback(
+    (updates?: OddsChangedLegDetail[]) => {
+      if (!updates || updates.length === 0) return;
+      const next = comboLegsRef.current.map((leg) => {
+        const found = updates.find((u) =>
+          leg.kind === "sport"
+            ? u.kind === "sport" &&
+              u.matchId === leg.matchId &&
+              u.market === leg.market &&
+              u.selection === leg.selection
+            : u.kind === "prediction" &&
+              u.questionId === leg.questionId &&
+              u.selection === leg.selection
+        );
+        return found ? { ...leg, odds: roundOdds2(found.currentOdds) } : leg;
+      });
+      persistCombo(next);
+    },
+    [persistCombo]
+  );
+
   const isInCombo = useCallback(
-    (
-      kind: "sport" | "prediction",
-      entityId: number,
-      market: string,
-      selection: string
-    ) => {
-      const uid = makeComboUid(kind, entityId, market, selection);
-      return comboLegs.some((l) => l.uid === uid);
+    (uid: string, market: string, selection: string) => {
+      return comboLegs.some(
+        (l) =>
+          l.uid === uid && l.market === market && l.selection === selection
+      );
     },
     [comboLegs]
   );
 
-  const setOddsPolicy = useCallback((p: OddsLockPolicy) => {
+  const setOddsPolicy = useCallback((p: OddsChangePolicy) => {
     setOddsPolicyState(p);
     void AsyncStorage.setItem(POLICY_STORAGE_KEY, p).catch(() => {});
   }, []);
 
   const setDataSaverMode = useCallback((v: boolean) => {
     setDataSaverState(v);
-    void AsyncStorage.setItem(DATASAVER_STORAGE_KEY, v ? "1" : "0").catch(() => {});
+    void AsyncStorage.setItem(DATASAVER_STORAGE_KEY, v ? "1" : "0").catch(
+      () => {}
+    );
   }, []);
 
   const openBet = useCallback(
-    (target: BetModalTarget) => {
+    (nextTarget: BetTarget) => {
       triggerHaptic("light", hapticsEnabled);
-      setBetTarget(target);
+      setTarget(nextTarget);
     },
     [hapticsEnabled]
   );
-
-  const closeBet = useCallback(() => setBetTarget(null), []);
+  const closeBet = useCallback(() => setTarget(null), []);
 
   const openPredictionBet = useCallback(
-    (target: PredictionModalTarget) => {
+    (nextTarget: PredictionModalTarget) => {
       triggerHaptic("light", hapticsEnabled);
-      setPredictionTarget(target);
+      setPredictionTarget(nextTarget);
     },
     [hapticsEnabled]
   );
-
   const closePredictionBet = useCallback(() => setPredictionTarget(null), []);
 
   const openMarkets = useCallback(
     (match: ClientMatch) => {
       triggerHaptic("light", hapticsEnabled);
-      setMarketMatchId(match.id);
+      setMarketMatch(match);
     },
     [hapticsEnabled]
   );
+  const closeMarkets = useCallback(() => setMarketMatch(null), []);
 
-  const closeMarkets = useCallback(() => setMarketMatchId(null), []);
+  const openCombo = useCallback(() => {
+    triggerHaptic("light", hapticsEnabled);
+    setComboOpen(true);
+  }, [hapticsEnabled]);
+  const closeCombo = useCallback(() => setComboOpen(false), []);
 
   const openRecharge = useCallback(() => {
     triggerHaptic("light", hapticsEnabled);
@@ -481,7 +526,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .catch(() => {});
     }
   }, [hapticsEnabled, paymentProviders.length]);
-
   const closeRecharge = useCallback(() => setRechargeOpen(false), []);
 
   const openShareTicket = useCallback(
@@ -491,7 +535,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [hapticsEnabled]
   );
-
   const closeShareTicket = useCallback(() => setShareTicketBet(null), []);
 
   const value = useMemo<AppContextValue>(
@@ -503,14 +546,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       applyUser,
       pendingCount,
       setPendingCount,
+      betsVersion,
+      bumpBets,
       feedMatches,
+      setFeedMatches,
       refreshFeedMatches,
       refreshPulseNow,
       comboLegs,
+      comboOpen,
+      openCombo,
+      closeCombo,
+      comboQuickMode,
+      setComboQuickMode,
       toggleComboLeg,
       removeComboLeg,
       clearCombo,
-      replaceComboLegs,
+      loadComboLegs,
+      applyComboOddsUpdates,
       isInCombo,
       oddsPolicy,
       setOddsPolicy,
@@ -519,15 +571,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       oddsFormat,
       soundEnabled,
       hapticsEnabled,
-      stakePresets,
       paymentProviders,
-      betTarget,
+      target,
       openBet,
       closeBet,
       predictionTarget,
       openPredictionBet,
       closePredictionBet,
-      marketMatchId,
+      marketMatch,
       openMarkets,
       closeMarkets,
       rechargeOpen,
@@ -541,26 +592,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dismissToast,
     }),
     [
+      applyComboOddsUpdates,
       applyUser,
       authReady,
       balance,
-      betTarget,
+      betsVersion,
+      bumpBets,
       clearCombo,
       closeBet,
+      closeCombo,
       closeMarkets,
       closePredictionBet,
       closeRecharge,
       closeShareTicket,
       comboLegs,
+      comboOpen,
+      comboQuickMode,
       dataSaverMode,
       dismissToast,
       feedMatches,
       hapticsEnabled,
       isInCombo,
-      marketMatchId,
+      loadComboLegs,
+      marketMatch,
       oddsFormat,
       oddsPolicy,
       openBet,
+      openCombo,
       openMarkets,
       openPredictionBet,
       openRecharge,
@@ -572,13 +630,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshFeedMatches,
       refreshPulseNow,
       removeComboLeg,
-      replaceComboLegs,
       setBalance,
       setDataSaverMode,
+      setFeedMatches,
       setOddsPolicy,
       shareTicketBet,
       soundEnabled,
-      stakePresets,
+      target,
       toast,
       toasts,
       toggleComboLeg,

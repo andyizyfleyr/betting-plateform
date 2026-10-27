@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -8,208 +8,299 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "@/lib/router";
-import { Plus, X } from "@/components/icons";
-import { api, ApiHttpError, generateIdempotencyKey } from "@/lib/api";
-import { eur, formatOdds } from "@/lib/format";
-import { colors } from "@/theme/tokens";
+import { Check, Layers, Sparkles, X } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
-import { TouchStakePad } from "./touch-stake-pad";
+import {
+  api,
+  ApiHttpError,
+  generateBetIdempotencyKey,
+  ODDS_CHANGED_CODE,
+  roundOdds2,
+  type OddsChangedDetails,
+} from "@/lib/api";
+import { eur, formatOdds } from "@/lib/format";
+import { useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 import { OddsLockControls } from "./odds-lock-controls";
+import { TouchStakePad } from "./touch-stake-pad";
 
 export function PredictionBetModal() {
   const router = useRouter();
   const {
+    predictionTarget,
+    closePredictionBet,
     user,
     balance,
     setBalance,
-    predictionTarget,
-    closePredictionBet,
+    bumpBets,
     oddsFormat,
     oddsPolicy,
     setOddsPolicy,
-    stakePresets,
     toggleComboLeg,
+    isInCombo,
     openRecharge,
-    refreshPulseNow,
     toast,
   } = useApp();
 
-  const [stake, setStake] = useState<number>(stakePresets[1] ?? 10);
-  const [liveOdds, setLiveOdds] = useState<number>(1.9);
-  const [submitting, setSubmitting] = useState(false);
-  const [idemKey, setIdemKey] = useState<string>(() =>
-    generateIdempotencyKey("prd")
+  const [stake, setStake] = useState("10");
+  const [lockedOdds, setLockedOdds] = useState(1.85);
+  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(
+    null
   );
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const idempotencyRef = useRef<string>(generateBetIdempotencyKey());
 
   useEffect(() => {
-    if (predictionTarget) {
-      setLiveOdds(predictionTarget.odds);
-      setIdemKey(generateIdempotencyKey("prd"));
-    }
+    if (!predictionTarget) return;
+    const { question, selection } = predictionTarget;
+    const opt = question.options?.find((o) => o.key === selection);
+    const initialOdds = opt
+      ? opt.odds
+      : selection === "yes"
+        ? question.oddsYes
+        : question.oddsNo;
+    setStake("10");
+    setLockedOdds(roundOdds2(initialOdds));
+    setOddsChanged(null);
+    setErrorMsg(null);
+    setSubmitting(false);
+    idempotencyRef.current = generateBetIdempotencyKey();
   }, [predictionTarget]);
 
   if (!predictionTarget) return null;
 
-  const potentialWin = Math.round(stake * liveOdds * 100) / 100;
-  const insufficient = Boolean(user) && stake > balance;
+  const { question, selection } = predictionTarget;
+  const opt = question.options?.find((o) => o.key === selection);
+  const selectionLabel = opt
+    ? opt.label
+    : selection === "yes"
+      ? "Oui"
+      : "Non";
 
-  const handleSubmit = async () => {
+  const numericStake = Math.max(
+    0,
+    Math.round((parseFloat(stake.replace(",", ".")) || 0) * 100) / 100
+  );
+  const potentialWin = Math.round(numericStake * lockedOdds * 100) / 100;
+  const uid = `pred-${question.id}`;
+  const inCombo = isInCombo(uid, "prediction", selection);
+
+  const handleAddCombo = () => {
+    const res = toggleComboLeg({
+      uid,
+      kind: "prediction",
+      questionId: question.id,
+      title: question.question,
+      league: question.category,
+      market: "prediction",
+      selection,
+      selectionLabel,
+      odds: lockedOdds,
+      startsAt: question.resolvesAt,
+      isLive: false,
+    });
+    if (res === "full") {
+      toast({
+        kind: "error",
+        title: "Combiné complet",
+        description: "Maximum 8 sélections par ticket combiné.",
+      });
+      return;
+    }
+    closePredictionBet();
+  };
+
+  const handleConfirm = async () => {
     if (!user) {
       closePredictionBet();
       router.push("/auth");
       return;
     }
-    if (stake < 0.5 || submitting) return;
-    if (insufficient) {
-      closePredictionBet();
-      openRecharge();
+    if (numericStake < 0.5) {
+      setErrorMsg("Mise minimale : 0,50 €.");
+      return;
+    }
+    if (numericStake > balance + 0.001) {
+      setErrorMsg("Solde insuffisant pour cette mise.");
       return;
     }
 
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       const res = await api.placePredictionBet({
-        questionId: predictionTarget.question.id,
-        selection: predictionTarget.selection,
-        stake,
-        expectedOdds: liveOdds,
+        questionId: question.id,
+        selection,
+        stake: numericStake,
+        expectedOdds: lockedOdds,
         oddsPolicy,
-        idempotencyKey: idemKey,
+        idempotencyKey: idempotencyRef.current,
       });
       setBalance(res.balance);
-      void refreshPulseNow();
-      void api.predictions(true).catch(() => {});
-      closePredictionBet();
+      bumpBets();
       toast({
         kind: "success",
-        title: "Pronostic validé !",
-        subtitle: `Gain potentiel ${eur(res.potentialWin)}`,
+        title: "Prédiction enregistrée !",
+        description: `${selectionLabel} @ ${formatOdds(res.bet.odds, oddsFormat)} · Gain potentiel ${eur(res.bet.potentialWin)}`,
       });
+      closePredictionBet();
     } catch (err) {
-      setIdemKey(generateIdempotencyKey("prd"));
-      if (err instanceof ApiHttpError && err.code === "ODDS_CHANGED" && err.currentOdds) {
-        setLiveOdds(err.currentOdds);
-        toast({
-          kind: "info",
-          title: `Cote actualisée à ${formatOdds(err.currentOdds, oddsFormat)}`,
-          subtitle: "Appuyez à nouveau pour confirmer",
-        });
+      idempotencyRef.current = generateBetIdempotencyKey();
+      if (err instanceof ApiHttpError && err.code === ODDS_CHANGED_CODE) {
+        const nextOdds = roundOdds2(
+          err.details?.currentOdds ?? err.currentOdds ?? lockedOdds
+        );
+        setOddsChanged(
+          err.details ?? {
+            previousOdds: lockedOdds,
+            currentOdds: nextOdds,
+            direction: nextOdds > lockedOdds ? "up" : "down",
+          }
+        );
+        setLockedOdds(nextOdds);
+      } else if (err instanceof ApiHttpError) {
+        setErrorMsg(err.message);
       } else {
-        toast({
-          kind: "error",
-          title: "Pronostic refusé",
-          subtitle: err instanceof Error ? err.message : "Réessayez",
-        });
+        setErrorMsg("Impossible d'enregistrer la prédiction.");
       }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleAddCombo = () => {
-    const res = toggleComboLeg({
-      kind: "prediction",
-      questionId: predictionTarget.question.id,
-      title: predictionTarget.question.question,
-      league: predictionTarget.question.category,
-      market:
-        predictionTarget.question.options &&
-        predictionTarget.question.options.length >= 2
-          ? "multichoice"
-          : "yesno",
-      selection: predictionTarget.selection,
-      selectionLabel: predictionTarget.selectionLabel,
-      odds: liveOdds,
-      startsAt: predictionTarget.question.resolvesAt,
-      isLive: false,
-    });
-    closePredictionBet();
-    if (res === "full") {
-      toast({ kind: "error", title: "Maximum 8 sélections dans le Betslip" });
-    } else {
-      toast({
-        kind: "info",
-        title: "Ajouté au Betslip",
-        subtitle: predictionTarget.selectionLabel,
-      });
-    }
-  };
-
   return (
     <Modal
-      visible={Boolean(predictionTarget)}
+      visible
       transparent
       animationType="slide"
       onRequestClose={closePredictionBet}
     >
-      <View style={styles.backdrop}>
-        <Pressable style={{ flex: 1 }} onPress={closePredictionBet} />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          <ScrollView bounces={false} contentContainerStyle={styles.content}>
-            <View style={styles.headerRow}>
-              <View style={{ flex: 1 }}>
-                <Text numberOfLines={2} style={styles.qTitle}>
-                  {predictionTarget.question.question}
-                </Text>
-                <Text style={styles.selLabel}>
-                  Choix : {predictionTarget.selectionLabel}
-                </Text>
+      <Pressable style={styles.backdrop} onPress={closePredictionBet}>
+        <Pressable
+          style={styles.sheet}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={styles.grabber} />
+
+          <View style={styles.topRow}>
+            <View style={styles.catRow}>
+              <Sparkles
+                size={14}
+                color={COLORS.betclicRed}
+                strokeWidth={2.2}
+              />
+              <Text style={styles.catText}>{question.category}</Text>
+            </View>
+            <Pressable onPress={closePredictionBet} style={styles.closeBtn}>
+              <X size={17} color={COLORS.mist} strokeWidth={2.2} />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollBody}
+          >
+            <View style={styles.card}>
+              <Text style={styles.question}>{question.question}</Text>
+              <View style={styles.pickRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subLabel}>Votre choix</Text>
+                  <Text style={styles.pickLabel}>{selectionLabel}</Text>
+                </View>
+                <View style={styles.oddsBadge}>
+                  <Text style={styles.oddsText}>
+                    {formatOdds(lockedOdds, oddsFormat)}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.oddsBadge}>
-                <Text style={styles.oddsBadgeText}>
-                  {formatOdds(liveOdds, oddsFormat)}
-                </Text>
-              </View>
-              <Pressable onPress={closePredictionBet} style={styles.closeBtn}>
-                <X size={17} color={colors.ink} strokeWidth={2.4} />
-              </Pressable>
             </View>
 
             <TouchStakePad
-              stake={stake}
-              onChangeStake={setStake}
-              maxBalance={balance}
-              presets={stakePresets}
+              value={stake}
+              onChange={(v) => {
+                setStake(v);
+                setErrorMsg(null);
+              }}
+              balance={balance}
+              isLoggedIn={Boolean(user)}
             />
 
-            <OddsLockControls value={oddsPolicy} onChange={setOddsPolicy} />
+            <OddsLockControls
+              oddsFormat={oddsFormat}
+              oddsPolicy={oddsPolicy}
+              onChangePolicy={setOddsPolicy}
+              oddsChanged={oddsChanged}
+            />
 
-            <View style={styles.payoutRow}>
-              <Text style={styles.payoutLabel}>Gain fixe garanti</Text>
-              <Text style={styles.payoutVal}>{eur(potentialWin)}</Text>
+            {errorMsg ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{errorMsg}</Text>
+                {user && numericStake > balance ? (
+                  <Pressable
+                    onPress={() => {
+                      closePredictionBet();
+                      openRecharge();
+                    }}
+                    style={styles.rechargeBtn}
+                  >
+                    <Text style={styles.rechargeText}>Recharger</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+
+            <View style={styles.summaryBox}>
+              <View>
+                <Text style={styles.summaryLabel}>Cote fixe</Text>
+                <Text style={styles.summaryVal}>
+                  {formatOdds(lockedOdds, oddsFormat)}
+                </Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.summaryLabel}>Gain potentiel</Text>
+                <Text style={styles.summaryWin}>{eur(potentialWin)}</Text>
+              </View>
             </View>
 
             <View style={styles.actionsRow}>
-              <Pressable onPress={handleAddCombo} style={styles.comboBtn}>
-                <Plus size={15} color={colors.ink} strokeWidth={2.5} />
-                <Text style={styles.comboBtnText}>Betslip</Text>
-              </Pressable>
               <Pressable
-                disabled={submitting || stake < 0.5}
-                onPress={() => void handleSubmit()}
-                style={[
-                  styles.submitBtn,
-                  (submitting || stake < 0.5) && { opacity: 0.55 },
-                ]}
+                onPress={handleAddCombo}
+                style={[styles.comboBtn, inCombo && styles.comboBtnActive]}
+              >
+                {inCombo ? (
+                  <Check size={16} color="#ffffff" strokeWidth={2.6} />
+                ) : (
+                  <Layers size={16} color={COLORS.ink} strokeWidth={2.2} />
+                )}
+                <Text
+                  style={[styles.comboText, inCombo && { color: "#ffffff" }]}
+                >
+                  {inCombo ? "Au combiné" : "Combiné"}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={submitting}
+                onPress={handleConfirm}
+                style={[styles.submitBtn, submitting && { opacity: 0.65 }]}
               >
                 {submitting ? (
-                  <ActivityIndicator size="small" color={colors.white} />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <Text style={styles.submitBtnText}>
+                  <Text style={styles.submitText}>
                     {!user
                       ? "Se connecter"
-                      : insufficient
-                        ? "Recharger mon solde"
-                        : `Parier ${eur(stake)}`}
+                      : oddsChanged
+                        ? `Accepter ${formatOdds(lockedOdds, oddsFormat)} · ${eur(numericStake)}`
+                        : `Parier · ${eur(numericStake)}`}
                   </Text>
                 )}
               </Pressable>
             </View>
           </ScrollView>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -217,117 +308,186 @@ export function PredictionBetModal() {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(17, 24, 39, 0.48)",
+    backgroundColor: "rgba(17, 24, 39, 0.45)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: colors.white,
+    backgroundColor: "#ffffff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingTop: 8,
-    maxHeight: "88%",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    maxHeight: "90%",
   },
-  handle: {
+  grabber: {
     alignSelf: "center",
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.edge,
-    marginBottom: 6,
+    backgroundColor: COLORS.edge,
+    marginBottom: 10,
   },
-  content: {
-    paddingHorizontal: 16,
-    paddingBottom: 28,
-    gap: 12,
-  },
-  headerRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
-  qTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: colors.ink,
+  catRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  selLabel: {
-    marginTop: 3,
-    fontSize: 12.5,
+  catText: {
+    fontSize: 12,
     fontWeight: "700",
-    color: colors.betclicRed,
-  },
-  oddsBadge: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: colors.betclicRed,
-  },
-  oddsBadgeText: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: colors.white,
-    fontVariant: ["tabular-nums"],
+    color: COLORS.betclicRed,
+    textTransform: "uppercase",
   },
   closeBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.elev,
+    borderRadius: 10,
+    backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
   },
-  payoutRow: {
+  scrollBody: {
+    gap: 12,
+    paddingBottom: 6,
+  },
+  card: {
+    borderRadius: 14,
+    backgroundColor: COLORS.elev,
+    padding: 13,
+    gap: 10,
+  },
+  question: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.ink,
+    lineHeight: 19,
+  },
+  pickRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 10,
+    gap: 10,
+  },
+  subLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.dim,
+  },
+  pickLabel: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  oddsBadge: {
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
     paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "#f0fdf4",
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: "rgba(21, 128, 61, 0.25)",
+    borderColor: COLORS.edge,
   },
-  payoutLabel: {
+  oddsText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.betclicRed,
+    fontVariant: ["tabular-nums"],
+  },
+  errorBox: {
+    borderRadius: 12,
+    backgroundColor: "rgba(225, 0, 20, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(225, 0, 20, 0.24)",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  errorText: {
     fontSize: 12,
-    fontWeight: "700",
-    color: colors.win,
+    fontWeight: "600",
+    color: COLORS.betclicRed,
+    flex: 1,
   },
-  payoutVal: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.win,
+  rechargeBtn: {
+    borderRadius: 8,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  rechargeText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  summaryBox: {
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.dim,
+  },
+  summaryVal: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  summaryWin: {
+    fontSize: 16.5,
+    fontWeight: "800",
+    color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
   actionsRow: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 8,
   },
   comboBtn: {
-    height: 46,
+    height: 48,
+    borderRadius: 13,
+    paddingHorizontal: 13,
+    backgroundColor: COLORS.elev,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 14,
-    borderRadius: 13,
-    backgroundColor: colors.elev,
+    justifyContent: "center",
+    gap: 6,
   },
-  comboBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.ink,
+  comboBtnActive: {
+    backgroundColor: COLORS.outerSpace,
+  },
+  comboText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.ink,
   },
   submitBtn: {
     flex: 1,
-    height: 46,
+    height: 48,
     borderRadius: 13,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
   },
-  submitBtnText: {
+  submitText: {
     fontSize: 14,
-    fontWeight: "900",
-    color: colors.white,
+    fontWeight: "800",
+    color: "#ffffff",
+    fontVariant: ["tabular-nums"],
   },
 });

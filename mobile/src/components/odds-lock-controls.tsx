@@ -1,95 +1,154 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Lock, TrendingUp, Zap } from "@/components/icons";
-import type { OddsLockPolicy } from "@/lib/api";
-import { colors, triggerHaptic } from "@/theme/tokens";
-import { useApp } from "@/context/app-context";
-
-const POLICIES: Array<{
-  key: OddsLockPolicy;
-  label: string;
-  Icon: typeof Lock;
-}> = [
-  { key: "strict", label: "Bloquer", Icon: Lock },
-  { key: "accept_higher", label: "Hausse OK", Icon: TrendingUp },
-  { key: "accept_any", label: "Auto", Icon: Zap },
-];
+import { ArrowDownRight, ArrowUpRight, Check, RefreshCw } from "lucide-react-native";
+import type { OddsChangedDetails, OddsChangePolicy } from "@/lib/api";
+import { formatOdds } from "@/lib/format";
+import { COLORS } from "@/theme/tokens";
 
 export function OddsLockControls({
-  value,
-  onChange,
+  oddsFormat,
+  oddsPolicy,
+  onChangePolicy,
+  oddsChanged,
 }: {
-  value: OddsLockPolicy;
-  onChange: (p: OddsLockPolicy) => void;
+  oddsFormat: "decimal" | "fractional";
+  oddsPolicy: OddsChangePolicy;
+  onChangePolicy: (policy: OddsChangePolicy) => void;
+  oddsChanged: OddsChangedDetails | null;
 }) {
-  const { hapticsEnabled } = useApp();
+  // Sur mobile (< lg dans Next.js), aucun bandeau permanent n'est affiché tant que la cote n'a pas varié.
+  if (!oddsChanged) return null;
+
+  const isUp = oddsChanged.direction === "up";
+  const acceptHigher = oddsPolicy === "accept_higher";
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.caption}>Variation de cote :</Text>
-      <View style={styles.pills}>
-        {POLICIES.map((p) => {
-          const active = value === p.key;
-          return (
-            <Pressable
-              key={p.key}
-              onPress={() => {
-                triggerHaptic("light", hapticsEnabled);
-                onChange(p.key);
-              }}
-              style={[styles.pill, active && styles.pillActive]}
-            >
-              <p.Icon
-                size={11.5}
-                color={active ? colors.white : colors.mist}
-                strokeWidth={2.4}
-              />
-              <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                {p.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+    <View
+      style={[
+        styles.banner,
+        isUp ? styles.bannerUp : styles.bannerDown,
+      ]}
+    >
+      {isUp ? (
+        <ArrowUpRight size={16} color={COLORS.win} strokeWidth={2.4} />
+      ) : (
+        <ArrowDownRight size={16} color={COLORS.amber} strokeWidth={2.4} />
+      )}
+      <View style={styles.body}>
+        <Text style={styles.titleLine}>
+          {isUp ? "La cote a augmenté : " : "La cote a évolué : "}
+          <Text style={styles.oldOdds}>
+            {formatOdds(oddsChanged.previousOdds, oddsFormat)}
+          </Text>
+          {" → "}
+          <Text style={styles.newOdds}>
+            {formatOdds(oddsChanged.currentOdds, oddsFormat)}
+          </Text>
+        </Text>
+
+        <View style={styles.subLine}>
+          <RefreshCw size={11.5} color={COLORS.mist} strokeWidth={2.2} />
+          <Text style={styles.subText}>
+            Aucun montant débité — confirmez la nouvelle cote.
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={() =>
+            onChangePolicy(acceptHigher ? "confirm_all" : "accept_higher")
+          }
+          style={styles.policyRow}
+        >
+          <View
+            style={[
+              styles.checkbox,
+              acceptHigher && styles.checkboxChecked,
+            ]}
+          >
+            {acceptHigher ? (
+              <Check size={10} color="#ffffff" strokeWidth={3} />
+            ) : null}
+          </View>
+          <Text style={styles.policyText}>
+            Accepter automatiquement les prochaines hausses
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  banner: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  caption: {
-    fontSize: 11,
+  bannerUp: {
+    backgroundColor: "rgba(16, 185, 129, 0.10)",
+    borderColor: "rgba(16, 185, 129, 0.35)",
+  },
+  bannerDown: {
+    backgroundColor: "rgba(245, 158, 11, 0.10)",
+    borderColor: "rgba(245, 158, 11, 0.40)",
+  },
+  body: {
+    flex: 1,
+    gap: 4,
+  },
+  titleLine: {
+    fontSize: 12.5,
     fontWeight: "600",
-    color: colors.dim,
+    color: COLORS.ink,
   },
-  pills: {
+  oldOdds: {
+    textDecorationLine: "line-through",
+    color: COLORS.dim,
+    fontVariant: ["tabular-nums"],
+  },
+  newOdds: {
+    fontWeight: "800",
+    color: COLORS.betclicRed,
+    fontVariant: ["tabular-nums"],
+  },
+  subLine: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
   },
-  pill: {
-    height: 28,
+  subText: {
+    fontSize: 11,
+    color: COLORS.mist,
+    flex: 1,
+  },
+  policyRow: {
+    marginTop: 4,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    borderRadius: 999,
-    backgroundColor: colors.elev,
+    gap: 7,
   },
-  pillActive: {
-    backgroundColor: colors.ink,
+  checkbox: {
+    width: 15,
+    height: 15,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.mist,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  pillText: {
+  checkboxChecked: {
+    borderColor: COLORS.betclicRed,
+    backgroundColor: COLORS.betclicRed,
+  },
+  policyText: {
     fontSize: 11,
-    fontWeight: "700",
-    color: colors.mist,
-  },
-  pillTextActive: {
-    color: colors.white,
+    fontWeight: "600",
+    color: COLORS.ink,
+    flex: 1,
   },
 });

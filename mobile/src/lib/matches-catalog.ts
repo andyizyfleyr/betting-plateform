@@ -1,24 +1,10 @@
-import type { ClientMatch } from "./api";
+import type { ClientMatch } from "@/lib/api";
+import { resolveEspnSlugForLeague } from "@/lib/real-leagues";
 
 export type MatchStatusFilter = "all" | "live" | "upcoming" | "finished";
 export type OddsProfileFilter = "all" | "favorite" | "tight";
 
 export const VIRTUAL_FILTER_VALUE = "__virtual__";
-
-export function resolveEspnSlugForLeague(league: string | null | undefined): string | null {
-  if (!league) return null;
-  const l = league.toLowerCase();
-  if (l.includes("champions")) return "uefa.champions";
-  if (l.includes("ligue europa") || l.includes("europa league")) return "uefa.europa";
-  if (l.includes("conference")) return "uefa.europa.conf";
-  if (l.includes("premier league")) return "eng.1";
-  if (l.includes("laliga") || l.includes("la liga")) return "esp.1";
-  if (l.includes("ligue 1")) return "fra.1";
-  if (l.includes("serie a")) return "ita.1";
-  if (l.includes("bundesliga")) return "ger.1";
-  if (l.includes("coupe du monde") || l.includes("world cup")) return "fifa.world";
-  return null;
-}
 
 export function isClearFavoriteMatch(m: ClientMatch): boolean {
   return Math.min(m.oddsHome, m.oddsAway) <= 1.85;
@@ -102,7 +88,11 @@ function leaguePopularityScore(league: string): number {
   ) {
     return 42;
   }
-  if (l.includes("ligue europa") || l.includes("europa league") || l.includes("nations")) {
+  if (
+    l.includes("ligue europa") ||
+    l.includes("europa league") ||
+    l.includes("nations")
+  ) {
     return 34;
   }
   if (
@@ -128,10 +118,14 @@ function scoreRealMatchBasePopularity(m: ClientMatch): number {
 function scoreRealLivePopularity(m: ClientMatch): number {
   const base = scoreRealMatchBasePopularity(m);
   const openBonus = m.suspended ? 0 : 12;
-  return base + openBonus;
+  const goalsBonus = Math.min(8, ((m.homeScore ?? 0) + (m.awayScore ?? 0)) * 2);
+  return base + openBonus + goalsBonus;
 }
 
-function scoreRealPreMatchPopularity(m: ClientMatch, earliestUpcomingMs: number): number {
+function scoreRealPreMatchPopularity(
+  m: ClientMatch,
+  earliestUpcomingMs: number
+): number {
   const base = scoreRealMatchBasePopularity(m);
   const kickoffMs = new Date(m.startsAt).getTime();
   const hoursAfterNext = Math.max(0, (kickoffMs - earliestUpcomingMs) / 3_600_000);
@@ -154,6 +148,11 @@ function parseKickoffMs(iso: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 }
 
+/**
+ * Trie les matchs à venir strictement par date et heure de coup d'envoi
+ * la plus proche d'abord (du plus présent au plus futur).
+ * La notoriété ne départage que deux matchs programmés exactement à la même minute.
+ */
 export function sortRealUpcomingByPopularity(list: ClientMatch[]): ClientMatch[] {
   if (list.length <= 1) return list;
   const withTime = list.map((m) => ({
@@ -250,7 +249,10 @@ const VIRTUAL_CLUBS_BY_SLUG: Record<string, string[]> = {
   ],
 };
 
-export function matchesClubForLeagueSlug(m: ClientMatch, slug: string | null): boolean {
+export function matchesClubForLeagueSlug(
+  m: ClientMatch,
+  slug: string | null
+): boolean {
   if (!slug) return false;
   const clubs = VIRTUAL_CLUBS_BY_SLUG[slug];
   if (!clubs || clubs.length === 0) return false;

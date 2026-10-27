@@ -1,62 +1,132 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Clock } from "@/components/icons";
-import { formatKickoff } from "@/lib/format";
-import { colors } from "@/theme/tokens";
+import { Clock } from "lucide-react-native";
+import { COLORS } from "@/theme/tokens";
+
+const DAYS_SHORT = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
 
 export function KickoffCountdown({ startsAt }: { startsAt: string }) {
-  const [, setTick] = useState(0);
+  const target = new Date(startsAt).getTime();
+  const [now, setNow] = useState(() => Date.now());
+  const diff = target - now;
+  const underFiveMin = Number.isFinite(target) && diff > 0 && diff < 300_000;
+  const underOneHour = Number.isFinite(target) && diff > 0 && diff < 3_600_000;
 
   useEffect(() => {
-    const diff = new Date(startsAt).getTime() - Date.now();
-    if (diff > 20 * 60_000) return undefined;
-    const id = setInterval(() => setTick((n) => n + 1), 1_000);
+    const interval = underFiveMin ? 5_000 : underOneHour ? 15_000 : 30_000;
+    const id = setInterval(() => setNow(Date.now()), interval);
     return () => clearInterval(id);
-  }, [startsAt]);
+  }, [underFiveMin, underOneHour]);
 
-  const diffMs = new Date(startsAt).getTime() - Date.now();
-  const isSoon = diffMs <= 3 * 60_000 && diffMs > -30_000;
-
-  let label = formatKickoff(startsAt);
-  if (diffMs > 0 && diffMs <= 180_000) {
-    const totalSecs = Math.max(0, Math.ceil(diffMs / 1000));
-    const m = Math.floor(totalSecs / 60);
-    const s = totalSecs % 60;
-    label = m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `${s}s`;
+  if (!Number.isFinite(target) || diff <= 12_000) {
+    return (
+      <View style={styles.urgentPill}>
+        <View style={styles.urgentDot} />
+        <Text style={styles.urgentText}>Imminent</Text>
+      </View>
+    );
   }
 
+  if (diff < 60_000) {
+    const secs = Math.max(15, Math.ceil(diff / 5_000) * 5);
+    return (
+      <View style={styles.urgentPill}>
+        <View style={styles.urgentDot} />
+        <Text style={styles.urgentText}>dans {secs} s</Text>
+      </View>
+    );
+  }
+
+  if (underOneHour) {
+    const mins = Math.max(1, Math.round(diff / 60_000));
+    return (
+      <View style={styles.soonPill}>
+        <Clock size={12} color={COLORS.dim} strokeWidth={2.2} />
+        <Text style={styles.soonText}>dans {mins} min</Text>
+      </View>
+    );
+  }
+
+  const kickoffDate = new Date(target);
+  const nowDate = new Date(now);
+  const sameDay =
+    kickoffDate.getFullYear() === nowDate.getFullYear() &&
+    kickoffDate.getMonth() === nowDate.getMonth() &&
+    kickoffDate.getDate() === nowDate.getDate();
+
+  const tomorrowDate = new Date(nowDate);
+  tomorrowDate.setDate(nowDate.getDate() + 1);
+  const isTomorrow =
+    kickoffDate.getFullYear() === tomorrowDate.getFullYear() &&
+    kickoffDate.getMonth() === tomorrowDate.getMonth() &&
+    kickoffDate.getDate() === tomorrowDate.getDate();
+
+  const timeStr = `${pad2(kickoffDate.getHours())}:${pad2(kickoffDate.getMinutes())}`;
+  const label = sameDay
+    ? `Auj. ${timeStr}`
+    : isTomorrow
+      ? `Demain ${timeStr}`
+      : `${DAYS_SHORT[kickoffDate.getDay()]} ${kickoffDate.getDate()} · ${timeStr}`;
+
   return (
-    <View style={[styles.badge, isSoon && styles.badgeSoon]}>
-      <Clock
-        size={10.5}
-        color={isSoon ? colors.betclicRed : colors.mist}
-        strokeWidth={2.4}
-      />
-      <Text style={[styles.text, isSoon && styles.textSoon]}>{label}</Text>
+    <View style={styles.datePill}>
+      <Clock size={12} color={COLORS.dim} strokeWidth={2.2} />
+      <Text style={styles.soonText}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  badge: {
+  urgentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(225, 0, 20, 0.10)",
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    flexShrink: 0,
+  },
+  urgentDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.betclicRed,
+  },
+  urgentText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+    fontVariant: ["tabular-nums"],
+  },
+  soonPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: colors.elev,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    flexShrink: 0,
   },
-  badgeSoon: {
-    backgroundColor: "rgba(225, 0, 20, 0.10)",
+  datePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 6,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    flexShrink: 0,
   },
-  text: {
+  soonText: {
     fontSize: 10.5,
-    fontWeight: "700",
-    color: colors.ink,
+    fontWeight: "600",
+    color: COLORS.mist,
     fontVariant: ["tabular-nums"],
-  },
-  textSoon: {
-    color: colors.betclicRed,
   },
 });

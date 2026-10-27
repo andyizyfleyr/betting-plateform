@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -8,61 +8,65 @@ import {
   Text,
   View,
 } from "react-native";
-import { ChevronDown, ChevronUp, Lock, X } from "@/components/icons";
-import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
-import { getCachedMatchSnapshot } from "@/lib/entity-cache";
-import { formatKickoff, formatOdds } from "@/lib/format";
-import { useSmartPolling } from "@/lib/polling";
-import { colors, triggerHaptic } from "@/theme/tokens";
+import { Check, ChevronDown, Lock, X } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import {
+  api,
+  type ClientMatch,
+  type MarketGroup,
+  type MarketOutcome,
+} from "@/lib/api";
+import { formatOdds } from "@/lib/format";
+import { COLORS } from "@/theme/tokens";
+import { KickoffCountdown } from "./kickoff-countdown";
+import {
+  OddsTrendCorner,
+  oddsTrendTextColor,
+  useOddsTrend,
+} from "./odds-trend-corner";
+import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
-import { OddsTrendCorner, oddsTextColor, useOddsTrend } from "./odds-trend-corner";
 
-export const MARKET_CATEGORIES = [
+const CATEGORIES = [
   { key: "all", label: "Tous" },
-  { key: "principal", label: "Principaux" },
-  { key: "buts", label: "Buts" },
-  { key: "mi-temps", label: "Mi-temps" },
-  { key: "equipes", label: "Équipes" },
-  { key: "handicap", label: "Handicap" },
-  { key: "scores", label: "Scores" },
+  { key: "main", label: "Principaux" },
+  { key: "goals", label: "Buts" },
+  { key: "halftime", label: "Mi-temps" },
+  { key: "teams", label: "Équipes" },
+  { key: "scores", label: "Score exact" },
 ] as const;
 
-export type MarketCategoryKey = (typeof MARKET_CATEGORIES)[number]["key"];
-
-export function sanitizeMarketGroups(groups: MarketGroup[]): MarketGroup[] {
-  return groups.map((g) => {
-    if (g.key === "correct_score" || g.label.toLowerCase().includes("score exact")) {
-      return {
-        ...g,
-        outcomes: g.outcomes.filter(
-          (o) =>
-            o.key !== "other" &&
-            !o.label.toLowerCase().includes("autre score")
-        ),
-      };
-    }
-    return g;
-  });
+export function filterExactScoreOutcomes(
+  groupKey: string,
+  outcomes: MarketOutcome[]
+): MarketOutcome[] {
+  if (groupKey !== "correct_score" && groupKey !== "exact_score") {
+    return outcomes;
+  }
+  return outcomes.filter(
+    (o) =>
+      o.key !== "other" &&
+      !o.label.toLowerCase().includes("autre score") &&
+      !o.label.toLowerCase().includes("autre")
+  );
 }
 
-function OutcomeButton({
+export function MarketOutcomeButton({
   outcome,
+  oddsFormat,
   selected,
   disabled,
-  oddsFormat,
   onPress,
   onLongPress,
 }: {
   outcome: MarketOutcome;
-  selected: boolean;
-  disabled: boolean;
   oddsFormat: "decimal" | "fractional";
+  selected: boolean;
+  disabled?: boolean;
   onPress: () => void;
   onLongPress: () => void;
 }) {
   const trend = useOddsTrend(outcome.odds);
-
   return (
     <Pressable
       disabled={disabled}
@@ -70,335 +74,341 @@ function OutcomeButton({
       onLongPress={onLongPress}
       delayLongPress={260}
       style={[
-        styles.outcomeBtn,
-        selected && styles.outcomeBtnSelected,
+        styles.outBtn,
+        selected ? styles.outBtnSelected : styles.outBtnIdle,
         disabled && { opacity: 0.55 },
       ]}
     >
-      <OddsTrendCorner trend={trend} selected={selected} />
-      <Text
-        numberOfLines={2}
-        style={[
-          styles.outcomeLabel,
-          selected && { color: "rgba(255,255,255,0.88)" },
-        ]}
-      >
-        {outcome.shortLabel ?? outcome.label}
-      </Text>
-      {disabled ? (
-        <Lock size={12} color={selected ? colors.white : colors.dim} strokeWidth={2.4} />
-      ) : (
+      <OddsTrendCorner trend={trend} inverted={selected} />
+      <View style={styles.outLabelWrap}>
+        {selected ? (
+          <Check size={12} color="#ffffff" strokeWidth={3} />
+        ) : null}
         <Text
+          numberOfLines={2}
           style={[
-            styles.outcomeOdds,
-            { color: oddsTextColor(trend, selected) },
+            styles.outLabel,
+            selected && { color: "rgba(255,255,255,0.88)" },
           ]}
         >
-          {formatOdds(outcome.odds, oddsFormat)}
+          {outcome.short ?? outcome.shortLabel ?? outcome.label}
         </Text>
-      )}
+      </View>
+      <Text
+        style={[
+          styles.outOdds,
+          { color: oddsTrendTextColor(trend, selected) },
+        ]}
+      >
+        {formatOdds(outcome.odds, oddsFormat)}
+      </Text>
     </Pressable>
   );
 }
 
-/**
- * Accordéon de marchés réutilisé par `MarketSheet` et par `/matchs/[id]`.
- */
 export function MarketGroupAccordion({
   match,
   group,
-  defaultOpen = true,
-  onAfterSelectSingle,
 }: {
   match: ClientMatch;
   group: MarketGroup;
-  defaultOpen?: boolean;
-  onAfterSelectSingle?: () => void;
 }) {
   const {
     oddsFormat,
-    comboLegs,
-    isInCombo,
-    toggleComboLeg,
     openBet,
-    hapticsEnabled,
+    closeMarkets,
+    toggleComboLeg,
+    isInCombo,
+    comboQuickMode,
     toast,
   } = useApp();
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(true);
+  const uid = `sport-${match.id}`;
 
-  const locked =
-    match.status === "finished" ||
-    Boolean(match.suspended) ||
-    Boolean(group.suspended) ||
-    (match.source === "manual" && Boolean(match.kickoffReached) && match.status !== "live");
+  const cleanOutcomes = useMemo(
+    () => filterExactScoreOutcomes(group.key, group.outcomes),
+    [group.key, group.outcomes]
+  );
 
-  const cols = group.outcomes.length === 3 ? 3 : 2;
-
-  const handleTap = (o: MarketOutcome) => {
-    if (locked) return;
-    if (comboLegs.length >= 1) {
-      const res = toggleComboLeg({
-        kind: "sport",
-        matchId: match.id,
-        title: `${match.homeTeam} – ${match.awayTeam}`,
-        league: match.league,
-        homeTeam: match.homeTeam,
-        awayTeam: match.awayTeam,
-        homeLogo: match.homeLogo ?? null,
-        awayLogo: match.awayLogo ?? null,
-        market: group.key,
-        selection: o.key,
-        selectionLabel: `${group.label} · ${o.label}`,
-        odds: o.odds,
-        startsAt: match.startsAt,
-        isLive: match.status === "live",
-        source: match.source ?? "virtual",
-      });
-      if (res === "full") {
-        toast({ kind: "error", title: "Maximum 8 sélections dans le Betslip" });
-      }
-      return;
-    }
-
-    onAfterSelectSingle?.();
-    openBet({
-      match,
-      market: group.key,
-      marketLabel: group.label,
-      selection: o.key,
-      selectionLabel: `${group.label} · ${o.label}`,
-      odds: o.odds,
-    });
-  };
-
-  const handleLongPress = (o: MarketOutcome) => {
-    if (locked) return;
+  const handleCombo = (o: MarketOutcome) => {
     const res = toggleComboLeg({
+      uid,
       kind: "sport",
       matchId: match.id,
+      matchSource: match.source,
       title: `${match.homeTeam} – ${match.awayTeam}`,
-      league: match.league,
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
       homeLogo: match.homeLogo ?? null,
       awayLogo: match.awayLogo ?? null,
+      league: match.league,
       market: group.key,
       selection: o.key,
-      selectionLabel: `${group.label} · ${o.label}`,
+      selectionLabel: `${group.short ?? group.label} · ${o.label}`,
       odds: o.odds,
       startsAt: match.startsAt,
       isLive: match.status === "live",
-      source: match.source ?? "virtual",
     });
-    if (res === "added") {
+    if (res === "full") {
       toast({
-        kind: "info",
-        title: "Ajouté au Betslip",
-        subtitle: `${match.homeTeam} – ${match.awayTeam} · ${o.label}`,
+        kind: "error",
+        title: "Combiné complet",
+        description: "Maximum 8 sélections par ticket combiné.",
       });
-    } else if (res === "full") {
-      toast({ kind: "error", title: "Maximum 8 sélections dans le Betslip" });
+    } else if (res === "source_conflict") {
+      toast({
+        kind: "error",
+        title: "Mélange interdit",
+        description:
+          "Impossible de combiner un match officiel et un match virtuel.",
+      });
     }
+  };
+
+  const handlePress = (o: MarketOutcome) => {
+    if (comboQuickMode) {
+      handleCombo(o);
+      return;
+    }
+    closeMarkets();
+    openBet({
+      match,
+      selection: o.key,
+      odds: o.odds,
+      label: o.label,
+      market: group.key,
+      marketLabel: group.label,
+    });
   };
 
   return (
     <View style={styles.groupCard}>
-      <Pressable
-        onPress={() => {
-          triggerHaptic("light", hapticsEnabled);
-          setOpen((v) => !v);
-        }}
-        style={styles.groupHeader}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={styles.groupTitle}>{group.label}</Text>
-          {group.hint ? <Text style={styles.groupHint}>{group.hint}</Text> : null}
-        </View>
-        {open ? (
-          <ChevronUp size={16} color={colors.dim} strokeWidth={2.4} />
-        ) : (
-          <ChevronDown size={16} color={colors.dim} strokeWidth={2.4} />
-        )}
+      <Pressable onPress={() => setOpen((v) => !v)} style={styles.groupHead}>
+        <Text style={styles.groupTitle}>{group.label}</Text>
+        <ChevronDown
+          size={16}
+          color={COLORS.dim}
+          strokeWidth={2.2}
+          style={open ? { transform: [{ rotate: "180deg" }] } : undefined}
+        />
       </Pressable>
 
-      {open && (
-        <View style={styles.outcomesWrap}>
-          {group.outcomes.map((o) => (
-            <View
-              key={o.key}
-              style={[
-                styles.outcomeCell,
-                cols === 3 ? { width: "31.8%" } : { width: "48.6%" },
-              ]}
-            >
-              <OutcomeButton
-                outcome={o}
-                selected={isInCombo("sport", match.id, group.key, o.key)}
-                disabled={locked}
-                oddsFormat={oddsFormat}
-                onPress={() => handleTap(o)}
-                onLongPress={() => handleLongPress(o)}
-              />
+      {open ? (
+        <View style={styles.groupBody}>
+          {group.rows && group.rows.length > 0 ? (
+            group.rows.map((row, idx) => (
+              <View key={idx} style={styles.subRowWrap}>
+                <Text style={styles.subRowLabel}>{row.label}</Text>
+                <View style={styles.gridRow}>
+                  {row.outcomes.map((o) => (
+                    <View key={o.key} style={styles.gridCellHalf}>
+                      <MarketOutcomeButton
+                        outcome={o}
+                        oddsFormat={oddsFormat}
+                        selected={isInCombo(uid, group.key, o.key)}
+                        disabled={match.suspended}
+                        onPress={() => handlePress(o)}
+                        onLongPress={() => handleCombo(o)}
+                      />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.gridWrap}>
+              {cleanOutcomes.map((o) => {
+                const cols =
+                  cleanOutcomes.length === 3
+                    ? "31.5%"
+                    : cleanOutcomes.length >= 6
+                      ? "31.5%"
+                      : "48.5%";
+                return (
+                  <View key={o.key} style={{ width: cols }}>
+                    <MarketOutcomeButton
+                      outcome={o}
+                      oddsFormat={oddsFormat}
+                      selected={isInCombo(uid, group.key, o.key)}
+                      disabled={match.suspended}
+                      onPress={() => handlePress(o)}
+                      onLongPress={() => handleCombo(o)}
+                    />
+                  </View>
+                );
+              })}
             </View>
-          ))}
+          )}
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
-/**
- * Feuille modale `MarketSheet` :
- * - Affiche la date/heure à droite dans l'en-tête (aucun bouton Betslip rouge ni mention « Virtuel »)
- * - Affiche les noms complets des clubs sans troncature
- * - Charge tous les marchés via `GET /api/matches/[id]` (~3 Ko Edge-cached).
- */
 export function MarketSheet() {
-  const { marketMatchId, closeMarkets, dataSaverMode } = useApp();
-  const [match, setMatch] = useState<ClientMatch | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [cat, setCat] = useState<MarketCategoryKey>("all");
+  const { marketMatch, closeMarkets, feedMatches } = useApp();
+  const [fullMatch, setFullMatch] = useState<ClientMatch | null>(null);
+  const [loadingFull, setLoadingFull] = useState(false);
+  const [cat, setCat] = useState<string>("all");
 
   useEffect(() => {
-    if (!marketMatchId) {
-      setMatch(null);
+    if (!marketMatch) {
+      setFullMatch(null);
       setCat("all");
       return;
     }
-    const cached = getCachedMatchSnapshot(marketMatchId);
-    if (cached) setMatch(cached);
-  }, [marketMatchId]);
-
-  const loadFullMatch = useCallback(async () => {
-    if (!marketMatchId) return;
-    if (!match || match.markets.length <= 1) setLoading(true);
-    try {
-      const res = await api.matchById(marketMatchId);
-      setMatch(res.match);
-    } catch {
-      // Conserve le cache
-    } finally {
-      setLoading(false);
+    setFullMatch(marketMatch);
+    if (marketMatch.markets.length <= 1) {
+      setLoadingFull(true);
+      api
+        .matchById(marketMatch.id)
+        .then((res) => setFullMatch(res.match))
+        .catch(() => {})
+        .finally(() => setLoadingFull(false));
     }
-  }, [marketMatchId, match]);
+  }, [marketMatch]);
 
-  useSmartPolling(loadFullMatch, marketMatchId ? 5_000 : null, {
-    enabled: Boolean(marketMatchId),
-    dataSaver: dataSaverMode,
-    runImmediately: true,
-  });
+  const match = useMemo(() => {
+    if (!fullMatch) return null;
+    const live = feedMatches?.find((m) => m.id === fullMatch.id);
+    if (!live) return fullMatch;
+    return fullMatch.markets.length > live.markets.length
+      ? {
+          ...fullMatch,
+          status: live.status,
+          minute: live.minute,
+          homeScore: live.homeScore,
+          awayScore: live.awayScore,
+          suspended: live.suspended,
+        }
+      : live;
+  }, [feedMatches, fullMatch]);
 
-  const cleanGroups = useMemo(
-    () => sanitizeMarketGroups(match?.markets ?? []),
-    [match?.markets]
-  );
+  if (!marketMatch || !match) return null;
 
-  const visibleGroups = useMemo(
-    () =>
-      cat === "all"
-        ? cleanGroups
-        : cleanGroups.filter((g) => (g.category ?? "principal") === cat),
-    [cat, cleanGroups]
+  const filteredGroups = match.markets.filter(
+    (g) => cat === "all" || g.category === cat
   );
 
   return (
     <Modal
-      visible={Boolean(marketMatchId)}
+      visible
       transparent
       animationType="slide"
       onRequestClose={closeMarkets}
     >
-      <View style={styles.backdrop}>
-        <Pressable style={{ flex: 1 }} onPress={closeMarkets} />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          {match && (
-            <>
-              <View style={styles.topBar}>
-                <Text numberOfLines={1} style={styles.leagueText}>
-                  {match.league}
-                </Text>
-                <View style={styles.topRight}>
-                  <Text style={styles.kickoffText}>
-                    {match.status === "live"
-                      ? (match.minute ?? "EN DIRECT")
-                      : formatKickoff(match.startsAt)}
+      <Pressable style={styles.backdrop} onPress={closeMarkets}>
+        <Pressable
+          style={styles.sheet}
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={styles.grabber} />
+
+          {/* En-tête : ligue (sans badge « Virtuel ») + date/heure du match (aucun bouton Betslip rouge) */}
+          <View style={styles.topRow}>
+            <View style={styles.leagueInfo}>
+              <SportIcon sport={match.sport} size={14} color={COLORS.dim} />
+              <Text numberOfLines={1} style={styles.leagueText}>
+                {match.league}
+              </Text>
+            </View>
+            <View style={styles.topRight}>
+              {match.status === "live" ? (
+                <View style={styles.livePill}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveText}>{match.minute ?? "LIVE"}</Text>
+                </View>
+              ) : (
+                <KickoffCountdown startsAt={match.startsAt} />
+              )}
+              <Pressable onPress={closeMarkets} style={styles.closeBtn}>
+                <X size={17} color={COLORS.mist} strokeWidth={2.2} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Noms complets des clubs sans troncature */}
+          <View style={styles.teamsCard}>
+            <View style={styles.teamLine}>
+              <View style={styles.teamLeft}>
+                <TeamAvatar
+                  name={match.homeTeam}
+                  logo={match.homeLogo}
+                  size="sm"
+                />
+                <Text style={styles.fullClubName}>{match.homeTeam}</Text>
+              </View>
+              {match.homeScore !== null ? (
+                <Text style={styles.scoreVal}>{match.homeScore}</Text>
+              ) : null}
+            </View>
+            <View style={styles.teamLine}>
+              <View style={styles.teamLeft}>
+                <TeamAvatar
+                  name={match.awayTeam}
+                  logo={match.awayLogo}
+                  size="sm"
+                />
+                <Text style={styles.fullClubName}>{match.awayTeam}</Text>
+              </View>
+              {match.awayScore !== null ? (
+                <Text style={styles.scoreVal}>{match.awayScore}</Text>
+              ) : null}
+            </View>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catsRow}
+          >
+            {CATEGORIES.map((c) => {
+              const active = cat === c.key;
+              return (
+                <Pressable
+                  key={c.key}
+                  onPress={() => setCat(c.key)}
+                  style={[styles.catPill, active && styles.catPillActive]}
+                >
+                  <Text
+                    style={[styles.catText, active && styles.catTextActive]}
+                  >
+                    {c.label}
                   </Text>
-                  <Pressable onPress={closeMarkets} style={styles.closeBtn}>
-                    <X size={17} color={colors.ink} strokeWidth={2.4} />
-                  </Pressable>
-                </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {match.suspended ? (
+            <View style={styles.suspendedNotice}>
+              <Lock size={14} color={COLORS.amber} strokeWidth={2.2} />
+              <Text style={styles.suspendedText}>
+                Cotes momentanément suspendues en direct
+              </Text>
+            </View>
+          ) : null}
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.groupsList}
+          >
+            {loadingFull ? (
+              <View style={styles.loaderBox}>
+                <ActivityIndicator size="small" color={COLORS.betclicRed} />
               </View>
-
-              {/* Clubs complets sans troncature */}
-              <View style={styles.teamsCard}>
-                <View style={styles.clubLine}>
-                  <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" />
-                  <Text style={styles.clubName}>{match.homeTeam}</Text>
-                  {match.status === "live" && (
-                    <Text style={styles.liveScore}>{match.homeScore ?? 0}</Text>
-                  )}
-                </View>
-                <View style={styles.clubLine}>
-                  <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="sm" />
-                  <Text style={styles.clubName}>{match.awayTeam}</Text>
-                  {match.status === "live" && (
-                    <Text style={styles.liveScore}>{match.awayScore ?? 0}</Text>
-                  )}
-                </View>
-              </View>
-
-              {/* Onglets catégories */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.catRow}
-                style={{ flexGrow: 0 }}
-              >
-                {MARKET_CATEGORIES.map((c) => {
-                  const active = cat === c.key;
-                  return (
-                    <Pressable
-                      key={c.key}
-                      onPress={() => setCat(c.key)}
-                      style={[styles.catChip, active && styles.catChipActive]}
-                    >
-                      <Text
-                        style={[
-                          styles.catChipText,
-                          active && styles.catChipTextActive,
-                        ]}
-                      >
-                        {c.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-
-              <ScrollView
-                style={styles.scrollBody}
-                contentContainerStyle={styles.scrollContent}
-              >
-                {loading && visibleGroups.length <= 1 && (
-                  <View style={{ paddingVertical: 16, alignItems: "center" }}>
-                    <ActivityIndicator size="small" color={colors.betclicRed} />
-                  </View>
-                )}
-                {visibleGroups.map((g, idx) => (
-                  <MarketGroupAccordion
-                    key={g.key}
-                    match={match}
-                    group={g}
-                    defaultOpen={idx < 4}
-                    onAfterSelectSingle={closeMarkets}
-                  />
-                ))}
-              </ScrollView>
-            </>
-          )}
-        </View>
-      </View>
+            ) : (
+              filteredGroups.map((group) => (
+                <MarketGroupAccordion
+                  key={group.key}
+                  match={match}
+                  group={group}
+                />
+              ))
+            )}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -406,156 +416,212 @@ export function MarketSheet() {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(17, 24, 39, 0.48)",
+    backgroundColor: "rgba(17, 24, 39, 0.45)",
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: "88%",
-    paddingTop: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 20,
+    maxHeight: "92%",
   },
-  handle: {
+  grabber: {
     alignSelf: "center",
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.edge,
-    marginBottom: 8,
+    backgroundColor: COLORS.edge,
+    marginBottom: 10,
   },
-  topBar: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 10,
     gap: 8,
+    marginBottom: 10,
+  },
+  leagueInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
   },
   leagueText: {
-    flex: 1,
     fontSize: 12.5,
-    fontWeight: "800",
-    color: colors.mist,
+    fontWeight: "700",
+    color: COLORS.mist,
+    flexShrink: 1,
   },
   topRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  kickoffText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: colors.ink,
+  livePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(225, 0, 20, 0.10)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.betclicRed,
+  },
+  liveText: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    color: COLORS.betclicRed,
   },
   closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.white,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
   teamsCard: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    backgroundColor: colors.white,
+    backgroundColor: "#ffffff",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.edge,
+    borderColor: COLORS.edge,
     padding: 12,
     gap: 8,
+    marginBottom: 10,
   },
-  clubLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  clubName: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  liveScore: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: colors.betclicRed,
-    fontVariant: ["tabular-nums"],
-  },
-  catRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    gap: 6,
-  },
-  catChip: {
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  catChipActive: {
-    backgroundColor: colors.betclicRed,
-    borderColor: colors.betclicRed,
-  },
-  catChipText: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: colors.ink,
-  },
-  catChipTextActive: {
-    color: colors.white,
-  },
-  scrollBody: {
-    paddingHorizontal: 16,
-  },
-  scrollContent: {
-    paddingBottom: 28,
-    gap: 10,
-  },
-  groupCard: {
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    padding: 12,
-    gap: 10,
-  },
-  groupHeader: {
+  teamLine: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 10,
+  },
+  teamLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    flex: 1,
+  },
+  fullClubName: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.ink,
+    flex: 1,
+  },
+  scoreVal: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  catsRow: {
+    flexDirection: "row",
+    gap: 7,
+    paddingBottom: 10,
+  },
+  catPill: {
+    height: 34,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.pillDefault,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  catPillActive: {
+    backgroundColor: COLORS.betclicRed,
+  },
+  catText: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: COLORS.ink,
+  },
+  catTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  suspendedNotice: {
+    borderRadius: 10,
+    backgroundColor: COLORS.amberSoft,
+    borderWidth: 1,
+    borderColor: COLORS.amberBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  suspendedText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.amber,
+  },
+  groupsList: {
+    gap: 10,
+    paddingBottom: 18,
+  },
+  loaderBox: {
+    paddingVertical: 28,
+    alignItems: "center",
+  },
+  groupCard: {
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    overflow: "hidden",
+  },
+  groupHead: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   groupTitle: {
-    fontSize: 13.5,
-    fontWeight: "800",
-    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.ink,
+    flex: 1,
   },
-  groupHint: {
-    marginTop: 2,
-    fontSize: 11,
-    color: colors.dim,
+  groupBody: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 10,
   },
-  outcomesWrap: {
+  subRowWrap: {
+    gap: 6,
+  },
+  subRowLabel: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: COLORS.dim,
+  },
+  gridRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  gridCellHalf: {
+    flex: 1,
+  },
+  gridWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     rowGap: 7,
   },
-  outcomeCell: {},
-  outcomeBtn: {
+  outBtn: {
     minHeight: 44,
-    borderRadius: 10,
-    backgroundColor: colors.elev,
-    borderWidth: 1,
-    borderColor: colors.edgeSoft,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -563,19 +629,27 @@ const styles = StyleSheet.create({
     position: "relative",
     overflow: "hidden",
   },
-  outcomeBtnSelected: {
-    backgroundColor: colors.betclicRed,
-    borderColor: colors.betclicRed,
+  outBtnIdle: {
+    backgroundColor: COLORS.elev,
   },
-  outcomeLabel: {
+  outBtnSelected: {
+    backgroundColor: COLORS.outerSpace,
+  },
+  outLabelWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     flex: 1,
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: colors.mist,
   },
-  outcomeOdds: {
-    fontSize: 13,
-    fontWeight: "900",
+  outLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.mist,
+    flexShrink: 1,
+  },
+  outOdds: {
+    fontSize: 13.5,
+    fontWeight: "800",
     fontVariant: ["tabular-nums"],
   },
 });

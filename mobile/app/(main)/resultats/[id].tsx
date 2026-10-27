@@ -1,333 +1,356 @@
-import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "@/lib/router";
-import { ArrowLeft, CheckCircle2 } from "@/components/icons";
-import { api, type ClientFinishedMatch } from "@/lib/api";
-import { getCachedFinishedMatchSnapshot } from "@/lib/entity-cache";
-import { formatOdds, formatPlacedAt } from "@/lib/format";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { ArrowLeft, CheckCircle2 } from "lucide-react-native";
+import { LiveMatchTracker } from "@/components/live-match-tracker";
+import { RealMatchStatsCard } from "@/components/real-match-stats-card";
+import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
-import { RealMatchStatsCard } from "@/components/live-match-tracker";
-import { BareInfiniteSpinner } from "@/components/infinite-scroll-loader";
-import { cardSurface, colors } from "@/theme/tokens";
-import { useApp } from "@/context/app-context";
+import { api, type ClientMatchHistoryItem } from "@/lib/api";
+import { getCachedFinishedMatchSnapshot } from "@/lib/entity-cache";
+import { formatFullDateTime } from "@/lib/format";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-/**
- * Page dédiée `/resultats/[id]` fidèle à `src/app/(main)/resultats/[id]/page.tsx`.
- */
-export default function ResultDetailScreen() {
+export default function ResultatDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
-  const matchId = Number(params.id);
-  const { oddsFormat } = useApp();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const matchId = Number(id);
 
-  const [match, setMatch] = useState<ClientFinishedMatch | null>(() =>
+  const [item, setItem] = useState<ClientMatchHistoryItem | null>(() =>
     Number.isFinite(matchId) ? getCachedFinishedMatchSnapshot(matchId) : null
   );
+  const [loading, setLoading] = useState<boolean>(!item);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!Number.isFinite(matchId) || matchId <= 0) return;
-    let active = true;
-    (async () => {
-      try {
-        const res = await api.finishedMatches(matchId);
-        if (!active) return;
-        const found =
-          res.focusedMatch ??
-          res.matches.find((m) => m.id === matchId) ??
-          null;
-        if (found) setMatch(found);
-      } catch {
-        // Conserve le snapshot
-      }
-    })();
-    return () => {
-      active = false;
-    };
+    try {
+      const res = await api.matchHistory(matchId);
+      const found =
+        res.focusedMatch ??
+        res.matches.find((m) => m.id === matchId) ??
+        null;
+      if (found) setItem(found);
+    } catch {
+      /* garde snapshot */
+    } finally {
+      setLoading(false);
+    }
   }, [matchId]);
 
-  return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.topRow}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft size={18} color={colors.ink} strokeWidth={2.4} />
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  if (loading && !item) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="small" color={COLORS.betclicRed} />
+      </View>
+    );
+  }
+
+  if (!item) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.notFound}>Résultat introuvable</Text>
+        <Pressable
+          onPress={() => router.back("/resultats")}
+          style={styles.backFallback}
+        >
+          <Text style={styles.backFallbackText}>Retour aux résultats</Text>
         </Pressable>
-        <Text numberOfLines={1} style={styles.title}>
-          {match?.league ?? "Résultat"}
-        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[COLORS.betclicRed]}
+          tintColor={COLORS.betclicRed}
+        />
+      }
+    >
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back("/resultats")}
+          style={styles.backBtn}
+        >
+          <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
+        </Pressable>
+        <View style={styles.leagueRow}>
+          <SportIcon sport={item.sport} size={14} color={COLORS.dim} />
+          <Text numberOfLines={1} style={styles.leagueText}>
+            {item.league}
+          </Text>
+        </View>
+        <View style={styles.finBadge}>
+          <Text style={styles.finBadgeText}>Terminé</Text>
+        </View>
       </View>
 
-      {!match ? (
-        <BareInfiniteSpinner visible />
-      ) : (
-        <>
-          <View style={[cardSurface.glassCard, styles.scoreCard]}>
-            <View style={styles.teamsRow}>
-              <View style={styles.clubCol}>
-                <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="md" />
-                <Text style={styles.clubName}>{match.homeTeam}</Text>
-              </View>
+      <View style={styles.scoreboardCard}>
+        <Text style={styles.dateHeader}>
+          {formatFullDateTime(item.finishedAt || item.startsAt)}
+        </Text>
 
-              <View style={styles.scoreCenter}>
-                <Text style={styles.ftBadge}>TERMINÉ</Text>
-                <Text style={styles.ftScore}>
-                  {match.homeScore} - {match.awayScore}
-                </Text>
-                {typeof match.htHomeScore === "number" &&
-                  typeof match.htAwayScore === "number" && (
-                    <Text style={styles.htScore}>
-                      MT {match.htHomeScore}-{match.htAwayScore}
-                    </Text>
-                  )}
-              </View>
+        <View style={styles.clubsRow}>
+          <View style={styles.clubCol}>
+            <TeamAvatar
+              name={item.homeTeam}
+              logo={item.homeLogo}
+              size="lg"
+            />
+            <Text style={styles.clubName}>{item.homeTeam}</Text>
+          </View>
 
-              <View style={styles.clubCol}>
-                <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="md" />
-                <Text style={styles.clubName}>{match.awayTeam}</Text>
-              </View>
-            </View>
+          <View style={styles.scoreCenter}>
+            <Text style={styles.bigScore}>
+              {item.homeScore ?? 0} : {item.awayScore ?? 0}
+            </Text>
+            {item.htHome !== null && item.htAway !== null ? (
+              <Text style={styles.htScore}>
+                MT {item.htHome} - {item.htAway}
+              </Text>
+            ) : null}
+          </View>
 
-            <Text style={styles.finishedAtText}>
-              Terminé {formatPlacedAt(match.finishedAt)}
+          <View style={styles.clubCol}>
+            <TeamAvatar
+              name={item.awayTeam}
+              logo={item.awayLogo}
+              size="lg"
+            />
+            <Text style={styles.clubName}>{item.awayTeam}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.settlementCard}>
+        <View style={styles.settlementHead}>
+          <CheckCircle2 size={15} color={COLORS.win} strokeWidth={2.4} />
+          <Text style={styles.settlementTitle}>Marchés réglés</Text>
+        </View>
+        <View style={styles.grid}>
+          <View style={styles.cell}>
+            <Text style={styles.cellLabel}>Résultat 1X2</Text>
+            <Text style={styles.cellVal}>{item.winnerCode ?? "—"}</Text>
+          </View>
+          <View style={styles.cell}>
+            <Text style={styles.cellLabel}>Mi-temps 1X2</Text>
+            <Text style={styles.cellVal}>{item.htWinnerCode ?? "—"}</Text>
+          </View>
+          <View style={styles.cell}>
+            <Text style={styles.cellLabel}>Total buts</Text>
+            <Text style={styles.cellVal}>
+              {item.totalGoals !== null ? `${item.totalGoals}` : "—"}
             </Text>
           </View>
-
-          {/* Marchés réglés */}
-          <View style={[cardSurface.glassCard, styles.settledCard]}>
-            <Text style={styles.sectionTitle}>Marchés réglés</Text>
-
-            <View style={styles.oddsRow}>
-              <View
-                style={[
-                  styles.closingPill,
-                  match.winner === "home" && styles.closingPillWon,
-                ]}
-              >
-                <Text style={styles.closingLabel}>1</Text>
-                <Text style={styles.closingVal}>
-                  {formatOdds(match.oddsHome, oddsFormat)}
-                </Text>
-              </View>
-              {match.oddsDraw !== null && (
-                <View
-                  style={[
-                    styles.closingPill,
-                    match.winner === "draw" && styles.closingPillWon,
-                  ]}
-                >
-                  <Text style={styles.closingLabel}>X</Text>
-                  <Text style={styles.closingVal}>
-                    {formatOdds(match.oddsDraw, oddsFormat)}
-                  </Text>
-                </View>
-              )}
-              <View
-                style={[
-                  styles.closingPill,
-                  match.winner === "away" && styles.closingPillWon,
-                ]}
-              >
-                <Text style={styles.closingLabel}>2</Text>
-                <Text style={styles.closingVal}>
-                  {formatOdds(match.oddsAway, oddsFormat)}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.settledChips}>
-              <View style={styles.settledChip}>
-                <CheckCircle2 size={13} color={colors.win} strokeWidth={2.4} />
-                <Text style={styles.settledChipText}>
-                  {match.totalGoals >= 3
-                    ? "Plus de 2,5 buts"
-                    : "Moins de 2,5 buts"}{" "}
-                  ({match.totalGoals})
-                </Text>
-              </View>
-              <View style={styles.settledChip}>
-                <CheckCircle2 size={13} color={colors.win} strokeWidth={2.4} />
-                <Text style={styles.settledChipText}>
-                  BTTS : {match.btts ? "Oui" : "Non"}
-                </Text>
-              </View>
-            </View>
+          <View style={styles.cell}>
+            <Text style={styles.cellLabel}>Les 2 marquent</Text>
+            <Text style={styles.cellVal}>
+              {item.btts === null ? "—" : item.btts ? "Oui" : "Non"}
+            </Text>
           </View>
+        </View>
+      </View>
 
-          {match.realStats && (
-            <RealMatchStatsCard
-              stats={match.realStats}
-              homeTeam={match.homeTeam}
-              awayTeam={match.awayTeam}
-            />
-          )}
+      <RealMatchStatsCard stats={item.realStats} />
 
-          {match.events.length > 0 && (
-            <View style={[cardSurface.glassCard, styles.settledCard]}>
-              <Text style={styles.sectionTitle}>Faits de match</Text>
-              {match.events.map((ev, idx) => (
-                <View key={`${ev.min}-${idx}`} style={styles.evRow}>
-                  <Text style={styles.evMin}>{ev.min}&apos;</Text>
-                  <Text style={styles.evText}>{ev.text}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </>
-      )}
+      <LiveMatchTracker
+        homeTeam={item.homeTeam}
+        awayTeam={item.awayTeam}
+        homeScore={item.homeScore}
+        awayScore={item.awayScore}
+        telemetry={item.telemetry}
+        events={item.events}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  page: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 10,
-    paddingBottom: 28,
-    gap: 11,
+    paddingBottom: 26,
+    gap: 12,
   },
-  topRow: {
-    flexDirection: "row",
+  center: {
+    flex: 1,
     alignItems: "center",
-    gap: 9,
+    justifyContent: "center",
+    gap: 10,
   },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
+  notFound: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  backFallback: {
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "900",
-    color: colors.ink,
+  backFallbackText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
   },
-  scoreCard: {
-    padding: 14,
-    gap: 8,
-  },
-  teamsRow: {
+  navBar: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leagueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  leagueText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.mist,
+    flexShrink: 1,
+  },
+  finBadge: {
+    borderRadius: 8,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  finBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.dim,
+  },
+  scoreboardCard: {
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 16,
+    gap: 12,
+  },
+  dateHeader: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: COLORS.dim,
+    textAlign: "center",
+  },
+  clubsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 8,
   },
   clubCol: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
+    gap: 7,
   },
   clubName: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: "800",
-    color: colors.ink,
+    color: COLORS.ink,
     textAlign: "center",
   },
   scoreCenter: {
+    minWidth: 74,
+    paddingTop: 6,
     alignItems: "center",
+    gap: 4,
   },
-  ftBadge: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: colors.dim,
-  },
-  ftScore: {
-    marginTop: 2,
-    fontSize: 22,
+  bigScore: {
+    fontSize: 26,
     fontWeight: "900",
-    color: colors.ink,
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   htScore: {
-    fontSize: 10.5,
-    fontWeight: "600",
-    color: colors.dim,
-  },
-  finishedAtText: {
-    textAlign: "center",
     fontSize: 11,
-    color: colors.dim,
     fontWeight: "600",
+    color: COLORS.dim,
   },
-  settledCard: {
-    padding: 13,
-    gap: 9,
+  settlementCard: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 14,
+    gap: 10,
   },
-  sectionTitle: {
-    fontSize: 13.5,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  oddsRow: {
-    flexDirection: "row",
-    gap: 7,
-  },
-  closingPill: {
-    flex: 1,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: colors.elev,
-    paddingHorizontal: 10,
+  settlementHead: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 7,
   },
-  closingPillWon: {
-    backgroundColor: "#dcfce7",
-    borderWidth: 1,
-    borderColor: "rgba(21,128,61,0.35)",
+  settlementTitle: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: COLORS.ink,
   },
-  closingLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.mist,
-  },
-  closingVal: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  settledChips: {
+  grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 7,
+    justifyContent: "space-between",
+    rowGap: 8,
   },
-  settledChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "#f0fdf4",
+  cell: {
+    width: "48.5%",
+    borderRadius: 11,
+    backgroundColor: COLORS.elev,
+    padding: 10,
+    gap: 2,
   },
-  settledChipText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: colors.win,
-  },
-  evRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  evMin: {
-    width: 28,
-    fontSize: 11.5,
-    fontWeight: "800",
-    color: colors.dim,
-  },
-  evText: {
-    flex: 1,
-    fontSize: 12.5,
+  cellLabel: {
+    fontSize: 11,
     fontWeight: "600",
-    color: colors.ink,
+    color: COLORS.dim,
+  },
+  cellVal: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.ink,
   },
 });

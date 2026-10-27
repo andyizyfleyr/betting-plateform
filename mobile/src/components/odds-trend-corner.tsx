@@ -1,66 +1,75 @@
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import Svg, { Polygon } from "react-native-svg";
-import { colors } from "@/theme/tokens";
+import Svg, { Path } from "react-native-svg";
+import { COLORS } from "@/theme/tokens";
 
-export type OddsTrend = "up" | "down" | "flat";
+export type OddsTrend = "up" | "down" | null;
 
-/**
- * Détecte en temps réel les hausses (vert `#15803d`), baisses (rouge `#e10014`)
- * et stabilités (noir `#111827`) de cotes pendant 4,5 secondes.
- */
-export function useOddsTrend(odds: number): OddsTrend {
+export function oddsTrendTextColor(trend: OddsTrend, active = false): string {
+  if (active) {
+    if (trend === "up") return "#6ee7b7";
+    if (trend === "down") return "#fecdd3";
+    return "#ffffff";
+  }
+  if (trend === "up") return COLORS.win;
+  if (trend === "down") return COLORS.betclicRed;
+  return COLORS.ink;
+}
+
+export function useOddsTrend(odds: number, durationMs = 4200): OddsTrend {
+  const [trend, setTrend] = useState<OddsTrend>(null);
   const prevRef = useRef<number>(odds);
-  const [trend, setTrend] = useState<OddsTrend>("flat");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const prev = prevRef.current;
-    if (Math.abs(odds - prev) >= 0.009) {
-      const next: OddsTrend = odds > prev ? "up" : "down";
-      prevRef.current = odds;
-      setTrend(next);
-      const t = setTimeout(() => setTrend("flat"), 4_500);
-      return () => clearTimeout(t);
-    }
     prevRef.current = odds;
-    return undefined;
-  }, [odds]);
+    if (!Number.isFinite(odds) || !Number.isFinite(prev)) return;
+    const centsNow = Math.round(odds * 100);
+    const centsPrev = Math.round(prev * 100);
+    if (centsNow === centsPrev) return;
+
+    const dir: Exclude<OddsTrend, null> = centsNow > centsPrev ? "up" : "down";
+    setTrend(dir);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setTrend(null);
+    }, durationMs);
+  }, [odds, durationMs]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   return trend;
 }
 
-export function oddsTextColor(trend: OddsTrend, selected = false): string {
-  if (selected) return colors.white;
-  if (trend === "up") return colors.win;
-  if (trend === "down") return colors.betclicRed;
-  return colors.ink;
-}
-
 export function OddsTrendCorner({
   trend,
-  selected = false,
+  inverted = false,
 }: {
   trend: OddsTrend;
-  selected?: boolean;
+  inverted?: boolean;
 }) {
-  if (trend === "flat") return null;
-
-  const fill = selected
-    ? "rgba(255,255,255,0.9)"
-    : trend === "up"
-      ? "#16a34a"
-      : colors.betclicRed;
+  if (!trend) return null;
+  const isUp = trend === "up";
+  const fill = isUp
+    ? inverted
+      ? "#6ee7b7"
+      : COLORS.win
+    : inverted
+      ? "#fda4af"
+      : COLORS.betclicRed;
 
   return (
-    <View
-      pointerEvents="none"
-      style={trend === "up" ? styles.topRight : styles.bottomRight}
-    >
-      <Svg width={9} height={9} viewBox="0 0 9 9">
-        {trend === "up" ? (
-          <Polygon points="0,0 9,0 9,9" fill={fill} />
+    <View pointerEvents="none" style={styles.wrap}>
+      <Svg width={9} height={9} viewBox="0 0 10 10">
+        {isUp ? (
+          <Path d="M5 1.5 L9 8.5 L1 8.5 Z" fill={fill} />
         ) : (
-          <Polygon points="9,0 9,9 0,9" fill={fill} />
+          <Path d="M1 1.5 L9 1.5 L5 8.5 Z" fill={fill} />
         )}
       </Svg>
     </View>
@@ -68,14 +77,9 @@ export function OddsTrendCorner({
 }
 
 const styles = StyleSheet.create({
-  topRight: {
+  wrap: {
     position: "absolute",
-    top: 2,
-    right: 2,
-  },
-  bottomRight: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
+    top: 3.5,
+    right: 4,
   },
 });

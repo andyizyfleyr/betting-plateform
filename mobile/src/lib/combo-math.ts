@@ -17,6 +17,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Retourne le pourcentage de Bonus Combiné applicable au nombre de sélections éligibles (cote ≥ 1,35). */
 export function comboBoostPct(eligibleLegsCount: number): number {
   if (eligibleLegsCount >= 8) return 20;
   if (eligibleLegsCount === 7) return 16;
@@ -27,9 +28,7 @@ export function comboBoostPct(eligibleLegsCount: number): number {
   return 0;
 }
 
-export function nextComboBoostTier(
-  eligibleLegsCount: number
-): { needed: number; pct: number } | null {
+export function nextComboBoostTier(eligibleLegsCount: number): { needed: number; pct: number } | null {
   for (const tier of COMBO_BOOST_TIERS) {
     if (eligibleLegsCount < tier.legs) {
       return { needed: tier.legs - eligibleLegsCount, pct: tier.pct };
@@ -49,6 +48,7 @@ export interface ComboQuote {
   capped: boolean;
 }
 
+/** Calcule la cote combinée fixe, le Bonus Combiné sur le bénéfice net et le plafond bookmaker. */
 export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
   if (oddsList.length === 0) {
     return {
@@ -101,10 +101,10 @@ function parseStartsAtMs(iso?: string | null): number {
 }
 
 /**
- * Classe les sélections d'un pari combiné :
- * 0) Terminées d'abord (date/heure croissante)
- * 1) En direct (date/heure croissante)
- * 2) À jouer (date/heure croissante)
+ * Classe les sélections d'un pari combiné dans l'ordre chronologique complet :
+ *  0) Matchs / sélections TERMINÉS en premier, selon la date et l'heure croissantes
+ *  1) Matchs actuellement EN DIRECT, selon la date et l'heure croissantes
+ *  2) Matchs / événements À JOUER, selon la date et l'heure croissantes (du plus proche au plus futur)
  */
 export function sortComboBetLegsChronologically<
   T extends {
@@ -139,6 +139,12 @@ export function sortComboBetLegsChronologically<
     .map((x) => x.leg);
 }
 
+/**
+ * Classe les sélections d'un coupon combiné en cours de préparation :
+ *  0) Sélections terminées / clôturées selon la date et l'heure croissantes
+ *  1) Matchs en direct selon la date et l'heure croissantes
+ *  2) Matchs / événements à jouer du plus proche au plus futur
+ */
 export function sortSlipSelectionsChronologically<
   T extends {
     isLive?: boolean;
@@ -166,6 +172,13 @@ export function sortSlipSelectionsChronologically<
     .map((x) => x.leg);
 }
 
+/**
+ * Classe les paris en cours dans « Mes paris » exactement selon la même logique chronologique :
+ *  0) Tickets dont tous les événements sont déjà terminés (en attente de règlement), par date/heure croissante
+ *  1) Combinés déjà entamés comptant au moins un match terminé, par date/heure croissante du match terminé
+ *  2) Tickets actuellement EN DIRECT, par date/heure de coup d'envoi croissante
+ *  3) Tickets À JOUER, de la date et l'heure la plus proche à la plus éloignée dans le futur
+ */
 export function sortOngoingBetsChronologically<
   T extends {
     id: number;
@@ -255,3 +268,4 @@ export function sortOngoingBetsChronologically<
     )
     .map((x) => x.bet);
 }
+

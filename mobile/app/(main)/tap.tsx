@@ -1,40 +1,75 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
+  Easing,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useRouter } from "@/lib/router";
-import { ArrowLeft, Flame, Zap } from "@/components/icons";
-import { api } from "@/lib/api";
-import { eur } from "@/lib/format";
-import { colors, triggerHaptic } from "@/theme/tokens";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { ArrowLeft, Minus, Plus } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import { api, ApiHttpError } from "@/lib/api";
+import { Redirect, useRouter } from "@/lib/router";
+import { triggerHaptic } from "@/theme/tokens";
 
-const BET_CHIPS = [1, 2, 5, 10, 25];
+const STAKES = [1, 2, 5, 10, 25, 50] as const;
+
+interface PopItem {
+  id: number;
+  anim: Animated.Value;
+}
 
 /**
- * Jeu initial `/tap` (`Tap Win`) porté en React Native Android,
- * avec agrégation des frappes (`tap_batch` toutes les 250 ms) pour minimiser les requêtes HTTP.
+ * Jeu Tap & Win initial (« Remet le jeu tap initial ») :
+ * Arène sombre #020617, anneau lumineux rotatif, bouton circulaire or #f9a602,
+ * animations +1 flottantes, sélecteur de mise $ et encaissement instantané.
  */
 export default function TapGameScreen() {
   const router = useRouter();
-  const { user, balance, setBalance, hapticsEnabled, toast } = useApp();
+  const { user, authReady, balance, setBalance, hapticsEnabled } = useApp();
 
   const [bet, setBet] = useState<number>(2);
-  const [phase, setPhase] = useState<"idle" | "playing" | "crashed" | "won">("idle");
+  const [phase, setPhase] = useState<
+    "idle" | "playing" | "crashed" | "cashed"
+  >("idle");
   const [multiplier, setMultiplier] = useState<number>(1.0);
-  const [growthFactor, setGrowthFactor] = useState<number>(1.06);
-  const [lastWin, setLastWin] = useState<number | null>(null);
+  const [winBanner, setWinBanner] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pops, setPops] = useState<PopItem[]>([]);
 
+  const spinAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const pendingTapsRef = useRef<number>(0);
+  const popSeqRef = useRef(0);
+  const pendingTapsRef = useRef(0);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flushingRef = useRef<boolean>(false);
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 2800,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spinAnim]);
+
+  useEffect(() => {
+    if (!user) return;
+    api.tap
+      .state()
+      .then((res) => {
+        if (typeof res.balance === "number") setBalance(res.balance);
+      })
+      .catch(() => {});
+  }, [setBalance, user]);
 
   useEffect(() => {
     return () => {
@@ -42,88 +77,97 @@ export default function TapGameScreen() {
     };
   }, []);
 
-  const flushBatch = async () => {
-    if (flushingRef.current || pendingTapsRef.current <= 0) return;
-    const count = pendingTapsRef.current;
+  if (authReady && !user) {
+    return <Redirect href="/auth" />;
+  }
+
+  const spawnPop = () => {
+    const id = ++popSeqRef.current;
+    const anim = new Animated.Value(0);
+    setPops((prev) => [...prev.slice(-5), { id, anim }]);
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 650,
+      useNativeDriver: true,
+    }).start(() => {
+      setPops((prev) => prev.filter((p) => p.id !== id));
+    });
+  };
+
+  const flushTaps = async () => {
+    flushTimerRef.current = null;
+    if (phaseRef.current !== "playing" || pendingTapsRef.current <= 0) return;
+    const batch = pendingTapsRef.current;
     pendingTapsRef.current = 0;
-    flushingRef.current = true;
+
     try {
-      const res = await api.tap.tapBatch(count);
-      setMultiplier(res.multiplier);
+      const res = await api.tap.tapBatch(batch);
       if (res.status === "crashed") {
+        pendingTapsRef.current = 0;
         setPhase("crashed");
-        if (typeof res.new_balance === "number") setBalance(res.new_balance);
         triggerHaptic("error", hapticsEnabled);
+        setWinBanner("CRASH !");
+        if (res.new_balance !== undefined) setBalance(Number(res.new_balance));
       } else if (res.status === "autocashout") {
-        setPhase("won");
-        setLastWin(res.win_amount ?? bet * res.multiplier);
-        if (typeof res.new_balance === "number") setBalance(res.new_balance);
+        pendingTapsRef.current = 0;
+        const m = Number(res.multiplier ?? multiplier);
+        const w = Number(res.win_amount ?? bet * m);
+        setMultiplier(m);
+        setPhase("cashed");
+        if (res.new_balance !== undefined) setBalance(Number(res.new_balance));
         triggerHaptic("success", hapticsEnabled);
+        setWinBanner(`+${w.toFixed(2)} $`);
+      } else if (res.multiplier !== undefined) {
+        setMultiplier(Number(res.multiplier));
       }
     } catch {
-      // Silencieux
-    } finally {
-      flushingRef.current = false;
-      if (pendingTapsRef.current > 0 && phase === "playing") {
-        void flushBatch();
-      }
+      /* ignore */
     }
   };
 
   const handleStart = async () => {
-    if (!user) {
-      router.push("/auth");
-      return;
-    }
-    if (bet > balance) {
-      toast({ kind: "error", title: "Solde insuffisant" });
-      return;
-    }
+    if (busy || bet > balance + 0.001) return;
     setBusy(true);
+    setWinBanner(null);
     try {
       const res = await api.tap.startGame(bet);
-      setBalance(res.new_balance);
-      setMultiplier(res.multiplier);
-      setGrowthFactor(res.factor || 1.06);
-      setLastWin(null);
-      pendingTapsRef.current = 0;
+      if (res.new_balance !== undefined) setBalance(Number(res.new_balance));
+      setMultiplier(Number(res.multiplier ?? 1.0));
       setPhase("playing");
       triggerHaptic("medium", hapticsEnabled);
     } catch (err) {
-      toast({
-        kind: "error",
-        title: "Impossible de démarrer",
-        subtitle: err instanceof Error ? err.message : undefined,
-      });
+      setWinBanner(
+        err instanceof ApiHttpError ? err.message : "Mise refusée"
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  const handleTapOrb = () => {
-    if (phase !== "playing") return;
+  const handleTapCircle = () => {
+    if (phase === "idle" || phase === "crashed" || phase === "cashed") {
+      void handleStart();
+      return;
+    }
     triggerHaptic("light", hapticsEnabled);
-
     Animated.sequence([
       Animated.timing(scaleAnim, {
-        toValue: 0.92,
+        toValue: 0.93,
         duration: 55,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
         useNativeDriver: true,
+        speed: 30,
       }),
     ]).start();
-
-    // Retour visuel optimiste immédiat + envoi groupé `tap_batch` toutes les 240 ms
-    setMultiplier((m) => Math.round(m * growthFactor * 100) / 100);
+    spawnPop();
     pendingTapsRef.current += 1;
     if (!flushTimerRef.current) {
       flushTimerRef.current = setTimeout(() => {
-        flushTimerRef.current = null;
-        void flushBatch();
-      }, 240);
+        void flushTaps();
+      }, 140);
     }
   };
 
@@ -134,91 +178,212 @@ export default function TapGameScreen() {
       clearTimeout(flushTimerRef.current);
       flushTimerRef.current = null;
     }
+    if (pendingTapsRef.current > 0) {
+      await flushTaps();
+    }
+    if (phaseRef.current !== "playing") {
+      setBusy(false);
+      return;
+    }
     try {
-      if (pendingTapsRef.current > 0) {
-        await flushBatch();
-      }
       const res = await api.tap.cashout();
-      setBalance(res.new_balance);
-      setLastWin(res.win_amount);
-      setPhase("won");
-      triggerHaptic("success", hapticsEnabled);
-    } catch (err) {
-      toast({
-        kind: "error",
-        title: "Encaissement impossible",
-        subtitle: err instanceof Error ? err.message : undefined,
-      });
+      if (res.status === "crashed") {
+        setPhase("crashed");
+        triggerHaptic("error", hapticsEnabled);
+        setWinBanner("CRASH !");
+      } else {
+        const m = Number(res.multiplier ?? multiplier);
+        const w = Number(res.win_amount ?? bet * m);
+        setMultiplier(m);
+        setPhase("cashed");
+        if (res.new_balance !== undefined) setBalance(Number(res.new_balance));
+        triggerHaptic("success", hapticsEnabled);
+        setWinBanner(`+${w.toFixed(2)} $`);
+      }
+    } catch {
+      /* ignore */
     } finally {
       setBusy(false);
     }
   };
 
+  const rotateInterpolate = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const livePayout = (bet * multiplier).toFixed(2);
+
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.screen}>
+      {/* Barre supérieure sombre */}
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft size={18} color={colors.white} strokeWidth={2.4} />
+        <Pressable
+          onPress={() => router.back("/jeux")}
+          style={styles.backBtn}
+        >
+          <ArrowLeft size={18} color="#f8fafc" strokeWidth={2.3} />
+          <Text style={styles.backLabel}>Jeux</Text>
         </Pressable>
-        <Text style={styles.title}>TAP WIN</Text>
-        <View style={{ width: 34 }} />
+
+        <View style={styles.balancePill}>
+          <Text style={styles.dollarSign}>$</Text>
+          <Text style={styles.balanceVal}>{balance.toFixed(2)}</Text>
+        </View>
       </View>
 
+      {/* Zone centrale : Multiplicateur + Anneau rotatif + Cercle Or #f9a602 */}
       <View style={styles.arena}>
         <Text
           style={[
             styles.multDisplay,
-            phase === "crashed" && { color: "#f87171" },
-            phase === "won" && { color: "#34d399" },
+            phase === "crashed" && { color: "#ef4444" },
+            phase === "cashed" && { color: "#22c55e" },
           ]}
         >
           ×{multiplier.toFixed(2)}
         </Text>
-        <Text style={styles.statusSub}>
-          {phase === "playing"
-            ? `Gain actuel : ${eur(bet * multiplier)}`
-            : phase === "crashed"
-              ? "EXPLOSÉ ! Retentez votre chance"
-              : phase === "won" && lastWin !== null
-                ? `ENCAISSÉ : +${eur(lastWin)}`
-                : "Appuyez sur l'orbe pour faire monter la cote"}
-        </Text>
 
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Pressable
-            disabled={phase !== "playing"}
-            onPress={handleTapOrb}
+        {winBanner ? (
+          <View
             style={[
-              styles.orb,
-              phase === "crashed" && styles.orbCrashed,
-              phase === "won" && styles.orbWon,
+              styles.bannerPill,
+              phase === "crashed"
+                ? styles.bannerCrash
+                : styles.bannerWin,
             ]}
           >
-            {phase === "crashed" ? (
-              <Flame size={48} color={colors.white} />
-            ) : (
-              <Zap size={50} color={colors.white} fill={colors.white} />
-            )}
-            <Text style={styles.orbLabel}>
-              {phase === "playing" ? "TAP !" : "PULSE"}
-            </Text>
-          </Pressable>
-        </Animated.View>
+            <Text style={styles.bannerText}>{winBanner}</Text>
+          </View>
+        ) : (
+          <Text style={styles.subHint}>
+            {phase === "playing"
+              ? `Gain actuel : ${livePayout} $`
+              : "Touchez le cercle d'or pour lancer et multiplier"}
+          </Text>
+        )}
+
+        <View style={styles.circleStage}>
+          <Animated.View
+            style={[
+              styles.conicRing,
+              { transform: [{ rotate: rotateInterpolate }] },
+            ]}
+          >
+            <LinearGradient
+              colors={
+                phase === "crashed"
+                  ? ["#ef4444", "#7f1d1d", "#ef4444"]
+                  : ["#f9a602", "#fde047", "#020617", "#f9a602"]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </Animated.View>
+
+          <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+            <Pressable onPress={handleTapCircle} style={styles.goldCircleWrap}>
+              <LinearGradient
+                colors={
+                  phase === "crashed"
+                    ? ["#dc2626", "#991b1b"]
+                    : ["#fde047", "#f9a602", "#d97706"]
+                }
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.8, y: 1 }}
+                style={styles.goldCircle}
+              >
+                <Text style={styles.goldMainText}>
+                  {phase === "playing"
+                    ? "TAP !"
+                    : phase === "crashed"
+                      ? "REJOUER"
+                      : "JOUER"}
+                </Text>
+                <Text style={styles.goldSubText}>
+                  {phase === "playing" ? "+ Cote" : `${bet.toFixed(2)} $`}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          </Animated.View>
+
+          {pops.map((p) => (
+            <Animated.View
+              key={p.id}
+              pointerEvents="none"
+              style={[
+                styles.popWrap,
+                {
+                  opacity: p.anim.interpolate({
+                    inputRange: [0, 0.2, 1],
+                    outputRange: [0, 1, 0],
+                  }),
+                  transform: [
+                    {
+                      translateY: p.anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-10, -95],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.popText}>+TAP</Text>
+            </Animated.View>
+          ))}
+        </View>
       </View>
 
-      <View style={styles.controls}>
-        <View style={styles.chipsRow}>
-          {BET_CHIPS.map((c) => {
-            const active = bet === c;
+      {/* Panneau inférieur : Contrôle de mise $ + Bouton ENCAISSER */}
+      <View style={styles.bottomDock}>
+        <View style={styles.stakeRow}>
+          <Pressable
+            disabled={phase === "playing"}
+            onPress={() => setBet((b) => Math.max(1, Math.round((b - 1) * 100) / 100))}
+            style={[styles.stepBtn, phase === "playing" && { opacity: 0.4 }]}
+          >
+            <Minus size={16} color="#f8fafc" strokeWidth={2.5} />
+          </Pressable>
+
+          <View style={styles.stakeDisplay}>
+            <Text style={styles.stakeCaption}>MISE ($)</Text>
+            <Text style={styles.stakeVal}>{bet.toFixed(2)} $</Text>
+          </View>
+
+          <Pressable
+            disabled={phase === "playing"}
+            onPress={() =>
+              setBet((b) => Math.min(100, Math.round((b + 1) * 100) / 100))
+            }
+            style={[styles.stepBtn, phase === "playing" && { opacity: 0.4 }]}
+          >
+            <Plus size={16} color="#f8fafc" strokeWidth={2.5} />
+          </Pressable>
+        </View>
+
+        <View style={styles.presetsRow}>
+          {STAKES.map((s) => {
+            const active = Math.abs(bet - s) < 0.01;
             return (
               <Pressable
-                key={c}
+                key={s}
                 disabled={phase === "playing"}
-                onPress={() => setBet(c)}
-                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setBet(s)}
+                style={[
+                  styles.presetChip,
+                  active && styles.presetChipActive,
+                  phase === "playing" && { opacity: 0.45 },
+                ]}
               >
-                <Text style={[styles.chipText, active && { color: colors.ink }]}>
-                  {c} €
+                <Text
+                  style={[
+                    styles.presetText,
+                    active && styles.presetTextActive,
+                  ]}
+                >
+                  {s} $
                 </Text>
               </Pressable>
             );
@@ -227,146 +392,255 @@ export default function TapGameScreen() {
 
         {phase === "playing" ? (
           <Pressable
-            disabled={busy}
-            onPress={() => void handleCashout()}
-            style={styles.cashoutBtn}
+            disabled={busy || multiplier <= 1.0}
+            onPress={handleCashout}
+            style={[
+              styles.cashoutBtn,
+              (busy || multiplier <= 1.0) && { opacity: 0.6 },
+            ]}
           >
-            {busy ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Text style={styles.actionText}>
-                ENCAISSER {eur(bet * multiplier)}
-              </Text>
-            )}
+            <Text style={styles.cashoutText}>
+              ENCAISSER {livePayout} $
+            </Text>
           </Pressable>
         ) : (
           <Pressable
-            disabled={busy}
-            onPress={() => void handleStart()}
-            style={styles.startBtn}
+            disabled={busy || bet > balance + 0.001}
+            onPress={handleStart}
+            style={[
+              styles.startBtn,
+              (busy || bet > balance + 0.001) && { opacity: 0.55 },
+            ]}
           >
-            {busy ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : (
-              <Text style={styles.actionText}>
-                JOUER · MISE {eur(bet)}
-              </Text>
-            )}
+            <Text style={styles.startText}>
+              LANCER LA MANCHE · {bet.toFixed(2)} $
+            </Text>
           </Pressable>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  screen: {
     flex: 1,
-    backgroundColor: "#0b0f1a",
+    backgroundColor: "#020617",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingVertical: 14,
   },
   topBar: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
   },
-  title: {
-    fontSize: 16,
+  backLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#f8fafc",
+  },
+  balancePill: {
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: "rgba(249, 166, 2, 0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(249, 166, 2, 0.40)",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  dollarSign: {
+    fontSize: 14,
     fontWeight: "900",
-    letterSpacing: 1.2,
-    color: colors.white,
+    color: "#f9a602",
+  },
+  balanceVal: {
+    fontSize: 14.5,
+    fontWeight: "900",
+    color: "#ffffff",
+    fontVariant: ["tabular-nums"],
   },
   arena: {
     alignItems: "center",
-    gap: 14,
+    justifyContent: "center",
+    gap: 10,
   },
   multDisplay: {
-    fontSize: 48,
+    fontSize: 44,
     fontWeight: "900",
-    color: colors.white,
+    color: "#f9a602",
     fontVariant: ["tabular-nums"],
+    letterSpacing: -1,
   },
-  statusSub: {
+  subHint: {
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#94a3b8",
+  },
+  bannerPill: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+  },
+  bannerWin: {
+    backgroundColor: "rgba(34, 197, 94, 0.22)",
+  },
+  bannerCrash: {
+    backgroundColor: "rgba(239, 68, 68, 0.25)",
+  },
+  bannerText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  circleStage: {
+    marginTop: 12,
+    width: 214,
+    height: 214,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  conicRing: {
+    position: "absolute",
+    width: 214,
+    height: 214,
+    borderRadius: 107,
+    overflow: "hidden",
+  },
+  goldCircleWrap: {
+    width: 194,
+    height: 194,
+    borderRadius: 97,
+    padding: 5,
+    backgroundColor: "#020617",
+  },
+  goldCircle: {
+    flex: 1,
+    borderRadius: 92,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  goldMainText: {
+    fontSize: 25,
+    fontWeight: "900",
+    color: "#0f172a",
+    letterSpacing: 0.5,
+  },
+  goldSubText: {
     fontSize: 13,
+    fontWeight: "800",
+    color: "rgba(15, 23, 42, 0.78)",
+  },
+  popWrap: {
+    position: "absolute",
+  },
+  popText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#fde047",
+  },
+  bottomDock: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: "#0f172a",
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+    gap: 11,
+  },
+  stakeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  stepBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.09)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stakeDisplay: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stakeCaption: {
+    fontSize: 9.5,
     fontWeight: "700",
     color: "#94a3b8",
   },
-  orb: {
-    marginTop: 12,
-    width: 176,
-    height: 176,
-    borderRadius: 88,
-    backgroundColor: colors.betclicRed,
-    borderWidth: 5,
-    borderColor: "rgba(255,255,255,0.22)",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    elevation: 8,
-  },
-  orbCrashed: {
-    backgroundColor: "#374151",
-  },
-  orbWon: {
-    backgroundColor: "#059669",
-  },
-  orbLabel: {
-    fontSize: 18,
+  stakeVal: {
+    fontSize: 15,
     fontWeight: "900",
-    color: colors.white,
-    letterSpacing: 1,
+    color: "#ffffff",
+    fontVariant: ["tabular-nums"],
   },
-  controls: {
-    gap: 12,
-    paddingBottom: 10,
-  },
-  chipsRow: {
+  presetsRow: {
     flexDirection: "row",
-    gap: 7,
+    gap: 6,
   },
-  chip: {
+  presetChip: {
     flex: 1,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.07)",
     alignItems: "center",
     justifyContent: "center",
   },
-  chipActive: {
-    backgroundColor: colors.white,
+  presetChipActive: {
+    backgroundColor: "#f9a602",
   },
-  chipText: {
-    fontSize: 13,
+  presetText: {
+    fontSize: 12,
     fontWeight: "800",
-    color: colors.white,
+    color: "#e2e8f0",
+  },
+  presetTextActive: {
+    color: "#0f172a",
   },
   startBtn: {
     height: 50,
     borderRadius: 14,
-    backgroundColor: colors.betclicRed,
+    backgroundColor: "#f9a602",
     alignItems: "center",
     justifyContent: "center",
+  },
+  startText: {
+    fontSize: 14.5,
+    fontWeight: "900",
+    color: "#0f172a",
   },
   cashoutBtn: {
     height: 50,
     borderRadius: 14,
-    backgroundColor: "#059669",
+    backgroundColor: "#10b981",
     alignItems: "center",
     justifyContent: "center",
   },
-  actionText: {
+  cashoutText: {
     fontSize: 15,
     fontWeight: "900",
-    color: colors.white,
+    color: "#ffffff",
+    fontVariant: ["tabular-nums"],
   },
 });

@@ -1,444 +1,360 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FlatList,
+  ActivityIndicator,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
-import { useRouter } from "@/lib/router";
-import { ReceiptText, Search, X } from "@/components/icons";
-import { api, type ClientBet } from "@/lib/api";
-import { getCachedBetsList } from "@/lib/entity-cache";
-import { eur } from "@/lib/format";
-import { useSmartPolling } from "@/lib/polling";
+import { Ticket } from "lucide-react-native";
 import { BetTicket } from "@/components/bet-ticket";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
-  BareInfiniteSpinner,
-  INFINITE_BATCH_STEP,
+  InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
-import { cardSurface, colors } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";
+import { api, type BetKind, type ClientBet } from "@/lib/api";
+import { getCachedBetsList } from "@/lib/entity-cache";
+import { useSmartPolling } from "@/lib/polling";
+import { useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-/**
- * Page `/paris` (`Mes paris`) fidèle à `src/app/(main)/paris/page.tsx` :
- * - Tri strict du plus récent au plus ancien tant pour les mises (`placedAt`) que pour les résultats (`settledAt ?? placedAt`)
- * - Bascule automatiquement sur « Terminés » lorsqu'aucun pari n'est en cours
- * - `BetTicket` compact + `SlideToCashOut` vert créatif + statut `Perdu` rouge + infinite scroll 10 par 10.
- */
+function sortNewestFirst(list: ClientBet[]): ClientBet[] {
+  return [...list].sort((a, b) => {
+    const tA = Date.parse(a.settledAt || a.placedAt) || 0;
+    const tB = Date.parse(b.settledAt || b.placedAt) || 0;
+    return tB - tA || b.id - a.id;
+  });
+}
+
 export default function MesParisScreen() {
   const router = useRouter();
-  const { user, setBalance, setPendingCount, dataSaverMode } = useApp();
+  const { user, setBalance, setPendingCount, betsVersion, dataSaverMode } =
+    useApp();
 
-  const [bets, setBets] = useState<ClientBet[] | null>(() =>
-    getCachedBetsList()
+  const [allBets, setAllBets] = useState<ClientBet[]>(
+    () => getCachedBetsList() ?? []
   );
-  const [tab, setTab] = useState<"ongoing" | "finished">("ongoing");
-  const [userPickedTab, setUserPickedTab] = useState(false);
-  const [kindFilter, setKindFilter] = useState<string>("all");
-  const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState<boolean>(
+    () => Boolean(user) && getCachedBetsList() === null
+  );
   const [refreshing, setRefreshing] = useState(false);
 
+  const [statusFilter, setStatusFilter] = useState<
+    "ongoing" | "finished" | "all"
+  >("ongoing");
+  const [kindFilter, setKindFilter] = useState<"all" | BetKind>("all");
+  const [outcomeFilter, setOutcomeFilter] = useState<
+    "all" | "won" | "lost" | "cashed"
+  >("all");
+  const autoDefaultAppliedRef = useRef(false);
+
   const loadBets = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setAllBets([]);
+      setLoading(false);
+      return;
+    }
     try {
-      const res = await api.bets("all");
-      setBets(res.bets);
+      const res = await api.allBets();
+      const sorted = sortNewestFirst(res.bets);
+      setAllBets(sorted);
       if (typeof res.balance === "number") setBalance(res.balance);
-      setPendingCount(res.bets.filter((b) => b.status === "pending").length);
+      const ongoing = sorted.filter((b) => b.status === "pending");
+      setPendingCount(ongoing.length);
+
+      // Contrainte stricte : basculer par défaut sur « Terminés » (du plus récent au plus ancien) quand 0 pari en cours
+      if (
+        !autoDefaultAppliedRef.current &&
+        ongoing.length === 0 &&
+        sorted.length > 0
+      ) {
+        autoDefaultAppliedRef.current = true;
+        setStatusFilter("finished");
+      } else if (ongoing.length > 0) {
+        autoDefaultAppliedRef.current = true;
+      }
     } catch {
-      // Conserve le snapshot
+      /* garde snapshot */
+    } finally {
+      setLoading(false);
     }
   }, [setBalance, setPendingCount, user]);
 
-  useSmartPolling(loadBets, 5_500, {
+  useEffect(() => {
+    void loadBets();
+  }, [loadBets, betsVersion]);
+
+  useSmartPolling(loadBets, 6_000, {
     enabled: Boolean(user),
     dataSaver: dataSaverMode,
-    runImmediately: true,
+    runImmediately: false,
   });
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadBets();
+    setRefreshing(false);
+  }, [loadBets]);
+
   const ongoingCount = useMemo(
-    () => (bets ?? []).filter((b) => b.status === "pending").length,
-    [bets]
+    () => allBets.filter((b) => b.status === "pending").length,
+    [allBets]
   );
   const finishedCount = useMemo(
-    () => (bets ?? []).filter((b) => b.status !== "pending").length,
-    [bets]
+    () => allBets.filter((b) => b.status !== "pending").length,
+    [allBets]
   );
 
-  // Bascule par défaut sur les paris terminés si aucun pari n'est en cours
-  useEffect(() => {
-    if (!userPickedTab && bets && ongoingCount === 0 && finishedCount > 0) {
-      setTab("finished");
-    }
-  }, [bets, finishedCount, ongoingCount, userPickedTab]);
-
-  const qNorm = search.trim().toLowerCase();
-
-  const sortedFiltered = useMemo(() => {
-    const base = (bets ?? []).filter((b) => {
-      if (tab === "ongoing" && b.status !== "pending") return false;
-      if (tab === "finished" && b.status === "pending") return false;
+  const filtered = useMemo(() => {
+    const base = allBets.filter((b) => {
+      if (statusFilter === "ongoing" && b.status !== "pending") return false;
+      if (statusFilter === "finished" && b.status === "pending") return false;
       if (kindFilter !== "all" && b.kind !== kindFilter) return false;
-      if (outcomeFilter !== "all" && b.status !== outcomeFilter) return false;
-      if (qNorm) {
-        const hay = `${b.homeTeam} ${b.awayTeam} ${b.question ?? ""} ${b.selectionLabel} ${b.league}`.toLowerCase();
-        if (!hay.includes(qNorm)) return false;
+      if (statusFilter !== "ongoing" && outcomeFilter !== "all") {
+        if (b.status !== outcomeFilter) return false;
       }
       return true;
     });
+    return sortNewestFirst(base);
+  }, [allBets, kindFilter, outcomeFilter, statusFilter]);
 
-    // Tri du plus récent au plus ancien (mises comme résultats)
-    return [...base].sort((a, b) => {
-      const ta =
-        tab === "finished"
-          ? Date.parse(a.settledAt ?? a.placedAt) || 0
-          : Date.parse(a.placedAt) || 0;
-      const tb =
-        tab === "finished"
-          ? Date.parse(b.settledAt ?? b.placedAt) || 0
-          : Date.parse(b.placedAt) || 0;
-      return tb - ta || b.id - a.id;
-    });
-  }, [bets, kindFilter, outcomeFilter, qNorm, tab]);
-
-  const summary = useMemo(() => {
-    const all = bets ?? [];
-    const ongoing = all.filter((b) => b.status === "pending");
-    const settled = all.filter(
-      (b) => b.status === "won" || b.status === "lost" || b.status === "cashed_out"
-    );
-    const won = settled.filter(
-      (b) => b.status === "won" || b.status === "cashed_out"
-    );
-    return {
-      inPlay: ongoing.reduce((s, b) => s + b.stake, 0),
-      maxPayout: ongoing.reduce((s, b) => s + b.potentialWin, 0),
-      winRate:
-        settled.length > 0 ? Math.round((won.length / settled.length) * 100) : 0,
-    };
-  }, [bets]);
-
-  const resetKey = `${tab}|${kindFilter}|${outcomeFilter}|${qNorm}`;
-  const { visibleCount, hasMore, loadMore } = useInfiniteBatch(
-    sortedFiltered.length,
-    resetKey,
-    INFINITE_BATCH_STEP
-  );
-
-  const visibleItems = useMemo(
-    () => sortedFiltered.slice(0, visibleCount),
-    [sortedFiltered, visibleCount]
+  const resetKey = `${statusFilter}|${kindFilter}|${outcomeFilter}`;
+  const { visibleItems, hasMore, onScrollCheck } = useInfiniteBatch(
+    filtered,
+    10,
+    resetKey
   );
 
   if (!user) {
     return (
-      <View style={[styles.root, { justifyContent: "center", padding: 20 }]}>
-        <View style={[cardSurface.glassCard, styles.guestCard]}>
-          <ReceiptText size={28} color={colors.dim} />
-          <Text style={styles.guestTitle}>Connectez-vous pour suivre vos paris</Text>
-          <Text style={styles.guestSub}>
-            Retrouvez vos tickets simples, combinés et votre Cash Out en temps réel.
-          </Text>
-          <Pressable
-            onPress={() => router.push("/auth")}
-            style={styles.loginBtn}
-          >
-            <Text style={styles.loginBtnText}>Se connecter</Text>
-          </Pressable>
+      <View style={styles.guestWrap}>
+        <View style={styles.guestIcon}>
+          <Ticket size={24} color={COLORS.betclicRed} strokeWidth={2.2} />
         </View>
+        <Text style={styles.guestTitle}>Connectez-vous pour voir vos paris</Text>
+        <Text style={styles.guestDesc}>
+          Suivez vos tickets simples et combinés en temps réel et encaissez via
+          Cash Out.
+        </Text>
+        <Pressable
+          onPress={() => router.push("/auth")}
+          style={styles.guestBtn}
+        >
+          <Text style={styles.guestBtnText}>Connexion / Inscription</Text>
+        </Pressable>
       </View>
     );
   }
 
   return (
-    <View style={styles.root}>
-      <View style={styles.topHeader}>
-        <Text style={styles.pageTitle}>Mes paris</Text>
-        <Pressable
-          onPress={() => setSearchOpen((v) => !v)}
-          style={styles.iconBtn}
-        >
-          {searchOpen ? (
-            <X size={17} color={colors.ink} strokeWidth={2.4} />
-          ) : (
-            <Search size={17} color={colors.ink} strokeWidth={2.4} />
-          )}
-        </Pressable>
-      </View>
-
-      {searchOpen && (
-        <View style={styles.searchWrap}>
-          <Search size={15} color={colors.dim} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            autoFocus
-            placeholder="Rechercher un ticket, club, sélection…"
-            placeholderTextColor={colors.dim}
-            style={styles.searchInput}
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")}>
-              <X size={15} color={colors.dim} />
-            </Pressable>
-          )}
-        </View>
-      )}
-
-      {/* Bandeau synthèse contextuel */}
-      {(ongoingCount > 0 || finishedCount > 0) && (
-        <View style={styles.kpiStrip}>
-          <View style={styles.kpiItem}>
-            <Text style={styles.kpiLabel}>En jeu</Text>
-            <Text style={styles.kpiVal}>{eur(summary.inPlay)}</Text>
-          </View>
-          <View style={styles.kpiDivider} />
-          <View style={styles.kpiItem}>
-            <Text style={styles.kpiLabel}>Gain max</Text>
-            <Text style={[styles.kpiVal, { color: colors.win }]}>
-              {eur(summary.maxPayout)}
-            </Text>
-          </View>
-          <View style={styles.kpiDivider} />
-          <View style={styles.kpiItem}>
-            <Text style={styles.kpiLabel}>Réussite</Text>
-            <Text style={styles.kpiVal}>{summary.winRate}%</Text>
-          </View>
-        </View>
-      )}
-
-      <View style={{ paddingHorizontal: 16 }}>
-        <FilterDropdownRow
-          filters={[
-            {
-              id: "tab",
-              label: "Statut",
-              value: tab,
-              defaultValue: "ongoing",
-              options: [
-                { value: "ongoing", label: "En cours", count: ongoingCount },
-                { value: "finished", label: "Terminés", count: finishedCount },
-              ],
-              onChange: (v) => {
-                setUserPickedTab(true);
-                setTab(v as "ongoing" | "finished");
-                setOutcomeFilter("all");
-              },
-            },
-            {
-              id: "kind",
-              label: "Format",
-              value: kindFilter,
-              options: [
-                { value: "all", label: "Tous les formats" },
-                { value: "sport", label: "Paris simples" },
-                { value: "combo", label: "Combinés" },
-                { value: "prediction", label: "Prédictions" },
-              ],
-              onChange: setKindFilter,
-            },
-            ...(tab === "finished"
-              ? [
-                  {
-                    id: "outcome",
-                    label: "Issue",
-                    value: outcomeFilter,
-                    options: [
-                      { value: "all", label: "Toutes les issues" },
-                      { value: "won", label: "Gagnés" },
-                      { value: "cashed_out", label: "Vendus (Cash Out)" },
-                      { value: "lost", label: "Perdus" },
-                      { value: "void", label: "Remboursés" },
-                    ],
-                    onChange: setOutcomeFilter,
-                  },
-                ]
-              : []),
-          ]}
-          onReset={() => {
-            setUserPickedTab(true);
-            setTab(ongoingCount > 0 ? "ongoing" : "finished");
-            setKindFilter("all");
-            setOutcomeFilter("all");
-            setSearch("");
-          }}
-          resultCountLabel={`${sortedFiltered.length} ticket${sortedFiltered.length > 1 ? "s" : ""}`}
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={[1]}
+      onScroll={onScrollCheck}
+      scrollEventThrottle={16}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[COLORS.betclicRed]}
+          tintColor={COLORS.betclicRed}
         />
+      }
+    >
+      <View style={styles.topRow}>
+        <Text style={styles.pageTitle}>Mes paris</Text>
       </View>
 
-      <FlatList<ClientBet>
-        data={visibleItems}
-        keyExtractor={(item) => `${item.kind}-${item.id}`}
-        contentContainerStyle={styles.listContent}
-        windowSize={7}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        onEndReached={() => {
-          if (hasMore) loadMore();
+      <FilterDropdownRow
+        filters={[
+          {
+            id: "status",
+            label: "Statut",
+            value: statusFilter,
+            defaultValue: ongoingCount > 0 ? "ongoing" : "finished",
+            onChange: setStatusFilter,
+            options: [
+              { value: "ongoing", label: "En cours", count: ongoingCount },
+              { value: "finished", label: "Terminés", count: finishedCount },
+              { value: "all", label: "Tous", count: allBets.length },
+            ],
+          },
+          {
+            id: "kind",
+            label: "Type de pari",
+            value: kindFilter,
+            defaultValue: "all",
+            onChange: setKindFilter,
+            options: [
+              { value: "all", label: "Tous les types" },
+              { value: "sport", label: "Paris simples" },
+              { value: "combo", label: "Combinés" },
+              { value: "prediction", label: "Prédictions" },
+            ],
+          },
+          ...(statusFilter !== "ongoing"
+            ? [
+                {
+                  id: "outcome",
+                  label: "Résultat",
+                  value: outcomeFilter,
+                  defaultValue: "all" as const,
+                  onChange: setOutcomeFilter,
+                  options: [
+                    { value: "all" as const, label: "Tous résultats" },
+                    { value: "won" as const, label: "Gagnés" },
+                    { value: "lost" as const, label: "Perdus" },
+                    { value: "cashed" as const, label: "Vendus (Cash Out)" },
+                  ],
+                },
+              ]
+            : []),
+        ]}
+        onReset={() => {
+          setStatusFilter(ongoingCount > 0 ? "ongoing" : "finished");
+          setKindFilter("all");
+          setOutcomeFilter("all");
         }}
-        onEndReachedThreshold={0.4}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={async () => {
-              setRefreshing(true);
-              await loadBets();
-              setRefreshing(false);
-            }}
-            tintColor={colors.betclicRed}
-            colors={[colors.betclicRed]}
-          />
-        }
-        ListEmptyComponent={
-          !bets ? (
-            <BareInfiniteSpinner visible />
-          ) : (
-            <View style={[cardSurface.glassCard, styles.emptyCard]}>
-              <Text style={styles.emptyText}>
-                {tab === "ongoing"
-                  ? "Aucun pari en cours pour le moment."
-                  : "Aucun ticket terminé pour ces filtres."}
-              </Text>
-            </View>
-          )
-        }
-        renderItem={({ item }) => (
-          <BetTicket bet={item} onCashedOut={() => void loadBets()} />
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        ListFooterComponent={<BareInfiniteSpinner visible={hasMore} />}
       />
-    </View>
+
+      <Text style={styles.countLine}>
+        {filtered.length} ticket{filtered.length > 1 ? "s" : ""}
+      </Text>
+
+      {loading && allBets.length === 0 ? (
+        <View style={styles.loader}>
+          <ActivityIndicator size="small" color={COLORS.betclicRed} />
+        </View>
+      ) : visibleItems.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Aucun ticket dans cette vue</Text>
+          <Pressable
+            onPress={() => router.push("/matchs")}
+            style={styles.browseBtn}
+          >
+            <Text style={styles.browseText}>Voir les matchs</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.list}>
+          {visibleItems.map((b) => (
+            <BetTicket
+              key={`${b.kind}-${b.id}`}
+              bet={b}
+              onCashedOut={loadBets}
+            />
+          ))}
+          <InfiniteScrollLoader hasMore={hasMore} />
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  page: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
-  topHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
+  content: {
+    paddingHorizontal: 12,
     paddingTop: 10,
-    paddingBottom: 6,
+    paddingBottom: 24,
+  },
+  topRow: {
+    marginBottom: 4,
   },
   pageTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    color: colors.ink,
-    letterSpacing: -0.3,
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.ink,
   },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.white,
+  countLine: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.dim,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  loader: {
+    paddingVertical: 36,
+    alignItems: "center",
+  },
+  list: {
+    gap: 10,
+  },
+  emptyCard: {
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: colors.edge,
+    borderColor: COLORS.edge,
+    padding: 24,
+    alignItems: "center",
+    gap: 10,
+  },
+  emptyTitle: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: COLORS.dim,
+  },
+  browseBtn: {
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  searchWrap: {
-    marginHorizontal: 16,
-    marginBottom: 6,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+  browseText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#ffffff",
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 13.5,
-    color: colors.ink,
-  },
-  kpiStrip: {
-    marginHorizontal: 16,
-    marginBottom: 4,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 13,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  kpiItem: {
+  guestWrap: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    padding: 26,
+    gap: 10,
   },
-  kpiDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: colors.edgeSoft,
-  },
-  kpiLabel: {
-    fontSize: 10.5,
-    fontWeight: "600",
-    color: colors.dim,
-  },
-  kpiVal: {
-    marginTop: 1,
-    fontSize: 13.5,
-    fontWeight: "900",
-    color: colors.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
-  emptyCard: {
-    padding: 20,
+  guestIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "rgba(225, 0, 20, 0.09)",
     alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.mist,
-  },
-  guestCard: {
-    padding: 22,
-    alignItems: "center",
-    gap: 8,
+    justifyContent: "center",
   },
   guestTitle: {
-    fontSize: 15.5,
-    fontWeight: "900",
-    color: colors.ink,
-    textAlign: "center",
-  },
-  guestSub: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: colors.mist,
-    textAlign: "center",
-  },
-  loginBtn: {
-    marginTop: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: colors.betclicRed,
-  },
-  loginBtnText: {
-    fontSize: 13.5,
+    fontSize: 16,
     fontWeight: "800",
-    color: colors.white,
+    color: COLORS.ink,
+    textAlign: "center",
+  },
+  guestDesc: {
+    fontSize: 13,
+    color: COLORS.dim,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  guestBtn: {
+    marginTop: 4,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guestBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#ffffff",
   },
 });

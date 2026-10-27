@@ -1,295 +1,397 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Dimensions,
-  FlatList,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { ChevronRight } from "lucide-react-native";
 import { useRouter } from "@/lib/router";
-import { ArrowRight } from "@/components/icons";
-import { colors, triggerHaptic } from "@/theme/tokens";
-import { useApp } from "@/context/app-context";
+import { COLORS } from "@/theme/tokens";
+
+export type HeroPromoAction =
+  | { type: "league"; slug: string; defaultLabel: string }
+  | { type: "live" }
+  | { type: "combo" }
+  | { type: "virtual" };
 
 interface HeroSlide {
   id: string;
-  tag: string;
+  player: string;
+  club: string;
   title: string;
-  subtitle: string;
-  cta: string;
-  href: string;
-  image: number;
-  gradient: readonly [string, string, string];
-  accent: string;
+  description: string;
+  ctaLabel: string;
+  action: HeroPromoAction;
+  image: ImageSourcePropType;
+  solidBg: string;
+  fadeMid: string;
+  ctaBg: string;
+  ctaText: string;
 }
 
 const HERO_SLIDES: HeroSlide[] = [
   {
-    id: "yamal-champions",
-    tag: "Ligue des Champions",
-    title: "Lamine Yamal enflamme les soirées d'Europe",
-    subtitle: "Cotes boostées 1X2, buteurs & combinés jusqu'à +20 %",
-    cta: "Voir les affiches",
-    href: "/matchs/tous",
+    id: "yamal-laliga",
+    player: "Lamine Yamal",
+    club: "FC Barcelone",
+    title: "LaLiga · Chocs & Cotes",
+    description: "Lamine Yamal enflamme le Barça : pariez en 1x2 et Total.",
+    ctaLabel: "Voir LaLiga",
+    action: { type: "league", slug: "esp.1", defaultLabel: "LaLiga" },
     image: require("../../assets/hero/lamine-yamal.webp"),
-    gradient: ["#0c1222", "#1e1b4b", "#be0011"],
-    accent: "#fbbf24",
+    solidBg: "#0b1636",
+    fadeMid: "rgba(11, 22, 54, 0.72)",
+    ctaBg: "#ff3b30",
+    ctaText: "#ffffff",
   },
   {
-    id: "virtual-247",
-    tag: "24h/24 · Sans interruption",
-    title: "Matchs virtuels EN DIRECT toutes les 3 minutes",
-    subtitle: "4 stades simultanés, Cash Out instantané & règlement immédiat",
-    cta: "Ouvrir le multiplex",
-    href: "/matchs/virtuels",
+    id: "virtual-multiplex",
+    player: "Multiplex IA",
+    club: "Matchs Virtuels 24h/24",
+    title: "Matchs Virtuels 24h/24",
+    description: "4 directs simultanés de 2-3 min : cotes dynamiques non-stop.",
+    ctaLabel: "Voir les virtuels",
+    action: { type: "virtual" },
     image: require("../../assets/hero/virtual-matches.webp"),
-    gradient: ["#06281e", "#064e3b", "#059669"],
-    accent: "#6ee7b7",
+    solidBg: "#13112b",
+    fadeMid: "rgba(19, 17, 43, 0.72)",
+    ctaBg: "#8b5cf6",
+    ctaText: "#ffffff",
   },
   {
-    id: "mbappe-laliga",
-    tag: "LaLiga · Choc au sommet",
-    title: "Kylian Mbappé & le Real Madrid en mission",
-    subtitle: "Plus de 18 marchés par match et suivi des stats officielles",
-    cta: "Parier maintenant",
-    href: "/matchs/tous",
+    id: "mbappe-combo",
+    player: "Kylian Mbappé",
+    club: "Real Madrid",
+    title: "Combinés · Boost +50 %",
+    description: "Combinez Mbappé et vos favoris au Betslip jusqu'à +50 %.",
+    ctaLabel: "Créer un combiné",
+    action: { type: "combo" },
     image: require("../../assets/hero/kylian-mbappe.webp"),
-    gradient: ["#111827", "#1f2937", "#dc2626"],
-    accent: "#fca5a5",
+    solidBg: "#101828",
+    fadeMid: "rgba(16, 24, 40, 0.72)",
+    ctaBg: "#f59e0b",
+    ctaText: "#111827",
   },
   {
-    id: "gordon-barca",
-    tag: "Nouvelle saison 2026-27",
-    title: "Anthony Gordon fait vibrer le Camp Nou",
-    subtitle: "Pronostiquez les grandes tendances sport & mercato à cote fixe",
-    cta: "Voir les prédictions",
-    href: "/predictions",
+    id: "gordon-ucl",
+    player: "Anthony Gordon",
+    club: "FC Barcelone",
+    title: "Ligue des Champions",
+    description: "Gordon brille sous le maillot du Barça : affiches d'Europe.",
+    ctaLabel: "Ligue des Champions",
+    action: {
+      type: "league",
+      slug: "uefa.champions",
+      defaultLabel: "Ligue des Champions",
+    },
     image: require("../../assets/hero/anthony-gordon-barca.webp"),
-    gradient: ["#17153b", "#311042", "#9f1239"],
-    accent: "#f9a8d4",
+    solidBg: "#2b0b1e",
+    fadeMid: "rgba(43, 11, 30, 0.72)",
+    ctaBg: "#10b981",
+    ctaText: "#ffffff",
   },
   {
-    id: "haaland-pl",
-    tag: "Premier League",
-    title: "Erling Haaland défie toutes les défenses",
-    subtitle: "Composez votre Combiné de 2 à 8 sélections dans le Betslip",
-    cta: "Ouvrir le Betslip",
-    href: "/betslip",
+    id: "haaland-epl",
+    player: "Erling Haaland",
+    club: "Manchester City",
+    title: "Premier League · Buts",
+    description: "Haaland empile les buts avec City : Total & Les 2 marquent.",
+    ctaLabel: "Premier League",
+    action: { type: "league", slug: "eng.1", defaultLabel: "Premier League" },
     image: require("../../assets/hero/erling-haaland.webp"),
-    gradient: ["#082f49", "#0c4a6e", "#0284c7"],
-    accent: "#7dd3fc",
+    solidBg: "#082f49",
+    fadeMid: "rgba(8, 47, 73, 0.72)",
+    ctaBg: "#38bdf8",
+    ctaText: "#082f49",
   },
   {
-    id: "saka-arsenal",
-    tag: "Mini-jeux Instantanés",
-    title: "Bukayo Saka · Vitesse & précision maximale",
-    subtitle: "Tap Win & Accelerator Pro avec gains crédités à la seconde",
-    cta: "Jouer aux mini-jeux",
-    href: "/jeux",
+    id: "saka-live",
+    player: "Bukayo Saka",
+    club: "Arsenal",
+    title: "Directs · Cotes Live",
+    description: "Bukayo Saka et les chocs en cours : cotes ajustées au réel.",
+    ctaLabel: "Voir le direct",
+    action: { type: "live" },
     image: require("../../assets/hero/bukayo-saka.webp"),
-    gradient: ["#3b0712", "#7f1d1d", "#e10014"],
-    accent: "#fde68a",
+    solidBg: "#3b0810",
+    fadeMid: "rgba(59, 8, 16, 0.72)",
+    ctaBg: "#ffffff",
+    ctaText: "#7f1d1d",
   },
   {
     id: "kane-bundesliga",
-    tag: "Scores & Résultats",
-    title: "Harry Kane et tous les résultats certifiés",
-    subtitle: "Consultez l'historique complet des matchs réels et virtuels",
-    cta: "Voir les résultats",
-    href: "/resultats",
+    player: "Harry Kane",
+    club: "Bayern Munich",
+    title: "Bundesliga · Chocs",
+    description: "Harry Kane affole les compteurs : 19 marchés par match.",
+    ctaLabel: "Voir Bundesliga",
+    action: { type: "league", slug: "ger.1", defaultLabel: "Bundesliga" },
     image: require("../../assets/hero/harry-kane.webp"),
-    gradient: ["#18181b", "#27272a", "#991b1b"],
-    accent: "#fcd34d",
+    solidBg: "#2d0712",
+    fadeMid: "rgba(45, 7, 18, 0.72)",
+    ctaBg: "#fbbf24",
+    ctaText: "#111827",
   },
 ];
 
-export function MobileHeroCarousel() {
+export function MobileHeroCarousel({
+  onAction,
+}: {
+  onAction: (action: HeroPromoAction) => void;
+}) {
   const router = useRouter();
-  const { hapticsEnabled } = useApp();
-  const [index, setIndex] = useState(0);
-  const listRef = useRef<FlatList<HeroSlide>>(null);
-  const screenWidth = Dimensions.get("window").width;
-  const cardWidth = Math.max(280, screenWidth - 32);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const pauseUntilRef = useRef<number>(0);
+  const activeIdxRef = useRef<number>(0);
+  const [slideWidth, setSlideWidth] = useState<number>(0);
+  const [activeIndex, setActiveIndex] = useState<number>(0);
+
+  const pauseAutoplay = useCallback(() => {
+    pauseUntilRef.current = Date.now() + 7500;
+  }, []);
+
+  const scrollToSlide = useCallback(
+    (index: number) => {
+      if (slideWidth <= 0) return;
+      const clamped =
+        ((index % HERO_SLIDES.length) + HERO_SLIDES.length) %
+        HERO_SLIDES.length;
+      scrollRef.current?.scrollTo({ x: clamped * slideWidth, animated: true });
+      activeIdxRef.current = clamped;
+      setActiveIndex(clamped);
+    },
+    [slideWidth]
+  );
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setIndex((prev) => {
-        const next = (prev + 1) % HERO_SLIDES.length;
-        listRef.current?.scrollToOffset({
-          offset: next * cardWidth,
-          animated: true,
-        });
-        return next;
-      });
-    }, 5_200);
-    return () => clearInterval(id);
-  }, [cardWidth]);
+    if (slideWidth <= 0) return;
+    const timer = setInterval(() => {
+      if (Date.now() < pauseUntilRef.current) return;
+      const next = (activeIdxRef.current + 1) % HERO_SLIDES.length;
+      scrollRef.current?.scrollTo({ x: next * slideWidth, animated: true });
+      activeIdxRef.current = next;
+      setActiveIndex(next);
+    }, 4800);
+    return () => clearInterval(timer);
+  }, [slideWidth]);
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    if (w > 0) setSlideWidth(w);
+  }, []);
+
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (slideWidth <= 0) return;
+      const idx = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
+      if (idx >= 0 && idx < HERO_SLIDES.length && idx !== activeIdxRef.current) {
+        activeIdxRef.current = idx;
+        setActiveIndex(idx);
+      }
+    },
+    [slideWidth]
+  );
 
   return (
-    <View style={styles.wrap}>
-      <FlatList
-        ref={listRef}
-        data={HERO_SLIDES}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={cardWidth}
-        decelerationRate="fast"
-        getItemLayout={(_, i) => ({
-          length: cardWidth,
-          offset: cardWidth * i,
-          index: i,
-        })}
-        onMomentumScrollEnd={(e) => {
-          const next = Math.round(e.nativeEvent.contentOffset.x / cardWidth);
-          if (next >= 0 && next < HERO_SLIDES.length) setIndex(next);
-        }}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => {
-              triggerHaptic("light", hapticsEnabled);
-              router.push(item.href);
-            }}
-            style={[styles.slideWrap, { width: cardWidth }]}
+    <View style={styles.section}>
+      <View onLayout={onLayout} style={styles.frame}>
+        {slideWidth > 0 ? (
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            onTouchStart={pauseAutoplay}
           >
-            <LinearGradient
-              colors={[item.gradient[0], item.gradient[1], item.gradient[2]]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.card}
-            >
-              <View style={styles.textCol}>
-                <View style={styles.tagPill}>
-                  <Text style={[styles.tagText, { color: item.accent }]}>
-                    {item.tag}
-                  </Text>
+            {HERO_SLIDES.map((slide) => (
+              <View
+                key={slide.id}
+                style={[
+                  styles.slide,
+                  { width: slideWidth, backgroundColor: slide.solidBg },
+                ]}
+              >
+                <View pointerEvents="none" style={styles.photoBox}>
+                  <Image
+                    source={slide.image}
+                    resizeMode="cover"
+                    style={styles.photo}
+                  />
+                  <LinearGradient
+                    colors={[slide.solidBg, slide.fadeMid, "transparent"]}
+                    locations={[0, 0.52, 1]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={styles.photoFade}
+                  />
                 </View>
-                <Text numberOfLines={2} style={styles.title}>
-                  {item.title}
-                </Text>
-                <Text numberOfLines={2} style={styles.subtitle}>
-                  {item.subtitle}
-                </Text>
-                <View style={styles.ctaBtn}>
-                  <Text style={styles.ctaText}>{item.cta}</Text>
-                  <ArrowRight size={13} color={colors.ink} strokeWidth={2.6} />
+
+                <View style={styles.copyCol}>
+                  <View style={styles.copyTop}>
+                    <Text numberOfLines={1} style={styles.title}>
+                      {slide.title}
+                    </Text>
+                    <Text numberOfLines={2} style={styles.desc}>
+                      {slide.description}
+                    </Text>
+                  </View>
+
+                  <View style={styles.ctaRow}>
+                    <Pressable
+                      onPress={() => {
+                        pauseAutoplay();
+                        if (slide.action.type === "virtual") {
+                          router.push("/matchs/virtuels");
+                        } else {
+                          onAction(slide.action);
+                        }
+                      }}
+                      style={[styles.ctaBtn, { backgroundColor: slide.ctaBg }]}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.ctaText, { color: slide.ctaText }]}
+                      >
+                        {slide.ctaLabel}
+                      </Text>
+                      <ChevronRight
+                        size={12}
+                        color={slide.ctaText}
+                        strokeWidth={2.6}
+                      />
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-
-              <Image
-                source={item.image}
-                style={styles.playerImg}
-                resizeMode="contain"
-              />
-            </LinearGradient>
-          </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={[styles.slide, { backgroundColor: "#0b1636" }]} />
         )}
-      />
+      </View>
 
       <View style={styles.dotsRow}>
-        {HERO_SLIDES.map((s, i) => (
-          <View
-            key={s.id}
-            style={[styles.dot, i === index && styles.dotActive]}
-          />
-        ))}
+        {HERO_SLIDES.map((slide, idx) => {
+          const isActive = idx === activeIndex;
+          return (
+            <Pressable
+              key={slide.id}
+              hitSlop={6}
+              onPress={() => {
+                pauseAutoplay();
+                scrollToSlide(idx);
+              }}
+              style={[styles.dot, isActive ? styles.dotActive : styles.dotIdle]}
+            />
+          );
+        })}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    marginBottom: 10,
+  section: {
+    paddingBottom: 8,
   },
-  slideWrap: {
-    paddingRight: 0,
-  },
-  card: {
-    height: 162,
-    borderRadius: 18,
+  frame: {
+    borderRadius: 16,
     overflow: "hidden",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    position: "relative",
   },
-  textCol: {
-    flex: 1,
-    paddingRight: 96,
+  slide: {
+    height: 118,
+    position: "relative",
+    overflow: "hidden",
+  },
+  photoBox: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: "47%",
+    overflow: "hidden",
+  },
+  photo: {
+    width: "100%",
+    height: "120%",
+    marginTop: -4,
+  },
+  photoFade: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 32,
+  },
+  copyCol: {
+    width: "55%",
+    height: "100%",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 4,
     zIndex: 2,
   },
-  tagPill: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    marginBottom: 6,
-  },
-  tagText: {
-    fontSize: 10,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+  copyTop: {
+    gap: 2,
   },
   title: {
-    fontSize: 15.5,
-    lineHeight: 19.5,
-    fontWeight: "900",
-    color: colors.white,
+    fontSize: 13.5,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+    color: "#ffffff",
   },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 11,
-    lineHeight: 14.5,
+  desc: {
+    fontSize: 10.5,
     fontWeight: "500",
-    color: "rgba(255,255,255,0.82)",
+    lineHeight: 13.5,
+    color: "rgba(255, 255, 255, 0.85)",
   },
-  ctaBtn: {
-    marginTop: 9,
-    alignSelf: "flex-start",
+  ctaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: colors.white,
-    paddingHorizontal: 11,
-    paddingVertical: 5.5,
+  },
+  ctaBtn: {
+    height: 26,
     borderRadius: 999,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: "100%",
   },
   ctaText: {
-    fontSize: 11.5,
-    fontWeight: "800",
-    color: colors.ink,
-  },
-  playerImg: {
-    position: "absolute",
-    right: -4,
-    bottom: 0,
-    width: 132,
-    height: 154,
-    zIndex: 1,
+    fontSize: 10.5,
+    fontWeight: "700",
+    flexShrink: 1,
   },
   dotsRow: {
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 6,
   },
   dot: {
-    width: 6,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "rgba(17, 24, 39, 0.16)",
+    height: 6,
+    borderRadius: 999,
   },
   dotActive: {
-    width: 18,
-    backgroundColor: colors.betclicRed,
+    width: 16,
+    backgroundColor: COLORS.betclicRed,
+  },
+  dotIdle: {
+    width: 6,
+    backgroundColor: "rgba(17, 24, 39, 0.20)",
   },
 });

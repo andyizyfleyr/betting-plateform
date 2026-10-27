@@ -1,93 +1,154 @@
-import React, { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "@/lib/router";
-import { ArrowLeft, ExternalLink, Share2 } from "@/components/icons";
-import { api, ApiHttpError, type ClientBet, type ClientMatch } from "@/lib/api";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  getCachedMatchSnapshot,
-  getCachedSingleOrPredictionBet,
-} from "@/lib/entity-cache";
-import { eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
-import { useSmartPolling } from "@/lib/polling";
-import { TeamAvatar } from "@/components/team-avatar";
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { ArrowLeft, ExternalLink, Share2 } from "lucide-react-native";
+import { BetStatusBadge } from "@/components/bet-ticket";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
-import {
-  LiveMatchTracker,
-  RealMatchStatsCard,
-} from "@/components/live-match-tracker";
-import { BareInfiniteSpinner } from "@/components/infinite-scroll-loader";
-import { cardSurface, colors } from "@/theme/tokens";
+import { SportIcon } from "@/components/sport-icon";
+import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
+import {
+  api,
+  ApiHttpError,
+  CASHOUT_CHANGED_CODE,
+  generateIdempotencyKey,
+  type ClientBet,
+} from "@/lib/api";
+import { getCachedSingleOrPredictionBet } from "@/lib/entity-cache";
+import {
+  eur,
+  formatFullDateTime,
+  formatMatchDateTimeShort,
+  formatOdds,
+} from "@/lib/format";
+import { useSmartPolling } from "@/lib/polling";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { COLORS } from "@/theme/tokens";
 
-/**
- * Page dédiée `/paris/simple/[id]` fidèle à `src/app/(main)/paris/simple/[id]/page.tsx`.
- */
 export default function SingleBetDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string }>();
-  const betId = Number(params.id);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const betId = Number(id);
   const {
     oddsFormat,
     setBalance,
-    refreshPulseNow,
+    bumpBets,
     openShareTicket,
-    dataSaverMode,
     toast,
+    dataSaverMode,
   } = useApp();
 
   const [bet, setBet] = useState<ClientBet | null>(() =>
     Number.isFinite(betId) ? getCachedSingleOrPredictionBet(betId) : null
   );
-  const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(() =>
-    bet?.matchId ? getCachedMatchSnapshot(bet.matchId) : null
-  );
+  const [loading, setLoading] = useState<boolean>(!bet);
+  const [refreshing, setRefreshing] = useState(false);
   const [cashingOut, setCashingOut] = useState(false);
+  const [liveCashout, setLiveCashout] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(betId) || betId <= 0) return;
     try {
-      const res = await api.bets("all");
+      const res = await api.allBets();
       const found =
-        res.bets.find((b) => b.kind !== "combo" && b.id === betId) ?? null;
-      if (found) {
-        setBet(found);
-        if (found.matchId) {
-          const mRes = await api.matchById(found.matchId).catch(() => null);
-          if (mRes) setLiveMatch(mRes.match);
-        }
-      }
+        res.bets.find(
+          (b) =>
+            b.id === betId && (b.kind === "sport" || b.kind === "prediction")
+        ) ?? null;
+      if (found) setBet(found);
     } catch {
-      // Conserve le snapshot
+      /* garde snapshot */
+    } finally {
+      setLoading(false);
     }
   }, [betId]);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   useSmartPolling(load, 5_000, {
-    enabled: Number.isFinite(betId) && betId > 0,
+    enabled: bet?.status === "pending",
     dataSaver: dataSaverMode,
-    runImmediately: true,
+    runImmediately: false,
   });
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }, [load]);
+
+  if (loading && !bet) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="small" color={COLORS.betclicRed} />
+      </View>
+    );
+  }
+
+  if (!bet) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.notFound}>Ticket introuvable</Text>
+        <Pressable
+          onPress={() => router.back("/paris")}
+          style={styles.backFallback}
+        >
+          <Text style={styles.backFallbackText}>Retour à Mes paris</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const cashOutOffer = liveCashout ?? bet.cashOut;
+  const canCashOut =
+    bet.status === "pending" &&
+    typeof cashOutOffer === "number" &&
+    cashOutOffer > 0;
+
   const handleCashOut = async () => {
-    if (!bet?.cashOut || cashingOut) return;
+    if (!canCashOut || cashOutOffer === null || cashingOut) return;
     setCashingOut(true);
     try {
-      const res = await api.cashOut(bet.id, bet.kind, bet.cashOut);
+      const res = await api.cashOut({
+        betId: bet.id,
+        kind: bet.kind,
+        expectedCashout: Math.round(cashOutOffer * 100) / 100,
+        idempotencyKey: generateIdempotencyKey("co"),
+      });
       setBalance(res.balance);
-      void refreshPulseNow();
+      bumpBets();
       await load();
       toast({
         kind: "win",
-        title: `Ticket vendu · +${eur(res.cashOutAmount)}`,
+        title: `Cash Out validé : +${eur(res.value)}`,
       });
     } catch (err) {
-      if (err instanceof ApiHttpError && err.code === "CASHOUT_CHANGED") {
-        await load();
-        toast({ kind: "info", title: "Offre Cash Out actualisée" });
+      if (err instanceof ApiHttpError && err.code === CASHOUT_CHANGED_CODE) {
+        const next =
+          err.cashoutDetails?.currentCashout ?? err.currentCashOut ?? null;
+        if (typeof next === "number" && next > 0) {
+          setLiveCashout(next);
+          toast({
+            kind: "info",
+            title: "Offre Cash Out mise à jour",
+            description: `Nouveau montant : ${eur(next)}`,
+          });
+        }
       } else {
         toast({
           kind: "error",
           title: "Cash Out indisponible",
-          subtitle: err instanceof Error ? err.message : undefined,
+          description:
+            err instanceof ApiHttpError ? err.message : "Réessayez.",
         });
       }
     } finally {
@@ -95,327 +156,378 @@ export default function SingleBetDetailScreen() {
     }
   };
 
+  const eventHref =
+    bet.kind === "prediction" && bet.questionId
+      ? `/predictions/${bet.questionId}`
+      : bet.matchId
+        ? bet.matchStatus === "finished"
+          ? `/resultats?match=${bet.matchId}`
+          : `/matchs/${bet.matchId}`
+        : null;
+
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.topRow}>
-        <Pressable onPress={() => router.back()} style={styles.iconBtn}>
-          <ArrowLeft size={18} color={colors.ink} strokeWidth={2.4} />
+    <ScrollView
+      style={styles.page}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[COLORS.betclicRed]}
+          tintColor={COLORS.betclicRed}
+        />
+      }
+    >
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back("/paris")}
+          style={styles.backBtn}
+        >
+          <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
         </Pressable>
-        <Text style={styles.pageTitle}>Ticket #{betId}</Text>
-        {bet && (
-          <Pressable
-            onPress={() => openShareTicket(bet)}
-            style={styles.iconBtn}
-          >
-            <Share2 size={16} color={colors.ink} strokeWidth={2.3} />
-          </Pressable>
-        )}
+        <Text style={styles.navTitle}>Ticket #{bet.id}</Text>
+        <Pressable
+          onPress={() => openShareTicket(bet)}
+          style={styles.shareBtn}
+        >
+          <Share2 size={15} color={COLORS.ink} strokeWidth={2.2} />
+        </Pressable>
       </View>
 
-      {!bet ? (
-        <BareInfiniteSpinner visible />
-      ) : (
-        <>
-          <View
-            style={[
-              bet.status === "won" ? cardSurface.ticketWon : cardSurface.glassCard,
-              styles.card,
-            ]}
-          >
-            <View style={styles.statusHeader}>
-              <Text style={styles.leagueText}>{bet.league}</Text>
-              <View
-                style={[
-                  styles.statusBadge,
-                  bet.status === "won" && { backgroundColor: "rgba(21,128,61,0.14)" },
-                  bet.status === "lost" && { backgroundColor: "rgba(220,38,38,0.14)" },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    bet.status === "won" && { color: colors.win },
-                    bet.status === "lost" && { color: colors.bittersweet },
-                  ]}
-                >
-                  {bet.status === "won"
-                    ? "Gagné"
-                    : bet.status === "lost"
-                      ? "Perdu"
-                      : bet.status === "cashed_out"
-                        ? "Vendu"
-                        : bet.status === "void"
-                          ? "Remboursé"
-                          : "En cours"}
-                </Text>
-              </View>
-            </View>
-
-            {bet.kind === "sport" ? (
-              <View style={styles.teamsRow}>
-                <View style={styles.teamCol}>
-                  <TeamAvatar name={bet.homeTeam} logo={bet.homeLogo} size="sm" />
-                  <Text style={styles.teamName}>{bet.homeTeam}</Text>
-                </View>
-                {typeof bet.matchHomeScore === "number" &&
-                typeof bet.matchAwayScore === "number" ? (
-                  <Text style={styles.scoreText}>
-                    {bet.matchHomeScore} - {bet.matchAwayScore}
-                  </Text>
-                ) : (
-                  <Text style={styles.vsText}>VS</Text>
-                )}
-                <View style={styles.teamCol}>
-                  <TeamAvatar name={bet.awayTeam} logo={bet.awayLogo} size="sm" />
-                  <Text style={styles.teamName}>{bet.awayTeam}</Text>
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.predTitle}>{bet.question}</Text>
-            )}
-
-            <View style={styles.selBox}>
-              <Text style={styles.selLabel}>Sélection</Text>
-              <Text style={styles.selValue}>{bet.selectionLabel}</Text>
-            </View>
-
-            <View style={styles.amountsInline}>
-              <View style={styles.metricInline}>
-                <Text style={styles.metricLabel}>Mise :</Text>
-                <Text style={styles.metricVal}>{eur(bet.stake)}</Text>
-              </View>
-              <View style={styles.metricInline}>
-                <Text style={styles.metricLabel}>Cote :</Text>
-                <Text style={styles.metricVal}>
-                  ×{formatOdds(bet.odds, oddsFormat)}
-                </Text>
-              </View>
-              <View style={styles.metricInline}>
-                <Text style={styles.metricLabel}>
-                  {bet.status === "cashed_out" ? "Encaissé :" : "Gain max :"}
-                </Text>
-                <Text
-                  style={[
-                    styles.metricVal,
-                    bet.status === "won" && { color: colors.win },
-                    bet.status === "lost" && { color: colors.bittersweet },
-                  ]}
-                >
-                  {bet.status === "lost"
-                    ? eur(0)
-                    : eur(
-                        bet.status === "cashed_out"
-                          ? (bet.cashOutAmount ?? bet.stake)
-                          : bet.potentialWin
-                      )}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.metaDate}>
-              Placé {formatPlacedAt(bet.placedAt)}
-              {bet.matchStartsAt
-                ? ` · Coup d'envoi ${formatKickoff(bet.matchStartsAt)}`
-                : ""}
+      <View style={styles.card}>
+        <View style={styles.cardHead}>
+          <View style={styles.leagueRow}>
+            <SportIcon sport={bet.sport} size={14} color={COLORS.dim} />
+            <Text numberOfLines={1} style={styles.leagueText}>
+              {bet.league}
             </Text>
-
-            {bet.status === "pending" &&
-              typeof bet.cashOut === "number" &&
-              bet.cashOut > 0 && (
-                <SlideToCashOut
-                  amount={bet.cashOut}
-                  loading={cashingOut}
-                  onConfirm={handleCashOut}
-                />
-              )}
           </View>
-
-          {liveMatch && liveMatch.status === "live" && (
-            <>
-              {liveMatch.source !== "manual" ? (
-                <LiveMatchTracker match={liveMatch} />
-              ) : (
-                <RealMatchStatsCard
-                  stats={liveMatch.realStats}
-                  homeTeam={liveMatch.homeTeam}
-                  awayTeam={liveMatch.awayTeam}
-                />
-              )}
-            </>
-          )}
-
-          {/* Bouton contextuel unique vers le match ou le résultat */}
-          {bet.kind === "sport" && bet.matchId && (
-            <Pressable
-              onPress={() =>
-                router.push(
-                  bet.matchStatus === "finished"
-                    ? `/resultats/${bet.matchId}`
-                    : `/matchs/${bet.matchId}`
-                )
-              }
-              style={styles.contextLinkBtn}
-            >
-              <Text style={styles.contextLinkText}>
-                {bet.matchStatus === "finished"
-                  ? "Consulter le résultat officiel"
-                  : "Ouvrir la fiche du match"}
+          <View style={styles.statusRight}>
+            {bet.matchStartsAt ? (
+              <Text style={styles.dateText}>
+                {formatMatchDateTimeShort(bet.matchStartsAt)}
               </Text>
-              <ExternalLink size={14} color={colors.ink} strokeWidth={2.3} />
-            </Pressable>
-          )}
-        </>
-      )}
+            ) : null}
+            <BetStatusBadge status={bet.status} />
+          </View>
+        </View>
+
+        {bet.kind === "prediction" ? (
+          <Text style={styles.matchTitle}>
+            {bet.question || bet.homeTeam}
+          </Text>
+        ) : (
+          <View style={styles.teamsBlock}>
+            <View style={styles.teamRow}>
+              <TeamAvatar
+                name={bet.homeTeam}
+                logo={bet.homeLogo}
+                size="sm"
+              />
+              <Text style={styles.teamName}>{bet.homeTeam}</Text>
+              {bet.matchHomeScore !== null ? (
+                <Text style={styles.scoreVal}>{bet.matchHomeScore}</Text>
+              ) : null}
+            </View>
+            <View style={styles.teamRow}>
+              <TeamAvatar
+                name={bet.awayTeam}
+                logo={bet.awayLogo}
+                size="sm"
+              />
+              <Text style={styles.teamName}>{bet.awayTeam}</Text>
+              {bet.matchAwayScore !== null ? (
+                <Text style={styles.scoreVal}>{bet.matchAwayScore}</Text>
+              ) : null}
+            </View>
+          </View>
+        )}
+
+        <View style={styles.pickBox}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pickCaption}>Sélection</Text>
+            <Text style={styles.pickVal}>{bet.selectionLabel}</Text>
+          </View>
+          <View style={styles.oddsBadge}>
+            <Text style={styles.oddsText}>
+              {formatOdds(bet.odds, oddsFormat)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryRows}>
+          <View style={styles.sRow}>
+            <Text style={styles.sLabel}>Placé le</Text>
+            <Text style={styles.sVal}>{formatFullDateTime(bet.placedAt)}</Text>
+          </View>
+          <View style={styles.sRow}>
+            <Text style={styles.sLabel}>Mise engagée</Text>
+            <Text style={styles.sVal}>{eur(bet.stake)}</Text>
+          </View>
+          <View style={styles.sRow}>
+            <Text style={styles.sLabel}>Cote fixe verrouillée</Text>
+            <Text style={styles.sVal}>{formatOdds(bet.odds, oddsFormat)}</Text>
+          </View>
+          <View style={[styles.sRow, styles.sTotal]}>
+            <Text style={styles.sTotalLabel}>
+              {bet.status === "cashed" ? "Montant vendu" : "Gain potentiel"}
+            </Text>
+            <Text
+              style={[
+                styles.sTotalVal,
+                bet.status === "won" && { color: COLORS.win },
+                bet.status === "lost" && { color: COLORS.betclicRed },
+              ]}
+            >
+              {eur(
+                bet.status === "cashed" && bet.cashOutAmount !== null
+                  ? bet.cashOutAmount
+                  : bet.potentialWin
+              )}
+            </Text>
+          </View>
+        </View>
+
+        {canCashOut && cashOutOffer !== null ? (
+          <SlideToCashOut
+            amount={cashOutOffer}
+            loading={cashingOut}
+            onConfirm={handleCashOut}
+          />
+        ) : null}
+
+        {eventHref ? (
+          <Pressable
+            onPress={() => router.push(eventHref)}
+            style={styles.eventLink}
+          >
+            <Text style={styles.eventLinkText}>
+              {bet.matchStatus === "finished"
+                ? "Voir le résultat officiel du match"
+                : "Ouvrir la fiche de l'événement"}
+            </Text>
+            <ExternalLink size={14} color={COLORS.ink} strokeWidth={2.2} />
+          </Pressable>
+        ) : null}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  page: {
     flex: 1,
-    backgroundColor: colors.deep,
+    backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 10,
-    paddingBottom: 28,
-    gap: 11,
+    paddingBottom: 26,
+    gap: 12,
   },
-  topRow: {
-    flexDirection: "row",
+  center: {
+    flex: 1,
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 10,
   },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
+  notFound: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  backFallback: {
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  pageTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.ink,
+  backFallbackText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
   },
-  card: {
-    padding: 14,
-    gap: 11,
-  },
-  statusHeader: {
+  navBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  leagueText: {
-    fontSize: 12,
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navTitle: {
+    fontSize: 16,
     fontWeight: "800",
-    color: colors.mist,
+    color: COLORS.ink,
   },
-  statusBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: colors.elev,
+  shareBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.ink,
+  card: {
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    padding: 15,
+    gap: 13,
   },
-  teamsRow: {
+  cardHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  teamCol: {
-    flex: 1,
+  leagueRow: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
+    flex: 1,
+  },
+  leagueText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.mist,
+    flexShrink: 1,
+  },
+  statusRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  dateText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.dim,
+    fontVariant: ["tabular-nums"],
+  },
+  matchTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.ink,
+    lineHeight: 22,
+  },
+  teamsBlock: {
+    gap: 9,
+  },
+  teamRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   teamName: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: "800",
-    color: colors.ink,
-    textAlign: "center",
+    color: COLORS.ink,
+    flex: 1,
   },
-  scoreText: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: colors.ink,
+  scoreVal: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
-  vsText: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: colors.dim,
+  pickBox: {
+    borderRadius: 13,
+    backgroundColor: COLORS.elev,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  predTitle: {
+  pickCaption: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.dim,
+  },
+  pickVal: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: COLORS.betclicRed,
+    marginTop: 1,
+  },
+  oddsBadge: {
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+  },
+  oddsText: {
     fontSize: 15,
     fontWeight: "800",
-    color: colors.ink,
-  },
-  selBox: {
-    padding: 10,
-    borderRadius: 11,
-    backgroundColor: colors.elev,
-    gap: 2,
-  },
-  selLabel: {
-    fontSize: 10.5,
-    fontWeight: "600",
-    color: colors.dim,
-  },
-  selValue: {
-    fontSize: 13.5,
-    fontWeight: "800",
-    color: colors.betclicRed,
-  },
-  amountsInline: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 6,
-  },
-  metricInline: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 4,
-  },
-  metricLabel: {
-    fontSize: 11,
-    color: colors.dim,
-    fontWeight: "500",
-  },
-  metricVal: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: colors.ink,
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
-  metaDate: {
-    fontSize: 11,
-    color: colors.dim,
-    fontWeight: "500",
+  summaryRows: {
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.edgeSoft,
+    paddingTop: 11,
   },
-  contextLinkBtn: {
+  sRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sLabel: {
+    fontSize: 12.5,
+    fontWeight: "500",
+    color: COLORS.dim,
+  },
+  sVal: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  sTotal: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.edgeSoft,
+    paddingTop: 9,
+    marginTop: 2,
+  },
+  sTotalLabel: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  sTotalVal: {
+    fontSize: 17,
+    fontWeight: "900",
+    color: COLORS.win,
+    fontVariant: ["tabular-nums"],
+  },
+  eventLink: {
     height: 42,
     borderRadius: 12,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.edge,
+    backgroundColor: COLORS.elev,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
   },
-  contextLinkText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: colors.ink,
+  eventLinkText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.ink,
   },
 });

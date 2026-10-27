@@ -1,14 +1,31 @@
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 
-/**
- * Moteur HTTP Android Expo SDK 42 haute performance :
- * 1. Stockage sécurisé du JWT dans Android Keystore (`expo-secure-store`) + miroir RAM 0 ms.
- * 2. Déduplication des requêtes GET identiques en vol (*Client Singleflight*).
- * 3. Validation conditionnelle `ETag` + `If-None-Match` (`304 Not Modified` = 0 octet JSON transféré).
- * 4. Timeout réseau propre + propagation typée des conflits de cote / Cash Out (`409`).
- * 5. Clés d'idempotence déterministes sur toutes les écritures financières.
- */
+export const ODDS_CHANGED_CODE = "ODDS_CHANGED" as const;
+export const CASHOUT_CHANGED_CODE = "CASHOUT_CHANGED" as const;
+
+export interface OddsChangedLegDetail {
+  kind: "sport" | "prediction";
+  matchId?: number;
+  questionId?: number;
+  market: string;
+  selection: string;
+  previousOdds: number;
+  currentOdds: number;
+  direction: "up" | "down";
+}
+
+export interface OddsChangedDetails {
+  previousOdds: number;
+  currentOdds: number;
+  direction: "up" | "down";
+  updatedLegs?: OddsChangedLegDetail[];
+}
+
+export interface CashoutChangedDetails {
+  previousCashout: number;
+  currentCashout: number;
+}
 
 const TOKEN_STORE_KEY = "pulse_android_jwt_v1";
 
@@ -96,9 +113,26 @@ function setEtagEntry(cacheKey: string, etag: string, body: unknown) {
   etagStore.set(cacheKey, { etag, body, at: Date.now() });
 }
 
+/**
+ * Routes publiques mises en cache au CDN Edge Vercel :
+ * Omet strictement l'en-tête `Authorization` pour bénéficier à 100 % du cache partagé Edge + `304 Not Modified`.
+ */
+function isPublicEdgeGetPath(path: string): boolean {
+  return (
+    path === "/api/matches/slim" ||
+    path === "/api/matches" ||
+    /^\/api\/matches\/[1-9]\d{0,9}$/.test(path) ||
+    path === "/api/matches/history" ||
+    path.startsWith("/api/matches/history?") ||
+    path === "/api/predictions/catalog"
+  );
+}
+
 export class ApiHttpError extends Error {
   status: number;
   code?: string;
+  details?: OddsChangedDetails;
+  cashoutDetails?: CashoutChangedDetails;
   currentOdds?: number;
   currentCashOut?: number;
   closed?: boolean;
@@ -109,6 +143,8 @@ export class ApiHttpError extends Error {
     status: number,
     payload?: {
       code?: string;
+      details?: OddsChangedDetails;
+      cashoutDetails?: CashoutChangedDetails;
       currentOdds?: number;
       currentCashOut?: number;
       closed?: boolean;
@@ -119,17 +155,29 @@ export class ApiHttpError extends Error {
     this.name = "ApiHttpError";
     this.status = status;
     this.code = payload?.code;
-    this.currentOdds = payload?.currentOdds;
-    this.currentCashOut = payload?.currentCashOut;
+    this.details = payload?.details;
+    this.cashoutDetails = payload?.cashoutDetails;
+    this.currentOdds = payload?.currentOdds ?? payload?.details?.currentOdds;
+    this.currentCashOut =
+      payload?.currentCashOut ?? payload?.cashoutDetails?.currentCashout;
     this.closed = payload?.closed;
     this.suspended = payload?.suspended;
   }
 }
 
-export function generateIdempotencyKey(prefix = "and"): string {
-  const randA = Math.random().toString(36).slice(2, 10);
-  const randB = Math.random().toString(36).slice(2, 10);
-  return `${prefix}-${Date.now().toString(36)}-${randA}${randB}`;
+export function generateIdempotencyKey(prefix = "idem"): string {
+  const safePrefix = prefix.replace(/[^A-Za-z0-9]/g, "").slice(0, 12) || "idem";
+  const randA = Math.random().toString(36).slice(2, 12);
+  const randB = Math.random().toString(36).slice(2, 12);
+  return `${safePrefix}_${Date.now().toString(36)}_${randA}${randB}`;
+}
+
+export function generateBetIdempotencyKey(): string {
+  return generateIdempotencyKey("bet");
+}
+
+export function roundOdds2(odds: number): number {
+  return Math.round(odds * 100) / 100;
 }
 
 export interface RequestOptions {
@@ -146,35 +194,54 @@ export async function requestJson<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const method = options.method ?? "GET";
+  const isGet = method === "GET";
+  const isPublicEdge = isGet && isPublicEdgeGetPath(path);
   const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
-  const token = tokenHydrated ? memoryAuthToken : await hydrateAuthToken();
-  const cacheKey = `${token ? token.slice(-12) : "anon"}:${url}`;
+  const token = isPublicEdge
+    ? null
+    : tokenHydrated
+      ? memoryAuthToken
+      : await hydrateAuthToken();
+  const cacheKey = isPublicEdge
+    ? `public:${url}`
+    : `${token ? token.slice(-12) : "anon"}:${url}`;
 
-  if (method === "GET" && !options.bypassEtag) {
+  if (isGet && !options.bypassEtag) {
     const existing = inflightGets.get(cacheKey);
     if (existing) {
       return existing as Promise<T>;
     }
+  } else if (!isGet) {
+    // Toute mutation invalide les ETag clients pour refléter immédiatement le nouveau solde / ticket
+    etagStore.clear();
   }
 
   const execute = async (): Promise<T> => {
-    const timeoutMs = options.timeoutMs ?? (method === "GET" ? 12_000 : 18_000);
+    const timeoutMs = options.timeoutMs ?? (isGet ? 12_000 : 18_000);
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {
-        reject(new ApiHttpError("Délai réseau dépassé. Vérifiez votre connexion.", 0));
+        reject(
+          new ApiHttpError(
+            "Le serveur met trop de temps à répondre — veuillez réessayer.",
+            504
+          )
+        );
       }, timeoutMs);
     });
 
     try {
       const headers: Record<string, string> = {
         Accept: "application/json",
-        "X-Client-Platform": "android-expo",
         ...(options.headers ?? {}),
       };
 
-      if (token) {
+      if (!isPublicEdge) {
+        headers["X-Client-Platform"] = "android-expo";
+      }
+
+      if (token && !isPublicEdge) {
         headers.Authorization = `Bearer ${token}`;
       }
 
@@ -183,7 +250,7 @@ export async function requestJson<T>(
       }
 
       const cachedEtag =
-        method === "GET" && !options.bypassEtag ? etagStore.get(cacheKey) : undefined;
+        isGet && !options.bypassEtag ? etagStore.get(cacheKey) : undefined;
       if (cachedEtag?.etag) {
         headers["If-None-Match"] = cachedEtag.etag;
       }
@@ -213,15 +280,33 @@ export async function requestJson<T>(
       }
 
       if (!res.ok) {
-        if (res.status === 401 && !options.ignoreUnauthorizedRedirect && memoryAuthToken) {
+        if (
+          res.status === 401 &&
+          !isPublicEdge &&
+          !options.ignoreUnauthorizedRedirect &&
+          memoryAuthToken
+        ) {
           await persistAuthToken(null);
           for (const listener of unauthorizedListeners) listener();
         }
+        const code = typeof data.code === "string" ? data.code : undefined;
+        const rawDetails =
+          data.details && typeof data.details === "object"
+            ? (data.details as OddsChangedDetails & CashoutChangedDetails)
+            : undefined;
+        const isCashoutChanged = code === CASHOUT_CHANGED_CODE;
+        const fallbackMsg =
+          res.status === 504
+            ? "Le serveur met trop de temps à répondre — veuillez réessayer."
+            : "Service temporairement indisponible — veuillez réessayer.";
+
         throw new ApiHttpError(
-          (typeof data.error === "string" && data.error) || `Erreur ${res.status}`,
+          (typeof data.error === "string" && data.error) || fallbackMsg,
           res.status,
           {
-            code: typeof data.code === "string" ? data.code : undefined,
+            code,
+            details: isCashoutChanged ? undefined : rawDetails,
+            cashoutDetails: isCashoutChanged ? rawDetails : undefined,
             currentOdds:
               typeof data.currentOdds === "number" ? data.currentOdds : undefined,
             currentCashOut:
@@ -232,7 +317,7 @@ export async function requestJson<T>(
         );
       }
 
-      if (method === "GET") {
+      if (isGet) {
         const respEtag = res.headers.get("etag");
         if (respEtag) {
           setEtagEntry(cacheKey, respEtag, data);
@@ -248,7 +333,7 @@ export async function requestJson<T>(
     }
   };
 
-  if (method === "GET" && !options.bypassEtag) {
+  if (isGet && !options.bypassEtag) {
     const p = execute().finally(() => {
       inflightGets.delete(cacheKey);
     });

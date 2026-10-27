@@ -2,7 +2,7 @@ import React from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Redirect } from "@/lib/router";
 import { useApp } from "@/context/app-context";
-import { colors } from "@/theme/tokens";
+import { COLORS } from "@/theme/tokens";
 
 export default function IndexRedirect() {
   const { authReady, user } = useApp();
@@ -12,12 +12,12 @@ export default function IndexRedirect() {
       <View
         style={{
           flex: 1,
-          backgroundColor: colors.deep,
+          backgroundColor: COLORS.deep,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <ActivityIndicator size="small" color={colors.betclicRed} />
+        <ActivityIndicator size="small" color={COLORS.betclicRed} />
       </View>
     );
   }
