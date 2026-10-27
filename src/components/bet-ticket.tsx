@@ -387,7 +387,8 @@ function ComboBetTicket({
         <div
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          className="mt-3 space-y-2"
+          onTouchStart={(e) => e.stopPropagation()}
+          className="mt-3 space-y-2 border-t border-edge/80 pt-3"
         >
           {cashoutChanged && (
             <div
@@ -721,7 +722,7 @@ function SingleBetTicket({
 
       {/* Vendre le coupon (1xBet Cash Out temps réel glisser-confirmer) */}
       {canCashOut && (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-2 border-t border-edge/80 pt-3">
           {cashoutChanged && (
             <div
               role="alert"
