@@ -23,7 +23,8 @@ import {
   useOddsTrend,
 } from "@/components/odds-trend-corner";
 import { TeamAvatar } from "@/components/team-avatar";
-import { useApp } from "@/components/providers";
+import { CardOverlayLink } from "@/components/card-overlay-link";
+import { useApp, useFeedMatches } from "@/components/providers";
 import {
   ApiRequestError,
   api,
@@ -250,10 +251,10 @@ export function DesktopBetslipSidebar() {
     removeComboLeg,
     clearCombo,
     applyComboOddsUpdates,
-    feedMatches,
     toast,
     bumpBets,
   } = useApp();
+  const feedMatches = useFeedMatches();
 
   const [stake, setStake] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -758,7 +759,7 @@ export function DesktopBetslipSidebar() {
                   <article
                     key={leg.uid}
                     className={cn(
-                      "relative cursor-pointer rounded-xl border bg-white p-3 transition-colors hover:bg-elev/25",
+                      "relative cursor-pointer overflow-hidden rounded-xl border bg-white p-3 transition-colors hover:bg-elev/25",
                       leg.closed
                         ? "border-betclic-red/40 bg-betclic-red/[0.03]"
                         : leg.suspended
@@ -766,11 +767,17 @@ export function DesktopBetslipSidebar() {
                           : "border-edge"
                     )}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <Link
-                        href={legHref}
-                        className="min-w-0 flex-1 after:absolute after:inset-0 after:z-0 after:content-['']"
-                      >
+                    <CardOverlayLink
+                      href={legHref}
+                      label={
+                        sportTeams
+                          ? `${sportTeams.homeTeam} – ${sportTeams.awayTeam}`
+                          : leg.title
+                      }
+                      className="rounded-xl"
+                    />
+                    <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                           <span className="truncate font-display font-bold uppercase text-mist">
                             {leg.league ||
@@ -816,19 +823,19 @@ export function DesktopBetslipSidebar() {
                             {leg.title}
                           </p>
                         )}
-                      </Link>
+                      </div>
 
                       <button
                         type="button"
                         onClick={() => removeComboLeg(leg.uid)}
                         aria-label="Retirer du coupon"
-                        className="relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elev text-mist transition-colors hover:bg-betclic-red/12 hover:text-betclic-red"
+                        className="pointer-events-auto relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elev text-mist transition-colors hover:bg-betclic-red/12 hover:text-betclic-red"
                       >
                         <X className="h-3.5 w-3.5" strokeWidth={2.4} />
                       </button>
                     </div>
 
-                    <div className="mt-2 flex items-center justify-between gap-2 border-t border-edge/80 pt-2">
+                    <div className="pointer-events-none relative z-[1] mt-2 flex items-center justify-between gap-2 border-t border-edge/80 pt-2">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <span className="shrink-0 rounded-md bg-elev px-1.5 py-0.5 text-[10px] font-semibold text-mist">
                           {formatMarketName(leg.market)}

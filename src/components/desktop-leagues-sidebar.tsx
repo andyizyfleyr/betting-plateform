@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { SportIcon } from "@/components/sport-icon";
-import { useApp } from "@/components/providers";
+import { useApp, useFeedMatches } from "@/components/providers";
 import {
   OFFICIAL_SOCCER_LEAGUES,
   resolveEspnSlugForLeague,
@@ -207,13 +207,13 @@ export function DesktopLeaguesSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const {
-    feedMatches,
     sportUniverse,
     setSportUniverse,
     sportLeagueFilter,
     setSportLeagueFilter,
     setSportStatusFilter,
   } = useApp();
+  const feedMatches = useFeedMatches();
 
   const [footballOpen, setFootballOpen] = useState(true);
   const [expandedCountries, setExpandedCountries] = useState<Record<string, boolean>>({});

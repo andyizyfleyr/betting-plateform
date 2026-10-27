@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, RefreshCw, Search, TrendingUp, X } from "lucide-react";
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { rememberPredictions } from "@/lib/client-entity-cache";
+import { CardOverlayLink } from "@/components/card-overlay-link";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
@@ -510,8 +510,13 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
   }, [q]);
 
   return (
-    <article className="glass-card relative cursor-pointer rounded-2xl p-3.5 transition-colors hover:bg-elev/20 active:bg-elev/40">
-      <div className="flex items-center justify-between gap-2 text-[11px]">
+    <article className="glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-colors hover:bg-elev/20 active:bg-elev/40">
+      <CardOverlayLink
+        href={`/predictions/${q.id}`}
+        label={q.question}
+        onBeforeNavigate={() => rememberPredictions([q])}
+      />
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px]">
         <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
           {q.category}
         </span>
@@ -519,14 +524,10 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
           {q.resolvedAt ? `Résolu · ${formatPlacedAt(q.resolvedAt)}` : "Résolu"}
         </span>
       </div>
-      <Link
-        href={`/predictions/${q.id}`}
-        onClick={() => rememberPredictions([q])}
-        className="mt-2 block font-display text-[15px] font-bold leading-snug text-ink after:absolute after:inset-0 after:z-0 after:content-[''] hover:text-betclic-red"
-      >
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[15px] font-bold leading-snug text-ink">
         {q.question}
-      </Link>
-      <div className="mt-2.5 flex items-center justify-between rounded-xl border border-win/25 bg-win/10 px-3 py-2">
+      </p>
+      <div className="pointer-events-none relative z-[1] mt-2.5 flex items-center justify-between rounded-xl border border-win/25 bg-win/10 px-3 py-2">
         <span className="inline-flex items-center gap-1.5 font-display text-[12.5px] font-bold text-win">
           <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} />
           Issue gagnante : {winner.label}
@@ -584,11 +585,17 @@ function MultiChoiceQuestionCard({
   return (
     <article
       className={cn(
-        "glass-card relative cursor-pointer rounded-2xl p-3.5 transition-colors hover:bg-elev/20 active:bg-elev/40",
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-colors hover:bg-elev/20 active:bg-elev/40",
         expired && "opacity-70"
       )}
     >
-      <div className="flex items-center justify-between gap-2 text-[11px]">
+      <CardOverlayLink
+        href={`/predictions/${q.id}`}
+        label={q.question}
+        onBeforeNavigate={() => rememberPredictions([q])}
+      />
+
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px]">
         <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
           {q.category}
         </span>
@@ -598,21 +605,17 @@ function MultiChoiceQuestionCard({
         </span>
       </div>
 
-      <Link
-        href={`/predictions/${q.id}`}
-        onClick={() => rememberPredictions([q])}
-        className="mt-2 block font-display text-[15.5px] font-bold leading-snug text-ink after:absolute after:inset-0 after:z-0 after:content-[''] hover:text-betclic-red"
-      >
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[15.5px] font-bold leading-snug text-ink">
         {q.question}
-      </Link>
+      </p>
 
       {q.myBet && myBetLabel && (
-        <p className="mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
+        <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
           Votre mise : {myBetLabel} · {eur(q.myBet.stake)}
         </p>
       )}
 
-      <div className="relative z-10 mt-2.5 flex flex-col gap-1.5">
+      <div className="pointer-events-auto relative z-10 mt-2.5 flex flex-col gap-1.5">
         {displayed.map((opt) => {
           const pct = probs.get(opt.key) ?? 0;
           const selected = q.myBet?.selection === opt.key;
@@ -649,7 +652,7 @@ function MultiChoiceQuestionCard({
         <button
           type="button"
           onClick={() => setExpanded((s) => !s)}
-          className="relative z-10 mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[12.5px] font-semibold text-ink transition-colors hover:bg-elev active:scale-[0.99]"
+          className="pointer-events-auto relative z-10 mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[12.5px] font-semibold text-ink transition-colors hover:bg-elev active:scale-[0.99]"
         >
           <span>
             {expanded
@@ -682,11 +685,17 @@ function BinaryQuestionCard({
   return (
     <article
       className={cn(
-        "glass-card relative cursor-pointer rounded-2xl p-3.5 transition-colors hover:bg-elev/20 active:bg-elev/40",
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-colors hover:bg-elev/20 active:bg-elev/40",
         expired && "opacity-70"
       )}
     >
-      <div className="flex items-center justify-between gap-2 text-[11px]">
+      <CardOverlayLink
+        href={`/predictions/${q.id}`}
+        label={q.question}
+        onBeforeNavigate={() => rememberPredictions([q])}
+      />
+
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px]">
         <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
           {q.category}
         </span>
@@ -696,21 +705,17 @@ function BinaryQuestionCard({
         </span>
       </div>
 
-      <Link
-        href={`/predictions/${q.id}`}
-        onClick={() => rememberPredictions([q])}
-        className="mt-2 block font-display text-[15px] font-semibold leading-snug text-ink after:absolute after:inset-0 after:z-0 after:content-[''] hover:text-betclic-red"
-      >
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[15px] font-semibold leading-snug text-ink">
         {q.question}
-      </Link>
+      </p>
 
       {q.myBet && (
-        <p className="mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
+        <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
           Votre mise : {q.myBet.selection === "yes" ? "Oui" : "Non"} · {eur(q.myBet.stake)}
         </p>
       )}
 
-      <div className="relative z-10 mt-2.5 grid grid-cols-2 gap-2">
+      <div className="pointer-events-auto relative z-10 mt-2.5 grid grid-cols-2 gap-2">
         <SideButton
           label="Oui"
           odds={q.oddsYes}

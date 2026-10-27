@@ -146,19 +146,30 @@ export function PartyRealtimeBridge({
             serverTime?: string;
           }>(pulseQueryKeys.matches);
 
+          const hasActiveMatchesObserver =
+            (queryClient
+              .getQueryCache()
+              .find({ queryKey: pulseQueryKeys.matches })
+              ?.getObserversCount() ?? 0) > 0;
+
           const { merged, hasNewMatch, needsFullMarkets, newlyFinishedIds } =
             mergeSlimIntoFullMatches(prevData?.matches, msg.matches);
 
-          queryClient.setQueryData<{
-            matches: ClientMatch[];
-            serverTime?: string;
-          }>(pulseQueryKeys.matches, {
-            matches: merged,
-            serverTime: msg.serverTime ?? prevData?.serverTime,
-          });
+          // Ne pré-remplit `pulseQueryKeys.matches` avec un snapshot slim que si le cache
+          // complet existe déjà ou qu'une vue active observe `matches` (évite tout appel
+          // `/api/matches` de ~250 Ko en tâche de fond sur `/paris`, `/predictions`, `/resultats` mobile).
+          if (prevData || hasActiveMatchesObserver) {
+            queryClient.setQueryData<{
+              matches: ClientMatch[];
+              serverTime?: string;
+            }>(pulseQueryKeys.matches, {
+              matches: merged,
+              serverTime: msg.serverTime ?? prevData?.serverTime,
+            });
+            onMatchesUpdatedRef.current?.(merged);
+          }
 
           rememberMatches(merged);
-          onMatchesUpdatedRef.current?.(merged);
 
           // Met aussi à jour instantanément toute fiche détail `/matchs/[id]` en cache
           for (const slim of msg.matches) {
@@ -174,7 +185,10 @@ export function PartyRealtimeBridge({
             });
           }
 
-          if (!prevData || hasNewMatch || needsFullMarkets) {
+          if (
+            hasActiveMatchesObserver &&
+            (!prevData || hasNewMatch || needsFullMarkets)
+          ) {
             void queryClient.invalidateQueries({
               queryKey: pulseQueryKeys.matches,
             });

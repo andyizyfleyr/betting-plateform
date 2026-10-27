@@ -60,6 +60,13 @@ body {
   border-color: rgba(21, 128, 61, 0.35);
 }
 
+a,
+button,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ---------- Utilitaires ---------- */
 .no-scrollbar {
   -ms-overflow-style: none;

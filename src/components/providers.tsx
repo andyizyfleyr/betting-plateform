@@ -86,7 +86,6 @@ interface AppContextValue {
   marketMatch: ClientMatch | null;
   openMarkets: (m: ClientMatch) => void;
   closeMarkets: () => void;
-  feedMatches: ClientMatch[] | null;
   setFeedMatches: (m: ClientMatch[] | null) => void;
   sportUniverse: SportUniverse | null;
   setSportUniverse: (u: SportUniverse | null) => void;
@@ -124,11 +123,16 @@ interface AppContextValue {
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
+const FeedMatchesContext = createContext<ClientMatch[] | null>(null);
 
 export function useApp() {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error("useApp doit être utilisé dans <Providers>");
   return ctx;
+}
+
+export function useFeedMatches(): ClientMatch[] | null {
+  return useContext(FeedMatchesContext);
 }
 
 let toastId = 0;
@@ -512,7 +516,6 @@ function ProvidersInner({ children }: { children: ReactNode }) {
         setMarketMatch(m);
       },
       closeMarkets: () => setMarketMatch(null),
-      feedMatches,
       setFeedMatches,
       sportUniverse,
       setSportUniverse,
@@ -555,7 +558,6 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       user,
       target,
       marketMatch,
-      feedMatches,
       sportUniverse,
       sportLeagueFilter,
       sportStatusFilter,
@@ -582,37 +584,39 @@ function ProvidersInner({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider value={value}>
-      <PartyRealtimeBridge
-        userId={user?.id ?? null}
-        disabled={isAuthRoute}
-        onMatchesUpdated={setFeedMatches}
-      >
-        <ProvidersRealtimeQueries
-          user={user}
-          setUser={setUser}
-          loggedIn={loggedIn}
-          isAuthRoute={isAuthRoute}
-          isAdminMode={isAdminMode}
-          isMatchsRoute={isMatchsRoute}
-          isParisRoute={isParisRoute}
-          needsBackgroundMatchFeed={needsBackgroundMatchFeed}
-          hasPending={hasPending}
-          betsVersion={betsVersion}
-          setFeedMatches={setFeedMatches}
-          setPendingCount={setPendingCount}
-          toast={toast}
-        />
-        {children}
-        {!isAdminMode && (
-          <>
-            <ComboSheet />
-            <MarketSheet />
-            <BetModal />
-            <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
-          </>
-        )}
-        <Toasts toasts={toasts} />
-      </PartyRealtimeBridge>
+      <FeedMatchesContext.Provider value={feedMatches}>
+        <PartyRealtimeBridge
+          userId={user?.id ?? null}
+          disabled={isAuthRoute}
+          onMatchesUpdated={setFeedMatches}
+        >
+          <ProvidersRealtimeQueries
+            user={user}
+            setUser={setUser}
+            loggedIn={loggedIn}
+            isAuthRoute={isAuthRoute}
+            isAdminMode={isAdminMode}
+            isMatchsRoute={isMatchsRoute}
+            isParisRoute={isParisRoute}
+            needsBackgroundMatchFeed={needsBackgroundMatchFeed}
+            hasPending={hasPending}
+            betsVersion={betsVersion}
+            setFeedMatches={setFeedMatches}
+            setPendingCount={setPendingCount}
+            toast={toast}
+          />
+          {children}
+          {!isAdminMode && (
+            <>
+              <ComboSheet />
+              <MarketSheet />
+              <BetModal />
+              <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
+            </>
+          )}
+          <Toasts toasts={toasts} />
+        </PartyRealtimeBridge>
+      </FeedMatchesContext.Provider>
     </AppContext.Provider>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch } from "@/lib/api";
 import { rememberSingleMatch } from "@/lib/client-entity-cache";
+import { CardOverlayLink } from "./card-overlay-link";
 import { TeamAvatar } from "./team-avatar";
 import { formatGoalSummary, LiveStatusBadge, ResultOdds } from "./match-card";
 import { KickoffCountdown } from "./kickoff-countdown";
@@ -32,7 +32,13 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
     <section
       className="glass-card relative cursor-pointer overflow-hidden rounded-2xl border-edge p-4 transition-colors hover:border-ink/15 active:bg-elev/40 lg:p-6"
     >
-      <div className="flex items-center justify-between gap-2">
+      <CardOverlayLink
+        href={`/matchs/${match.id}`}
+        label={`${match.homeTeam} – ${match.awayTeam}`}
+        onBeforeNavigate={() => rememberSingleMatch(match)}
+      />
+
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
             className={cn(
@@ -51,7 +57,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
               type="button"
               onClick={() => setShowTracker((s) => !s)}
               className={cn(
-                "relative z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display text-[10.5px] font-bold transition-colors",
+                "pointer-events-auto relative z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display text-[10.5px] font-bold transition-colors",
                 showTracker
                   ? "bg-emerald-700 text-white"
                   : "bg-elev text-mist"
@@ -79,15 +85,12 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
 
       <div
         className={cn(
+          "pointer-events-none relative z-[1]",
           hasLiveSidePanel && "xl:mt-4 xl:grid xl:grid-cols-2 xl:items-center xl:gap-6"
         )}
       >
         <div>
-          <Link
-            href={`/matchs/${match.id}`}
-            onClick={() => rememberSingleMatch(match)}
-            className="my-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 after:absolute after:inset-0 after:z-0 after:content-[''] xl:my-3"
-          >
+          <div className="my-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 xl:my-3">
             <TeamCol
               name={match.homeTeam}
               logo={match.homeLogo}
@@ -148,7 +151,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
               logo={match.awayLogo}
               redCards={match.redAway ?? 0}
             />
-          </Link>
+          </div>
 
           {isLive && hasGoals && (
             <div className="mb-3 hidden grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10.5px] text-mist lg:grid">
@@ -176,20 +179,24 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
 
         <div>
           {!isReal && isLive && showTracker && (
-            <LiveMatchTracker match={match} className="mb-3 xl:mb-0" />
+            <div className="pointer-events-auto relative z-10">
+              <LiveMatchTracker match={match} className="mb-3 xl:mb-0" />
+            </div>
           )}
           {isReal && isLive && showTracker && realStatsAvailable && (
-            <RealMatchStatsCard
-              stats={match.realStats}
-              homeTeam={match.homeTeam}
-              awayTeam={match.awayTeam}
-              homeLogo={match.homeLogo}
-              awayLogo={match.awayLogo}
-              htHomeScore={match.htHomeScore}
-              htAwayScore={match.htAwayScore}
-              compact
-              className="mb-3 xl:mb-0"
-            />
+            <div className="pointer-events-auto relative z-10">
+              <RealMatchStatsCard
+                stats={match.realStats}
+                homeTeam={match.homeTeam}
+                awayTeam={match.awayTeam}
+                homeLogo={match.homeLogo}
+                awayLogo={match.awayLogo}
+                htHomeScore={match.htHomeScore}
+                htAwayScore={match.htAwayScore}
+                compact
+                className="mb-3 xl:mb-0"
+              />
+            </div>
           )}
 
           <div className="xl:hidden">

@@ -12,7 +12,7 @@ import {
   oddsTrendTextClass,
   useOddsTrend,
 } from "./odds-trend-corner";
-import { useApp } from "./providers";
+import { useApp, useFeedMatches } from "./providers";
 import { TeamAvatar } from "./team-avatar";
 import { SportIcon } from "./sport-icon";
 import { LiveMatchTracker } from "./live-match-tracker";
@@ -103,12 +103,12 @@ export function MarketSheet() {
     openBet,
     oddsFormat,
     target,
-    feedMatches,
     comboLegs,
     comboQuickMode,
     toggleComboLeg,
     toast,
   } = useApp();
+  const feedMatches = useFeedMatches();
   const dragControls = useDragControls();
   const [category, setCategory] = useState<SheetCategory>("all");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});

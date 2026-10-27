@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { api, type ClientMatchHistoryItem } from "@/lib/api";
+import { rememberMatchHistory } from "@/lib/client-entity-cache";
+import { CardOverlayLink } from "@/components/card-overlay-link";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
   InfiniteScrollSentinel,
@@ -79,15 +81,19 @@ function MatchHistoryCard({
   const targetHref = isFinished ? `/resultats/${match.id}` : `/matchs/${match.id}`;
 
   return (
-    <Link
-      href={targetHref}
+    <article
       className={cn(
-        "glass-card block overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/35 active:bg-elev/60",
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/35 active:bg-elev/60",
         highlighted && "ring-2 ring-betclic-red/45 shadow-sm"
       )}
     >
+      <CardOverlayLink
+        href={targetHref}
+        label={`${match.homeTeam} – ${match.awayTeam}`}
+        onBeforeNavigate={() => rememberMatchHistory([match])}
+      />
       {/* En-tête ligue + heure + statut */}
-      <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-mist">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px] font-medium text-mist">
         <div className="flex min-w-0 items-center gap-1.5">
           <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
           <span className="truncate">{match.league}</span>
@@ -129,7 +135,7 @@ function MatchHistoryCard({
       </div>
 
       {/* Équipes + score */}
-      <div className="mt-2.5 space-y-1.5">
+      <div className="pointer-events-none relative z-[1] mt-2.5 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="xs" />
@@ -183,7 +189,7 @@ function MatchHistoryCard({
 
       {/* Résumé compact sur une ligne */}
       {hasScore && match.htHome != null && match.htAway != null && (
-        <div className="mt-2 flex items-center gap-1.5 text-[10.5px] font-semibold text-mist">
+        <div className="pointer-events-none relative z-[1] mt-2 flex items-center gap-1.5 text-[10.5px] font-semibold text-mist">
           <span className="rounded-md bg-elev px-2 py-0.5 tabular-nums">
             MT {match.htHome}-{match.htAway}
           </span>
@@ -199,7 +205,7 @@ function MatchHistoryCard({
           )}
         </div>
       )}
-    </Link>
+    </article>
   );
 }
 

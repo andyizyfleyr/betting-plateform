@@ -27,7 +27,7 @@ import {
   type SheetCategory,
 } from "@/components/market-sheet";
 import { LiveStatusBadge } from "@/components/match-card";
-import { useApp } from "@/components/providers";
+import { useApp, useFeedMatches } from "@/components/providers";
 import {
   hasAnyRealStats,
   RealMatchStatsCard,
@@ -65,12 +65,12 @@ export default function MatchDetailPage() {
     openBet,
     oddsFormat,
     target,
-    feedMatches,
     comboLegs,
     comboQuickMode,
     toggleComboLeg,
     toast,
   } = useApp();
+  const feedMatches = useFeedMatches();
   const { isOffline, isConstrained } = useNetworkQuality();
 
   const sharedFromFeed = useMemo(

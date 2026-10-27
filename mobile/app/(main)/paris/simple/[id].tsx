@@ -440,7 +440,14 @@ export default function SingleBetDetailScreen() {
               </View>
 
               {/* Détail de la rencontre ou prédiction */}
-              <View style={styles.card}>
+              <Pressable
+                disabled={!eventHref}
+                onPress={eventHref ? () => router.push(eventHref) : undefined}
+                style={({ pressed }) => [
+                  styles.card,
+                  eventHref && pressed ? { opacity: 0.9 } : null,
+                ]}
+              >
                 <View style={styles.eventTopRow}>
                   <Text style={styles.sectionCaps}>
                     {bet.kind === "prediction"
@@ -521,10 +528,7 @@ export default function SingleBetDetailScreen() {
                 </View>
 
                 {eventHref ? (
-                  <Pressable
-                    onPress={() => router.push(eventHref)}
-                    style={styles.eventLinkBtn}
-                  >
+                  <View style={styles.eventLinkBtn}>
                     <Text style={styles.eventLinkText}>
                       {bet.kind === "prediction"
                         ? "Ouvrir la prédiction"
@@ -537,9 +541,9 @@ export default function SingleBetDetailScreen() {
                       color={COLORS.ink}
                       strokeWidth={2.3}
                     />
-                  </Pressable>
+                  </View>
                 ) : null}
-              </View>
+              </Pressable>
             </View>
           )}
         </View>

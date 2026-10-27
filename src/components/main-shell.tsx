@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { DesktopBetslipSidebar } from "@/components/desktop-betslip-sidebar";
 import { DesktopLeaguesSidebar } from "@/components/desktop-leagues-sidebar";
 import { DesktopSidebar } from "@/components/desktop-sidebar";
+import { RouteWarmup } from "@/components/route-warmup";
 import { useApp } from "@/components/providers";
 import { cn } from "@/lib/format";
 
@@ -38,6 +39,7 @@ export function MainShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh w-full flex-col bg-deep">
+      <RouteWarmup />
       <AppHeader />
 
       {/* Disposition 3 colonnes sur desktop (Ligues | Matchs / Contenu | Betslip), 1 colonne sur mobile */}

@@ -30,7 +30,7 @@ import { computeComboQuote } from "@/lib/combo-math";
 import { cn, eur, formatOdds, initials, teamHue } from "@/lib/format";
 import { AnimatedNumber } from "./animated-number";
 import { PulseLogo } from "./pulse-logo";
-import { useApp, type AdminTabKey } from "./providers";
+import { useApp, useFeedMatches, type AdminTabKey } from "./providers";
 import { Toggle } from "./toggle";
 
 const USER_PRIMARY_NAV = [
@@ -72,12 +72,12 @@ export function DesktopSidebar() {
     comboQuickMode,
     setComboQuickMode,
     pendingCount,
-    feedMatches,
     adminTab,
     setAdminTab,
     adminPendingFinance,
     toast,
   } = useApp();
+  const feedMatches = useFeedMatches();
 
   const [loggingOut, setLoggingOut] = useState(false);
 

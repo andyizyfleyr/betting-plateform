@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import {
   AlertTriangle,
   Check,
@@ -26,6 +25,7 @@ import {
   generateIdempotencyKey,
   type CashoutChangedDetails,
 } from "@/lib/odds-lock";
+import { CardOverlayLink } from "./card-overlay-link";
 import { SlideToCashOut } from "./slide-to-cashout";
 import { LiveMatchClock } from "./live-match-clock";
 import { SportIcon } from "./sport-icon";
@@ -240,8 +240,14 @@ function ComboBetTicket({
         lost && "border-betclic-red/25"
       )}
     >
+      <CardOverlayLink
+        href={`/paris/combine/${bet.id}`}
+        label={`Ouvrir le combiné #${bet.id}`}
+        onBeforeNavigate={() => rememberSingleBet(bet)}
+      />
+
       {/* En-tête identique aux paris simples */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
           <Layers className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
           <span className="truncate font-semibold text-ink">Combiné</span>
@@ -266,7 +272,7 @@ function ComboBetTicket({
               type="button"
               onClick={() => onShare(bet)}
               aria-label="Partager ce combiné"
-              className="relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
+              className="pointer-events-auto relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
             >
               <Share2 className="h-3 w-3" strokeWidth={2.2} />
               Flex
@@ -300,12 +306,8 @@ function ComboBetTicket({
         </div>
       </div>
 
-      {/* Lien étendu couvrant l'intégralité du ticket vers `/paris/combine/[id]` */}
-      <Link
-        href={`/paris/combine/${bet.id}`}
-        onClick={() => rememberSingleBet(bet)}
-        className="mt-2.5 block rounded-xl transition-opacity after:absolute after:inset-0 after:z-0 after:content-[''] active:opacity-85"
-      >
+      {/* Corps du ticket combiné */}
+      <div className="pointer-events-none relative z-[1] mt-2.5 block rounded-xl">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1 space-y-1.5">
             {previewLegs.map((leg, idx) => {
@@ -361,10 +363,10 @@ function ComboBetTicket({
             <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
           </span>
         </div>
-      </Link>
+      </div>
 
       {/* Montants en ligne (Nom en petit + valeur en grand) */}
-      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-2.5">
+      <div className="pointer-events-none relative z-[1] mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-2.5">
         <Amount label="Mise" value={eur(bet.stake)} tone="neutral" />
         <Amount
           label="Cote"
@@ -415,7 +417,7 @@ function ComboBetTicket({
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
-          className="relative z-10 mt-3 space-y-2 border-t border-edge/80 pt-3"
+          className="pointer-events-auto relative z-10 mt-3 space-y-2 border-t border-edge/80 pt-3"
         >
           {cashoutChanged && (
             <div
@@ -593,8 +595,18 @@ function SingleBetTicket({
         lost && "border-betclic-red/25"
       )}
     >
+      <CardOverlayLink
+        href={detailHref}
+        label={
+          isPrediction
+            ? `Ouvrir le pari prédiction #${bet.id}`
+            : `Ouvrir le pari #${bet.id}`
+        }
+        onBeforeNavigate={() => rememberSingleBet(bet)}
+      />
+
       {/* En-tête : ligue/catégorie + date/heure + bouton partager + badge de statut */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
           {isPrediction ? (
             <TrendingUp className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
@@ -638,7 +650,7 @@ function SingleBetTicket({
               type="button"
               onClick={() => onShare(bet)}
               aria-label="Partager ce ticket"
-              className="relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
+              className="pointer-events-auto relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
             >
               <Share2 className="h-3 w-3" strokeWidth={2.2} />
               Flex
@@ -664,12 +676,8 @@ function SingleBetTicket({
         </div>
       </div>
 
-      {/* Lien étendu couvrant l'intégralité du ticket vers `/paris/simple/[id]` */}
-      <Link
-        href={detailHref}
-        onClick={() => rememberSingleBet(bet)}
-        className="mt-2.5 block rounded-xl transition-opacity after:absolute after:inset-0 after:z-0 after:content-[''] active:opacity-85"
-      >
+      {/* Corps du ticket simple */}
+      <div className="pointer-events-none relative z-[1] mt-2.5 block rounded-xl">
         {isPrediction ? (
           <>
             <div className="flex items-center justify-between gap-2">
@@ -735,10 +743,10 @@ function SingleBetTicket({
             </div>
           </>
         )}
-      </Link>
+      </div>
 
       {/* Montants en ligne (Nom en petit + valeur en grand) */}
-      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-2.5">
+      <div className="pointer-events-none relative z-[1] mt-3 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-2.5">
         <Amount label="Mise" value={eur(bet.stake)} tone="neutral" />
         <Amount
           label="Cote"
@@ -774,7 +782,7 @@ function SingleBetTicket({
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
-          className="relative z-10 mt-3 space-y-2 border-t border-edge/80 pt-3"
+          className="pointer-events-auto relative z-10 mt-3 space-y-2 border-t border-edge/80 pt-3"
         >
           {cashoutChanged && (
             <div

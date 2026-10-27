@@ -29,6 +29,7 @@ import {
   StatusPill,
   TicketTeamRow,
 } from "@/components/bet-ticket";
+import { CardOverlayLink } from "@/components/card-overlay-link";
 import {
   InfiniteScrollSentinel,
   useInfiniteBatch,
@@ -698,7 +699,13 @@ export default function ComboDetailPage() {
                         leg.status === "lost" && "border-betclic-red/25"
                       )}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      {legHref && (
+                        <CardOverlayLink
+                          href={legHref}
+                          label={teams ? `${teams.home} – ${teams.away}` : leg.title}
+                        />
+                      )}
+                      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
                           <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-elev px-1 font-display text-[10px] font-bold tabular-nums text-ink">
                             {idx + 1}
@@ -743,17 +750,10 @@ export default function ComboDetailPage() {
                         </div>
                       </div>
 
-                      <div className="mt-2.5">
-                        {legHref ? (
-                          <Link
-                            href={legHref}
-                            className="-mx-1.5 flex items-center rounded-xl px-1.5 py-1 after:absolute after:inset-0 after:z-0 after:content-['']"
-                          >
-                            {eventContent}
-                          </Link>
-                        ) : (
-                          eventContent
-                        )}
+                      <div className="pointer-events-none relative z-[1] mt-2.5">
+                        <div className="-mx-1.5 flex items-center rounded-xl px-1.5 py-1">
+                          {eventContent}
+                        </div>
 
                         <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-elev px-3 py-2">
                           <div className="flex min-w-0 items-center gap-1.5">
