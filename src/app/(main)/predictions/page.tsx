@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, ListChecks, RefreshCw, Search, TrendingUp, X } from "lucide-react";
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
@@ -569,9 +570,12 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
           {q.resolvedAt ? `Résolu · ${formatPlacedAt(q.resolvedAt)}` : "Résolu"}
         </span>
       </div>
-      <h2 className="mt-2 font-display text-[15px] font-bold leading-snug text-ink">
+      <Link
+        href={`/predictions/${q.id}`}
+        className="mt-2 block font-display text-[15px] font-bold leading-snug text-ink hover:text-betclic-red"
+      >
         {q.question}
-      </h2>
+      </Link>
       <div className="mt-2.5 flex items-center justify-between rounded-xl border border-win/25 bg-win/10 px-3 py-2">
         <span className="inline-flex items-center gap-1.5 font-display text-[12.5px] font-bold text-win">
           <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} />
@@ -645,9 +649,12 @@ function MultiChoiceQuestionCard({
         </span>
       </div>
 
-      <h2 className="mt-2 font-display text-[15.5px] font-bold leading-snug text-ink">
+      <Link
+        href={`/predictions/${q.id}`}
+        className="mt-2 block font-display text-[15.5px] font-bold leading-snug text-ink hover:text-betclic-red"
+      >
         {q.question}
-      </h2>
+      </Link>
 
       {q.myBet && myBetLabel && (
         <p className="mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
@@ -739,9 +746,12 @@ function BinaryQuestionCard({
         </span>
       </div>
 
-      <h2 className="mt-2 font-display text-[15px] font-semibold leading-snug text-ink">
+      <Link
+        href={`/predictions/${q.id}`}
+        className="mt-2 block font-display text-[15px] font-semibold leading-snug text-ink hover:text-betclic-red"
+      >
         {q.question}
-      </h2>
+      </Link>
 
       <div className="mt-2.5">
         <div className="flex justify-between text-[11px] font-medium text-mist">

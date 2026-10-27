@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowDownLeft,
@@ -388,22 +389,20 @@ export default function ParametresPage() {
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={openRecharge}
+            <Link
+              href="/parametres/depot"
               className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12.5px] font-bold text-white active:opacity-90"
             >
               <Plus className="h-4 w-4" strokeWidth={2.6} />
               Déposer
-            </button>
-            <button
-              type="button"
-              onClick={() => setWithdrawOpen(true)}
+            </Link>
+            <Link
+              href="/parametres/retrait"
               className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[12.5px] font-bold text-ink active:bg-surface"
             >
               <ArrowUpRight className="h-4 w-4 text-betclic-red" strokeWidth={2.4} />
               Retirer
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -449,6 +448,12 @@ export default function ParametresPage() {
           <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
           Portefeuille & Mouvements
         </h2>
+        <Link
+          href="/parametres/transactions"
+          className="font-display text-[11.5px] font-bold text-betclic-red hover:underline"
+        >
+          Page dédiée →
+        </Link>
       </div>
 
       <FilterDropdownRow
