@@ -49,6 +49,7 @@ const TAG_PURGE_COOLDOWN_MS = 2_500;
 
 interface GlobalResponseCacheStore {
   matchesPayload: CachedJsonPayload | null;
+  matchesSlimPayload: CachedJsonPayload | null;
   historyBasePayload: CachedJsonPayload | null;
   historyParsedItems: unknown[] | null;
   historyServerTime: string | null;
@@ -65,6 +66,7 @@ function store(): GlobalResponseCacheStore {
   if (!globalCache.__pulseResponseCacheStoreV3) {
     globalCache.__pulseResponseCacheStoreV3 = {
       matchesPayload: null,
+      matchesSlimPayload: null,
       historyBasePayload: null,
       historyParsedItems: null,
       historyServerTime: null,
@@ -113,6 +115,26 @@ export function setMatchesPayloadCache(data: unknown): CachedJsonPayload {
     at: Date.now(),
   };
   store().matchesPayload = entry;
+  return entry;
+}
+
+export function getMatchesSlimPayloadCache(allowStaleFallback = false): CachedJsonPayload | null {
+  const entry = store().matchesSlimPayload;
+  if (!entry) return null;
+  if (allowStaleFallback || Date.now() - entry.at < MATCHES_CACHE_TTL_MS) {
+    return entry;
+  }
+  return null;
+}
+
+export function setMatchesSlimPayloadCache(data: unknown): CachedJsonPayload {
+  const json = JSON.stringify(data);
+  const entry: CachedJsonPayload = {
+    json,
+    etag: computeWeakEtag(json),
+    at: Date.now(),
+  };
+  store().matchesSlimPayload = entry;
   return entry;
 }
 
@@ -225,6 +247,7 @@ export function invalidatePublicApiCaches(
 ): void {
   const s = store();
   s.matchesPayload = null;
+  s.matchesSlimPayload = null;
   s.historyBasePayload = null;
   s.historyParsedItems = null;
   s.historyServerTime = null;
@@ -278,7 +301,7 @@ export function jsonWithEtag(
     "Cache-Control": "private, max-age=0, must-revalidate",
     "CDN-Cache-Control": "private, no-store",
     "Vercel-CDN-Cache-Control": "private, no-store",
-    Vary: "Cookie, Accept-Encoding",
+    Vary: "Cookie, Authorization, Accept-Encoding",
     "X-Content-Type-Options": "nosniff",
   };
 

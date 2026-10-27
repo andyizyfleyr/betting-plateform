@@ -122,6 +122,7 @@ export interface ClientMatch {
   events?: ClientMatchEvent[];
   telemetry?: LiveMatchTelemetry;
   realStats?: ClientRealMatchStats | null;
+  marketCount?: number;
   markets: MarketGroup[];
 }
 

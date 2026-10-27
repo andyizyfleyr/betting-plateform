@@ -2,9 +2,23 @@ import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { appUser } from "@/db/schema";
-import { AUTH_COOKIE, signJwt, verifyJwt, type JwtPayload } from "@/lib/jwt";
+import {
+  AUTH_COOKIE,
+  extractAuthToken,
+  MOBILE_ANDROID_CLIENT,
+  MOBILE_CLIENT_HEADER,
+  signJwt,
+  verifyJwt,
+  type JwtPayload,
+} from "@/lib/jwt";
 
-export { AUTH_COOKIE, verifyJwt };
+export {
+  AUTH_COOKIE,
+  extractAuthToken,
+  MOBILE_ANDROID_CLIENT,
+  MOBILE_CLIENT_HEADER,
+  verifyJwt,
+};
 export type { JwtPayload };
 
 const TTL_SECONDS = 7 * 24 * 3600; // 7 jours
@@ -69,7 +83,7 @@ export function clearAuthCookie(res: NextResponse) {
  * afin d'économiser 1 requête SQL sur > 90 % des appels API authentifiés.
  */
 export async function getAuthUserId(req: NextRequest): Promise<number | null> {
-  const token = req.cookies.get(AUTH_COOKIE)?.value;
+  const token = extractAuthToken(req);
   if (!token) return null;
   const payload = await verifyJwt(token);
   if (!payload?.sub) return null;

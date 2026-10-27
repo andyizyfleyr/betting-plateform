@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AUTH_COOKIE, verifyJwt } from "@/lib/jwt";
+import { extractAuthToken, verifyJwt } from "@/lib/jwt";
 
 const STATIC_RE = /\.(?:svg|png|jpg|jpeg|gif|webp|mp3|wav|ogg|woff2?|ico|txt|json|css|js)$/i;
 
@@ -20,7 +20,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get(AUTH_COOKIE)?.value;
+  const token = extractAuthToken(req);
   const payload = token ? await verifyJwt(token) : null;
   const authed = !!payload;
   const isAdmin = payload?.role === "admin";
@@ -39,6 +39,7 @@ export async function proxy(req: NextRequest) {
     // Flux publics Edge (également exclus par `config.matcher` ci-dessous)
     if (
       pathname === "/api/matches" ||
+      pathname === "/api/matches/slim" ||
       /^\/api\/matches\/[1-9]\d{0,9}$/.test(pathname) ||
       pathname === "/api/matches/history" ||
       pathname === "/api/predictions/catalog"
@@ -108,6 +109,6 @@ export const config = {
   // Vercel serve directement le cache partagé sans exécuter le middleware ni lire les cookies,
   // tout en protégeant 100 % des autres routes (`/api/predictions/my-bets`, `/api/bets`, `/api/admin`, etc.).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/matches$|api/matches/[1-9][0-9]*$|api/matches/history$|api/predictions/catalog$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/matches$|api/matches/slim$|api/matches/[1-9][0-9]*$|api/matches/history$|api/predictions/catalog$).*)",
   ],
 };

@@ -4,6 +4,28 @@
  */
 
 export const AUTH_COOKIE = "__pulse_session";
+export const MOBILE_CLIENT_HEADER = "x-client-platform";
+export const MOBILE_ANDROID_CLIENT = "android-expo";
+
+type RequestWithCookiesAndHeaders = {
+  cookies?: { get(name: string): { value?: string } | undefined };
+  headers: { get(name: string): string | null };
+};
+
+/**
+ * Extrait le jeton de session depuis le cookie HttpOnly Web (`__pulse_session`)
+ * ou depuis l'en-tête mobile natif `Authorization: Bearer <jwt>` (3 segments JWT).
+ */
+export function extractAuthToken(req: RequestWithCookiesAndHeaders): string | null {
+  const cookieToken = req.cookies?.get(AUTH_COOKIE)?.value?.trim();
+  if (cookieToken) return cookieToken;
+
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader || !/^Bearer\s+/i.test(authHeader)) return null;
+  const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (bearer.split(".").length !== 3) return null;
+  return bearer;
+}
 
 const SECRET = process.env.JWT_SECRET ?? "pulse-demo-secret-change-in-production";
 

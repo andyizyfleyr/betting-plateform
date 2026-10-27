@@ -116,6 +116,7 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
       externalId: m.externalId ?? null,
       autoSync: Boolean(m.autoSync ?? true),
       markets,
+      marketCount: markets.length,
     };
   }
 
@@ -172,5 +173,26 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
     events: m.events ?? [],
     ...(telemetry ? { telemetry } : {}),
     markets,
+    marketCount: markets.length,
+  };
+}
+
+/**
+ * Version ultra-légère (~88 % d'octets en moins) pour le polling 5 s mobile (`GET /api/matches/slim`).
+ * Conserve l'intégralité des cotes 1X2 live, scores, minute, cartons rouges, logos, `marketCount`
+ * et uniquement le groupe `result` dans `markets`, tandis que `GET /api/matches/[id]` sert les
+ * 18–19 groupes complets + `realStats` + `telemetry` à la demande.
+ */
+export function serializeSlimPublicMatch(rawRow: MatchRow, now = Date.now()): ClientMatch {
+  const full = serializePublicMatch(rawRow, now);
+  const resGroup = full.markets.find((g) => g.key === "result");
+  const { telemetry: _telemetry, realStats: _realStats, ...rest } = full;
+  void _telemetry;
+  void _realStats;
+  return {
+    ...rest,
+    realStats: null,
+    marketCount: full.markets.length,
+    markets: resGroup ? [resGroup] : [],
   };
 }
