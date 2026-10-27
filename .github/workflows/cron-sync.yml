@@ -2,10 +2,18 @@ name: Synchronisation automatique des matchs (Cron)
 
 on:
   schedule:
-    # Toutes les 20 min de 11h00 à 23h40 UTC (12h00 à 00h40 heure de Porto-Novo / Paris)
+    # 2 passages légers le matin à 06h00 et 09h00 UTC (07h00 et 10h00 heure de Porto-Novo / Paris)
+    - cron: "0 6,9 * * *"
+    # Toutes les 20 min de 11h00 à 23h40 UTC (12h00 à 00h40 locale)
     - cron: "*/20 11-23 * * *"
     # Passage final à 00h15 UTC (01h15 locale) pour clôturer les fins de soirée / LDC
     - cron: "15 0 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cron-sync.yml"
+      - "src/app/api/cron/tick/route.ts"
   workflow_dispatch:
     inputs:
       mode:
@@ -48,6 +56,7 @@ jobs:
           CANDIDATES+=(
             "https://be-plateform.vercel.app"
             "https://be-plateform-matias-projects-9014d3d4.vercel.app"
+            "https://betting-plateform.vercel.app"
           )
 
           STATUSES_URL="$(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=Production&per_page=1" --jq '.[0].statuses_url // empty' 2>/dev/null || true)"
@@ -72,13 +81,13 @@ jobs:
             echo "→ Appel ${TARGET} (mode=${CRON_MODE})"
 
             RESP_FILE="$(mktemp)"
-            HTTP_CODE="$(curl -sS -L --max-time 55 \
+            HTTP_CODE="$(curl -sS --max-redirs 3 -L --max-time 55 \
               -o "$RESP_FILE" \
               -w "%{http_code}" \
               -H "Accept: application/json" \
               -H "X-Cron-Mode: ${CRON_MODE}" \
               -H "User-Agent: PulseBet-GitHub-Cron/1.0" \
-              "${AUTH_ARGS[@]}" \
+              ${AUTH_ARGS[@]+"${AUTH_ARGS[@]}"} \
               "$TARGET" || echo "000")"
 
             BODY="$(cat "$RESP_FILE" 2>/dev/null || true)"
@@ -87,17 +96,18 @@ jobs:
             LAST_HTTP="$HTTP_CODE"
             LAST_BODY="$BODY"
 
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✓ Synchronisation réussie (HTTP 200) sur ${BASE} :"
-              echo "$BODY"
+            if [ "$HTTP_CODE" = "200" ] && printf '%s' "$BODY" | jq -e '.ok == true' >/dev/null 2>&1; then
+              echo "✓ Synchronisation réussie (HTTP 200 JSON valide) sur ${BASE} :"
+              printf '%s\n' "$BODY"
               exit 0
             fi
 
-            echo "  Réponse HTTP ${HTTP_CODE} sur ${BASE}, essai suivant si disponible..."
+            echo "  Réponse non retenue (HTTP ${HTTP_CODE}) sur ${BASE}, essai suivant..."
           done
 
           echo "✗ Échec de la synchronisation Cron (dernier code HTTP : ${LAST_HTTP})"
-          echo "${LAST_BODY}"
+          printf '%s\n' "${LAST_BODY}" | head -c 500
+          echo ""
           if [ "$LAST_HTTP" = "401" ]; then
             echo "::error::CRON_SECRET est actif sur Vercel : ajoutez la même valeur dans GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret -> CRON_SECRET."
           fi
