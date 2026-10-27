@@ -5,6 +5,7 @@ import {
   seedMatchSnapshot,
   seedMatchesSnapshot,
   seedPredictionsSnapshot,
+  seedSingleBetSnapshot,
   setCachedWalletSnapshot,
 } from "./entity-cache";
 import type { LiveClockAnchor } from "./live-clock";
@@ -622,6 +623,25 @@ export const api = {
         const normalized = data.bets.map(normalizeClientBet);
         seedBetsSnapshot(normalized);
         return { bets: normalized, balance: data.balance };
+      },
+      byId: async (kind: "sport" | "prediction" | "combo", id: number) => {
+        const data = await requestJson<{
+          bets: ClientBet[];
+          balance: number | null;
+        }>(
+          `/api/bets?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(
+            String(id)
+          )}`
+        );
+        const normalized = data.bets.map(normalizeClientBet);
+        for (const b of normalized) {
+          seedSingleBetSnapshot(b);
+        }
+        const found =
+          normalized.find(
+            (b) => (b.kind ?? "sport") === kind && b.id === id
+          ) ?? null;
+        return { bet: found, balance: data.balance };
       },
       placeSingle: (payload: {
         matchId: number;

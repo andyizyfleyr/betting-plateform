@@ -1,9 +1,10 @@
 "use client";
 
 import { memo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
+import { rememberSingleMatch } from "@/lib/client-entity-cache";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
 import {
@@ -81,26 +82,18 @@ function MatchCardInner({
   nextUp?: boolean;
   className?: string;
 }) {
-  const router = useRouter();
-  const { openMarkets } = useApp();
   const [showTracker, setShowTracker] = useState(false);
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
   const isReal = match.source === "manual";
   const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
   const marketCount = match.marketCount ?? match.markets?.length ?? 0;
+  const detailHref = isFinished ? `/resultats/${match.id}` : `/matchs/${match.id}`;
 
   return (
     <article
-      onClick={() => {
-        if (isFinished) {
-          router.push(`/resultats/${match.id}`);
-        } else {
-          router.push(`/matchs/${match.id}`);
-        }
-      }}
       className={cn(
-        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-4 transition-colors active:bg-elev/45 lg:p-3.5",
+        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-4 transition-colors hover:bg-elev/20 active:bg-elev/45 lg:p-3.5",
         !isFinished && "max-lg:min-h-[194px]",
         className
       )}
@@ -124,12 +117,9 @@ function MatchCardInner({
                 realStatsAvailable && (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowTracker((s) => !s);
-                    }}
+                    onClick={() => setShowTracker((s) => !s)}
                     className={cn(
-                      "hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
+                      "relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
                       showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                     )}
                   >
@@ -140,12 +130,9 @@ function MatchCardInner({
               ) : (
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowTracker((s) => !s);
-                  }}
+                  onClick={() => setShowTracker((s) => !s)}
                   className={cn(
-                    "hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
+                    "relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
                     showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                   )}
                 >
@@ -193,8 +180,12 @@ function MatchCardInner({
         </div>
       </div>
 
-      {/* Équipes & scores aérés */}
-      <div className="mt-3.5 flex flex-col gap-2.5 lg:mt-2.5 lg:gap-1.5">
+      {/* Équipes & scores aérés + lien étendu vers la page dédiée */}
+      <Link
+        href={detailHref}
+        onClick={() => rememberSingleMatch(match)}
+        className="mt-3.5 flex flex-col gap-2.5 after:absolute after:inset-0 after:z-0 after:content-[''] lg:mt-2.5 lg:gap-1.5"
+      >
         <TeamRow
           name={match.homeTeam}
           logo={match.homeLogo}
@@ -211,7 +202,7 @@ function MatchCardInner({
           winner={isFinished && (match.awayScore ?? 0) > (match.homeScore ?? 0)}
           isLive={isLive}
         />
-      </div>
+      </Link>
 
       {/* Tracker 2D virtuel ou statistiques officielles (desktop uniquement) */}
       {!isReal && isLive && showTracker && (
@@ -387,7 +378,12 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
   ];
 
   return (
-    <div className={cn("grid gap-1.5", cells.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+    <div
+      className={cn(
+        "relative z-10 grid gap-1.5",
+        cells.length === 3 ? "grid-cols-3" : "grid-cols-2"
+      )}
+    >
       {cells.map((c) => {
         const isSelected =
           target?.match.id === match.id &&

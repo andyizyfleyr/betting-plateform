@@ -84,9 +84,21 @@ export async function GET(req: NextRequest) {
     await syncLiveMatchesThrottled();
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
-  const cachedResp = getCachedUserBetsResponse(uid, filter);
-  if (cachedResp) {
-    return jsonWithEtag(req, null, cachedResp);
+  const targetKindParam = req.nextUrl.searchParams.get("kind");
+  const targetIdParam = req.nextUrl.searchParams.get("id");
+  const targetId = targetIdParam ? Number(targetIdParam) : NaN;
+  const hasTarget =
+    (targetKindParam === "sport" ||
+      targetKindParam === "prediction" ||
+      targetKindParam === "combo") &&
+    Number.isInteger(targetId) &&
+    targetId > 0;
+
+  if (!hasTarget) {
+    const cachedResp = getCachedUserBetsResponse(uid, filter);
+    if (cachedResp) {
+      return jsonWithEtag(req, null, cachedResp);
+    }
   }
 
   const SETTLED_HISTORY_LIMIT = 60;
@@ -122,58 +134,146 @@ export async function GET(req: NextRequest) {
     settledComboRows,
     [user],
   ] = await Promise.all([
-    filter === "finished"
-      ? Promise.resolve([])
-      : db
-          .select({ bet: bets, match: matches })
-          .from(bets)
-          .leftJoin(matches, eq(bets.matchId, matches.id))
-          .where(and(eq(bets.userId, uid), eq(bets.status, "pending")))
-          .orderBy(desc(bets.placedAt)),
-    filter === "ongoing"
-      ? Promise.resolve([])
-      : db
-          .select({ bet: bets, match: settledMatchScalarCols })
-          .from(bets)
-          .leftJoin(matches, eq(bets.matchId, matches.id))
-          .where(and(eq(bets.userId, uid), ne(bets.status, "pending")))
-          .orderBy(sql`${bets.settledAt} DESC NULLS LAST`, desc(bets.placedAt))
-          .limit(SETTLED_HISTORY_LIMIT),
-    filter === "finished"
-      ? Promise.resolve([])
-      : db
-          .select({ bet: predictionBets, question: predictionQuestions })
-          .from(predictionBets)
-          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
-          .where(and(eq(predictionBets.userId, uid), eq(predictionBets.status, "pending")))
-          .orderBy(desc(predictionBets.placedAt)),
-    filter === "ongoing"
-      ? Promise.resolve([])
-      : db
-          .select({ bet: predictionBets, question: predictionQuestions })
-          .from(predictionBets)
-          .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
-          .where(and(eq(predictionBets.userId, uid), ne(predictionBets.status, "pending")))
-          .orderBy(
-            sql`${predictionBets.settledAt} DESC NULLS LAST`,
-            desc(predictionBets.placedAt)
-          )
-          .limit(SETTLED_HISTORY_LIMIT),
-    filter === "finished"
-      ? Promise.resolve([])
-      : db
-          .select()
-          .from(comboBets)
-          .where(and(eq(comboBets.userId, uid), eq(comboBets.status, "pending")))
-          .orderBy(desc(comboBets.placedAt)),
-    filter === "ongoing"
-      ? Promise.resolve([])
-      : db
-          .select()
-          .from(comboBets)
-          .where(and(eq(comboBets.userId, uid), ne(comboBets.status, "pending")))
-          .orderBy(sql`${comboBets.settledAt} DESC NULLS LAST`, desc(comboBets.placedAt))
-          .limit(SETTLED_HISTORY_LIMIT),
+    hasTarget
+      ? targetKindParam === "sport"
+        ? db
+            .select({ bet: bets, match: matches })
+            .from(bets)
+            .leftJoin(matches, eq(bets.matchId, matches.id))
+            .where(
+              and(
+                eq(bets.userId, uid),
+                eq(bets.id, targetId),
+                eq(bets.status, "pending")
+              )
+            )
+        : Promise.resolve([])
+      : filter === "finished"
+        ? Promise.resolve([])
+        : db
+            .select({ bet: bets, match: matches })
+            .from(bets)
+            .leftJoin(matches, eq(bets.matchId, matches.id))
+            .where(and(eq(bets.userId, uid), eq(bets.status, "pending")))
+            .orderBy(desc(bets.placedAt)),
+    hasTarget
+      ? targetKindParam === "sport"
+        ? db
+            .select({ bet: bets, match: settledMatchScalarCols })
+            .from(bets)
+            .leftJoin(matches, eq(bets.matchId, matches.id))
+            .where(
+              and(
+                eq(bets.userId, uid),
+                eq(bets.id, targetId),
+                ne(bets.status, "pending")
+              )
+            )
+        : Promise.resolve([])
+      : filter === "ongoing"
+        ? Promise.resolve([])
+        : db
+            .select({ bet: bets, match: settledMatchScalarCols })
+            .from(bets)
+            .leftJoin(matches, eq(bets.matchId, matches.id))
+            .where(and(eq(bets.userId, uid), ne(bets.status, "pending")))
+            .orderBy(sql`${bets.settledAt} DESC NULLS LAST`, desc(bets.placedAt))
+            .limit(SETTLED_HISTORY_LIMIT),
+    hasTarget
+      ? targetKindParam === "prediction"
+        ? db
+            .select({ bet: predictionBets, question: predictionQuestions })
+            .from(predictionBets)
+            .leftJoin(
+              predictionQuestions,
+              eq(predictionBets.questionId, predictionQuestions.id)
+            )
+            .where(
+              and(
+                eq(predictionBets.userId, uid),
+                eq(predictionBets.id, targetId),
+                eq(predictionBets.status, "pending")
+              )
+            )
+        : Promise.resolve([])
+      : filter === "finished"
+        ? Promise.resolve([])
+        : db
+            .select({ bet: predictionBets, question: predictionQuestions })
+            .from(predictionBets)
+            .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
+            .where(and(eq(predictionBets.userId, uid), eq(predictionBets.status, "pending")))
+            .orderBy(desc(predictionBets.placedAt)),
+    hasTarget
+      ? targetKindParam === "prediction"
+        ? db
+            .select({ bet: predictionBets, question: predictionQuestions })
+            .from(predictionBets)
+            .leftJoin(
+              predictionQuestions,
+              eq(predictionBets.questionId, predictionQuestions.id)
+            )
+            .where(
+              and(
+                eq(predictionBets.userId, uid),
+                eq(predictionBets.id, targetId),
+                ne(predictionBets.status, "pending")
+              )
+            )
+        : Promise.resolve([])
+      : filter === "ongoing"
+        ? Promise.resolve([])
+        : db
+            .select({ bet: predictionBets, question: predictionQuestions })
+            .from(predictionBets)
+            .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
+            .where(and(eq(predictionBets.userId, uid), ne(predictionBets.status, "pending")))
+            .orderBy(
+              sql`${predictionBets.settledAt} DESC NULLS LAST`,
+              desc(predictionBets.placedAt)
+            )
+            .limit(SETTLED_HISTORY_LIMIT),
+    hasTarget
+      ? targetKindParam === "combo"
+        ? db
+            .select()
+            .from(comboBets)
+            .where(
+              and(
+                eq(comboBets.userId, uid),
+                eq(comboBets.id, targetId),
+                eq(comboBets.status, "pending")
+              )
+            )
+        : Promise.resolve([])
+      : filter === "finished"
+        ? Promise.resolve([])
+        : db
+            .select()
+            .from(comboBets)
+            .where(and(eq(comboBets.userId, uid), eq(comboBets.status, "pending")))
+            .orderBy(desc(comboBets.placedAt)),
+    hasTarget
+      ? targetKindParam === "combo"
+        ? db
+            .select()
+            .from(comboBets)
+            .where(
+              and(
+                eq(comboBets.userId, uid),
+                eq(comboBets.id, targetId),
+                ne(comboBets.status, "pending")
+              )
+            )
+        : Promise.resolve([])
+      : filter === "ongoing"
+        ? Promise.resolve([])
+        : db
+            .select()
+            .from(comboBets)
+            .where(and(eq(comboBets.userId, uid), ne(comboBets.status, "pending")))
+            .orderBy(sql`${comboBets.settledAt} DESC NULLS LAST`, desc(comboBets.placedAt))
+            .limit(SETTLED_HISTORY_LIMIT),
     db
       .select({ balance: appUser.balance })
       .from(appUser)
@@ -512,6 +612,9 @@ export async function GET(req: NextRequest) {
     balance: user?.balance ?? null,
     serverTime: new Date().toISOString(),
   };
+  if (hasTarget) {
+    return jsonWithEtag(req, payload);
+  }
   const entry = setCachedUserBetsResponse(uid, filter, payload);
   return jsonWithEtag(req, null, entry);
   } catch (err) {

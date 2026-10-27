@@ -137,11 +137,9 @@ export default function ComboDetailPage() {
   }, [serverOverrideCashout]);
 
   const fetchCombo = useCallback(async () => {
-    const r = await api.allBets();
+    const r = await api.betById("combo", comboId);
     if (typeof r.balance === "number") setBalance(r.balance);
-    const found =
-      r.bets.find((b) => b.kind === "combo" && b.id === comboId) ?? null;
-    setFetchedBet(found);
+    setFetchedBet(r.bet);
   }, [comboId, setBalance]);
 
   const handlePullRefresh = useCallback(async () => {
@@ -161,12 +159,10 @@ export default function ComboDetailPage() {
     async function loadInitial() {
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const r = await api.allBets();
+          const r = await api.betById("combo", comboId);
           if (cancelled) return;
           if (typeof r.balance === "number") setBalance(r.balance);
-          const found =
-            r.bets.find((b) => b.kind === "combo" && b.id === comboId) ?? null;
-          setFetchedBet(found);
+          setFetchedBet(r.bet);
           setLoadError(null);
           return;
         } catch (err) {
@@ -642,7 +638,9 @@ export default function ComboDetailPage() {
                   const marketTag = shortMarketBadge(leg.market);
                   const legHref =
                     leg.kind === "sport" && leg.matchId
-                      ? `/resultats?match=${leg.matchId}`
+                      ? leg.matchStatus === "finished"
+                        ? `/resultats/${leg.matchId}`
+                        : `/matchs/${leg.matchId}`
                       : leg.kind === "prediction"
                         ? leg.questionId
                           ? `/predictions/${leg.questionId}`
@@ -694,7 +692,8 @@ export default function ComboDetailPage() {
                     <article
                       key={`${leg.kind}-${leg.matchId ?? leg.questionId ?? idx}`}
                       className={cn(
-                        "glass-card overflow-hidden rounded-2xl p-3.5",
+                        "glass-card relative overflow-hidden rounded-2xl p-3.5 transition-colors",
+                        legHref && "cursor-pointer hover:bg-elev/25 active:bg-elev/45",
                         leg.status === "won" && "ticket-won",
                         leg.status === "lost" && "border-betclic-red/25"
                       )}
@@ -748,7 +747,7 @@ export default function ComboDetailPage() {
                         {legHref ? (
                           <Link
                             href={legHref}
-                            className="-mx-1.5 flex items-center rounded-xl px-1.5 py-1 transition-colors hover:bg-elev/70 active:bg-elev"
+                            className="-mx-1.5 flex items-center rounded-xl px-1.5 py-1 after:absolute after:inset-0 after:z-0 after:content-['']"
                           >
                             {eventContent}
                           </Link>

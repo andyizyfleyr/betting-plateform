@@ -90,11 +90,9 @@ export default function ComboDetailScreen() {
   const fetchCombo = useCallback(async () => {
     if (!user || invalidId) return;
     try {
-      const r = await api.bets.list();
+      const r = await api.bets.byId("combo", comboId);
       if (r.balance != null) setBalance(r.balance);
-      const found =
-        r.bets.find((b) => b.kind === "combo" && b.id === comboId) ?? null;
-      setBet(found);
+      setBet(r.bet);
     } catch {
       /* garde l'état courant */
     }
@@ -511,7 +509,7 @@ function ComboLegCard({
   const legHref =
     leg.kind === "sport" && leg.matchId
       ? leg.matchStatus === "finished"
-        ? `/resultats?match=${leg.matchId}`
+        ? `/resultats/${leg.matchId}`
         : `/matchs/${leg.matchId}`
       : leg.kind === "prediction" && leg.questionId
         ? `/predictions/${leg.questionId}`

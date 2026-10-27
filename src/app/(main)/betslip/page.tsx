@@ -644,11 +644,21 @@ export default function BetslipPage() {
                 leg.matchObj.homeScore != null &&
                 leg.matchObj.awayScore != null;
 
+              const sportMatchId = leg.matchObj?.id ?? leg.matchId;
+              const legHref =
+                leg.kind === "sport" && sportMatchId
+                  ? leg.matchObj?.status === "finished"
+                    ? `/resultats/${sportMatchId}`
+                    : `/matchs/${sportMatchId}`
+                  : leg.kind === "prediction" && leg.questionId
+                    ? `/predictions/${leg.questionId}`
+                    : "/predictions";
+
               return (
                 <div
                   key={leg.uid}
                   className={cn(
-                    "glass-card rounded-2xl p-3 lg:p-3.5",
+                    "glass-card relative cursor-pointer rounded-2xl p-3 transition-colors hover:bg-elev/20 active:bg-elev/40 lg:p-3.5",
                     leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
                   )}
                 >
@@ -693,29 +703,16 @@ export default function BetslipPage() {
                       type="button"
                       onClick={() => removeComboLeg(leg.uid)}
                       aria-label="Retirer cette sélection"
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge active:text-ink"
+                      className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
                     >
                       <X className="h-3.5 w-3.5" strokeWidth={2.2} />
                     </button>
                   </div>
 
-                  {/* Équipes alignées exactement comme sur la page Matchs */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (leg.kind === "sport" && leg.matchObj) {
-                        if (leg.matchObj.status === "finished") {
-                          router.push(`/resultats?match=${leg.matchObj.id}`);
-                        } else {
-                          openMarkets(leg.matchObj);
-                        }
-                      } else if (leg.kind === "sport" && leg.matchId) {
-                        router.push(`/resultats?match=${leg.matchId}`);
-                      } else {
-                        router.push("/predictions");
-                      }
-                    }}
-                    className="mt-2.5 block w-full text-left"
+                  {/* Lien étendu vers la page dédiée du match ou de la prédiction */}
+                  <Link
+                    href={legHref}
+                    className="mt-2.5 block w-full text-left after:absolute after:inset-0 after:z-0 after:content-['']"
                   >
                     {hasSportTeams ? (
                       <div className="flex flex-col gap-1.5">
@@ -772,7 +769,7 @@ export default function BetslipPage() {
                       </span>
                       <LegLiveOddsBadge odds={leg.liveOdds} oddsFormat={oddsFormat} />
                     </div>
-                  </button>
+                  </Link>
                 </div>
               );
             })}
