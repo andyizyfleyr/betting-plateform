@@ -14,6 +14,7 @@ import {
   type RealSyncSummary,
 } from "@/lib/real-sports-feed";
 import { settleFinishedBets } from "@/lib/settle";
+import { recordVisitorActivity } from "@/lib/visitor-activity";
 
 /**
  * Orchestrateur unifié « Time-Continuum » à empreinte SQL minimale :
@@ -50,8 +51,14 @@ function withTimeoutBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T 
   });
 }
 
-export async function syncPlatformStateThrottled(force = false): Promise<void> {
+export async function syncPlatformStateThrottled(
+  force = false,
+  opts?: { fromCron?: boolean }
+): Promise<void> {
   const now = Date.now();
+  if (!opts?.fromCron) {
+    recordVisitorActivity(now);
+  }
   if (!force && now - lastFullSyncAt < SYNC_THROTTLE_MS) {
     if (inFlightFullSync) await inFlightFullSync;
     return;
