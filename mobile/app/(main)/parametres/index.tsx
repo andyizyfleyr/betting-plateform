@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/lib/router";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -20,7 +20,7 @@ import {
   ShieldCheck,
   Trophy,
   User as UserIcon,
-} from "lucide-react-native";
+} from "@/components/icons";
 import { api, type ClientWalletResponse } from "@/lib/api";
 import { getCachedWalletSnapshot } from "@/lib/entity-cache";
 import { eur } from "@/lib/format";

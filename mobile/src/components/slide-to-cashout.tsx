@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronsRight, Sparkles } from "lucide-react-native";
+import { ChevronsRight, Sparkles } from "@/components/icons";
 import { eur } from "@/lib/format";
 import { colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";

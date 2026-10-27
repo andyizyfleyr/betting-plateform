@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AlertCircle, CheckCircle2, Info, Sparkles, X } from "lucide-react-native";
+import { AlertCircle, CheckCircle2, Info, Sparkles, X } from "@/components/icons";
 import { colors } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";
 

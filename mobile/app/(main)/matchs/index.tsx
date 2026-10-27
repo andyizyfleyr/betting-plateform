@@ -10,8 +10,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { ChevronRight, Search, X } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ChevronRight, Search, X } from "@/components/icons";
 import { MobileHeroCarousel } from "@/components/mobile-hero-carousel";
 import { MatchCard } from "@/components/match-card";
 import { BareInfiniteSpinner } from "@/components/infinite-scroll-loader";

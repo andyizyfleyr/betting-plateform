@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, CheckCircle2 } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { ArrowLeft, CheckCircle2 } from "@/components/icons";
 import { api, type ClientFinishedMatch } from "@/lib/api";
 import { getCachedFinishedMatchSnapshot } from "@/lib/entity-cache";
 import { formatOdds, formatPlacedAt } from "@/lib/format";

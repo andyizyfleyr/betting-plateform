@@ -8,8 +8,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { ArrowLeft, Landmark, Smartphone, Wallet } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ArrowLeft, Landmark, Smartphone, Wallet } from "@/components/icons";
 import { api, type ClientWalletResponse } from "@/lib/api";
 import { getCachedWalletSnapshot } from "@/lib/entity-cache";
 import { eur } from "@/lib/format";

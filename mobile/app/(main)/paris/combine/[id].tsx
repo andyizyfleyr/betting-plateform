@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, ChevronRight, Share2 } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { ArrowLeft, ChevronRight, Share2 } from "@/components/icons";
 import { api, ApiHttpError, type ClientBet, type ClientComboLeg } from "@/lib/api";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { getCachedBetSnapshot } from "@/lib/entity-cache";

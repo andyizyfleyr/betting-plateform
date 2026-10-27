@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import * as WebBrowser from "expo-web-browser";
-import { CreditCard, Landmark, Smartphone, Wallet, X } from "lucide-react-native";
+import { CreditCard, Landmark, Smartphone, Wallet, X } from "@/components/icons";
 import { api } from "@/lib/api";
 import { eur } from "@/lib/format";
 import { colors, triggerHaptic } from "@/theme/tokens";

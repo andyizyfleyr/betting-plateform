@@ -9,14 +9,14 @@ import {
   View,
 } from "react-native";
 import * as WebBrowser from "expo-web-browser";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/lib/router";
 import {
   ArrowLeft,
   CreditCard,
   Landmark,
   Smartphone,
   Wallet,
-} from "lucide-react-native";
+} from "@/components/icons";
 import { api } from "@/lib/api";
 import { eur } from "@/lib/format";
 import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";

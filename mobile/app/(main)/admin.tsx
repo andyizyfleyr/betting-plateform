@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { RefreshCw, ShieldCheck } from "lucide-react-native";
+import { RefreshCw, ShieldCheck } from "@/components/icons";
 import { api } from "@/lib/api";
 import { eur } from "@/lib/format";
 import { useSmartPolling } from "@/lib/polling";

@@ -7,8 +7,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { Flame, QrCode, Ticket, Trash2, X } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { Flame, QrCode, Ticket, Trash2, X } from "@/components/icons";
 import { api, ApiHttpError, generateIdempotencyKey } from "@/lib/api";
 import {
   computeComboQuote,

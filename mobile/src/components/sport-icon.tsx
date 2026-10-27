@@ -1,5 +1,5 @@
 import React from "react";
-import { CircleDot, Flame, Sparkles, Trophy } from "lucide-react-native";
+import { CircleDot, Flame, Sparkles, Trophy } from "@/components/icons";
 import { colors } from "@/theme/tokens";
 
 export function SportIcon({

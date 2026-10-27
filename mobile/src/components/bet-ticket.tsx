@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
-import { ChevronRight, Share2 } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ChevronRight, Share2 } from "@/components/icons";
 import { api, ApiHttpError, type ClientBet } from "@/lib/api";
 import { eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";

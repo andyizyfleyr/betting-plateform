@@ -7,8 +7,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ArrowLeft } from "@/components/icons";
 import { api, type ClientWalletEntry, type ClientWalletResponse } from "@/lib/api";
 import { getCachedWalletSnapshot } from "@/lib/entity-cache";
 import { eur, formatPlacedAt } from "@/lib/format";

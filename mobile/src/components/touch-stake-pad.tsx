@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Delete, Keyboard as KeyboardIcon } from "lucide-react-native";
+import { Delete, Keyboard as KeyboardIcon } from "@/components/icons";
 import { eur } from "@/lib/format";
 import { colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";

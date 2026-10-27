@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { ArrowLeft } from "@/components/icons";
 import { api, type ClientPredictionQuestion } from "@/lib/api";
 import { getCachedPredictionSnapshot } from "@/lib/entity-cache";
 import { useSmartPolling } from "@/lib/polling";

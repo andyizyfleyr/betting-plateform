@@ -2,15 +2,15 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import { ArrowRight } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ArrowRight } from "@/components/icons";
 import { colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";
 
@@ -183,9 +183,7 @@ export function MobileHeroCarousel() {
               <Image
                 source={item.image}
                 style={styles.playerImg}
-                contentFit="contain"
-                contentPosition="bottom right"
-                cachePolicy="memory-disk"
+                resizeMode="contain"
               />
             </LinearGradient>
           </Pressable>

@@ -8,8 +8,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { CheckCircle2, ChevronDown, ChevronRight, Search, X } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { CheckCircle2, ChevronDown, ChevronRight, Search, X } from "@/components/icons";
 import { api, type ClientPredictionQuestion } from "@/lib/api";
 import { getCachedPredictionsList } from "@/lib/entity-cache";
 import { eur, formatKickoff, formatOdds } from "@/lib/format";

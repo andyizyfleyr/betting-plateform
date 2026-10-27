@@ -1,6 +1,5 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Slot } from "expo-router";
 import { AppHeader } from "@/components/app-header";
 import { BottomNav } from "@/components/bottom-nav";
 import { MarketSheet } from "@/components/market-sheet";
@@ -11,13 +10,15 @@ import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { ToastHost } from "@/components/toast-host";
 import { colors } from "@/theme/tokens";
 
-export default function MainShellLayout() {
+export default function MainShellLayout({
+  children,
+}: {
+  children?: React.ReactNode;
+}) {
   return (
     <View style={styles.root}>
       <AppHeader />
-      <View style={styles.body}>
-        <Slot />
-      </View>
+      <View style={styles.body}>{children}</View>
       <BottomNav />
 
       {/* Modales et feuilles globales partagées */}

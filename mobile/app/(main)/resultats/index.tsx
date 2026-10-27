@@ -8,8 +8,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, Search, X } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { ChevronRight, Search, X } from "@/components/icons";
 import { api, type ClientFinishedMatch } from "@/lib/api";
 import { getCachedFinishedMatchesList } from "@/lib/entity-cache";
 import { formatPlacedAt } from "@/lib/format";

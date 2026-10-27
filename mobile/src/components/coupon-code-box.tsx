@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Copy, Download, Share2 } from "lucide-react-native";
+import { Copy, Download, Share2 } from "@/components/icons";
 import { api } from "@/lib/api";
 import { colors } from "@/theme/tokens";
 import { makeComboUid, useApp } from "@/context/app-context";
@@ -92,7 +92,7 @@ export function CouponCodeBox({
     try {
       const res = await api.coupons.save(comboLegs, defaultStake);
       setSavedCode(res.code);
-      await Clipboard.setStringAsync(res.code);
+      Clipboard.setString(res.code);
       toast({
         kind: "success",
         title: `Code ${res.code} copié`,
@@ -144,7 +144,7 @@ export function CouponCodeBox({
           {savedCode ? (
             <Pressable
               onPress={async () => {
-                await Clipboard.setStringAsync(savedCode);
+                Clipboard.setString(savedCode);
                 toast({ kind: "info", title: `Code ${savedCode} copié` });
               }}
               style={styles.codePill}

@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
-import { ChevronRight, Lock } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ChevronRight, Lock } from "@/components/icons";
 import type { ClientMatch } from "@/lib/api";
 import { formatKickoff, formatOdds } from "@/lib/format";
 import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";

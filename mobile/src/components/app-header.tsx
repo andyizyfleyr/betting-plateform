@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { usePathname, useRouter } from "expo-router";
+import { usePathname, useRouter } from "@/lib/router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LogOut, Plus, ShieldCheck, Zap } from "lucide-react-native";
+import { LogOut, Plus, ShieldCheck, Zap } from "@/components/icons";
 import { api } from "@/lib/api";
 import { eur } from "@/lib/format";
 import { colors } from "@/theme/tokens";

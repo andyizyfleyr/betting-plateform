@@ -2,23 +2,21 @@ import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 
 /**
- * Moteur HTTP Android Expo haute performance :
+ * Moteur HTTP Android Expo SDK 42 haute performance :
  * 1. Stockage sécurisé du JWT dans Android Keystore (`expo-secure-store`) + miroir RAM 0 ms.
  * 2. Déduplication des requêtes GET identiques en vol (*Client Singleflight*).
  * 3. Validation conditionnelle `ETag` + `If-None-Match` (`304 Not Modified` = 0 octet JSON transféré).
- * 4. Timeout `AbortController` + propagation typée des conflits de cote / Cash Out (`409`).
+ * 4. Timeout réseau propre + propagation typée des conflits de cote / Cash Out (`409`).
  * 5. Clés d'idempotence déterministes sur toutes les écritures financières.
  */
 
 const TOKEN_STORE_KEY = "pulse_android_jwt_v1";
 
 function resolveApiBaseUrl(): string {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (envUrl) return envUrl.replace(/\/+$/, "");
-  const extraUrl = (
-    Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined
-  )?.apiBaseUrl?.trim();
-  if (extraUrl) return extraUrl.replace(/\/+$/, "");
+  const extra = (Constants.manifest?.extra ?? {}) as { apiBaseUrl?: string };
+  if (extra.apiBaseUrl && extra.apiBaseUrl.trim().length > 0) {
+    return extra.apiBaseUrl.trim().replace(/\/+$/, "");
+  }
   return "https://be-plateform.vercel.app";
 }
 
@@ -54,7 +52,6 @@ export function getMemoryAuthToken(): string | null {
 export async function persistAuthToken(token: string | null): Promise<void> {
   memoryAuthToken = token && token.trim().length > 0 ? token.trim() : null;
   tokenHydrated = true;
-  // Toute transition d'identité vide le cache ETag privé pour éviter tout mélange de session
   clearEtagCache();
   try {
     if (memoryAuthToken) {
@@ -131,9 +128,7 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   timeoutMs?: number;
-  /** Désactive l'envoi d'If-None-Match si une lecture forcée est souhaitée. */
   bypassEtag?: boolean;
-  /** Ne déclenche pas la déconnexion globale sur 401 (ex: `/api/auth/me` ou `/api/auth/login`). */
   ignoreUnauthorizedRedirect?: boolean;
 }
 
@@ -154,9 +149,14 @@ export async function requestJson<T>(
   }
 
   const execute = async (): Promise<T> => {
-    const controller = new AbortController();
     const timeoutMs = options.timeoutMs ?? (method === "GET" ? 12_000 : 18_000);
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new ApiHttpError("Délai réseau dépassé. Vérifiez votre connexion.", 0));
+      }, timeoutMs);
+    });
 
     try {
       const headers: Record<string, string> = {
@@ -179,12 +179,14 @@ export async function requestJson<T>(
         headers["If-None-Match"] = cachedEtag.etag;
       }
 
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-        signal: controller.signal,
-      });
+      const res = await Promise.race([
+        fetch(url, {
+          method,
+          headers,
+          body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+        }),
+        timeoutPromise,
+      ]);
 
       if (res.status === 304 && cachedEtag) {
         cachedEtag.at = Date.now();
@@ -231,12 +233,9 @@ export async function requestJson<T>(
       return data as unknown as T;
     } catch (err) {
       if (err instanceof ApiHttpError) throw err;
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new ApiHttpError("Délai réseau dépassé. Vérifiez votre connexion.", 0);
-      }
       throw new ApiHttpError("Connexion réseau momentanément indisponible.", 0);
     } finally {
-      clearTimeout(timeoutId);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
     }
   };
 
