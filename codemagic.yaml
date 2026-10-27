@@ -3,6 +3,14 @@ workflows:
     name: Pulse Bet Android APK (React Native Hermes)
     max_build_duration: 45
     instance_type: mac_mini_m2
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+      cancel_previous_builds: true
     environment:
       node: 22
       java: 17
