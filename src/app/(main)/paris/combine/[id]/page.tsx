@@ -509,7 +509,7 @@ export default function ComboDetailPage() {
                     bet.boostPct > 0 &&
                     bet.baseOdds != null &&
                     bet.odds - bet.baseOdds >= 0.01 && (
-                      <span className="font-display text-[11px] font-semibold tabular-nums text-dim line-through">
+                      <span className="hidden font-display text-[11px] font-semibold tabular-nums text-dim line-through sm:inline">
                         {formatOdds(bet.baseOdds, oddsFormat)}
                       </span>
                     )}
@@ -559,7 +559,7 @@ export default function ComboDetailPage() {
               </div>
 
               {canCashOut && (
-                <div className="mt-3.5 space-y-2">
+                <div className="mt-3 space-y-2 border-t border-edge/80 pt-3">
                   {cashoutChanged && (
                     <div
                       role="alert"
