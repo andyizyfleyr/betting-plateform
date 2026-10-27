@@ -5,30 +5,39 @@
   },
   "build": {
     "development": {
+      "node": "22.14.0",
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "latest"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"
       }
     },
     "preview": {
+      "node": "22.14.0",
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "latest"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"
       }
     },
     "production": {
+      "node": "22.14.0",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "image": "latest"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"
       }
     }
   },
