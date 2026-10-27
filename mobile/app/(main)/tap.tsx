@@ -7,8 +7,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { ArrowLeft, Flame, Zap } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ArrowLeft, Flame, Zap } from "@/components/icons";
 import { api } from "@/lib/api";
 import { eur } from "@/lib/format";
 import { colors, triggerHaptic } from "@/theme/tokens";

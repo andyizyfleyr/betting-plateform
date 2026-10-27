@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Clock } from "lucide-react-native";
+import { Clock } from "@/components/icons";
 import { formatKickoff } from "@/lib/format";
 import { colors } from "@/theme/tokens";
 

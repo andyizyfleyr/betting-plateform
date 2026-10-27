@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, ChevronDown, RotateCcw, X } from "lucide-react-native";
+import { Check, ChevronDown, RotateCcw, X } from "@/components/icons";
 import { colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";
 

@@ -1,6 +1,6 @@
 import React from "react";
 import { ActivityIndicator, View } from "react-native";
-import { Redirect } from "expo-router";
+import { Redirect } from "@/lib/router";
 import { useApp } from "@/context/app-context";
 import { colors } from "@/theme/tokens";
 

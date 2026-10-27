@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { Image } from "expo-image";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { hslClubBackground, initials } from "@/lib/format";
 import { colors } from "@/theme/tokens";
 
@@ -38,9 +37,7 @@ export function TeamAvatar({
         <Image
           source={{ uri: logo }}
           style={{ width: dim.img, height: dim.img }}
-          contentFit="contain"
-          cachePolicy="memory-disk"
-          transition={120}
+          resizeMode="contain"
           onError={() => setFailed(true)}
         />
       </View>

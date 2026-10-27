@@ -1,16 +1,20 @@
-const { getDefaultConfig } = require("expo/metro-config");
+const path = require("path");
+const Resolver = require("metro-resolver");
+const { getDefaultConfig } = require("@expo/metro-config");
 
-/** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// Optimisations de bundle Android (minification & inlineRequires pour démarrage à froid accéléré)
-config.transformer = {
-  ...config.transformer,
-  minifierConfig: {
-    keep_classnames: false,
-    keep_fnames: false,
-    mangle: { toplevel: true },
-  },
+if (!config.resolver.assetExts.includes("webp")) {
+  config.resolver.assetExts.push("webp");
+}
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const cleanContext = { ...context, resolveRequest: null };
+  if (typeof moduleName === "string" && moduleName.startsWith("@/")) {
+    const absTarget = path.resolve(__dirname, "src", moduleName.slice(2));
+    return Resolver.resolve(cleanContext, absTarget, platform);
+  }
+  return Resolver.resolve(cleanContext, moduleName, platform);
 };
 
 module.exports = config;

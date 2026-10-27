@@ -8,8 +8,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { ReceiptText, Search, X } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { ReceiptText, Search, X } from "@/components/icons";
 import { api, type ClientBet } from "@/lib/api";
 import { getCachedBetsList } from "@/lib/entity-cache";
 import { eur } from "@/lib/format";

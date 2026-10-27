@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Lock, TrendingUp, Zap } from "lucide-react-native";
+import { Lock, TrendingUp, Zap } from "@/components/icons";
 import type { OddsLockPolicy } from "@/lib/api";
 import { colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";

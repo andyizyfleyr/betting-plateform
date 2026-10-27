@@ -7,8 +7,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Activity, ArrowLeft, Lock } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { Activity, ArrowLeft, Lock } from "@/components/icons";
 import { api, type ClientMatch } from "@/lib/api";
 import { getCachedMatchSnapshot } from "@/lib/entity-cache";
 import { formatKickoff } from "@/lib/format";

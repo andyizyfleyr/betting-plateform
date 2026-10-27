@@ -1,13 +1,59 @@
-const eurFormatter = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+/**
+ * Formateurs français déterministes sans dépendance à `Intl`
+ * (compatible à 100 % avec le moteur JSC Android d'Expo Go SDK 42).
+ */
+
+const WEEKDAYS_SHORT = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
+const WEEKDAYS_LONG = [
+  "dimanche",
+  "lundi",
+  "mardi",
+  "mercredi",
+  "jeudi",
+  "vendredi",
+  "samedi",
+];
+const MONTHS_SHORT = [
+  "janv.",
+  "févr.",
+  "mars",
+  "avr.",
+  "mai",
+  "juin",
+  "juil.",
+  "août",
+  "sept.",
+  "oct.",
+  "nov.",
+  "déc.",
+];
+const MONTHS_LONG = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+];
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
 
 export function eur(value: number): string {
   const safe = Number.isFinite(value) ? value : 0;
-  return eurFormatter.format(safe);
+  const sign = safe < 0 ? "-" : "";
+  const abs = Math.abs(safe);
+  const fixed = abs.toFixed(2);
+  const [intPart, decPart] = fixed.split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${sign}${grouped},${decPart} €`;
 }
 
 export function decimalToFraction(decimal: number): string {
@@ -50,11 +96,7 @@ export function formatKickoff(iso: string | Date): string {
     return `Dans ${mins} min`;
   }
 
-  const time = new Intl.DateTimeFormat("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-
+  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
   const startOfDay = (d: Date) =>
     new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const diffDays = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000);
@@ -62,11 +104,8 @@ export function formatKickoff(iso: string | Date): string {
   if (diffDays === 0) return `Aujourd'hui · ${time}`;
   if (diffDays === 1) return `Demain · ${time}`;
   if (diffDays === -1) return `Hier · ${time}`;
-  const day = new Intl.DateTimeFormat("fr-FR", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).format(date);
+
+  const day = `${WEEKDAYS_SHORT[date.getDay()]} ${date.getDate()} ${MONTHS_SHORT[date.getMonth()]}`;
   return `${day} · ${time}`;
 }
 
@@ -79,12 +118,7 @@ export function formatPlacedAt(iso: string | Date): string {
   if (mins < 60) return `il y a ${mins} min`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `il y a ${hours} h`;
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return `${date.getDate()} ${MONTHS_SHORT[date.getMonth()]} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 export function initials(team: string): string {
@@ -109,9 +143,6 @@ export function hslClubBackground(name: string): string {
 }
 
 export function todayLabel(): string {
-  return new Intl.DateTimeFormat("fr-FR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(new Date());
+  const d = new Date();
+  return `${WEEKDAYS_LONG[d.getDay()]} ${d.getDate()} ${MONTHS_LONG[d.getMonth()]}`;
 }

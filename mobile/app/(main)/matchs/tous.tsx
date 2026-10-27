@@ -8,8 +8,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Search, X } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { ArrowLeft, Search, X } from "@/components/icons";
 import { MatchCard } from "@/components/match-card";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {

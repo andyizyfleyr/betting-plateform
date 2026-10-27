@@ -10,9 +10,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/lib/router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowRight, Eye, EyeOff, Sparkles, Zap } from "lucide-react-native";
+import { ArrowRight, Eye, EyeOff, Sparkles, Zap } from "@/components/icons";
 import { api } from "@/lib/api";
 import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";

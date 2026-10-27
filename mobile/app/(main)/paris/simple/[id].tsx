@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, ExternalLink, Share2 } from "lucide-react-native";
+import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { ArrowLeft, ExternalLink, Share2 } from "@/components/icons";
 import { api, ApiHttpError, type ClientBet, type ClientMatch } from "@/lib/api";
 import {
   getCachedMatchSnapshot,

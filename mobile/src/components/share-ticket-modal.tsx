@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
-import { Copy, Share2, X, Zap } from "lucide-react-native";
+import { Copy, Share2, X, Zap } from "@/components/icons";
 import { eur, formatOdds } from "@/lib/format";
 import { colors } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";
@@ -86,7 +86,7 @@ export function ShareTicketModal() {
           <View style={styles.actionsRow}>
             <Pressable
               onPress={async () => {
-                await Clipboard.setStringAsync(shareText);
+                Clipboard.setString(shareText);
                 toast({ kind: "success", title: "Ticket copié dans le presse-papiers" });
               }}
               style={styles.copyBtn}

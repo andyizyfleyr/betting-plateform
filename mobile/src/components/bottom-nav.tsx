@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { usePathname, useRouter } from "expo-router";
+import { usePathname, useRouter } from "@/lib/router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Flame,
@@ -8,7 +8,7 @@ import {
   Sparkles,
   Ticket,
   User,
-} from "lucide-react-native";
+} from "@/components/icons";
 import { colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";
 

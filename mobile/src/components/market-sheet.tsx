@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { ChevronDown, ChevronUp, Lock, X } from "lucide-react-native";
+import { ChevronDown, ChevronUp, Lock, X } from "@/components/icons";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
 import { getCachedMatchSnapshot } from "@/lib/entity-cache";
 import { formatKickoff, formatOdds } from "@/lib/format";

@@ -1,8 +1,7 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import { ArrowLeft, Play } from "lucide-react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "@/lib/router";
+import { ArrowLeft, Play } from "@/components/icons";
 import { cardSurface, colors, triggerHaptic } from "@/theme/tokens";
 import { useApp } from "@/context/app-context";
 
@@ -51,8 +50,7 @@ export default function JeuxScreen() {
           <Image
             source={g.image}
             style={styles.banner}
-            contentFit="cover"
-            cachePolicy="memory-disk"
+            resizeMode="cover"
           />
           <View style={styles.cardBody}>
             <View style={{ flex: 1, gap: 3 }}>

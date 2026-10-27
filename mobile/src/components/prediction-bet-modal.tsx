@@ -8,8 +8,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { Plus, X } from "lucide-react-native";
+import { useRouter } from "@/lib/router";
+import { Plus, X } from "@/components/icons";
 import { api, ApiHttpError, generateIdempotencyKey } from "@/lib/api";
 import { eur, formatOdds } from "@/lib/format";
 import { colors } from "@/theme/tokens";
