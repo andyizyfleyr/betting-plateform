@@ -15,7 +15,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { ApiRequestError, api, type PaymentProvider } from "@/lib/api";
-import { getCachedWallet } from "@/lib/client-entity-cache";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
@@ -26,7 +25,7 @@ type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
 
 export default function DepositPage() {
   const router = useRouter();
-  const { toast, balance, user, bumpBets } = useApp();
+  const { toast, user, bumpBets } = useApp();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
   const [amountText, setAmountText] = useState("25");
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
@@ -36,9 +35,6 @@ export default function DepositPage() {
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
-
-  const cachedWallet = getCachedWallet();
-  const displayBalance = balance || cachedWallet?.balance || 0;
 
   useEffect(() => {
     let active = true;
@@ -165,14 +161,9 @@ export default function DepositPage() {
           >
             <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
           </button>
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-[14.5px] font-extrabold leading-tight text-ink lg:text-[18px]">
-              Déposer des fonds
-            </h1>
-            <p className="truncate text-[10.5px] leading-tight text-dim lg:text-[11.5px]">
-              Solde : {eur(displayBalance)}
-            </p>
-          </div>
+          <h1 className="truncate font-display text-[15px] font-extrabold leading-tight text-ink lg:text-[18px]">
+            Déposer des fonds
+          </h1>
         </div>
 
         <Link

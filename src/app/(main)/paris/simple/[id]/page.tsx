@@ -36,10 +36,7 @@ import {
 } from "@/lib/odds-lock";
 import { StatusPill, shortMarketBadge } from "@/components/bet-ticket";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
-import {
-  formatGoalSummary,
-  LiveStatusBadge,
-} from "@/components/match-card";
+import { LiveStatusBadge } from "@/components/match-card";
 import { useApp } from "@/components/providers";
 import {
   hasAnyRealStats,
@@ -305,11 +302,6 @@ export default function SingleBetDetailPage() {
   const canToggleTracker = Boolean(
     linkedMatch && ((!isReal && matchStatus === "live") || realStatsAvailable)
   );
-  const { homeGoals, awayGoals } = formatGoalSummary(
-    linkedMatch?.events,
-    homeScore ?? 0,
-    awayScore ?? 0
-  );
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
@@ -413,19 +405,14 @@ export default function SingleBetDetailPage() {
                 lost && "border-betclic-red/25"
               )}
             >
-              <div className="flex items-center justify-between gap-2 rounded-lg bg-elev px-2.5 py-1.5 lg:rounded-xl lg:px-3 lg:py-2">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {shortMarketBadge(bet.market) && (
-                    <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase text-mist ring-1 ring-edge/80">
-                      {shortMarketBadge(bet.market)}
-                    </span>
-                  )}
-                  <span className="truncate text-[12.5px] font-semibold text-ink lg:text-[13.5px]">
-                    {bet.selectionLabel}
+              <div className="flex min-w-0 items-center gap-1.5 rounded-lg bg-elev px-2.5 py-1.5 lg:rounded-xl lg:px-3 lg:py-2">
+                {shortMarketBadge(bet.market) && (
+                  <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase text-mist ring-1 ring-edge/80">
+                    {shortMarketBadge(bet.market)}
                   </span>
-                </div>
-                <span className="shrink-0 font-display text-[13px] font-extrabold tabular-nums text-betclic-red lg:text-[14px]">
-                  {formatOdds(bet.odds, oddsFormat)}
+                )}
+                <span className="truncate text-[12.5px] font-semibold text-ink lg:text-[13.5px]">
+                  {bet.selectionLabel}
                 </span>
               </div>
 
@@ -724,25 +711,16 @@ export default function SingleBetDetailPage() {
                     </div>
                   </div>
 
-                  {(linkedMatch?.htHomeScore != null ||
-                    homeGoals.length > 0 ||
-                    awayGoals.length > 0) && (
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
-                      {linkedMatch?.htHomeScore != null &&
-                        linkedMatch?.htAwayScore != null && (
-                          <span className="rounded bg-elev px-1.5 py-0.5 font-semibold tabular-nums">
-                            MT {linkedMatch.htHomeScore}-{linkedMatch.htAwayScore}
-                          </span>
-                        )}
-                      {(homeGoals.length > 0 || awayGoals.length > 0) && (
-                        <span className="truncate">
-                          ⚽ {[...homeGoals, ...awayGoals].join(" · ")}
+                  {linkedMatch?.htHomeScore != null &&
+                    linkedMatch?.htAwayScore != null && (
+                      <div className="mt-2 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
+                        <span className="rounded bg-elev px-1.5 py-0.5 font-semibold tabular-nums">
+                          MT {linkedMatch.htHomeScore}-{linkedMatch.htAwayScore}
                         </span>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
 
-                  {/* Actions compactes côte à côte */}
+                  {/* Action contextuelle unique vers le match ou son résultat */}
                   {bet.matchId && (
                     <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-edge/70 pt-2">
                       {canToggleTracker && (
@@ -765,17 +743,18 @@ export default function SingleBetDetailPage() {
                         </button>
                       )}
                       <Link
-                        href={`/matchs/${bet.matchId}`}
+                        href={
+                          matchStatus === "finished"
+                            ? `/resultats/${bet.matchId}`
+                            : `/matchs/${bet.matchId}`
+                        }
                         className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink active:scale-[0.99]"
                       >
-                        <span className="truncate">Match & cotes</span>
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.3} />
-                      </Link>
-                      <Link
-                        href={`/resultats?match=${bet.matchId}`}
-                        className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink active:scale-[0.99]"
-                      >
-                        <span className="truncate">Résultats</span>
+                        <span className="truncate">
+                          {matchStatus === "finished"
+                            ? "Voir le résultat du match"
+                            : "Voir le match & les cotes"}
+                        </span>
                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.3} />
                       </Link>
                     </div>

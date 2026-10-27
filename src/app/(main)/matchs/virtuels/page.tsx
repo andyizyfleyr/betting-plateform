@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
-  Cpu,
   History,
   RefreshCw,
   Search,
@@ -266,7 +265,7 @@ export default function VirtualMatchesPage() {
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
       <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
-        {/* En-tête compact + icône loupe sur mobile (Point 10) */}
+        {/* En-tête compact + icône loupe sur mobile */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
@@ -277,31 +276,12 @@ export default function VirtualMatchesPage() {
             >
               <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
             </button>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="truncate font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
-                  Matchs virtuels
-                </h1>
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
-                  <Cpu className="h-3 w-3" strokeWidth={2.4} />
-                  24h/24
-                </span>
-              </div>
-              <p className="hidden text-[12.5px] text-mist lg:block">
-                Simulateur non-stop · Multiplex de 4 directs simultanés de 2 à 3 min
-              </p>
-            </div>
+            <h1 className="truncate font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+              Matchs virtuels
+            </h1>
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            <Link
-              href="/resultats?universe=virtual"
-              className="inline-flex h-8.5 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
-            >
-              <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
-              <span>Résultats</span>
-            </Link>
-
             <button
               type="button"
               onClick={toggleMobileSearch}

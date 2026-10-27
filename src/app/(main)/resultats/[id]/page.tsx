@@ -9,23 +9,14 @@ import {
   CheckCircle2,
   RefreshCw,
 } from "lucide-react";
-import {
-  api,
-  type ClientBet,
-  type ClientMatchHistoryItem,
-} from "@/lib/api";
-import {
-  getAllCachedBets,
-  getCachedMatchHistoryItem,
-} from "@/lib/client-entity-cache";
+import { api, type ClientMatchHistoryItem } from "@/lib/api";
+import { getCachedMatchHistoryItem } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
-import { BetTicket } from "@/components/bet-ticket";
 import { useApp } from "@/components/providers";
 import {
   hasAnyRealStats,
   RealMatchStatsCard,
 } from "@/components/real-match-stats-card";
-import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
@@ -35,38 +26,17 @@ export default function ResultDetailPage() {
   const router = useRouter();
   const matchId = Number(params?.id);
   const invalidId = !Number.isInteger(matchId) || matchId <= 0;
-  const { oddsFormat, user, betsVersion } = useApp();
+  const { oddsFormat } = useApp();
 
   const [prevId, setPrevId] = useState(matchId);
   const [item, setItem] = useState<ClientMatchHistoryItem | null | undefined>(() =>
     invalidId ? null : (getCachedMatchHistoryItem(matchId) ?? undefined)
   );
-  const [myMatchBets, setMyMatchBets] = useState<ClientBet[]>(() =>
-    invalidId
-      ? []
-      : getAllCachedBets().filter(
-          (b) =>
-            (b.kind === "sport" && b.matchId === matchId) ||
-            (b.kind === "combo" &&
-              b.legs?.some((l) => l.kind === "sport" && l.matchId === matchId))
-        )
-  );
-  const [shareBet, setShareBet] = useState<ClientBet | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   if (matchId !== prevId) {
     setPrevId(matchId);
     setItem(invalidId ? null : (getCachedMatchHistoryItem(matchId) ?? undefined));
-    setMyMatchBets(
-      invalidId
-        ? []
-        : getAllCachedBets().filter(
-            (b) =>
-              (b.kind === "sport" && b.matchId === matchId) ||
-              (b.kind === "combo" &&
-                b.legs?.some((l) => l.kind === "sport" && l.matchId === matchId))
-          )
-    );
   }
 
   const fetchResult = useCallback(async () => {
@@ -97,28 +67,6 @@ export default function ResultDetailPage() {
     void fetchResult();
   }, [fetchResult]);
 
-  useEffect(() => {
-    if (!user || invalidId) return;
-    let cancelled = false;
-    api
-      .allBets()
-      .then((r) => {
-        if (cancelled) return;
-        setMyMatchBets(
-          r.bets.filter(
-            (b) =>
-              (b.kind === "sport" && b.matchId === matchId) ||
-              (b.kind === "combo" &&
-                b.legs?.some((l) => l.kind === "sport" && l.matchId === matchId))
-          )
-        );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [user, invalidId, matchId, betsVersion]);
-
   const cleanEvents = useMemo(
     () => (item ? sanitizeMatchEvents(item.events) : []),
     [item]
@@ -130,15 +78,14 @@ export default function ResultDetailPage() {
     const as = item.awayScore ?? 0;
     const total = hs + as;
     const btts = hs > 0 && as > 0;
-    const winnerLabel =
+    const doubleChance =
       item.winnerCode === "V1"
-        ? `V1 · ${item.homeTeam}`
+        ? "1X & 12"
         : item.winnerCode === "V2"
-          ? `V2 · ${item.awayTeam}`
-          : "X · Nul";
+          ? "12 & 2X"
+          : "1X & 2X";
     return [
-      { label: "1X2", value: winnerLabel },
-      { label: "Score exact", value: `${hs} - ${as}` },
+      { label: "Double chance", value: doubleChance },
       {
         label: "Total 2.5",
         value: total >= 3 ? `TP 2.5 (${total} b.)` : `TM 2.5 (${total} b.)`,
@@ -147,11 +94,11 @@ export default function ResultDetailPage() {
         label: "Les 2 marquent",
         value: btts ? "Oui" : "Non",
       },
-      ...(item.htHome != null && item.htAway != null
+      ...(item.htWinnerCode && item.winnerCode
         ? [
             {
-              label: "Mi-temps",
-              value: `${item.htHome} - ${item.htAway}`,
+              label: "MT-Fin",
+              value: `${item.htWinnerCode}-${item.winnerCode}`,
             },
           ]
         : []),
@@ -454,29 +401,9 @@ export default function ResultDetailPage() {
                 </div>
               </section>
             )}
-
-            {/* Vos paris sur ce match */}
-            {myMatchBets.length > 0 && (
-              <section className="space-y-2">
-                <h2 className="font-display text-[12.5px] font-extrabold text-ink lg:text-[14px]">
-                  Vos paris sur ce match ({myMatchBets.length})
-                </h2>
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
-                  {myMatchBets.map((b) => (
-                    <BetTicket
-                      key={`${b.kind}-${b.id}`}
-                      bet={b}
-                      onShare={(ticket) => setShareBet(ticket)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
         )}
       </div>
-
-      <ShareTicketModal bet={shareBet} onClose={() => setShareBet(null)} />
     </div>
   );
 }

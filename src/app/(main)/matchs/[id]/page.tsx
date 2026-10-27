@@ -11,14 +11,10 @@ import {
   Radio,
   RefreshCw,
 } from "lucide-react";
-import { api, type ClientBet, type ClientMatch } from "@/lib/api";
-import {
-  getAllCachedBets,
-  getCachedClientMatch,
-} from "@/lib/client-entity-cache";
+import { api, type ClientMatch } from "@/lib/api";
+import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
-import { BetTicket } from "@/components/bet-ticket";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import {
   AccordionItem,
@@ -28,16 +24,12 @@ import {
   sanitizeMatchMarkets,
   type SheetCategory,
 } from "@/components/market-sheet";
-import {
-  formatGoalSummary,
-  LiveStatusBadge,
-} from "@/components/match-card";
+import { LiveStatusBadge } from "@/components/match-card";
 import { useApp } from "@/components/providers";
 import {
   hasAnyRealStats,
   RealMatchStatsCard,
 } from "@/components/real-match-stats-card";
-import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { cn } from "@/lib/format";
@@ -76,8 +68,6 @@ export default function MatchDetailPage() {
     comboQuickMode,
     toggleComboLeg,
     toast,
-    user,
-    betsVersion,
   } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
 
@@ -100,14 +90,6 @@ export default function MatchDetailPage() {
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(() =>
     defaultOpenMarkets(invalidId ? null : getCachedClientMatch(matchId))
   );
-  const [myMatchBets, setMyMatchBets] = useState<ClientBet[]>(() =>
-    invalidId
-      ? []
-      : getAllCachedBets().filter(
-          (b) => b.kind === "sport" && b.matchId === matchId
-        )
-  );
-  const [shareBet, setShareBet] = useState<ClientBet | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   if (matchId !== prevId) {
@@ -116,13 +98,6 @@ export default function MatchDetailPage() {
     setFetchedMatch(cached);
     setCategory("all");
     setOpenMap(defaultOpenMarkets(cached));
-    setMyMatchBets(
-      invalidId
-        ? []
-        : getAllCachedBets().filter(
-            (b) => b.kind === "sport" && b.matchId === matchId
-          )
-    );
   }
 
   const match = invalidId ? null : (sharedFromFeed ?? fetchedMatch);
@@ -162,28 +137,6 @@ export default function MatchDetailPage() {
     return () => clearInterval(id);
   }, [invalidId, sharedFromFeed, fetchMatch, status, pollMs]);
 
-  useEffect(() => {
-    if (!user || invalidId) return;
-    let cancelled = false;
-    api
-      .allBets()
-      .then((r) => {
-        if (cancelled) return;
-        setMyMatchBets(
-          r.bets.filter(
-            (b) =>
-              (b.kind === "sport" && b.matchId === matchId) ||
-              (b.kind === "combo" &&
-                b.legs?.some((l) => l.kind === "sport" && l.matchId === matchId))
-          )
-        );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [user, invalidId, matchId, betsVersion]);
-
   const groups = useMemo(() => sanitizeMatchMarkets(match?.markets), [match]);
   const filteredGroups = useMemo(() => {
     if (category === "all") return groups;
@@ -200,12 +153,6 @@ export default function MatchDetailPage() {
   const isReal = match?.source === "manual";
   const realStatsAvailable = Boolean(isReal && hasAnyRealStats(match?.realStats));
   const suspended = Boolean(match?.suspended);
-  const { homeGoals, awayGoals } = formatGoalSummary(
-    match?.events,
-    match?.homeScore ?? 0,
-    match?.awayScore ?? 0
-  );
-  const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
@@ -377,25 +324,6 @@ export default function MatchDetailPage() {
                   )}
                 </div>
               </div>
-
-              {(isLive || isFinished) && hasGoals && (
-                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-edge/60 pt-1.5 text-[10px] text-mist lg:mt-3 lg:pt-2.5 lg:text-[11px]">
-                  <div className="space-y-0.5">
-                    {homeGoals.map((g, i) => (
-                      <div key={i} className="truncate">
-                        ⚽ {g}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-0.5 text-right">
-                    {awayGoals.map((g, i) => (
-                      <div key={i} className="truncate">
-                        {g} ⚽
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Bascules compactes (Terrain 2D / Stats / Rapport) */}
               {(isLive && !isReal) || realStatsAvailable || isFinished ? (
@@ -638,37 +566,9 @@ export default function MatchDetailPage() {
                 </div>
               </section>
             )}
-
-            {/* Vos paris sur ce match */}
-            {myMatchBets.length > 0 && (
-              <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="font-display text-[12.5px] font-extrabold text-ink lg:text-[14px]">
-                    Vos paris sur ce match ({myMatchBets.length})
-                  </h2>
-                  <Link
-                    href="/paris"
-                    className="font-display text-[11px] font-bold text-betclic-red"
-                  >
-                    Mes paris
-                  </Link>
-                </div>
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
-                  {myMatchBets.map((b) => (
-                    <BetTicket
-                      key={`${b.kind}-${b.id}`}
-                      bet={b}
-                      onShare={(ticket) => setShareBet(ticket)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
         )}
       </div>
-
-      <ShareTicketModal bet={shareBet} onClose={() => setShareBet(null)} />
     </div>
   );
 }

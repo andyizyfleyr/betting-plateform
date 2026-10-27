@@ -11,7 +11,6 @@ import {
   Hash,
   Layers,
   Loader2,
-  Plus,
   Trash2,
   TrendingUp,
   Trophy,
@@ -515,24 +514,15 @@ export default function BetslipPage() {
     <div className="mx-auto w-full max-w-[1360px] px-4 pt-3.5 pb-2 lg:px-0 lg:py-0">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
-              Coupon de pari
-            </h1>
-            {enrichedLegs.length > 0 && (
-              <span className="rounded-full bg-betclic-red px-2 py-0.5 font-display text-[11px] font-bold text-white">
-                {enrichedLegs.length}/{MAX_COMBO_LEGS}
-              </span>
-            )}
-          </div>
-          <p className="hidden text-[13px] text-mist lg:block">
-            {enrichedLegs.length === 0
-              ? "Coupon de pari · Simple & Combiné"
-              : isCombo
-                ? `Pari combiné · ${enrichedLegs.length} événements`
-                : "Pari simple · Ajoutez une cote pour un combiné"}
-          </p>
+        <div className="flex items-center gap-2">
+          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+            Coupon de pari
+          </h1>
+          {enrichedLegs.length > 0 && (
+            <span className="rounded-full bg-betclic-red px-2 py-0.5 font-display text-[11px] font-bold text-white">
+              {enrichedLegs.length}/{MAX_COMBO_LEGS}
+            </span>
+          )}
         </div>
 
         {enrichedLegs.length > 0 && (
@@ -609,30 +599,32 @@ export default function BetslipPage() {
             className={cn(!mobileCouponOpen && "hidden lg:block")}
           />
 
-          {/* Jauge Bonus Combiné 1xBet */}
-          <div className="rounded-2xl border border-edge bg-white p-3">
-            <div className="flex items-center justify-between gap-2 text-[11.5px]">
-              <span className="inline-flex items-center gap-1.5 font-display font-bold text-ink">
-                <Flame className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-                {quote.boostPct > 0
-                  ? `Bonus Combiné actif : +${quote.boostPct}%`
-                  : "Bonus Combiné jusqu'à +20%"}
-              </span>
-              {nextBoost ? (
-                <span className="text-[11px] font-semibold text-mist">
-                  +{nextBoost.needed} cote{nextBoost.needed > 1 ? "s" : ""} (≥{MIN_ELIGIBLE_BOOST_ODDS}) → +{nextBoost.pct}%
+          {/* Jauge Bonus Combiné (uniquement en mode combiné ≥ 2 sélections) */}
+          {isCombo && (
+            <div className="rounded-2xl border border-edge bg-white p-3">
+              <div className="flex items-center justify-between gap-2 text-[11.5px]">
+                <span className="inline-flex items-center gap-1.5 font-display font-bold text-ink">
+                  <Flame className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
+                  {quote.boostPct > 0
+                    ? `Bonus Combiné actif : +${quote.boostPct}%`
+                    : "Bonus Combiné jusqu'à +20%"}
                 </span>
-              ) : (
-                <span className="text-[11px] font-bold text-win">Palier max atteint</span>
-              )}
+                {nextBoost ? (
+                  <span className="text-[11px] font-semibold text-mist">
+                    +{nextBoost.needed} cote{nextBoost.needed > 1 ? "s" : ""} (≥{MIN_ELIGIBLE_BOOST_ODDS}) → +{nextBoost.pct}%
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-win">Palier max atteint</span>
+                )}
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-elev">
+                <div
+                  className="h-full rounded-full bg-betclic-red transition-all duration-300"
+                  style={{ width: `${Math.min(100, (quote.eligibleLegs / 8) * 100)}%` }}
+                />
+              </div>
             </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-elev">
-              <div
-                className="h-full rounded-full bg-betclic-red transition-all duration-300"
-                style={{ width: `${Math.min(100, (quote.eligibleLegs / 8) * 100)}%` }}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Liste des sélections */}
           <div className="space-y-2.5">
@@ -659,21 +651,9 @@ export default function BetslipPage() {
                     leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
                   )}
                 >
-                  {/* En-tête : type + ligue + statut + retrait */}
+                  {/* En-tête : ligue + statut + retrait */}
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-mist">
-                      {leg.kind === "sport" && leg.resolvedSource && (
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide",
-                            leg.resolvedSource === "manual"
-                              ? "bg-emerald-600/12 text-emerald-700"
-                              : "bg-elev text-dim"
-                          )}
-                        >
-                          {leg.resolvedSource === "manual" ? "Réel" : "Virtuel"}
-                        </span>
-                      )}
                       <span className="truncate font-semibold">{leg.league}</span>
                       {leg.isLive && (
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
@@ -786,17 +766,6 @@ export default function BetslipPage() {
               );
             })}
           </div>
-
-          {/* Bouton ajouter d'autres sélections */}
-          {enrichedLegs.length < MAX_COMBO_LEGS && (
-            <Link
-              href="/matchs"
-              className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-edge bg-white/70 font-display text-[12.5px] font-semibold text-mist hover:bg-elev/60 active:bg-elev"
-            >
-              <Plus className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-              Ajouter une sélection (appui long ou mode Combiné 1-clic)
-            </Link>
-          )}
           </div>
 
           {/* Bloc Mise & Validation : barre collante juste au-dessus de la BottomNav sur mobile, colonne collante à droite sur desktop */}

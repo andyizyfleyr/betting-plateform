@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Flame, Play } from "lucide-react";
+import { Play } from "lucide-react";
 
 const MINI_GAMES = [
   {
@@ -13,7 +13,6 @@ const MINI_GAMES = [
     subtitle: "Enchaînez les pressions pour faire grimper le multiplicateur et encaissez avant le crash.",
     image: "/images/games/tap-win.jpg",
     imageAlt: "Miniature du jeu casino Tap Win",
-    stats: "Manches instantanées · Cash-out libre",
   },
   {
     href: "/accelerator",
@@ -24,35 +23,23 @@ const MINI_GAMES = [
       "Maintenez l'accélérateur pour pousser l'aiguille dans le rouge et relâchez au bon moment.",
     image: "/images/games/accelerator-pro.jpg",
     imageAlt: "Miniature du jeu casino Accelerator Pro",
-    stats: "Contrôle direct · Cash-out manuel ou auto",
   },
 ] as const;
 
 export default function JeuxPage() {
   return (
     <div className="mx-auto w-full max-w-[1360px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
-            Casino & Mini-jeux
-          </h1>
-          <p className="hidden text-[13px] text-mist lg:block">
-            Sessions instantanées branchées sur votre portefeuille
-          </p>
-        </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/10 px-2.5 py-1 font-display text-[10.5px] font-bold text-betclic-red">
-          <Flame className="h-3.5 w-3.5" strokeWidth={2.3} />2 jeux
-        </span>
-      </div>
+      <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+        Mini-jeux
+      </h1>
 
-      <div className="mt-4 grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:mt-5 lg:gap-5">
-        {MINI_GAMES.map(({ href, badge, tag, title, subtitle, image, imageAlt, stats }, idx) => (
+      <div className="mt-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:mt-4 lg:gap-5">
+        {MINI_GAMES.map(({ href, badge, tag, title, subtitle, image, imageAlt }, idx) => (
           <Link
             key={href}
             href={href}
             className="glass-card group overflow-hidden rounded-2xl border border-edge transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99]"
           >
-            {/* Vraie miniature 16:9 haute définition */}
             <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
               <Image
                 src={image}
@@ -64,10 +51,8 @@ export default function JeuxPage() {
                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
               />
 
-              {/* Voile dégradé bas discret pour laisser briller l'illustration centrale */}
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/15" />
 
-              {/* Badges supérieurs */}
               <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
                 <span className="rounded-full border border-white/20 bg-black/55 px-2.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-md">
                   {badge}
@@ -77,10 +62,9 @@ export default function JeuxPage() {
                 </span>
               </div>
 
-              {/* Titre du jeu ancré au bas du visuel */}
               <div className="absolute inset-x-3.5 bottom-3 flex items-end justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="font-display text-[21px] font-extrabold leading-tight tracking-tight text-white drop-shadow-sm">
+                  <h2 className="font-display text-[20px] font-extrabold leading-tight tracking-tight text-white drop-shadow-sm">
                     {title}
                   </h2>
                   <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-white/85">
@@ -91,18 +75,6 @@ export default function JeuxPage() {
                   <Play className="ml-0.5 h-4 w-4 fill-current" strokeWidth={2.2} />
                 </span>
               </div>
-            </div>
-
-            {/* Barre d'infos & CTA */}
-            <div className="flex items-center justify-between gap-2 bg-white px-4 py-2.5">
-              <span className="truncate text-[11.5px] font-medium text-mist">{stats}</span>
-              <span className="inline-flex shrink-0 items-center gap-1 font-display text-[12px] font-bold text-betclic-red">
-                Jouer
-                <ArrowRight
-                  className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
-                  strokeWidth={2.5}
-                />
-              </span>
             </div>
           </Link>
         ))}

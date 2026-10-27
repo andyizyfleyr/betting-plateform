@@ -13,21 +13,12 @@ import {
   RefreshCw,
   TrendingUp,
 } from "lucide-react";
-import {
-  api,
-  type ClientBet,
-  type ClientPrediction,
-} from "@/lib/api";
-import {
-  getAllCachedBets,
-  getCachedPrediction,
-} from "@/lib/client-entity-cache";
+import { api, type ClientPrediction } from "@/lib/api";
+import { getCachedPrediction } from "@/lib/client-entity-cache";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
-import { BetTicket } from "@/components/bet-ticket";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { useApp } from "@/components/providers";
-import { ShareTicketModal } from "@/components/share-ticket-modal";
-import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
+import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
 const POLL_MS = 10_000;
 
@@ -43,8 +34,6 @@ export default function PredictionDetailPage() {
     comboQuickMode,
     toggleComboLeg,
     toast,
-    user,
-    betsVersion,
   } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_MS, isConstrained);
@@ -54,37 +43,12 @@ export default function PredictionDetailPage() {
     invalidId ? null : (getCachedPrediction(questionId) ?? undefined)
   );
   const [activeSelection, setActiveSelection] = useState<string | null>(null);
-  const [myQuestionBets, setMyQuestionBets] = useState<ClientBet[]>(() =>
-    invalidId
-      ? []
-      : getAllCachedBets().filter(
-          (b) =>
-            (b.kind === "prediction" && b.questionId === questionId) ||
-            (b.kind === "combo" &&
-              b.legs?.some(
-                (l) => l.kind === "prediction" && l.questionId === questionId
-              ))
-        )
-  );
-  const [shareBet, setShareBet] = useState<ClientBet | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   if (questionId !== prevId) {
     setPrevId(questionId);
     setQuestion(invalidId ? null : (getCachedPrediction(questionId) ?? undefined));
     setActiveSelection(null);
-    setMyQuestionBets(
-      invalidId
-        ? []
-        : getAllCachedBets().filter(
-            (b) =>
-              (b.kind === "prediction" && b.questionId === questionId) ||
-              (b.kind === "combo" &&
-                b.legs?.some(
-                  (l) => l.kind === "prediction" && l.questionId === questionId
-                ))
-          )
-    );
   }
 
   const fetchPrediction = useCallback(async () => {
@@ -115,30 +79,6 @@ export default function PredictionDetailPage() {
     const id = setInterval(() => void fetchPrediction(), pollIntervalMs);
     return () => clearInterval(id);
   }, [invalidId, fetchPrediction, question, isOpen, pollIntervalMs]);
-
-  useEffect(() => {
-    if (!user || invalidId) return;
-    let cancelled = false;
-    api
-      .allBets()
-      .then((r) => {
-        if (cancelled) return;
-        setMyQuestionBets(
-          r.bets.filter(
-            (b) =>
-              (b.kind === "prediction" && b.questionId === questionId) ||
-              (b.kind === "combo" &&
-                b.legs?.some(
-                  (l) => l.kind === "prediction" && l.questionId === questionId
-                ))
-          )
-        );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [user, invalidId, questionId, betsVersion]);
 
   const sortedOptions = useMemo(() => {
     if (!question) return [];
@@ -276,11 +216,8 @@ export default function PredictionDetailPage() {
           <div className="space-y-2.5 lg:space-y-4">
             {/* Carte compacte de la question */}
             <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold text-mist lg:text-[11px]">
-                <span className="rounded bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
-                  {question.category}
-                </span>
-                <span className="inline-flex items-center gap-1 tabular-nums text-dim">
+              <div className="flex items-center justify-end text-[10px] font-semibold tabular-nums text-dim lg:text-[11px]">
+                <span className="inline-flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {question.status === "resolved" && question.resolvedAt
                     ? `Résolu · ${formatKickoff(question.resolvedAt)}`
@@ -288,25 +225,9 @@ export default function PredictionDetailPage() {
                 </span>
               </div>
 
-              <h2 className="mt-1.5 font-display text-[14.5px] font-extrabold leading-snug text-ink lg:text-[17.5px]">
+              <h2 className="mt-1 font-display text-[14.5px] font-extrabold leading-snug text-ink lg:text-[17.5px]">
                 {question.question}
               </h2>
-
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10.5px] text-mist">
-                <span>
-                  Volume :{" "}
-                  <strong className="font-display text-ink">
-                    {eur(question.volume)}
-                  </strong>
-                </span>
-                <span className="text-dim">·</span>
-                <span>
-                  Participants :{" "}
-                  <strong className="font-display text-ink">
-                    {question.yesCount + question.noCount}
-                  </strong>
-                </span>
-              </div>
             </section>
 
             {/* Issues compactes en une seule ligne chacune */}
@@ -407,32 +328,6 @@ export default function PredictionDetailPage() {
                 })}
               </div>
             </section>
-
-            {/* Vos paris sur cette prédiction */}
-            {myQuestionBets.length > 0 && (
-              <section className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display text-[12.5px] font-extrabold text-ink lg:text-[14px]">
-                    Vos paris ({myQuestionBets.length})
-                  </h3>
-                  <Link
-                    href="/paris"
-                    className="font-display text-[11px] font-bold text-betclic-red"
-                  >
-                    Mes paris
-                  </Link>
-                </div>
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
-                  {myQuestionBets.map((b) => (
-                    <BetTicket
-                      key={`${b.kind}-${b.id}`}
-                      bet={b}
-                      onShare={(ticket) => setShareBet(ticket)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
         )}
       </div>
@@ -442,8 +337,6 @@ export default function PredictionDetailPage() {
         selection={activeSelection}
         onClose={() => setActiveSelection(null)}
       />
-
-      <ShareTicketModal bet={shareBet} onClose={() => setShareBet(null)} />
     </div>
   );
 }
