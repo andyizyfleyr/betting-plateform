@@ -11,68 +11,78 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, Eye, EyeOff, Zap } from "lucide-react-native";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  User,
+  Zap,
+} from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
-import { useRouter } from "@/lib/router";
-import { COLORS } from "@/theme/tokens";
+import { useRouter, useSearchParams } from "@/lib/router";
+import { COLORS, triggerHaptic } from "@/theme/tokens";
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { applyUser, refreshPulseNow, toast } = useApp();
+  const params = useSearchParams();
+  const { applyUser, toast, hapticsEnabled } = useApp();
 
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(
+    params.get("mode") === "register" ? "register" : "login"
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async () => {
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !password) {
-      setErrorMsg("Veuillez renseigner votre e-mail et votre mot de passe.");
-      return;
-    }
-    if (mode === "register" && name.trim().length < 2) {
-      setErrorMsg("Indiquez votre prénom ou pseudo (2 caractères min.).");
-      return;
-    }
-
+  const submit = async () => {
+    setError(null);
     setLoading(true);
-    setErrorMsg(null);
     try {
-      const res =
+      const r =
         mode === "login"
-          ? await api.auth.login({ email: cleanEmail, password })
-          : await api.auth.register({
-              name: name.trim(),
-              email: cleanEmail,
-              password,
-            });
-      applyUser(res.user);
-      void refreshPulseNow();
+          ? await api.auth.login(email.trim(), password)
+          : await api.auth.register(name.trim(), email.trim(), password);
+      applyUser(r.user);
+      triggerHaptic("success", hapticsEnabled);
       toast({
         kind: "success",
         title:
           mode === "login"
-            ? `Bon retour, ${res.user.name} !`
-            : `Bienvenue sur PULSE, ${res.user.name} !`,
+            ? `Bon retour, ${r.user.name}`
+            : `Bienvenue ${r.user.name}`,
+        description:
+          mode === "register"
+            ? "250,00 € ont été crédités sur votre solde."
+            : undefined,
       });
-      // Contrainte stricte : connexion admin -> /admin
-      if (res.user.role === "admin") {
-        router.replace("/admin");
-      } else {
-        router.replace("/matchs");
-      }
+      router.replace(r.user.role === "admin" ? "/admin" : "/matchs");
     } catch (err) {
-      setErrorMsg(
-        err instanceof ApiHttpError
+      setError(
+        err instanceof ApiHttpError || err instanceof Error
           ? err.message
-          : "Connexion impossible. Vérifiez vos identifiants."
+          : "Connexion impossible"
       );
-    } finally {
+      setLoading(false);
+    }
+  };
+
+  const quickDemo = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const r = await api.auth.login("demo@pulse.app", "demo1234");
+      applyUser(r.user);
+      triggerHaptic("success", hapticsEnabled);
+      toast({ kind: "success", title: "Connecté au compte démo" });
+      router.replace(r.user.role === "admin" ? "/admin" : "/matchs");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Connexion impossible");
       setLoading(false);
     }
   };
@@ -84,147 +94,175 @@ export default function AuthScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Pressable
-            onPress={() => router.replace("/matchs")}
-            style={styles.backLink}
-          >
-            <ArrowLeft size={16} color={COLORS.mist} strokeWidth={2.3} />
-            <Text style={styles.backText}>Retour aux matchs</Text>
-          </Pressable>
-
-          <View style={styles.card}>
+          <View>
+            {/* En-tête identique à src/app/auth/page.tsx */}
             <View style={styles.brandRow}>
               <View style={styles.brandIcon}>
-                <Zap size={18} color="#ffffff" fill="#ffffff" strokeWidth={2.5} />
+                <Zap size={18} color="#ffffff" fill="#ffffff" strokeWidth={2.2} />
               </View>
-              <Text style={styles.brandName}>PULSE</Text>
+              <View>
+                <Text style={styles.brandTitle}>PULSE</Text>
+                <Text style={styles.brandSubtitle}>
+                  Paris sportifs & prédictions
+                </Text>
+              </View>
             </View>
 
-            <Text style={styles.heading}>
-              {mode === "login"
-                ? "Connectez-vous à votre compte"
-                : "Créez votre compte joueur"}
-            </Text>
-
-            <View style={styles.segmented}>
-              <Pressable
-                onPress={() => {
-                  setMode("login");
-                  setErrorMsg(null);
-                }}
-                style={[
-                  styles.segBtn,
-                  mode === "login" && styles.segBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segText,
-                    mode === "login" && styles.segTextActive,
-                  ]}
-                >
-                  Connexion
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setMode("register");
-                  setErrorMsg(null);
-                }}
-                style={[
-                  styles.segBtn,
-                  mode === "register" && styles.segBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segText,
-                    mode === "register" && styles.segTextActive,
-                  ]}
-                >
-                  Inscription
-                </Text>
-              </Pressable>
+            <View style={styles.headingBlock}>
+              <Text style={styles.h1}>
+                {mode === "login" ? "Bon retour" : "Créer un compte"}
+              </Text>
+              <Text style={styles.subtitle}>
+                {mode === "login"
+                  ? "Accédez à vos prédictions, matchs en direct et paris."
+                  : "250,00 € crédités dès l'inscription pour démarrer."}
+              </Text>
             </View>
 
-            <View style={styles.fields}>
+            {/* Sélecteur Connexion / Inscription */}
+            <View style={styles.tabSwitch}>
+              {(["login", "register"] as const).map((m) => {
+                const active = mode === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => {
+                      setMode(m);
+                      setError(null);
+                    }}
+                    style={[styles.tabBtn, active && styles.tabBtnActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.tabBtnText,
+                        active && styles.tabBtnTextActive,
+                      ]}
+                    >
+                      {m === "login" ? "Connexion" : "Inscription"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Formulaire */}
+            <View style={styles.form}>
               {mode === "register" ? (
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Pseudo / Nom</Text>
-                  <TextInput
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="Ex. Alexandre"
-                    placeholderTextColor={COLORS.dim}
-                    style={styles.input}
-                  />
+                  <Text style={styles.label}>Prénom ou pseudo</Text>
+                  <View style={styles.inputBox}>
+                    <User size={16} color={COLORS.dim} strokeWidth={2.1} />
+                    <TextInput
+                      value={name}
+                      onChangeText={setName}
+                      placeholder="Alex Martin"
+                      placeholderTextColor={COLORS.dim}
+                      autoCapitalize="words"
+                      style={styles.input}
+                    />
+                  </View>
                 </View>
               ) : null}
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Adresse e-mail</Text>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholder="vous@exemple.com"
-                  placeholderTextColor={COLORS.dim}
-                  style={styles.input}
-                />
+                <Text style={styles.label}>Adresse e-mail</Text>
+                <View style={styles.inputBox}>
+                  <Mail size={16} color={COLORS.dim} strokeWidth={2.1} />
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="vous@exemple.fr"
+                    placeholderTextColor={COLORS.dim}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.input}
+                  />
+                </View>
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Mot de passe</Text>
-                <View style={styles.pwdWrap}>
+                <Text style={styles.label}>Mot de passe</Text>
+                <View style={styles.inputBox}>
+                  <Lock size={16} color={COLORS.dim} strokeWidth={2.1} />
                   <TextInput
                     value={password}
                     onChangeText={setPassword}
-                    secureTextEntry={!showPwd}
-                    autoCapitalize="none"
-                    placeholder="••••••••"
+                    placeholder={
+                      mode === "register" ? "Au moins 4 caractères" : "••••••••"
+                    }
                     placeholderTextColor={COLORS.dim}
-                    style={styles.pwdInput}
+                    secureTextEntry={!showPass}
+                    autoCapitalize="none"
+                    onSubmitEditing={submit}
+                    style={styles.input}
                   />
                   <Pressable
-                    hitSlop={8}
-                    onPress={() => setShowPwd((v) => !v)}
+                    hitSlop={10}
+                    onPress={() => setShowPass((s) => !s)}
                   >
-                    {showPwd ? (
-                      <EyeOff size={17} color={COLORS.dim} strokeWidth={2.1} />
+                    {showPass ? (
+                      <EyeOff size={16} color={COLORS.dim} strokeWidth={2.1} />
                     ) : (
-                      <Eye size={17} color={COLORS.dim} strokeWidth={2.1} />
+                      <Eye size={16} color={COLORS.dim} strokeWidth={2.1} />
                     )}
                   </Pressable>
                 </View>
               </View>
+
+              {error ? (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              <Pressable
+                disabled={loading}
+                onPress={submit}
+                style={({ pressed }) => [
+                  styles.submitBtn,
+                  loading && { opacity: 0.6 },
+                  pressed && !loading && { transform: [{ scale: 0.99 }] },
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <>
+                    <Text style={styles.submitText}>
+                      {mode === "login" ? "Se connecter" : "Créer mon compte"}
+                    </Text>
+                    <ArrowRight size={16} color="#ffffff" strokeWidth={2.4} />
+                  </>
+                )}
+              </Pressable>
             </View>
 
-            {errorMsg ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{errorMsg}</Text>
-              </View>
-            ) : null}
-
+            {/* Accès rapide avec le compte démo */}
             <Pressable
               disabled={loading}
-              onPress={handleSubmit}
-              style={[styles.submitBtn, loading && { opacity: 0.65 }]}
+              onPress={quickDemo}
+              style={({ pressed }) => [
+                styles.demoBtn,
+                loading && { opacity: 0.6 },
+                pressed && { backgroundColor: COLORS.elev },
+              ]}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text style={styles.submitText}>
-                  {mode === "login" ? "Se connecter" : "Créer mon compte"}
-                </Text>
-              )}
+              <Zap size={16} color={COLORS.betclicRed} strokeWidth={2.2} />
+              <Text style={styles.demoBtnText}>
+                Accès rapide avec le compte démo
+              </Text>
             </Pressable>
           </View>
+
+          <Text style={styles.footerDisclaimer}>
+            18+ · Jouer comporte des risques : endettement, isolement,
+            dépendance.
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -236,139 +274,162 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.deep,
   },
-  scroll: {
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    gap: 16,
-  },
-  backLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    fontSize: 13.5,
-    fontWeight: "700",
-    color: COLORS.mist,
-  },
-  card: {
-    borderRadius: 22,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    padding: 20,
-    gap: 15,
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
   },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    gap: 10,
   },
   brandIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
   },
-  brandName: {
-    fontSize: 20,
-    fontWeight: "900",
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: -0.3,
     color: COLORS.ink,
-    letterSpacing: -0.5,
+    lineHeight: 20,
   },
-  heading: {
-    fontSize: 16.5,
-    fontWeight: "800",
+  brandSubtitle: {
+    fontSize: 11,
+    color: COLORS.dim,
+  },
+  headingBlock: {
+    marginTop: 24,
+  },
+  h1: {
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: -0.4,
     color: COLORS.ink,
   },
-  segmented: {
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: COLORS.elev,
-    padding: 3,
+  subtitle: {
+    marginTop: 4,
+    fontSize: 13.5,
+    color: COLORS.mist,
+    lineHeight: 19,
+  },
+  tabSwitch: {
+    marginTop: 20,
     flexDirection: "row",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: COLORS.elev,
+    padding: 4,
+    gap: 4,
   },
-  segBtn: {
+  tabBtn: {
     flex: 1,
-    borderRadius: 9,
+    height: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  segBtnActive: {
+  tabBtnActive: {
     backgroundColor: "#ffffff",
+    shadowColor: "#111827",
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
-  segText: {
-    fontSize: 13.5,
-    fontWeight: "700",
+  tabBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
     color: COLORS.mist,
   },
-  segTextActive: {
+  tabBtnTextActive: {
     color: COLORS.ink,
   },
-  fields: {
-    gap: 11,
+  form: {
+    marginTop: 20,
+    gap: 14,
   },
   fieldGroup: {
-    gap: 5,
+    gap: 6,
   },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: "700",
+  label: {
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
-  input: {
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: COLORS.elev,
+  inputBox: {
+    height: 48,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.edge,
-    paddingHorizontal: 13,
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.ink,
-  },
-  pwdWrap: {
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: COLORS.elev,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    paddingHorizontal: 13,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
   },
-  pwdInput: {
+  input: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 14.5,
     color: COLORS.ink,
+    paddingVertical: 0,
   },
   errorBox: {
     borderRadius: 12,
-    backgroundColor: "rgba(225, 0, 20, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(225, 0, 20, 0.24)",
+    borderColor: "rgba(225, 0, 20, 0.30)",
+    backgroundColor: "rgba(225, 0, 20, 0.08)",
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   errorText: {
     fontSize: 12.5,
-    fontWeight: "600",
     color: COLORS.betclicRed,
   },
   submitBtn: {
+    marginTop: 4,
     height: 48,
-    borderRadius: 13,
+    borderRadius: 16,
     backgroundColor: COLORS.betclicRed,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
   },
   submitText: {
     fontSize: 14.5,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#ffffff",
+  },
+  demoBtn: {
+    marginTop: 12,
+    height: 44,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  demoBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.ink,
+  },
+  footerDisclaimer: {
+    marginTop: 24,
+    textAlign: "center",
+    fontSize: 11,
+    color: COLORS.dim,
+    lineHeight: 16,
   },
 });

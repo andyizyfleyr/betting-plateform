@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LogOut, Plus, ShieldCheck, Zap } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
@@ -11,109 +11,125 @@ import { COLORS } from "@/theme/tokens";
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, balance, applyUser, openRecharge } = useApp();
-
-  const prevBalanceRef = useRef<number>(balance);
-  const [deltaFlash, setDeltaFlash] = useState<"up" | "down" | null>(null);
-
-  useEffect(() => {
-    const prev = prevBalanceRef.current;
-    prevBalanceRef.current = balance;
-    if (Math.abs(balance - prev) >= 0.01) {
-      setDeltaFlash(balance > prev ? "up" : "down");
-      const timer = setTimeout(() => setDeltaFlash(null), 900);
-      return () => clearTimeout(timer);
-    }
-  }, [balance]);
+  const { user, balance, applyUser, clearCombo, openRecharge, toast } = useApp();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   if (
     pathname === "/auth" ||
+    pathname.startsWith("/auth/") ||
     pathname === "/tap" ||
-    pathname === "/accelerator"
+    pathname.startsWith("/tap/") ||
+    pathname === "/accelerator" ||
+    pathname.startsWith("/accelerator/")
   ) {
     return null;
   }
 
-  const onAdminPage = pathname.startsWith("/admin");
+  const isAdminShell =
+    user?.role === "admin" ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/");
 
-  const handleLogout = async () => {
-    await api.auth.logout();
-    applyUser(null);
-    router.replace("/auth");
+  const handleAdminLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await api.auth.logout();
+      clearCombo();
+      applyUser(null);
+      router.replace("/auth");
+    } catch {
+      toast({ kind: "error", title: "Impossible de se déconnecter" });
+    } finally {
+      setLoggingOut(false);
+    }
   };
+
+  if (isAdminShell) {
+    return (
+      <SafeAreaView edges={["top"]} style={styles.safeTop}>
+        <View style={styles.bar}>
+          <Pressable
+            onPress={() => router.push("/admin")}
+            style={({ pressed }) => [styles.brand, pressed && { opacity: 0.8 }]}
+          >
+            <View style={styles.brandIcon}>
+              <Zap size={16} color="#ffffff" fill="#ffffff" strokeWidth={2.2} />
+            </View>
+            <Text style={styles.brandText}>PULSE</Text>
+            <View style={styles.adminPill}>
+              <ShieldCheck size={12} color={COLORS.betclicRed} strokeWidth={2.4} />
+              <Text style={styles.adminPillText}>ADMIN</Text>
+            </View>
+          </Pressable>
+
+          <View style={styles.rightRow}>
+            {user?.name ? (
+              <Text numberOfLines={1} style={styles.adminName}>
+                {user.name}
+              </Text>
+            ) : null}
+            <Pressable
+              onPress={handleAdminLogout}
+              disabled={loggingOut}
+              style={({ pressed }) => [
+                styles.logoutPill,
+                pressed && { backgroundColor: COLORS.edge },
+                loggingOut && { opacity: 0.6 },
+              ]}
+            >
+              {loggingOut ? (
+                <ActivityIndicator size="small" color={COLORS.dim} />
+              ) : (
+                <LogOut size={14} color={COLORS.betclicRed} strokeWidth={2.2} />
+              )}
+              <Text style={styles.logoutText}>Déconnexion</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeTop}>
       <View style={styles.bar}>
         <Pressable
-          onPress={() => {
-            if (!onAdminPage) router.push("/matchs");
-          }}
-          style={styles.brand}
+          onPress={() => router.push("/matchs")}
+          style={({ pressed }) => [styles.brand, pressed && { opacity: 0.8 }]}
         >
           <View style={styles.brandIcon}>
-            <Zap size={15} color="#ffffff" fill="#ffffff" strokeWidth={2.5} />
+            <Zap size={16} color="#ffffff" fill="#ffffff" strokeWidth={2.2} />
           </View>
           <Text style={styles.brandText}>PULSE</Text>
         </Pressable>
 
-        {onAdminPage ? (
-          <View style={styles.rightRow}>
-            <View style={styles.adminPill}>
-              <ShieldCheck size={14} color={COLORS.amber} strokeWidth={2.2} />
-              <Text style={styles.adminPillText}>Admin</Text>
-            </View>
-            <Pressable
-              onPress={() => router.push("/matchs")}
-              style={styles.playerViewBtn}
-            >
-              <Text style={styles.playerViewText}>Vue joueur</Text>
-            </Pressable>
-            <Pressable onPress={handleLogout} style={styles.iconBtn}>
-              <LogOut size={16} color={COLORS.mist} strokeWidth={2} />
-            </Pressable>
-          </View>
-        ) : user ? (
-          <View style={styles.rightRow}>
-            {user.role === "admin" ? (
-              <Pressable
-                onPress={() => router.push("/admin")}
-                style={styles.adminShortcut}
-              >
-                <ShieldCheck size={14} color={COLORS.amber} strokeWidth={2.2} />
-              </Pressable>
-            ) : null}
-
+        <View style={styles.rightRow}>
+          {user ? (
             <Pressable
               onPress={openRecharge}
-              style={[
+              style={({ pressed }) => [
                 styles.balancePill,
-                deltaFlash === "up" && styles.balancePillUp,
-                deltaFlash === "down" && styles.balancePillDown,
+                pressed && { transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Text
-                style={[
-                  styles.balanceText,
-                  deltaFlash === "up" && { color: COLORS.win },
-                  deltaFlash === "down" && { color: COLORS.betclicRed },
-                ]}
-              >
-                {eur(balance)}
-              </Text>
-              <View style={styles.plusBox}>
-                <Plus size={14} color="#ffffff" strokeWidth={2.75} />
+              <Text style={styles.balanceText}>{eur(balance)}</Text>
+              <View style={styles.plusCircle}>
+                <Plus size={14} color="#ffffff" strokeWidth={2.8} />
               </View>
             </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            onPress={() => router.push("/auth")}
-            style={styles.loginBtn}
-          >
-            <Text style={styles.loginText}>Connexion</Text>
-          </Pressable>
-        )}
+          ) : (
+            <Pressable
+              onPress={() => router.push("/auth")}
+              style={({ pressed }) => [
+                styles.loginBtn,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.loginText}>Connexion</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -121,17 +137,16 @@ export function AppHeader() {
 
 const styles = StyleSheet.create({
   safeTop: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.edge,
   },
   bar: {
     height: 52,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#ffffff",
   },
   brand: {
     flexDirection: "row",
@@ -148,8 +163,45 @@ const styles = StyleSheet.create({
   },
   brandText: {
     fontSize: 17,
-    fontWeight: "800",
-    letterSpacing: -0.4,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    color: COLORS.ink,
+  },
+  adminPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(225, 0, 20, 0.10)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  adminPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+    letterSpacing: 0.3,
+  },
+  adminName: {
+    maxWidth: 110,
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.mist,
+  },
+  logoutPill: {
+    height: 34,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  logoutText: {
+    fontSize: 12,
+    fontWeight: "600",
     color: COLORS.ink,
   },
   rightRow: {
@@ -159,7 +211,9 @@ const styles = StyleSheet.create({
   },
   balancePill: {
     height: 36,
-    borderRadius: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
     backgroundColor: COLORS.elev,
     paddingLeft: 12,
     paddingRight: 6,
@@ -167,82 +221,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  balancePillUp: {
-    backgroundColor: "rgba(21, 128, 61, 0.12)",
-  },
-  balancePillDown: {
-    backgroundColor: "rgba(225, 0, 20, 0.10)",
-  },
   balanceText: {
     fontSize: 13,
     fontWeight: "700",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
-  plusBox: {
+  plusCircle: {
     width: 24,
     height: 24,
-    borderRadius: 8,
+    borderRadius: 999,
     backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
   },
   loginBtn: {
     height: 36,
-    borderRadius: 12,
+    borderRadius: 999,
     backgroundColor: COLORS.betclicRed,
     paddingHorizontal: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   loginText: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: "700",
     color: "#ffffff",
-  },
-  adminShortcut: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: COLORS.amberSoft,
-    borderWidth: 1,
-    borderColor: COLORS.amberBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  adminPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: COLORS.amberSoft,
-    borderWidth: 1,
-    borderColor: COLORS.amberBorder,
-  },
-  adminPillText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: COLORS.amber,
-  },
-  playerViewBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: COLORS.elev,
-  },
-  playerViewText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.ink,
-  },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: COLORS.elev,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

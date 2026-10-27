@@ -6,23 +6,37 @@ import { COLORS, triggerHaptic } from "@/theme/tokens";
 const QUICK_AMOUNTS = [5, 10, 25, 50] as const;
 
 export function TouchStakePad({
-  value,
-  onChange,
+  value: valueProp,
+  stakeText,
+  onChange: onChangeProp,
+  onChangeStakeText,
   balance,
-  isLoggedIn,
+  isLoggedIn = true,
+  label = "Mise (€)",
   defaultExpanded = false,
+  defaultExpandedOnMobile,
   compact = false,
   dark = false,
 }: {
-  value: string;
-  onChange: (next: string) => void;
+  value?: string;
+  stakeText?: string;
+  onChange?: (next: string) => void;
+  onChangeStakeText?: (next: string) => void;
   balance: number;
-  isLoggedIn: boolean;
+  isLoggedIn?: boolean;
+  label?: string;
+  hasError?: boolean;
+  collapsibleOnMobile?: boolean;
+  defaultExpandedOnMobile?: boolean;
   defaultExpanded?: boolean;
   compact?: boolean;
   dark?: boolean;
 }) {
-  const [padOpen, setPadOpen] = useState(defaultExpanded);
+  const value = valueProp ?? stakeText ?? "";
+  const onChange = onChangeProp ?? onChangeStakeText ?? (() => {});
+  const [padOpen, setPadOpen] = useState(
+    defaultExpandedOnMobile ?? defaultExpanded
+  );
 
   const numericValue = parseFloat((value || "0").replace(",", ".")) || 0;
   const maxBalance = Math.max(0, Math.floor(balance * 100) / 100);
@@ -50,7 +64,7 @@ export function TouchStakePad({
     <View style={styles.wrap}>
       <View style={styles.topRow}>
         <Text style={[styles.label, dark && { color: "rgba(255,255,255,0.72)" }]}>
-          Mise (€)
+          {label}
         </Text>
         <View style={styles.chipsRow}>
           {QUICK_AMOUNTS.map((amt) => {

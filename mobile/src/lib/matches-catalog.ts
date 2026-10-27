@@ -3,6 +3,8 @@ import { resolveEspnSlugForLeague } from "@/lib/real-leagues";
 
 export type MatchStatusFilter = "all" | "live" | "upcoming" | "finished";
 export type OddsProfileFilter = "all" | "favorite" | "tight";
+export type StatusFilter = MatchStatusFilter;
+export type OddsProfile = OddsProfileFilter;
 
 export const VIRTUAL_FILTER_VALUE = "__virtual__";
 

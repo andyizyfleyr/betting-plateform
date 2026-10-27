@@ -5,7 +5,11 @@ import { COLORS } from "@/theme/tokens";
 
 export type OddsTrend = "up" | "down" | null;
 
-export function oddsTrendTextColor(trend: OddsTrend, active = false): string {
+export function oddsTrendTextColor(
+  trend: OddsTrend,
+  active = false,
+  baseColor: string = COLORS.ink
+): string {
   if (active) {
     if (trend === "up") return "#6ee7b7";
     if (trend === "down") return "#fecdd3";
@@ -13,7 +17,7 @@ export function oddsTrendTextColor(trend: OddsTrend, active = false): string {
   }
   if (trend === "up") return COLORS.win;
   if (trend === "down") return COLORS.betclicRed;
-  return COLORS.ink;
+  return baseColor;
 }
 
 export function useOddsTrend(odds: number, durationMs = 4200): OddsTrend {

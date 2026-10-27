@@ -7,17 +7,19 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, ChevronDown, RotateCcw } from "lucide-react-native";
+import { Check, ChevronDown } from "lucide-react-native";
 import { COLORS } from "@/theme/tokens";
 
 export interface FilterDropdownOption<T extends string = string> {
   value: T;
   label: string;
+  pillLabel?: string;
   count?: number;
 }
 
 export interface FilterDropdownDef<T extends string = string> {
   id: string;
+  placeholder?: string;
   label?: string;
   value: T;
   defaultValue?: T;
@@ -28,11 +30,13 @@ export interface FilterDropdownDef<T extends string = string> {
 export function FilterDropdownRow({
   filters,
   onReset,
+  resultCountText,
   hasActiveFilters,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filters: FilterDropdownDef<any>[];
   onReset?: () => void;
+  resultCountText?: string | null;
   hasActiveFilters?: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -47,7 +51,7 @@ export function FilterDropdownRow({
 
   return (
     <>
-      <View style={styles.stickyBar}>
+      <View style={styles.barWrap}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -56,47 +60,70 @@ export function FilterDropdownRow({
           {filters.map((f) => {
             const defVal = f.defaultValue ?? f.options[0]?.value;
             const isActive = defVal !== undefined && f.value !== defVal;
-            const currentOpt =
-              f.options.find((o) => o.value === f.value) ?? f.options[0];
             const isOpen = openId === f.id;
-            const pillActive = isActive || isOpen;
+            const selectedOption = f.options.find((o) => o.value === f.value);
+            const fallbackPlaceholder = f.placeholder ?? f.label ?? "Filtre";
+            const displayLabel = isActive
+              ? (selectedOption?.pillLabel ??
+                selectedOption?.label ??
+                fallbackPlaceholder)
+              : fallbackPlaceholder;
 
             return (
               <Pressable
                 key={f.id}
                 onPress={() => setOpenId(isOpen ? null : f.id)}
-                style={[
+                style={({ pressed }) => [
                   styles.pill,
-                  pillActive ? styles.pillActive : styles.pillDefault,
+                  isActive ? styles.pillActive : styles.pillDefault,
+                  pressed && { transform: [{ scale: 0.98 }] },
                 ]}
               >
                 <Text
                   numberOfLines={1}
                   style={[
                     styles.pillText,
-                    pillActive ? styles.pillTextActive : styles.pillTextDefault,
+                    isActive ? styles.pillTextActive : styles.pillTextDefault,
                   ]}
                 >
-                  {currentOpt?.label ?? f.label ?? "Tous"}
+                  {displayLabel}
                 </Text>
                 <ChevronDown
-                  size={15}
-                  strokeWidth={2.2}
-                  color={pillActive ? "#ffffff" : COLORS.mist}
-                  style={isOpen ? { transform: [{ rotate: "180deg" }] } : undefined}
+                  size={16}
+                  strokeWidth={2.25}
+                  color={
+                    isActive
+                      ? "rgba(255,255,255,0.95)"
+                      : "rgba(55,65,81,0.8)"
+                  }
+                  style={
+                    isOpen ? { transform: [{ rotate: "180deg" }] } : undefined
+                  }
                 />
               </Pressable>
             );
           })}
 
           {anyActive && onReset ? (
-            <Pressable onPress={onReset} style={styles.resetPill}>
-              <RotateCcw size={13.5} strokeWidth={2.2} color={COLORS.mist} />
+            <Pressable
+              onPress={() => {
+                setOpenId(null);
+                onReset();
+              }}
+              style={({ pressed }) => [
+                styles.resetBtn,
+                pressed && { backgroundColor: "rgba(225,0,20,0.08)" },
+              ]}
+            >
               <Text style={styles.resetText}>Réinitialiser</Text>
             </Pressable>
           ) : null}
         </ScrollView>
       </View>
+
+      {resultCountText != null ? (
+        <Text style={styles.countText}>{resultCountText}</Text>
+      ) : null}
 
       <Modal
         visible={Boolean(activeDef)}
@@ -106,13 +133,9 @@ export function FilterDropdownRow({
       >
         <Pressable style={styles.backdrop} onPress={() => setOpenId(null)}>
           <Pressable
-            style={styles.menuSheet}
+            style={styles.menuCard}
             onPress={(e) => e.stopPropagation()}
           >
-            <View style={styles.grabber} />
-            {activeDef?.label ? (
-              <Text style={styles.menuTitle}>{activeDef.label}</Text>
-            ) : null}
             <ScrollView
               style={styles.optionsList}
               showsVerticalScrollIndicator={false}
@@ -126,20 +149,20 @@ export function FilterDropdownRow({
                       activeDef.onChange(opt.value);
                       setOpenId(null);
                     }}
-                    style={[
+                    style={({ pressed }) => [
                       styles.optionItem,
                       selected && styles.optionItemSelected,
+                      pressed && !selected && { backgroundColor: COLORS.elev },
                     ]}
                   >
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.optionLabel,
                         selected && styles.optionLabelSelected,
                       ]}
                     >
                       {opt.label}
-                    </Text>
-                    <View style={styles.optionRight}>
                       {typeof opt.count === "number" ? (
                         <Text
                           style={[
@@ -147,17 +170,17 @@ export function FilterDropdownRow({
                             selected && styles.optionCountSelected,
                           ]}
                         >
-                          {opt.count}
+                          {` (${opt.count})`}
                         </Text>
                       ) : null}
-                      {selected ? (
-                        <Check
-                          size={15}
-                          strokeWidth={2.6}
-                          color={COLORS.betclicRed}
-                        />
-                      ) : null}
-                    </View>
+                    </Text>
+                    {selected ? (
+                      <Check
+                        size={16}
+                        strokeWidth={2.5}
+                        color={COLORS.betclicRed}
+                      />
+                    ) : null}
                   </Pressable>
                 );
               })}
@@ -170,124 +193,123 @@ export function FilterDropdownRow({
 }
 
 const styles = StyleSheet.create({
-  stickyBar: {
+  barWrap: {
     backgroundColor: COLORS.deep,
-    paddingVertical: 6,
+    paddingVertical: 12,
   },
   rowContent: {
+    flexGrow: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingRight: 4,
   },
   pill: {
     height: 40,
-    borderRadius: 12,
+    flexGrow: 1,
+    flexShrink: 0,
+    borderRadius: 999,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    maxWidth: 220,
   },
   pillDefault: {
-    backgroundColor: COLORS.pillDefault,
+    backgroundColor: "#e7e9ed",
   },
   pillActive: {
     backgroundColor: COLORS.betclicRed,
+    shadowColor: "#e10014",
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   pillText: {
     fontSize: 14,
     fontWeight: "500",
-    flexShrink: 1,
   },
   pillTextDefault: {
-    color: COLORS.ink,
+    color: "#374151",
   },
   pillTextActive: {
     color: "#ffffff",
   },
-  resetPill: {
+  resetBtn: {
     height: 40,
-    borderRadius: 12,
+    flexShrink: 0,
+    borderRadius: 999,
     paddingHorizontal: 12,
-    backgroundColor: COLORS.pillDefault,
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
   },
   resetText: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: "500",
-    color: COLORS.mist,
+    color: COLORS.betclicRed,
+  },
+  countText: {
+    marginBottom: 10,
+    fontSize: 12.5,
+    fontWeight: "500",
+    color: COLORS.dim,
+    fontVariant: ["tabular-nums"],
   },
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(17, 24, 39, 0.36)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(17, 24, 39, 0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
   },
-  menuSheet: {
+  menuCard: {
+    width: "100%",
+    maxWidth: 340,
+    maxHeight: 340,
+    borderRadius: 16,
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 24,
-    maxHeight: "68%",
-  },
-  grabber: {
-    alignSelf: "center",
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.edge,
-    marginBottom: 10,
-  },
-  menuTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.dim,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    paddingHorizontal: 10,
-    marginBottom: 6,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.08)",
+    shadowColor: "#111827",
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
   optionsList: {
-    maxHeight: 360,
+    maxHeight: 320,
   },
   optionItem: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    borderRadius: 10,
+    gap: 12,
   },
   optionItemSelected: {
     backgroundColor: "rgba(225, 0, 20, 0.08)",
   },
   optionLabel: {
+    flex: 1,
     fontSize: 14,
     fontWeight: "500",
     color: COLORS.ink,
-    flex: 1,
-    paddingRight: 8,
   },
   optionLabelSelected: {
-    fontWeight: "700",
+    fontWeight: "600",
     color: COLORS.betclicRed,
   },
-  optionRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   optionCount: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "400",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
   optionCountSelected: {
-    color: COLORS.betclicRed,
+    fontWeight: "600",
+    color: "rgba(225, 0, 20, 0.85)",
   },
 });

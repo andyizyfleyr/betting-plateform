@@ -20,7 +20,8 @@ export type HeroPromoAction =
   | { type: "league"; slug: string; defaultLabel: string }
   | { type: "live" }
   | { type: "combo" }
-  | { type: "virtual" };
+  | { type: "virtual" }
+  | { type: "recharge" };
 
 interface HeroSlide {
   id: string;

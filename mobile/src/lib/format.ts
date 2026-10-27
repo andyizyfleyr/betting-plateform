@@ -146,3 +146,16 @@ export function todayLabel(): string {
   const d = new Date();
   return `${DAYS_LONG[d.getDay()]} ${d.getDate()} ${MONTHS_LONG[d.getMonth()]}`;
 }
+
+export function formatDayHeading(iso: string | Date): string {
+  const date = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(date.getTime())) return "Récemment";
+  const now = new Date();
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000);
+  if (diffDays === 0) return "Aujourd'hui";
+  if (diffDays === -1) return "Hier";
+  if (diffDays === 1) return "Demain";
+  return `${DAYS_LONG[date.getDay()]} ${date.getDate()} ${MONTHS_LONG[date.getMonth()]}`;
+}

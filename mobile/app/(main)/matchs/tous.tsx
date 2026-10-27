@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,7 +9,16 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ArrowLeft, Search, X } from "lucide-react-native";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Cpu,
+  History,
+  RefreshCw,
+  Search,
+  Trophy,
+  X,
+} from "lucide-react-native";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
   InfiniteScrollLoader,
@@ -17,136 +26,223 @@ import {
 } from "@/components/infinite-scroll-loader";
 import { MatchCard } from "@/components/match-card";
 import { useApp } from "@/context/app-context";
+import { api, type ClientMatch } from "@/lib/api";
 import {
-  deduplicateLeagueNames,
-  matchesLeagueChoice,
   matchesSearchAndOdds,
-  sortRealLiveByPopularity,
-  sortRealUpcomingByPopularity,
-  type OddsProfileFilter,
+  type OddsProfile,
+  sortByKickoffAsc,
+  type StatusFilter,
 } from "@/lib/matches-catalog";
-import {
-  OFFICIAL_SOCCER_LEAGUES,
-  resolveEspnSlugForLeague,
-} from "@/lib/real-leagues";
-import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { sortRealLeaguesByPriority } from "@/lib/real-leagues";
+import { useRouter, useSearchParams } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
-export default function TousMatchsScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams<{ status?: string; league?: string }>();
-  const { feedMatches, refreshFeedMatches } = useApp();
+const POLL_INTERVAL = 12_000;
 
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "live" | "upcoming">(
-    params.status === "live"
-      ? "live"
-      : params.status === "upcoming"
-        ? "upcoming"
-        : "all"
-  );
-  const [leagueFilter, setLeagueFilter] = useState<string>("all");
-  const [oddsFilter, setOddsFilter] = useState<OddsProfileFilter>("all");
+export default function AllMatchesScreen() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { setFeedMatches } = useApp();
+
+  const initialStatusParam = searchParams.get("status");
+  const initialLeagueParam = searchParams.get("league");
+
+  const [matches, setMatches] = useState<ClientMatch[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const realMatches = useMemo(
-    () =>
-      (feedMatches ?? []).filter(
-        (m) => m.source === "manual" && m.status !== "finished"
-      ),
-    [feedMatches]
+  const [filter, setFilter] = useState<StatusFilter>(() =>
+    initialStatusParam === "live" ||
+    initialStatusParam === "upcoming" ||
+    initialStatusParam === "finished"
+      ? initialStatusParam
+      : "all"
   );
+  const [leagueFilter, setLeagueFilter] = useState<string>(
+    () => initialLeagueParam || "all"
+  );
+  const [oddsProfile, setOddsProfile] = useState<OddsProfile>("all");
+  const [query, setQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInputRef = useRef<TextInput | null>(null);
 
-  const leagueNames = useMemo(
-    () => deduplicateLeagueNames(realMatches.map((m) => m.league)),
-    [realMatches]
+  const fetchList = useCallback(
+    async (isBackground = false) => {
+      try {
+        const r = await api.matches();
+        setMatches(r.matches);
+        setFeedMatches(r.matches);
+        setLoadError(null);
+      } catch (err) {
+        if (!isBackground) {
+          setLoadError(
+            err instanceof Error
+              ? err.message
+              : "Impossible de charger les rencontres officielles."
+          );
+          setMatches((prev) => prev ?? []);
+        }
+      }
+    },
+    [setFeedMatches]
   );
 
   useEffect(() => {
-    if (!params.league) return;
-    const raw = params.league;
-    const matchBySlug = leagueNames.find(
-      (lg) => resolveEspnSlugForLeague(lg) === raw
-    );
-    if (matchBySlug) {
-      setLeagueFilter(matchBySlug);
-      return;
-    }
-    const official = OFFICIAL_SOCCER_LEAGUES.find((o) => o.slug === raw);
-    if (official) setLeagueFilter(official.label);
-  }, [leagueNames, params.league]);
+    void fetchList(false);
+    const id = setInterval(() => void fetchList(true), POLL_INTERVAL);
+    return () => clearInterval(id);
+  }, [fetchList, reloadNonce]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshFeedMatches();
+    await fetchList(true);
     setRefreshing(false);
-  }, [refreshFeedMatches]);
+  }, [fetchList]);
 
-  const selectedSlug = useMemo(
-    () =>
-      leagueFilter === "all" ? null : resolveEspnSlugForLeague(leagueFilter),
-    [leagueFilter]
+  const realMatchesAll = useMemo(
+    () => (matches ?? []).filter((m) => m.source === "manual"),
+    [matches]
   );
 
-  const filteredMatches = useMemo(() => {
-    const qNorm = query.trim().toLowerCase();
-    const base = realMatches.filter((m) => {
-      if (statusFilter === "live" && m.status !== "live") return false;
-      if (statusFilter === "upcoming" && m.status !== "upcoming") return false;
-      if (!matchesLeagueChoice(m, leagueFilter, selectedSlug)) return false;
-      return matchesSearchAndOdds(m, qNorm, oddsFilter);
-    });
-    const live = sortRealLiveByPopularity(
-      base.filter((m) => m.status === "live")
-    );
-    const upcoming = sortRealUpcomingByPopularity(
-      base.filter((m) => m.status === "upcoming")
-    );
-    return [...live, ...upcoming];
-  }, [leagueFilter, oddsFilter, query, realMatches, selectedSlug, statusFilter]);
+  const qNorm = query.trim().toLowerCase();
 
-  const resetKey = `${statusFilter}|${leagueFilter}|${oddsFilter}|${query}`;
+  const searchedPool = useMemo(
+    () => realMatchesAll.filter((m) => matchesSearchAndOdds(m, qNorm, "all")),
+    [realMatchesAll, qNorm]
+  );
+
+  const activeAllCount = useMemo(
+    () => searchedPool.filter((m) => m.status !== "finished").length,
+    [searchedPool]
+  );
+  const liveAllCount = useMemo(
+    () => searchedPool.filter((m) => m.status === "live").length,
+    [searchedPool]
+  );
+  const upcomingAllCount = useMemo(
+    () => searchedPool.filter((m) => m.status === "upcoming").length,
+    [searchedPool]
+  );
+  const finishedAllCount = useMemo(
+    () => searchedPool.filter((m) => m.status === "finished").length,
+    [searchedPool]
+  );
+
+  const statusPoolForLeagueCounts = useMemo(() => {
+    if (filter === "live")
+      return searchedPool.filter((m) => m.status === "live");
+    if (filter === "upcoming")
+      return searchedPool.filter((m) => m.status === "upcoming");
+    if (filter === "finished")
+      return searchedPool.filter((m) => m.status === "finished");
+    return searchedPool.filter((m) => m.status !== "finished");
+  }, [searchedPool, filter]);
+
+  const leagueOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of statusPoolForLeagueCounts) {
+      counts.set(m.league, (counts.get(m.league) ?? 0) + 1);
+    }
+    const ordered = sortRealLeaguesByPriority([...counts.keys()]);
+    return ordered.map((lg) => ({ league: lg, count: counts.get(lg) ?? 0 }));
+  }, [statusPoolForLeagueCounts]);
+
+  const effectiveLeague = useMemo(() => {
+    if (leagueFilter === "all") return "all";
+    return realMatchesAll.some((m) => m.league === leagueFilter)
+      ? leagueFilter
+      : "all";
+  }, [leagueFilter, realMatchesAll]);
+
+  const byStatusAndLeague = useMemo(() => {
+    return statusPoolForLeagueCounts.filter(
+      (m) => effectiveLeague === "all" || m.league === effectiveLeague
+    );
+  }, [statusPoolForLeagueCounts, effectiveLeague]);
+
+  const favCount = useMemo(
+    () =>
+      byStatusAndLeague.filter((m) =>
+        matchesSearchAndOdds(m, "", "favorite")
+      ).length,
+    [byStatusAndLeague]
+  );
+  const tightCount = useMemo(
+    () =>
+      byStatusAndLeague.filter((m) => matchesSearchAndOdds(m, "", "tight"))
+        .length,
+    [byStatusAndLeague]
+  );
+
+  const filteredPool = useMemo(
+    () =>
+      byStatusAndLeague.filter((m) =>
+        matchesSearchAndOdds(m, "", oddsProfile)
+      ),
+    [byStatusAndLeague, oddsProfile]
+  );
+
+  const liveOrdered = useMemo(
+    () => filteredPool.filter((m) => m.status === "live"),
+    [filteredPool]
+  );
+  const upcomingOrdered = useMemo(
+    () => sortByKickoffAsc(filteredPool.filter((m) => m.status === "upcoming")),
+    [filteredPool]
+  );
+  const finishedOrdered = useMemo(
+    () =>
+      [...filteredPool.filter((m) => m.status === "finished")].sort(
+        (a, b) =>
+          new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()
+      ),
+    [filteredPool]
+  );
+
+  const visible = useMemo(() => {
+    if (filter === "live") return liveOrdered;
+    if (filter === "upcoming") return upcomingOrdered;
+    if (filter === "finished") return finishedOrdered;
+    return [...liveOrdered, ...upcomingOrdered];
+  }, [filter, liveOrdered, upcomingOrdered, finishedOrdered]);
+
+  const resetKey = `${filter}|${effectiveLeague}|${oddsProfile}|${qNorm}`;
   const { visibleItems, hasMore, onScrollCheck } = useInfiniteBatch(
-    filteredMatches,
+    visible,
     10,
     resetKey
   );
 
-  const liveCount = useMemo(
-    () => realMatches.filter((m) => m.status === "live").length,
-    [realMatches]
+  const visibleLiveOrdered = useMemo(
+    () => visibleItems.filter((m) => m.status === "live"),
+    [visibleItems]
   );
-  const upCount = useMemo(
-    () => realMatches.filter((m) => m.status === "upcoming").length,
-    [realMatches]
+  const visibleUpcomingOrdered = useMemo(
+    () => visibleItems.filter((m) => m.status === "upcoming"),
+    [visibleItems]
+  );
+  const visibleFinishedOrdered = useMemo(
+    () => visibleItems.filter((m) => m.status === "finished"),
+    [visibleItems]
   );
 
-  const leagueOptions = useMemo(() => {
-    const opts = [
-      { value: "all", label: "Toutes les ligues", count: realMatches.length },
-    ];
-    for (const lg of leagueNames) {
-      const slug = resolveEspnSlugForLeague(lg);
-      const count = realMatches.filter((m) =>
-        matchesLeagueChoice(m, lg, slug)
-      ).length;
-      opts.push({ value: lg, label: lg, count });
+  const toggleMobileSearch = () => {
+    if (mobileSearchOpen) {
+      setQuery("");
+      setMobileSearchOpen(false);
+    } else {
+      setMobileSearchOpen(true);
+      setTimeout(() => searchInputRef.current?.focus(), 40);
     }
-    if (
-      leagueFilter !== "all" &&
-      !opts.some((o) => o.value === leagueFilter)
-    ) {
-      opts.push({ value: leagueFilter, label: leagueFilter, count: 0 });
-    }
-    return opts;
-  }, [leagueFilter, leagueNames, realMatches]);
+  };
 
   return (
     <ScrollView
       style={styles.page}
       contentContainerStyle={styles.content}
+      stickyHeaderIndices={[2]}
       showsVerticalScrollIndicator={false}
-      stickyHeaderIndices={[1]}
       onScroll={onScrollCheck}
       scrollEventThrottle={16}
       refreshControl={
@@ -158,113 +254,298 @@ export default function TousMatchsScreen() {
         />
       }
     >
-      {/* En-tête + recherche */}
-      <View style={styles.topSection}>
-        <View style={styles.titleRow}>
+      {/* 0 : En-tête identique à src/app/(main)/matchs/tous/page.tsx */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
           <Pressable
-            onPress={() => router.push("/matchs")}
-            style={styles.backBtn}
+            onPress={() => router.back("/matchs")}
+            style={({ pressed }) => [
+              styles.roundBackBtn,
+              pressed && { transform: [{ scale: 0.95 }] },
+            ]}
           >
-            <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
+            <ArrowLeft size={16} color={COLORS.ink} strokeWidth={2.2} />
           </Pressable>
-          <Text style={styles.pageTitle}>Tous les matchs</Text>
-          <Pressable
-            onPress={() => router.push("/resultats")}
-            style={styles.resultsLink}
-          >
-            <Text style={styles.resultsLinkText}>Résultats</Text>
-          </Pressable>
+          <Text numberOfLines={1} style={styles.pageTitle}>
+            {effectiveLeague !== "all" ? effectiveLeague : "Tous les matchs"}
+          </Text>
         </View>
 
-        <View style={styles.searchBar}>
-          <Search size={16} color={COLORS.dim} strokeWidth={2.2} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Club ou compétition officielle…"
-            placeholderTextColor={COLORS.dim}
-            style={styles.searchInput}
-          />
-          {query.length > 0 ? (
-            <Pressable hitSlop={8} onPress={() => setQuery("")}>
-              <X size={16} color={COLORS.dim} strokeWidth={2.2} />
-            </Pressable>
-          ) : null}
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => router.push("/resultats?universe=real")}
+            style={styles.roundActionBtn}
+          >
+            <History size={16} color={COLORS.ink} strokeWidth={2.2} />
+          </Pressable>
+          <Pressable
+            onPress={toggleMobileSearch}
+            style={[
+              styles.roundActionBtn,
+              (mobileSearchOpen || Boolean(query)) &&
+                styles.roundActionBtnActive,
+            ]}
+          >
+            {mobileSearchOpen ? (
+              <X size={16} color="#ffffff" strokeWidth={2.3} />
+            ) : (
+              <Search
+                size={16}
+                color={query ? "#ffffff" : COLORS.ink}
+                strokeWidth={2.2}
+              />
+            )}
+          </Pressable>
         </View>
       </View>
 
-      {/* Barre sticky de filtres 40 px */}
-      <FilterDropdownRow
-        filters={[
-          {
-            id: "status",
-            label: "Statut du match",
-            value: statusFilter,
-            defaultValue: "all",
-            onChange: setStatusFilter,
-            options: [
-              { value: "all", label: "Tous les statuts", count: realMatches.length },
-              { value: "live", label: "En direct", count: liveCount },
-              { value: "upcoming", label: "À venir", count: upCount },
-            ],
-          },
-          {
-            id: "league",
-            label: "Compétition",
-            value: leagueFilter,
-            defaultValue: "all",
-            onChange: setLeagueFilter,
-            options: leagueOptions,
-          },
-          {
-            id: "odds",
-            label: "Profil de cote",
-            value: oddsFilter,
-            defaultValue: "all",
-            onChange: setOddsFilter,
-            options: [
-              { value: "all", label: "Toutes les cotes" },
-              { value: "favorite", label: "Favori net (≤ 1,85)" },
-              { value: "tight", label: "Match serré (> 1,85)" },
-            ],
-          },
-        ]}
-        onReset={() => {
-          setStatusFilter("all");
-          setLeagueFilter("all");
-          setOddsFilter("all");
-          setQuery("");
-        }}
-      />
+      {/* 1 : Barre de recherche mobile dépliable */}
+      <View>
+        {mobileSearchOpen || query ? (
+          <View style={styles.searchBar}>
+            <Search size={16} color={COLORS.dim} strokeWidth={2.1} />
+            <TextInput
+              ref={searchInputRef}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Rechercher un match, un club ou une compétition…"
+              placeholderTextColor={COLORS.dim}
+              style={styles.searchInput}
+            />
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                setQuery("");
+                setMobileSearchOpen(false);
+              }}
+            >
+              <X size={16} color={COLORS.dim} strokeWidth={2.2} />
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
 
-      <Text style={styles.countLine}>
-        {filteredMatches.length} match
-        {filteredMatches.length > 1 ? "s" : ""} officiel
-        {filteredMatches.length > 1 ? "s" : ""}
-      </Text>
+      {/* 2 : Rangée unique collante de 3 pastilles dropdown 40 px */}
+      <View style={styles.stickyFilterWrap}>
+        <FilterDropdownRow
+          filters={[
+            {
+              id: "status",
+              placeholder: "Statut",
+              value: filter,
+              defaultValue: "all",
+              onChange: setFilter,
+              options: [
+                {
+                  value: "all",
+                  label: "Affiche",
+                  count: matches !== null ? activeAllCount : undefined,
+                },
+                {
+                  value: "live",
+                  label: "En direct",
+                  count: matches !== null ? liveAllCount : undefined,
+                },
+                {
+                  value: "upcoming",
+                  label: "Avant-match",
+                  count: matches !== null ? upcomingAllCount : undefined,
+                },
+                {
+                  value: "finished",
+                  label: "Terminés",
+                  count: matches !== null ? finishedAllCount : undefined,
+                },
+              ],
+            },
+            {
+              id: "league",
+              placeholder: "Ligue",
+              value: effectiveLeague,
+              defaultValue: "all",
+              onChange: setLeagueFilter,
+              options: [
+                {
+                  value: "all",
+                  label: "Toutes ligues",
+                  count:
+                    matches !== null
+                      ? statusPoolForLeagueCounts.length
+                      : undefined,
+                },
+                ...leagueOptions.map(({ league, count }) => ({
+                  value: league,
+                  label: league,
+                  count: matches !== null ? count : undefined,
+                })),
+              ],
+            },
+            {
+              id: "odds",
+              placeholder: "Cotes",
+              value: oddsProfile,
+              defaultValue: "all",
+              onChange: setOddsProfile,
+              options: [
+                {
+                  value: "all",
+                  label: "Toutes cotes",
+                  count: matches !== null ? byStatusAndLeague.length : undefined,
+                },
+                {
+                  value: "favorite",
+                  label: "Favori net",
+                  count: matches !== null ? favCount : undefined,
+                },
+                {
+                  value: "tight",
+                  label: "Match serré",
+                  count: matches !== null ? tightCount : undefined,
+                },
+              ],
+            },
+          ]}
+          onReset={() => {
+            setFilter("all");
+            setLeagueFilter("all");
+            setOddsProfile("all");
+          }}
+          resultCountText={
+            matches !== null
+              ? `${visible.length} match${visible.length > 1 ? "s" : ""} officiel${
+                  visible.length > 1 ? "s" : ""
+                }`
+              : null
+          }
+        />
+      </View>
 
-      {feedMatches === null ? (
-        <View style={styles.loader}>
+      {/* 3 : Contenu */}
+      {matches === null ? (
+        <View style={styles.loaderBox}>
           <ActivityIndicator size="small" color={COLORS.betclicRed} />
         </View>
-      ) : visibleItems.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>Aucun match officiel trouvé</Text>
-          <Text style={styles.emptyDesc}>
-            Modifiez vos filtres ou consultez les matchs virtuels 24h/24.
-          </Text>
+      ) : loadError && matches.length === 0 ? (
+        <View style={styles.errorCard}>
+          <View style={styles.errorIconCircle}>
+            <AlertTriangle size={20} color="#d97706" strokeWidth={2.1} />
+          </View>
+          <Text style={styles.errorTitle}>Connexion au serveur interrompue</Text>
+          <Text style={styles.errorSub}>{loadError}</Text>
           <Pressable
-            onPress={() => router.push("/matchs/virtuels")}
-            style={styles.virtualBtn}
+            onPress={() => {
+              setMatches(null);
+              setLoadError(null);
+              setReloadNonce((n) => n + 1);
+            }}
+            style={styles.retryBtn}
           >
-            <Text style={styles.virtualBtnText}>Voir les virtuels 24h/24</Text>
+            <RefreshCw size={14} color="#ffffff" strokeWidth={2.3} />
+            <Text style={styles.retryBtnText}>Réessayer</Text>
           </Pressable>
         </View>
+      ) : visible.length === 0 ? (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyCircle}>
+            <Trophy size={20} color={COLORS.dim} strokeWidth={1.9} />
+          </View>
+          <Text style={styles.emptyTitle}>
+            {filter === "live"
+              ? "Aucun match officiel en direct actuellement"
+              : "Aucun match officiel dans ce filtre"}
+          </Text>
+          <Text style={styles.emptySub}>
+            {filter === "live"
+              ? "Retrouvez les prochaines affiches en avant-match ou pariez en direct sur les matchs virtuels 24h/24."
+              : "Modifiez ou réinitialisez les filtres pour afficher l'ensemble des rencontres."}
+          </Text>
+          <View style={styles.emptyActions}>
+            {filter === "live" && upcomingAllCount > 0 ? (
+              <Pressable
+                onPress={() => setFilter("upcoming")}
+                style={styles.emptySecondaryBtn}
+              >
+                <Text style={styles.emptySecondaryText}>
+                  Avant-match ({upcomingAllCount})
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => router.push("/matchs/virtuels")}
+              style={styles.emptyPrimaryBtn}
+            >
+              <Cpu size={14} color="#ffffff" strokeWidth={2.3} />
+              <Text style={styles.emptyPrimaryText}>Matchs virtuels 24h/24</Text>
+            </Pressable>
+          </View>
+        </View>
       ) : (
-        <View style={styles.list}>
-          {visibleItems.map((m) => (
-            <MatchCard key={m.id} match={m} />
-          ))}
+        <View style={styles.sectionsStack}>
+          {visibleLiveOrdered.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <View style={styles.sectionHeadLeft}>
+                  <View style={styles.emeraldDot} />
+                  <Text style={styles.sectionHeadTitle}>EN DIRECT</Text>
+                </View>
+                <View style={styles.emeraldCountPill}>
+                  <Text style={styles.emeraldCountText}>
+                    {liveOrdered.length}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.cardStack}>
+                {visibleLiveOrdered.map((m) => (
+                  <MatchCard key={m.id} match={m} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {visibleUpcomingOrdered.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionHeadTitle}>AVANT-MATCH</Text>
+                <View style={styles.grayCountPill}>
+                  <Text style={styles.grayCountText}>
+                    {upcomingOrdered.length}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.cardStack}>
+                {visibleUpcomingOrdered.map((m) => (
+                  <MatchCard key={m.id} match={m} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {visibleFinishedOrdered.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionHeadTitle}>TERMINÉS RÉCEMMENT</Text>
+                <Pressable
+                  onPress={() => router.push("/resultats?universe=real")}
+                  style={styles.historyLink}
+                >
+                  <History
+                    size={14}
+                    color={COLORS.betclicRed}
+                    strokeWidth={2.2}
+                  />
+                  <Text style={styles.historyLinkText}>
+                    Tout l&apos;historique
+                  </Text>
+                </Pressable>
+              </View>
+              <View style={styles.cardStack}>
+                {visibleFinishedOrdered.map((m) => (
+                  <MatchCard key={m.id} match={m} />
+                ))}
+              </View>
+            </View>
+          ) : null}
+
           <InfiniteScrollLoader hasMore={hasMore} />
         </View>
       )}
@@ -278,23 +559,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 24,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 32,
   },
-  topSection: {
-    gap: 10,
-    marginBottom: 4,
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  titleRow: {
+  headerLeft: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  backBtn: {
+  roundBackBtn: {
     width: 36,
     height: 36,
-    borderRadius: 11,
+    borderRadius: 18,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: COLORS.edge,
@@ -302,30 +587,35 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pageTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: COLORS.ink,
     flex: 1,
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    color: COLORS.ink,
   },
-  resultsLink: {
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: COLORS.pillDefault,
-    paddingHorizontal: 11,
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  roundActionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
   },
-  resultsLinkText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.ink,
+  roundActionBtnActive: {
+    backgroundColor: COLORS.betclicRed,
   },
   searchBar: {
+    marginTop: 10,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -333,56 +623,191 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "500",
+    fontSize: 14,
     color: COLORS.ink,
     paddingVertical: 0,
   },
-  countLine: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.dim,
-    marginTop: 4,
-    marginBottom: 8,
+  stickyFilterWrap: {
+    backgroundColor: COLORS.deep,
   },
-  loader: {
-    paddingVertical: 36,
+  loaderBox: {
+    paddingVertical: 48,
     alignItems: "center",
   },
-  list: {
-    gap: 10,
-  },
-  emptyCard: {
+  errorCard: {
+    marginTop: 32,
     borderRadius: 16,
-    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: COLORS.edge,
-    padding: 22,
+    borderColor: "rgba(245,158,11,0.3)",
+    backgroundColor: "#ffffff",
+    padding: 20,
+    alignItems: "center",
+  },
+  errorIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(245,158,11,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorTitle: {
+    marginTop: 12,
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  errorSub: {
+    marginTop: 4,
+    textAlign: "center",
+    fontSize: 12.5,
+    color: COLORS.mist,
+    lineHeight: 18,
+  },
+  retryBtn: {
+    marginTop: 16,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 16,
+    flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
+  retryBtnText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  emptyState: {
+    marginTop: 40,
+    alignItems: "center",
+  },
+  emptyCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyTitle: {
-    fontSize: 14.5,
-    fontWeight: "800",
+    marginTop: 12,
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "600",
     color: COLORS.ink,
   },
-  emptyDesc: {
+  emptySub: {
+    marginTop: 4,
+    maxWidth: 290,
+    textAlign: "center",
     fontSize: 12.5,
     color: COLORS.dim,
-    textAlign: "center",
+    lineHeight: 18,
   },
-  virtualBtn: {
-    marginTop: 4,
+  emptyActions: {
+    marginTop: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+  },
+  emptySecondaryBtn: {
     height: 38,
-    borderRadius: 11,
-    backgroundColor: COLORS.betclicRed,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
     paddingHorizontal: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  virtualBtnText: {
-    fontSize: 12.5,
+  emptySecondaryText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  emptyPrimaryBtn: {
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  emptyPrimaryText: {
+    fontSize: 12,
     fontWeight: "700",
     color: "#ffffff",
+  },
+  sectionsStack: {
+    gap: 20,
+  },
+  section: {
+    gap: 10,
+  },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 2,
+  },
+  sectionHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  emeraldDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#059669",
+  },
+  sectionHeadTitle: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    color: COLORS.ink,
+  },
+  emeraldCountPill: {
+    borderRadius: 999,
+    backgroundColor: "rgba(5,150,105,0.12)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  emeraldCountText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#047857",
+    fontVariant: ["tabular-nums"],
+  },
+  grayCountPill: {
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  grayCountText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: COLORS.dim,
+    fontVariant: ["tabular-nums"],
+  },
+  historyLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  historyLinkText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+  },
+  cardStack: {
+    gap: 12,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -8,239 +8,274 @@ import {
   Text,
   View,
 } from "react-native";
-import { ArrowLeft } from "lucide-react-native";
+import {
+  ArrowDownLeft,
+  ArrowLeft,
+  ArrowUpRight,
+  X,
+} from "lucide-react-native";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
   InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { useApp } from "@/context/app-context";
-import {
-  api,
-  ApiHttpError,
-  generateIdempotencyKey,
-  type ClientWalletData,
-  type ClientWalletEntry,
-} from "@/lib/api";
-import { getCachedWalletSnapshot } from "@/lib/entity-cache";
-import { eur, formatFullDateTime } from "@/lib/format";
-import { Redirect, useRouter } from "@/lib/router";
+import { api, type ClientWalletData } from "@/lib/api";
+import { getCachedWallet } from "@/lib/entity-cache";
+import { eur, formatPlacedAt } from "@/lib/format";
+import { createIdempotencyKey } from "@/lib/http";
+import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
+
+type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits";
 
 export default function TransactionsScreen() {
   const router = useRouter();
-  const { user, authReady, setBalance, toast } = useApp();
+  const { user, setBalance, toast, betsVersion } = useApp();
 
   const [wallet, setWallet] = useState<ClientWalletData | null>(() =>
-    getCachedWalletSnapshot()
+    getCachedWallet()
   );
-  const [loading, setLoading] = useState<boolean>(!wallet);
+  const [kindFilter, setKindFilter] = useState<TxKindFilter>("all");
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const cancelSlotRef = useRef<Map<number, string>>(new Map());
+  const cancelInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const data = await api.wallet();
-      setWallet(data);
-      setBalance(data.balance);
+      const w = await api.wallet();
+      setWallet(w);
     } catch {
-      /* ignore */
-    } finally {
-      setLoading(false);
+      /* silencieux */
     }
-  }, [setBalance, user]);
+  }, [user]);
 
   useEffect(() => {
     void load();
+  }, [load, betsVersion]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
   }, [load]);
 
-  if (authReady && !user) {
-    return <Redirect href="/auth" />;
-  }
-
-  const entries: ClientWalletEntry[] = useMemo(() => {
-    const raw = wallet?.entries ?? [];
-    return [...raw].sort(
-      (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)
-    );
-  }, [wallet?.entries]);
-
-  const filtered = useMemo(() => {
-    return entries.filter((e) => {
-      if (typeFilter !== "all" && e.type !== typeFilter) return false;
-      if (statusFilter === "pending" && e.status !== "pending") return false;
-      if (statusFilter === "completed" && e.status === "pending") return false;
-      return true;
-    });
-  }, [entries, statusFilter, typeFilter]);
-
-  const resetKey = `${typeFilter}|${statusFilter}`;
-  const { visibleItems, hasMore, onScrollCheck } = useInfiniteBatch(
-    filtered,
-    10,
-    resetKey
-  );
-
-  const handleCancelWithdrawal = async (rawId?: number) => {
-    if (!rawId) return;
+  const cancelWithdrawal = async (withdrawalId: number) => {
+    if (cancellingId != null || cancelInFlightRef.current) return;
+    cancelInFlightRef.current = true;
+    const idemKey =
+      cancelSlotRef.current.get(withdrawalId) ??
+      createIdempotencyKey("wdcancel");
+    cancelSlotRef.current.set(withdrawalId, idemKey);
+    setCancellingId(withdrawalId);
     try {
-      const res = await api.cancelWithdrawal(
-        rawId,
-        generateIdempotencyKey("wdc")
-      );
+      const res = await api.cancelWithdrawal(withdrawalId, idemKey);
+      cancelSlotRef.current.delete(withdrawalId);
       setBalance(res.balance);
-      await load();
-      toast({ kind: "info", title: "Retrait annulé" });
-    } catch (err) {
+      void load();
+      toast({ kind: "success", title: "Retrait annulé et recrédité" });
+    } catch (e) {
       toast({
         kind: "error",
         title: "Annulation impossible",
-        description:
-          err instanceof ApiHttpError ? err.message : "Veuillez réessayer.",
+        description: e instanceof Error ? e.message : undefined,
       });
+    } finally {
+      cancelInFlightRef.current = false;
+      setCancellingId(null);
     }
   };
+
+  const filteredTx = useMemo(() => {
+    const list = [...(wallet?.entries ?? [])].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    if (kindFilter === "credits") return list.filter((t) => t.amount > 0);
+    if (kindFilter === "debits") return list.filter((t) => t.amount < 0);
+    if (kindFilter === "withdrawals") {
+      return list.filter((t) => t.type === "withdrawal");
+    }
+    if (kindFilter === "deposits") {
+      return list.filter((t) => t.type === "deposit");
+    }
+    return list;
+  }, [wallet, kindFilter]);
+
+  const { visibleItems: visibleTx, hasMore, onScrollCheck } = useInfiniteBatch(
+    filteredTx,
+    10,
+    kindFilter
+  );
+
+  if (!user) {
+    return (
+      <View style={[styles.page, styles.guestWrap]}>
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>
+            Connectez-vous pour consulter vos mouvements
+          </Text>
+          <Pressable
+            onPress={() => router.push("/auth?mode=login")}
+            style={styles.redBtn}
+          >
+            <Text style={styles.redBtnText}>Connexion</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <ScrollView
       style={styles.page}
       contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
       stickyHeaderIndices={[1]}
+      showsVerticalScrollIndicator={false}
       onScroll={onScrollCheck}
       scrollEventThrottle={16}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            await load();
-            setRefreshing(false);
-          }}
+          onRefresh={onRefresh}
           colors={[COLORS.betclicRed]}
           tintColor={COLORS.betclicRed}
         />
       }
     >
-      <View style={styles.topSection}>
-        <View style={styles.navBar}>
-          <Pressable
-            onPress={() => router.back("/parametres")}
-            style={styles.backBtn}
-          >
-            <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
-          </Pressable>
-          <Text style={styles.navTitle}>Transactions</Text>
-          <View style={{ width: 36 }} />
-        </View>
-
-        {wallet ? (
-          <View style={styles.kpiRow}>
-            <View style={styles.kpiBox}>
-              <Text style={styles.kpiLabel}>Déposé</Text>
-              <Text style={styles.kpiVal}>
-                {eur(wallet.summary.totalDeposited)}
-              </Text>
-            </View>
-            <View style={styles.kpiBox}>
-              <Text style={styles.kpiLabel}>Retiré</Text>
-              <Text style={styles.kpiVal}>
-                {eur(wallet.summary.totalWithdrawn)}
-              </Text>
-            </View>
-            <View style={styles.kpiBox}>
-              <Text style={styles.kpiLabel}>En attente</Text>
-              <Text style={styles.kpiVal}>
-                {eur(wallet.summary.pendingWithdrawals)}
-              </Text>
-            </View>
-          </View>
-        ) : null}
+      {/* 0 : En-tête compact identique à src/app/(main)/parametres/transactions/page.tsx */}
+      <View style={styles.headerRow}>
+        <Pressable
+          onPress={() => router.back("/parametres")}
+          style={({ pressed }) => [
+            styles.roundBackBtn,
+            pressed && { transform: [{ scale: 0.95 }] },
+          ]}
+        >
+          <ArrowLeft size={14} color={COLORS.ink} strokeWidth={2.3} />
+        </Pressable>
+        <Text numberOfLines={1} style={styles.headerTitle}>
+          Mouvements
+        </Text>
       </View>
 
-      <FilterDropdownRow
-        filters={[
-          {
-            id: "type",
-            label: "Type d'opération",
-            value: typeFilter,
-            defaultValue: "all",
-            onChange: setTypeFilter,
-            options: [
-              { value: "all", label: "Toutes opérations", count: entries.length },
-              { value: "deposit", label: "Dépôts" },
-              { value: "withdrawal", label: "Retraits" },
-              { value: "win", label: "Gains" },
-              { value: "cashout", label: "Cash Out" },
-              { value: "stake", label: "Mises" },
-            ],
-          },
-          {
-            id: "status",
-            label: "Statut",
-            value: statusFilter,
-            defaultValue: "all",
-            onChange: setStatusFilter,
-            options: [
-              { value: "all", label: "Tous statuts" },
-              { value: "completed", label: "Validées" },
-              { value: "pending", label: "En attente" },
-            ],
-          },
-        ]}
-        onReset={() => {
-          setTypeFilter("all");
-          setStatusFilter("all");
-        }}
-      />
+      {/* 1 : Filtre dropdown collant */}
+      <View style={styles.stickyFilterWrap}>
+        <FilterDropdownRow
+          filters={[
+            {
+              id: "kind",
+              placeholder: "Mouvement",
+              value: kindFilter,
+              defaultValue: "all",
+              onChange: (v) => setKindFilter(v as TxKindFilter),
+              options: [
+                { value: "all", label: "Tous les mouvements" },
+                { value: "credits", label: "Crédits & gains (+)" },
+                { value: "debits", label: "Mises & débits (-)" },
+                { value: "deposits", label: "Dépôts" },
+                { value: "withdrawals", label: "Retraits" },
+              ],
+            },
+          ]}
+          onReset={() => setKindFilter("all")}
+          resultCountText={
+            wallet
+              ? `${filteredTx.length} ${
+                  filteredTx.length > 1 ? "mouvements" : "mouvement"
+                }`
+              : null
+          }
+        />
+      </View>
 
-      <Text style={styles.countLine}>
-        {filtered.length} mouvement{filtered.length > 1 ? "s" : ""}
-      </Text>
-
-      {loading && entries.length === 0 ? (
-        <View style={styles.loader}>
+      {/* 2 : Liste */}
+      {wallet === null ? (
+        <View style={styles.loaderBox}>
           <ActivityIndicator size="small" color={COLORS.betclicRed} />
         </View>
-      ) : visibleItems.length === 0 ? (
+      ) : visibleTx.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>Aucune transaction trouvée.</Text>
+          <Text style={styles.emptyTitle}>
+            Aucun mouvement dans cette catégorie
+          </Text>
         </View>
       ) : (
-        <View style={styles.list}>
-          {visibleItems.map((e) => {
-            const positive = e.amount >= 0;
+        <View style={{ gap: 6 }}>
+          {visibleTx.map((t) => {
+            const positive = t.amount >= 0;
+            const canCancel = Boolean(
+              t.type === "withdrawal" && t.canCancel && t.rawId != null
+            );
+
             return (
-              <View key={e.id} style={styles.rowCard}>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.rowTitle}>{e.title}</Text>
-                  <Text style={styles.rowSub}>{e.subtitle}</Text>
-                  <Text style={styles.rowDate}>
-                    {formatFullDateTime(e.createdAt)}
-                  </Text>
-                </View>
-                <View style={{ alignItems: "flex-end", gap: 5 }}>
-                  <Text
+              <View key={t.id} style={styles.txRow}>
+                <View style={styles.txLeft}>
+                  <View
                     style={[
-                      styles.rowAmt,
-                      { color: positive ? COLORS.win : COLORS.ink },
+                      styles.txIconCircle,
+                      positive ? styles.txIconPos : styles.txIconNeg,
                     ]}
                   >
-                    {positive ? `+${eur(e.amount)}` : eur(e.amount)}
+                    {positive ? (
+                      <ArrowDownLeft
+                        size={14}
+                        color={COLORS.win}
+                        strokeWidth={2.3}
+                      />
+                    ) : (
+                      <ArrowUpRight
+                        size={14}
+                        color={COLORS.mist}
+                        strokeWidth={2.3}
+                      />
+                    )}
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={1} style={styles.txTitle}>
+                      {t.title}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.txSub}>
+                      {t.subtitle} · {formatPlacedAt(t.createdAt)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.txRight}>
+                  <Text
+                    style={[
+                      styles.txAmount,
+                      positive && { color: COLORS.win },
+                    ]}
+                  >
+                    {positive
+                      ? `+${eur(t.amount)}`
+                      : `-${eur(Math.abs(t.amount))}`}
                   </Text>
-                  {e.canCancel && e.rawId ? (
+                  {canCancel ? (
                     <Pressable
-                      onPress={() => handleCancelWithdrawal(e.rawId)}
-                      style={styles.cancelPill}
+                      disabled={cancellingId === t.rawId}
+                      onPress={() =>
+                        t.rawId != null && cancelWithdrawal(t.rawId)
+                      }
+                      style={styles.cancelBtn}
                     >
-                      <Text style={styles.cancelPillText}>Annuler</Text>
+                      {cancellingId === t.rawId ? (
+                        <ActivityIndicator size="small" color={COLORS.ink} />
+                      ) : (
+                        <X
+                          size={12}
+                          color={COLORS.betclicRed}
+                          strokeWidth={2.4}
+                        />
+                      )}
+                      <Text style={styles.cancelBtnText}>Annuler</Text>
                     </Pressable>
-                  ) : (
-                    <Text style={styles.statusText}>{e.status}</Text>
-                  )}
+                  ) : null}
                 </View>
               </View>
             );
@@ -253,89 +288,138 @@ export default function TransactionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: COLORS.deep },
-  content: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 26 },
-  topSection: { gap: 10, marginBottom: 4 },
-  navBar: {
+  page: {
+    flex: 1,
+    backgroundColor: COLORS.deep,
+  },
+  content: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 28,
+  },
+  guestWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 16,
+  },
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 8,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
+  roundBackBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: COLORS.edge,
     alignItems: "center",
     justifyContent: "center",
   },
-  navTitle: { fontSize: 17, fontWeight: "800", color: COLORS.ink },
-  kpiRow: { flexDirection: "row", gap: 8 },
-  kpiBox: {
+  headerTitle: {
     flex: 1,
-    borderRadius: 13,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    padding: 10,
-    gap: 2,
-  },
-  kpiLabel: { fontSize: 10.5, fontWeight: "600", color: COLORS.dim },
-  kpiVal: {
-    fontSize: 13.5,
+    fontSize: 15,
     fontWeight: "800",
     color: COLORS.ink,
-    fontVariant: ["tabular-nums"],
   },
-  countLine: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.dim,
-    marginTop: 4,
-    marginBottom: 8,
+  stickyFilterWrap: {
+    backgroundColor: COLORS.deep,
   },
-  loader: { paddingVertical: 36, alignItems: "center" },
-  list: { gap: 9 },
-  emptyCard: {
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    padding: 24,
+  loaderBox: {
+    paddingVertical: 44,
     alignItems: "center",
   },
-  emptyText: { fontSize: 13, fontWeight: "600", color: COLORS.dim },
-  rowCard: {
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
+  emptyCard: {
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.edge,
-    padding: 13,
+    backgroundColor: "#ffffff",
+    padding: 16,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+    textAlign: "center",
+  },
+  redBtn: {
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  redBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  txRow: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
-  rowTitle: { fontSize: 13.5, fontWeight: "800", color: COLORS.ink },
-  rowSub: { fontSize: 12, color: COLORS.mist },
-  rowDate: { fontSize: 10.5, color: COLORS.dim },
-  rowAmt: {
-    fontSize: 14.5,
+  txLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  txIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  txIconPos: {
+    backgroundColor: "rgba(21,128,61,0.12)",
+  },
+  txIconNeg: {
+    backgroundColor: COLORS.elev,
+  },
+  txTitle: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  txSub: {
+    fontSize: 10.5,
+    color: COLORS.dim,
+  },
+  txRight: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  txAmount: {
+    fontSize: 13,
     fontWeight: "800",
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
-  statusText: { fontSize: 10.5, fontWeight: "700", color: COLORS.dim },
-  cancelPill: {
-    borderRadius: 7,
-    backgroundColor: "rgba(225, 0, 20, 0.10)",
+  cancelBtn: {
+    height: 26,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: COLORS.elev,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
-  cancelPillText: {
-    fontSize: 11,
+  cancelBtnText: {
+    fontSize: 10,
     fontWeight: "700",
-    color: COLORS.betclicRed,
+    color: COLORS.ink,
   },
 });

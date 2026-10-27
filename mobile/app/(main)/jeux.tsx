@@ -6,28 +6,35 @@ import {
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowLeft, Play } from "lucide-react-native";
+import { Play } from "lucide-react-native";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
-const GAMES = [
+const TAP_IMAGE = require("../../assets/games/tap-win.jpg") as ImageSourcePropType;
+const ACC_IMAGE =
+  require("../../assets/games/accelerator-pro.jpg") as ImageSourcePropType;
+
+const MINI_GAMES = [
   {
-    id: "tap",
     href: "/tap",
-    title: "Tap & Win",
-    subtitle: "Frappez l'or à chaque impulsion · Encaissez avant le crash",
-    badge: "INSTANTANÉ",
-    image: require("../../assets/games/tap-win.jpg"),
+    badge: "Classique",
+    tag: "Jusqu'à ×50",
+    title: "Tap Win",
+    subtitle:
+      "Enchaînez les pressions pour faire grimper le multiplicateur et encaissez avant le crash.",
+    image: TAP_IMAGE,
   },
   {
-    id: "accelerator",
     href: "/accelerator",
+    badge: "Temps réel",
+    tag: "Turbo Live",
     title: "Accelerator Pro",
-    subtitle: "Jauge de risque ×1,01 – ×2,00 · Maintenez pour accélérer",
-    badge: "PRO",
-    image: require("../../assets/games/accelerator-pro.jpg"),
+    subtitle:
+      "Maintenez l'accélérateur pour pousser l'aiguille dans le rouge et relâchez au bon moment.",
+    image: ACC_IMAGE,
   },
 ] as const;
 
@@ -40,52 +47,56 @@ export default function JeuxScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.navBar}>
-        <Pressable
-          onPress={() => router.back("/parametres")}
-          style={styles.backBtn}
-        >
-          <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
-        </Pressable>
-        <Text style={styles.pageTitle}>Jeux instantanés</Text>
-      </View>
+      <Text style={styles.pageTitle}>Mini-jeux</Text>
 
       <View style={styles.grid}>
-        {GAMES.map((g) => (
+        {MINI_GAMES.map(({ href, badge, tag, title, subtitle, image }) => (
           <Pressable
-            key={g.id}
-            onPress={() => router.push(g.href)}
-            style={styles.card}
+            key={href}
+            onPress={() => router.push(href)}
+            style={({ pressed }) => [
+              styles.card,
+              pressed && { transform: [{ scale: 0.99 }] },
+            ]}
           >
-            <View style={styles.imageBox}>
-              <Image
-                source={g.image}
-                resizeMode="cover"
-                style={styles.image}
-              />
+            <View style={styles.mediaBox}>
+              <Image source={image} style={styles.image} resizeMode="cover" />
+
               <LinearGradient
-                colors={["transparent", "rgba(2, 6, 23, 0.88)"]}
-                locations={[0.25, 1]}
+                colors={[
+                  "rgba(0,0,0,0.18)",
+                  "rgba(0,0,0,0.25)",
+                  "rgba(0,0,0,0.86)",
+                ]}
+                locations={[0, 0.48, 1]}
                 style={StyleSheet.absoluteFillObject}
               />
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{g.badge}</Text>
+
+              <View style={styles.topBadgesRow}>
+                <View style={styles.darkBadge}>
+                  <Text style={styles.darkBadgeText}>{badge}</Text>
+                </View>
+                <View style={styles.amberBadge}>
+                  <Text style={styles.amberBadgeText}>{tag}</Text>
+                </View>
               </View>
-              <View style={styles.overlayBottom}>
+
+              <View style={styles.bottomRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.gameTitle}>{g.title}</Text>
-                  <Text numberOfLines={2} style={styles.gameSub}>
-                    {g.subtitle}
+                  <Text style={styles.cardTitle}>{title}</Text>
+                  <Text numberOfLines={2} style={styles.cardSub}>
+                    {subtitle}
                   </Text>
                 </View>
-                <View style={styles.playBtn}>
+
+                <View style={styles.playCircle}>
                   <Play
-                    size={15}
+                    size={16}
                     color="#ffffff"
                     fill="#ffffff"
                     strokeWidth={2.2}
+                    style={{ marginLeft: 2 }}
                   />
-                  <Text style={styles.playText}>Jouer</Text>
                 </View>
               </View>
             </View>
@@ -102,97 +113,98 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 26,
-    gap: 12,
-  },
-  navBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
   },
   pageTitle: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.3,
     color: COLORS.ink,
   },
   grid: {
+    marginTop: 14,
     gap: 14,
   },
   card: {
-    borderRadius: 20,
-    overflow: "hidden",
-    backgroundColor: "#0f172a",
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.edge,
+    backgroundColor: "#020617",
+    overflow: "hidden",
   },
-  imageBox: {
+  mediaBox: {
     width: "100%",
-    aspectRatio: 16 / 9.6,
-    position: "relative",
-    justifyContent: "flex-end",
+    aspectRatio: 16 / 9,
+    backgroundColor: "#020617",
+    justifyContent: "space-between",
   },
   image: {
     ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "100%",
   },
-  badge: {
-    position: "absolute",
-    top: 12,
-    left: 12,
+  topBadgesRow: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  darkBadge: {
     borderRadius: 999,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: 10,
     paddingVertical: 3,
   },
-  badgeText: {
+  darkBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#ffffff",
+  },
+  amberBadge: {
+    borderRadius: 999,
+    backgroundColor: "rgba(251,191,36,0.95)",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  amberBadgeText: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#ffffff",
-    letterSpacing: 0.5,
+    color: "#020617",
   },
-  overlayBottom: {
-    padding: 14,
+  bottomRow: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 12,
   },
-  gameTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#ffffff",
-  },
-  gameSub: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.82)",
-    marginTop: 2,
-  },
-  playBtn: {
-    height: 38,
-    borderRadius: 999,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  playText: {
-    fontSize: 13,
+  cardTitle: {
+    fontSize: 20,
     fontWeight: "800",
     color: "#ffffff",
+    letterSpacing: -0.3,
+  },
+  cardSub: {
+    marginTop: 2,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: "rgba(255,255,255,0.85)",
+  },
+  playCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.betclicRed,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

@@ -171,6 +171,45 @@ export function getCachedWalletSnapshot(): ClientWalletData | null {
   return walletSnapshot;
 }
 
+export const getCachedClientMatch = getCachedMatchSnapshot;
+export const getCachedClientPrediction = getCachedPredictionSnapshot;
+export const getCachedMatchHistoryItem = getCachedFinishedMatchSnapshot;
+export const getCachedWallet = getCachedWalletSnapshot;
+
+export function getCachedUnifiedBet(
+  kindOrId: "sport" | "prediction" | "combo" | number | string,
+  maybeId?: number
+): ClientBet | null {
+  if (typeof maybeId === "number") {
+    return betCache.get(`${String(kindOrId)}:${maybeId}`) ?? null;
+  }
+  if (typeof kindOrId === "number") {
+    return (
+      betCache.get(`sport:${kindOrId}`) ??
+      betCache.get(`prediction:${kindOrId}`) ??
+      betCache.get(`combo:${kindOrId}`) ??
+      null
+    );
+  }
+  const s = String(kindOrId);
+  if (s.startsWith("sport-")) {
+    return betCache.get(`sport:${Number(s.slice(6))}`) ?? null;
+  }
+  if (s.startsWith("pred-")) {
+    return betCache.get(`prediction:${Number(s.slice(5))}`) ?? null;
+  }
+  const n = Number(s);
+  if (Number.isInteger(n) && n > 0) {
+    return (
+      betCache.get(`combo:${n}`) ??
+      betCache.get(`sport:${n}`) ??
+      betCache.get(`prediction:${n}`) ??
+      null
+    );
+  }
+  return null;
+}
+
 export function clearPrivateEntityCaches() {
   betCache.clear();
   latestBetsList = null;

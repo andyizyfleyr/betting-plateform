@@ -115,6 +115,10 @@ interface AppContextValue {
   setOddsPolicy: (p: OddsChangePolicy) => void;
   dataSaverMode: boolean;
   setDataSaverMode: (v: boolean) => void;
+  dataSaverEnabled: boolean;
+  setDataSaverEnabled: (v: boolean) => void;
+  adminPendingFinance: number;
+  setAdminPendingFinance: (n: number) => void;
   oddsFormat: "decimal" | "fractional";
   soundEnabled: boolean;
   hapticsEnabled: boolean;
@@ -160,6 +164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [oddsPolicy, setOddsPolicyState] =
     useState<OddsChangePolicy>("confirm_all");
   const [dataSaverMode, setDataSaverState] = useState<boolean>(false);
+  const [adminPendingFinance, setAdminPendingFinance] = useState<number>(0);
   const [paymentProviders, setPaymentProviders] = useState<PaymentProvider[]>([]);
 
   const [target, setTarget] = useState<BetTarget | null>(null);
@@ -568,6 +573,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setOddsPolicy,
       dataSaverMode,
       setDataSaverMode,
+      dataSaverEnabled: dataSaverMode,
+      setDataSaverEnabled: setDataSaverMode,
+      adminPendingFinance,
+      setAdminPendingFinance,
       oddsFormat,
       soundEnabled,
       hapticsEnabled,
@@ -608,6 +617,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       comboLegs,
       comboOpen,
       comboQuickMode,
+      adminPendingFinance,
       dataSaverMode,
       dismissToast,
       feedMatches,

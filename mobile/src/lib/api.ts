@@ -91,8 +91,8 @@ export interface LiveMatchTelemetry {
   cornersAway: number;
   savesHome: number;
   savesAway: number;
-  momentum?: MomentumBucket[];
-  recentHomePressure?: number;
+  momentum: MomentumBucket[];
+  recentHomePressure: number;
 }
 
 export interface ClientRealMatchStats {
@@ -184,6 +184,7 @@ export interface ClientMatchHistoryItem {
 export type ClientFinishedMatch = ClientMatchHistoryItem;
 
 export interface ClientComboLeg {
+  id: number;
   kind: "sport" | "prediction";
   matchId?: number | null;
   questionId?: number | null;
@@ -205,6 +206,10 @@ export interface ClientComboLeg {
   matchMinute?: string | null;
   matchStartsAt?: string | null;
   matchSource?: MatchSource | null;
+  startsAt?: string | null;
+  minute?: string | null;
+  homeScore?: number | null;
+  awayScore?: number | null;
 }
 
 export interface ClientBet {
@@ -213,6 +218,8 @@ export interface ClientBet {
   matchId: number | null;
   sport: string;
   league: string;
+  title: string;
+  subtitle: string;
   homeTeam: string;
   awayTeam: string;
   homeLogo?: string | null;
@@ -231,6 +238,7 @@ export interface ClientBet {
   status: BetStatus;
   cashOutAmount: number | null;
   cashOut: number | null;
+  cashOutValue: number | null;
   placedAt: string;
   settledAt?: string | null;
   matchStatus: MatchStatus | null;
@@ -239,7 +247,14 @@ export interface ClientBet {
   matchMinute: string | null;
   matchStartsAt: string | null;
   matchSource?: MatchSource | null;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  minute?: string | null;
+  startsAt?: string | null;
 }
+
+export type ComboLegClient = ClientComboLeg;
+export type UnifiedBet = ClientBet;
 
 export interface PredictionOptionClient {
   key: string;
@@ -406,6 +421,38 @@ export interface UserPulseTicket {
   selectionLabel: string;
 }
 
+function normalizeClientBet(raw: ClientBet): ClientBet {
+  const title =
+    raw.title ||
+    (raw.kind === "combo"
+      ? "Combiné"
+      : raw.kind === "prediction"
+        ? raw.question || raw.homeTeam
+        : `${raw.homeTeam} – ${raw.awayTeam}`);
+  const subtitle = raw.subtitle || raw.league || "";
+  const legs = Array.isArray(raw.legs)
+    ? raw.legs.map((l, idx) => ({
+        ...l,
+        id: typeof l.id === "number" ? l.id : idx + 1,
+        startsAt: l.startsAt ?? l.matchStartsAt ?? null,
+        minute: l.minute ?? l.matchMinute ?? null,
+        homeScore: l.homeScore ?? l.matchHomeScore ?? null,
+        awayScore: l.awayScore ?? l.matchAwayScore ?? null,
+      }))
+    : undefined;
+  return {
+    ...raw,
+    title,
+    subtitle,
+    legs,
+    cashOutValue: raw.cashOutValue !== undefined ? raw.cashOutValue : raw.cashOut,
+    homeScore: raw.homeScore ?? raw.matchHomeScore,
+    awayScore: raw.awayScore ?? raw.matchAwayScore,
+    minute: raw.minute ?? raw.matchMinute,
+    startsAt: raw.startsAt ?? raw.matchStartsAt,
+  };
+}
+
 export const api = {
   mobileBootstrap: () =>
     requestJson<MobileBootstrapResponse>("/api/mobile/bootstrap", {
@@ -418,7 +465,14 @@ export const api = {
         ignoreUnauthorizedRedirect: true,
         bypassEtag: true,
       }),
-    login: async (payload: { email: string; password: string }) => {
+    login: async (
+      emailOrPayload: { email: string; password: string } | string,
+      maybePassword?: string
+    ) => {
+      const payload =
+        typeof emailOrPayload === "string"
+          ? { email: emailOrPayload, password: maybePassword ?? "" }
+          : emailOrPayload;
       const res = await requestJson<{ user: ClientUser; token?: string }>(
         "/api/auth/login",
         {
@@ -432,7 +486,21 @@ export const api = {
       }
       return res;
     },
-    register: async (payload: { name: string; email: string; password: string }) => {
+    register: async (
+      nameOrPayload:
+        | { name: string; email: string; password: string }
+        | string,
+      maybeEmail?: string,
+      maybePassword?: string
+    ) => {
+      const payload =
+        typeof nameOrPayload === "string"
+          ? {
+              name: nameOrPayload,
+              email: maybeEmail ?? "",
+              password: maybePassword ?? "",
+            }
+          : nameOrPayload;
       const res = await requestJson<{ user: ClientUser; token?: string }>(
         "/api/auth/register",
         {
@@ -515,20 +583,93 @@ export const api = {
       serverTime?: string;
     }>("/api/pulse"),
 
-  bets: async (filter: "ongoing" | "finished") => {
-    const data = await requestJson<{ bets: ClientBet[]; balance: number | null }>(
-      `/api/bets?filter=${filter}`
-    );
-    seedBetsSnapshot(data.bets);
-    return data;
-  },
+  bets: Object.assign(
+    async (filter: "ongoing" | "finished" | "all" = "all") => {
+      const data = await requestJson<{
+        bets: ClientBet[];
+        balance: number | null;
+      }>(`/api/bets?filter=${filter}`);
+      const normalized = data.bets.map(normalizeClientBet);
+      seedBetsSnapshot(normalized);
+      return { bets: normalized, balance: data.balance };
+    },
+    {
+      list: async (filter: "ongoing" | "finished" | "all" = "all") => {
+        const data = await requestJson<{
+          bets: ClientBet[];
+          balance: number | null;
+        }>(`/api/bets?filter=${filter}`);
+        const normalized = data.bets.map(normalizeClientBet);
+        seedBetsSnapshot(normalized);
+        return { bets: normalized, balance: data.balance };
+      },
+      placeSingle: (payload: {
+        matchId: number;
+        selection: string;
+        market?: string;
+        stake: number;
+        expectedOdds: number;
+        oddsPolicy?: OddsChangePolicy;
+        idempotencyKey: string;
+      }) =>
+        requestJson<{ bet: ClientBet; balance: number; deduplicated?: boolean }>(
+          "/api/bets",
+          {
+            method: "POST",
+            body: payload,
+          }
+        ),
+      placeCombo: (payload: {
+        legs: Array<{
+          kind: "sport" | "prediction";
+          matchId?: number;
+          questionId?: number;
+          market?: string;
+          selection: string;
+          expectedOdds: number;
+        }>;
+        stake: number;
+        expectedTotalOdds: number;
+        oddsPolicy?: OddsChangePolicy;
+        idempotencyKey: string;
+      }) =>
+        requestJson<{
+          bet: {
+            id: number;
+            totalOdds: number;
+            stake: number;
+            potentialWin: number;
+            boostPct: number;
+          };
+          balance: number;
+          deduplicated?: boolean;
+        }>("/api/bets/combo", {
+          method: "POST",
+          body: payload,
+        }),
+      cashout: (payload: {
+        betId: number;
+        kind?: BetKind;
+        expectedCashout: number;
+        idempotencyKey: string;
+      }) =>
+        requestJson<{ balance: number; value: number; deduplicated?: boolean }>(
+          "/api/bets/cashout",
+          {
+            method: "POST",
+            body: payload,
+          }
+        ),
+    }
+  ),
 
   allBets: async () => {
     const data = await requestJson<{ bets: ClientBet[]; balance: number | null }>(
       "/api/bets?filter=all"
     );
-    seedBetsSnapshot(data.bets);
-    return data;
+    const normalized = data.bets.map(normalizeClientBet);
+    seedBetsSnapshot(normalized);
+    return { bets: normalized, balance: data.balance };
   },
 
   placeBet: (payload: {
@@ -622,6 +763,48 @@ export const api = {
         NonNullable<ClientPrediction["myBet"]> & { questionId: number }
       >;
     }>("/api/predictions/my-bets"),
+
+  predictionsMine: () =>
+    requestJson<{
+      myBets: Record<
+        number,
+        NonNullable<ClientPrediction["myBet"]> & { questionId: number }
+      >;
+    }>("/api/predictions/my-bets"),
+
+  predictions: {
+    place: (payload: {
+      questionId: number;
+      selection: string;
+      stake: number;
+      expectedOdds: number;
+      oddsPolicy?: OddsChangePolicy;
+      idempotencyKey: string;
+    }) =>
+      requestJson<{
+        bet: ClientPredictionBet;
+        balance: number;
+        deduplicated?: boolean;
+      }>("/api/predictions", {
+        method: "POST",
+        body: payload,
+      }),
+    catalog: async () => {
+      const res = await requestJson<{
+        questions: ClientPrediction[];
+        serverTime?: string;
+      }>("/api/predictions/catalog");
+      seedPredictionsSnapshot(res.questions);
+      return res;
+    },
+    mine: () =>
+      requestJson<{
+        myBets: Record<
+          number,
+          NonNullable<ClientPrediction["myBet"]> & { questionId: number }
+        >;
+      }>("/api/predictions/my-bets"),
+  },
 
   placePredictionBet: (payload: {
     questionId: number;
@@ -758,6 +941,19 @@ export const api = {
       }>("/api/tap", {
         method: "POST",
         body: { action: "cashout" },
+      }),
+    post: (body: Record<string, unknown>, timeoutMs = 10_000) =>
+      requestJson<{
+        status?: string;
+        multiplier?: number | string;
+        factor?: number | string;
+        win_amount?: number | string;
+        new_balance?: number | string;
+        message?: string;
+      }>("/api/tap", {
+        method: "POST",
+        body,
+        timeoutMs,
       }),
   },
 

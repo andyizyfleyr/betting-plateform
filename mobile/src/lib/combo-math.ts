@@ -37,6 +37,8 @@ export function nextComboBoostTier(eligibleLegsCount: number): { needed: number;
   return null;
 }
 
+export const nextBoostHint = nextComboBoostTier;
+
 export interface ComboQuote {
   baseOdds: number;
   eligibleLegs: number;

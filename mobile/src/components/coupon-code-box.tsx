@@ -21,10 +21,14 @@ import { COLORS } from "@/theme/tokens";
 export function CouponCodeBox({
   dark = false,
   compact = false,
+  variant,
 }: {
   dark?: boolean;
   compact?: boolean;
+  variant?: string;
+  autoCheckUrlCode?: boolean;
 }) {
+  const isCompact = compact || variant === "inline";
   const { comboLegs, loadComboLegs, toast } = useApp();
   const [inputCode, setInputCode] = useState("");
   const [savedCode, setSavedCode] = useState<string | null>(null);
@@ -113,7 +117,7 @@ export function CouponCodeBox({
       style={[
         styles.card,
         dark ? styles.cardDark : styles.cardLight,
-        compact && { padding: 10 },
+        compact || isCompact ? { padding: 10 } : undefined,
       ]}
     >
       {comboLegs.length > 0 ? (

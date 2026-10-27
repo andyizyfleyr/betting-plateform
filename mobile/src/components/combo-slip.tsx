@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -9,12 +9,11 @@ import {
   View,
 } from "react-native";
 import {
-  ChevronUp,
+  Check,
   Flame,
-  Layers,
-  Sparkles,
   Trash2,
   X,
+  Zap,
 } from "lucide-react-native";
 import { useApp, type ComboSelection } from "@/context/app-context";
 import {
@@ -27,475 +26,50 @@ import {
 } from "@/lib/api";
 import {
   computeComboQuote,
+  MAX_COMBO_LEGS,
+  MIN_COMBO_LEGS,
   MIN_ELIGIBLE_BOOST_ODDS,
   nextComboBoostTier,
+  sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
-import { eur, formatMatchDateTimeShort, formatOdds } from "@/lib/format";
+import { eur, formatOdds } from "@/lib/format";
 import { usePathname, useRouter } from "@/lib/router";
-import { COLORS } from "@/theme/tokens";
-import { CouponCodeBox } from "./coupon-code-box";
+import { COLORS, triggerHaptic } from "@/theme/tokens";
 import { OddsLockControls } from "./odds-lock-controls";
 import { TeamAvatar } from "./team-avatar";
 import { TouchStakePad } from "./touch-stake-pad";
 
-function sortDraftChronologically(legs: ComboSelection[]): ComboSelection[] {
-  if (legs.length <= 1) return [...legs];
-  return legs
-    .map((leg, idx) => {
-      const rank = leg.isLive ? 1 : 2;
-      const ms = leg.startsAt ? Date.parse(leg.startsAt) : Number.MAX_SAFE_INTEGER;
-      return {
-        leg,
-        idx,
-        rank,
-        ms: Number.isFinite(ms) ? ms : Number.MAX_SAFE_INTEGER,
-      };
-    })
-    .sort((a, b) => a.rank - b.rank || a.ms - b.ms || a.idx - b.idx)
-    .map((x) => x.leg);
-}
-
-export function ComboSlipBody({
-  inPage = false,
-  onAfterSubmit,
-}: {
-  inPage?: boolean;
-  onAfterSubmit?: () => void;
-}) {
-  const router = useRouter();
-  const {
-    user,
-    balance,
-    setBalance,
-    bumpBets,
-    comboLegs,
-    removeComboLeg,
-    clearCombo,
-    applyComboOddsUpdates,
-    oddsFormat,
-    oddsPolicy,
-    setOddsPolicy,
-    comboQuickMode,
-    setComboQuickMode,
-    openRecharge,
-    toast,
-    feedMatches,
-  } = useApp();
-
-  const [stake, setStake] = useState("10");
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(
-    null
-  );
-  const idempotencyRef = useRef<string>(generateBetIdempotencyKey());
-
-  const syncedLegs = useMemo(() => {
-    const mapped = comboLegs.map((leg) => {
-      if (leg.kind === "sport" && leg.matchId && feedMatches) {
-        const live = feedMatches.find((m) => m.id === leg.matchId);
-        if (live) {
-          const g = live.markets.find((mk) => mk.key === leg.market);
-          const o = g?.outcomes.find((out) => out.key === leg.selection);
-          return {
-            ...leg,
-            odds: o ? o.odds : leg.odds,
-            isLive: live.status === "live",
-            startsAt: live.startsAt,
-          };
-        }
-      }
-      return leg;
-    });
-    return sortDraftChronologically(mapped);
-  }, [comboLegs, feedMatches]);
-
-  useEffect(() => {
-    idempotencyRef.current = generateBetIdempotencyKey();
-  }, [comboLegs.length]);
-
-  const numericStake = Math.max(
-    0,
-    Math.round((parseFloat(stake.replace(",", ".")) || 0) * 100) / 100
-  );
-  const quote = useMemo(
-    () =>
-      computeComboQuote(
-        syncedLegs.map((l) => l.odds),
-        numericStake
-      ),
-    [numericStake, syncedLegs]
-  );
-  const nextBoost = useMemo(
-    () => nextComboBoostTier(quote.eligibleLegs),
-    [quote.eligibleLegs]
-  );
-
-  const handlePlace = async () => {
-    if (!user) {
-      onAfterSubmit?.();
-      router.push("/auth");
-      return;
-    }
-    if (syncedLegs.length === 0) return;
-    if (numericStake < 0.5) {
-      setErrorMsg("Mise minimale : 0,50 €.");
-      return;
-    }
-    if (numericStake > balance + 0.001) {
-      setErrorMsg("Solde insuffisant pour cette mise.");
-      return;
-    }
-
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      if (syncedLegs.length === 1) {
-        const single = syncedLegs[0];
-        if (single.kind === "sport" && single.matchId) {
-          const res = await api.placeBet({
-            matchId: single.matchId,
-            selection: single.selection,
-            market: single.market,
-            stake: numericStake,
-            expectedOdds: roundOdds2(single.odds),
-            oddsPolicy,
-            idempotencyKey: idempotencyRef.current,
-          });
-          setBalance(res.balance);
-        } else if (single.kind === "prediction" && single.questionId) {
-          const res = await api.placePredictionBet({
-            questionId: single.questionId,
-            selection: single.selection,
-            stake: numericStake,
-            expectedOdds: roundOdds2(single.odds),
-            oddsPolicy,
-            idempotencyKey: idempotencyRef.current,
-          });
-          setBalance(res.balance);
-        }
-        clearCombo();
-        setOddsChanged(null);
-        bumpBets();
-        toast({
-          kind: "success",
-          title: "Pari simple validé !",
-          description: `Mise ${eur(numericStake)} enregistrée.`,
-        });
-        onAfterSubmit?.();
-        return;
-      }
-
-      const res = await api.placeComboBet({
-        legs: syncedLegs.map((l) => ({
-          kind: l.kind,
-          matchId: l.matchId,
-          questionId: l.questionId,
-          market: l.market,
-          selection: l.selection,
-          expectedOdds: roundOdds2(l.odds),
-        })),
-        stake: numericStake,
-        expectedTotalOdds: quote.totalOdds,
-        oddsPolicy,
-        idempotencyKey: idempotencyRef.current,
-      });
-
-      setBalance(res.balance);
-      clearCombo();
-      setOddsChanged(null);
-      bumpBets();
-      toast({
-        kind: "success",
-        title: `Combiné validé @ ${formatOdds(res.bet.totalOdds, oddsFormat)} !`,
-        description: `Gain potentiel ${eur(res.bet.potentialWin)}${res.bet.boostPct > 0 ? ` (Boost +${res.bet.boostPct} %)` : ""}`,
-      });
-      onAfterSubmit?.();
-    } catch (err) {
-      idempotencyRef.current = generateBetIdempotencyKey();
-      if (err instanceof ApiHttpError && err.code === ODDS_CHANGED_CODE) {
-        if (err.details?.updatedLegs) {
-          applyComboOddsUpdates(err.details.updatedLegs);
-        }
-        setOddsChanged(
-          err.details ?? {
-            previousOdds: quote.totalOdds,
-            currentOdds: err.currentOdds ?? quote.totalOdds,
-            direction:
-              (err.currentOdds ?? quote.totalOdds) > quote.totalOdds
-                ? "up"
-                : "down",
-          }
-        );
-      } else if (err instanceof ApiHttpError) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg("Impossible de valider le ticket. Réessayez.");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <View style={styles.container}>
-      {/* Barre Mode 1-clic + Vider */}
-      <View style={styles.toolbar}>
-        <Pressable
-          onPress={() => setComboQuickMode(!comboQuickMode)}
-          style={[
-            styles.quickToggle,
-            comboQuickMode && styles.quickToggleActive,
-          ]}
-        >
-          <Sparkles
-            size={13}
-            color={comboQuickMode ? "#ffffff" : COLORS.mist}
-            strokeWidth={2.3}
-          />
-          <Text
-            style={[
-              styles.quickToggleText,
-              comboQuickMode && { color: "#ffffff" },
-            ]}
-          >
-            Sélection 1-clic {comboQuickMode ? "ON" : "OFF"}
-          </Text>
-        </Pressable>
-
-        {syncedLegs.length > 0 ? (
-          <Pressable onPress={clearCombo} style={styles.clearBtn}>
-            <Trash2 size={13.5} color={COLORS.dim} strokeWidth={2.2} />
-            <Text style={styles.clearBtnText}>Vider</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {syncedLegs.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyIcon}>
-            <Layers size={22} color={COLORS.betclicRed} strokeWidth={2.2} />
-          </View>
-          <Text style={styles.emptyTitle}>Votre Betslip est vide</Text>
-          <Text style={styles.emptyDesc}>
-            Maintenez une cote appuyée (ou activez le mode 1-clic) pour combiner
-            jusqu&apos;à 8 sélections et débloquer jusqu&apos;à +20 % de Bonus
-            Combiné.
-          </Text>
-          {inPage ? (
-            <Pressable
-              onPress={() => router.push("/matchs")}
-              style={styles.browseBtn}
-            >
-              <Text style={styles.browseBtnText}>Parcourir les matchs</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : (
-        <>
-          {/* Jauge Boost Combiné */}
-          <View style={styles.boostCard}>
-            <View style={styles.boostRow}>
-              <Flame
-                size={15}
-                color={quote.boostPct > 0 ? COLORS.win : COLORS.amber}
-                strokeWidth={2.4}
-              />
-              <Text style={styles.boostTitle}>
-                {quote.boostPct > 0
-                  ? `Bonus Combiné actif : +${quote.boostPct} %`
-                  : "Bonus Combiné jusqu'à +20 %"}
-              </Text>
-            </View>
-            {nextBoost ? (
-              <Text style={styles.boostSub}>
-                +{nextBoost.needed} sélection
-                {nextBoost.needed > 1 ? "s" : ""} (cote ≥{" "}
-                {formatOdds(MIN_ELIGIBLE_BOOST_ODDS, oddsFormat)}) pour +
-                {nextBoost.pct} %
-              </Text>
-            ) : (
-              <Text style={styles.boostSub}>
-                Palier maximum +20 % débloqué !
-              </Text>
-            )}
-          </View>
-
-          {/* Liste des sélections */}
-          <View style={styles.legsList}>
-            {syncedLegs.map((leg) => (
-              <View key={leg.uid} style={styles.legCard}>
-                <Pressable
-                  onPress={() => {
-                    onAfterSubmit?.();
-                    if (leg.kind === "sport" && leg.matchId) {
-                      router.push(`/matchs/${leg.matchId}`);
-                    } else if (leg.kind === "prediction" && leg.questionId) {
-                      router.push(`/predictions/${leg.questionId}`);
-                    }
-                  }}
-                  style={styles.legMain}
-                >
-                  <View style={styles.legMetaRow}>
-                    <Text numberOfLines={1} style={styles.legLeague}>
-                      {leg.league}
-                    </Text>
-                    {leg.isLive ? (
-                      <View style={styles.legLivePill}>
-                        <View style={styles.legLiveDot} />
-                        <Text style={styles.legLiveText}>DIRECT</Text>
-                      </View>
-                    ) : leg.startsAt ? (
-                      <Text style={styles.legDate}>
-                        {formatMatchDateTimeShort(leg.startsAt)}
-                      </Text>
-                    ) : null}
-                  </View>
-
-                  <View style={styles.legTitleRow}>
-                    {leg.homeTeam ? (
-                      <TeamAvatar
-                        name={leg.homeTeam}
-                        logo={leg.homeLogo}
-                        size="2xs"
-                      />
-                    ) : null}
-                    <Text numberOfLines={1} style={styles.legTitle}>
-                      {leg.title}
-                    </Text>
-                    {leg.awayTeam ? (
-                      <TeamAvatar
-                        name={leg.awayTeam}
-                        logo={leg.awayLogo}
-                        size="2xs"
-                      />
-                    ) : null}
-                  </View>
-
-                  <Text numberOfLines={1} style={styles.legPick}>
-                    {leg.selectionLabel}
-                  </Text>
-                </Pressable>
-
-                <View style={styles.legRight}>
-                  <View style={styles.legOddsPill}>
-                    <Text style={styles.legOddsText}>
-                      {formatOdds(leg.odds, oddsFormat)}
-                    </Text>
-                  </View>
-                  <Pressable
-                    hitSlop={8}
-                    onPress={() => removeComboLeg(leg.uid)}
-                    style={styles.removeBtn}
-                  >
-                    <X size={14} color={COLORS.dim} strokeWidth={2.4} />
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </View>
-
-          <TouchStakePad
-            value={stake}
-            onChange={(v) => {
-              setStake(v);
-              setErrorMsg(null);
-            }}
-            balance={balance}
-            isLoggedIn={Boolean(user)}
-          />
-
-          <OddsLockControls
-            oddsFormat={oddsFormat}
-            oddsPolicy={oddsPolicy}
-            onChangePolicy={setOddsPolicy}
-            oddsChanged={oddsChanged}
-          />
-
-          {errorMsg ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errorMsg}</Text>
-              {user && numericStake > balance ? (
-                <Pressable
-                  onPress={() => {
-                    onAfterSubmit?.();
-                    openRecharge();
-                  }}
-                  style={styles.rechargeBtn}
-                >
-                  <Text style={styles.rechargeText}>Recharger</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
-
-          <View style={styles.quoteCard}>
-            <View style={styles.quoteRow}>
-              <Text style={styles.quoteLabel}>
-                {syncedLegs.length > 1 ? "Cote totale" : "Cote fixe"}
-              </Text>
-              <Text style={styles.quoteVal}>
-                {formatOdds(quote.totalOdds, oddsFormat)}
-              </Text>
-            </View>
-            {quote.boostAmount > 0 ? (
-              <View style={styles.quoteRow}>
-                <Text style={[styles.quoteLabel, { color: COLORS.win }]}>
-                  Bonus Combiné (+{quote.boostPct} %)
-                </Text>
-                <Text style={[styles.quoteVal, { color: COLORS.win }]}>
-                  +{eur(quote.boostAmount)}
-                </Text>
-              </View>
-            ) : null}
-            <View style={[styles.quoteRow, styles.quoteTotalRow]}>
-              <Text style={styles.quoteTotalLabel}>Gain potentiel</Text>
-              <Text style={styles.quoteTotalWin}>
-                {eur(quote.potentialWin)}
-              </Text>
-            </View>
-          </View>
-
-          <Pressable
-            disabled={submitting}
-            onPress={handlePlace}
-            style={[styles.submitBtn, submitting && { opacity: 0.65 }]}
-          >
-            {submitting ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text style={styles.submitText}>
-                {!user
-                  ? "Se connecter pour valider"
-                  : oddsChanged
-                    ? `Accepter ${formatOdds(quote.totalOdds, oddsFormat)} · ${eur(numericStake)}`
-                    : syncedLegs.length > 1
-                      ? `Valider le combiné · ${eur(numericStake)}`
-                      : `Valider le pari · ${eur(numericStake)}`}
-              </Text>
-            )}
-          </Pressable>
-        </>
-      )}
-
-      <CouponCodeBox />
-    </View>
-  );
-}
+export type { ComboSelection };
 
 export function ComboFloatingBar() {
   const pathname = usePathname();
-  const { comboLegs, openCombo, oddsFormat } = useApp();
+  const {
+    comboLegs,
+    comboOpen,
+    comboQuickMode,
+    setComboQuickMode,
+    openCombo,
+    clearCombo,
+    target,
+    marketMatch,
+    rechargeOpen,
+    oddsFormat,
+  } = useApp();
+
+  const allowedRoute =
+    pathname === "/matchs" ||
+    pathname.startsWith("/matchs/") ||
+    pathname === "/predictions" ||
+    pathname.startsWith("/predictions/") ||
+    pathname === "/paris";
 
   if (
+    !allowedRoute ||
     comboLegs.length === 0 ||
-    pathname.startsWith("/betslip") ||
-    pathname.startsWith("/parametres") ||
-    pathname === "/jeux" ||
-    pathname === "/auth" ||
-    pathname.startsWith("/admin") ||
-    pathname === "/tap" ||
-    pathname === "/accelerator"
+    comboOpen ||
+    target ||
+    marketMatch ||
+    rechargeOpen
   ) {
     return null;
   }
@@ -507,485 +81,903 @@ export function ComboFloatingBar() {
 
   return (
     <View pointerEvents="box-none" style={styles.floatWrap}>
-      <Pressable onPress={openCombo} style={styles.floatBar}>
-        <View style={styles.floatLeft}>
-          <View style={styles.floatCountBadge}>
-            <Text style={styles.floatCountText}>{comboLegs.length}</Text>
+      <View style={styles.floatCard}>
+        <Pressable onPress={openCombo} style={styles.floatLeft}>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{comboLegs.length}</Text>
           </View>
-          <View>
-            <Text style={styles.floatTitle}>
-              {comboLegs.length > 1 ? "Ticket combiné" : "Sélection Betslip"}
-            </Text>
-            <Text style={styles.floatSub}>
-              Cote {formatOdds(quote.totalOdds, oddsFormat)}
-              {quote.boostPct > 0 ? ` · Boost +${quote.boostPct}%` : ""}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.floatTitleRow}>
+              <Text numberOfLines={1} style={styles.floatTitle}>
+                {comboLegs.length === 1
+                  ? "Coupon (1 sélection)"
+                  : "Coupon de pari · Combiné"}
+              </Text>
+              {quote.boostPct > 0 ? (
+                <View style={styles.floatBoostBadge}>
+                  <Text style={styles.floatBoostText}>
+                    +{quote.boostPct}% Bonus
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text numberOfLines={1} style={styles.floatSub}>
+              Cote totale{" "}
+              <Text style={styles.floatSubStrong}>
+                {formatOdds(quote.totalOdds, oddsFormat)}
+              </Text>
             </Text>
           </View>
-        </View>
+        </Pressable>
+
         <View style={styles.floatRight}>
-          <Text style={styles.floatOpenText}>Ouvrir</Text>
-          <ChevronUp size={15} color="#ffffff" strokeWidth={2.5} />
+          <Pressable
+            onPress={() => setComboQuickMode(!comboQuickMode)}
+            style={[
+              styles.quickModeBtn,
+              comboQuickMode && styles.quickModeBtnActive,
+            ]}
+          >
+            <Zap
+              size={12}
+              color={comboQuickMode ? "#6ee7b7" : "rgba(255,255,255,0.75)"}
+              strokeWidth={2.5}
+            />
+            <Text
+              style={[
+                styles.quickModeText,
+                comboQuickMode && { color: "#6ee7b7" },
+              ]}
+            >
+              1-clic
+            </Text>
+          </Pressable>
+
+          <Pressable onPress={openCombo} style={styles.openBtn}>
+            <Text style={styles.openBtnText}>Ouvrir</Text>
+          </Pressable>
+
+          <Pressable onPress={clearCombo} style={styles.clearIconBtn}>
+            <X size={14} color="rgba(255,255,255,0.75)" strokeWidth={2.3} />
+          </Pressable>
         </View>
-      </Pressable>
+      </View>
     </View>
   );
 }
 
 export function ComboSheet() {
-  const { comboOpen, closeCombo, comboLegs } = useApp();
+  const router = useRouter();
+  const {
+    comboLegs,
+    comboOpen,
+    closeCombo,
+    removeComboLeg,
+    clearCombo,
+    applyComboOddsUpdates,
+    oddsPolicy,
+    setOddsPolicy,
+    balance,
+    setBalance,
+    bumpBets,
+    openRecharge,
+    oddsFormat,
+    toast,
+    user,
+    hapticsEnabled,
+  } = useApp();
+
+  const [stakeText, setStakeText] = useState("10");
+  const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
+  const [error, setError] = useState<string | null>(null);
+  const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(
+    null
+  );
+  const inFlightRef = useRef(false);
+  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
+  const [placedInfo, setPlacedInfo] = useState<{
+    id: number;
+    totalOdds: number;
+    stake: number;
+    potentialWin: number;
+    boostPct: number;
+  } | null>(null);
+
+  const orderedLegs = useMemo(
+    () => sortSlipSelectionsChronologically(comboLegs),
+    [comboLegs]
+  );
 
   if (!comboOpen) return null;
 
+  const parsed = Number(stakeText.replace(",", "."));
+  const stake =
+    Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
+  const overBalance = stake > balance;
+  const enoughLegs = orderedLegs.length >= MIN_COMBO_LEGS;
+
+  const quote = computeComboQuote(
+    orderedLegs.map((l) => l.odds),
+    stake
+  );
+  const nextBoost = nextComboBoostTier(quote.eligibleLegs);
+
+  const canSubmit =
+    phase === "input" &&
+    enoughLegs &&
+    orderedLegs.length <= MAX_COMBO_LEGS &&
+    stake >= 0.5 &&
+    !overBalance;
+
+  const submitCombo = async () => {
+    if (!user) {
+      closeCombo();
+      router.push("/auth");
+      return;
+    }
+    if (!canSubmit || inFlightRef.current) return;
+    inFlightRef.current = true;
+    const legsSig = orderedLegs
+      .map((l) => `${l.uid}:${l.market}:${l.selection}:${roundOdds2(l.odds)}`)
+      .join("|");
+    const sig = `${legsSig}::${stake}::${quote.totalOdds}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = { key: generateBetIdempotencyKey(), sig };
+    }
+
+    setPhase("loading");
+    setError(null);
+    try {
+      const res = await api.placeComboBet({
+        legs: orderedLegs.map((l) => ({
+          kind: l.kind,
+          ...(l.matchId ? { matchId: l.matchId } : {}),
+          ...(l.questionId ? { questionId: l.questionId } : {}),
+          market: l.market,
+          selection: l.selection,
+          expectedOdds: roundOdds2(l.odds),
+        })),
+        stake,
+        expectedTotalOdds: quote.totalOdds,
+        oddsPolicy,
+        idempotencyKey: idempotencySlotRef.current.key,
+      });
+      idempotencySlotRef.current = null;
+      setOddsChanged(null);
+      setBalance(res.balance);
+      bumpBets();
+      triggerHaptic("success", hapticsEnabled);
+      setPlacedInfo(res.bet);
+      clearCombo();
+      setPhase("success");
+    } catch (e) {
+      setPhase("input");
+      if (e instanceof ApiHttpError && e.status >= 400 && e.status < 500) {
+        idempotencySlotRef.current = null;
+      }
+      if (
+        e instanceof ApiHttpError &&
+        e.status === 409 &&
+        e.code === ODDS_CHANGED_CODE &&
+        e.details
+      ) {
+        setOddsChanged(e.details);
+        if (e.details.updatedLegs && e.details.updatedLegs.length > 0) {
+          applyComboOddsUpdates(e.details.updatedLegs);
+        }
+        return;
+      }
+      setOddsChanged(null);
+      const msg = e instanceof Error ? e.message : "Validation impossible";
+      setError(msg);
+      toast({ kind: "error", title: "Combiné refusé", description: msg });
+    } finally {
+      inFlightRef.current = false;
+    }
+  };
+
+  const finishAndClose = (goBets = false) => {
+    setPhase("input");
+    setPlacedInfo(null);
+    setError(null);
+    setOddsChanged(null);
+    closeCombo();
+    if (goBets) router.push("/paris");
+  };
+
   return (
     <Modal
-      visible
+      visible={comboOpen}
       transparent
       animationType="slide"
-      onRequestClose={closeCombo}
+      onRequestClose={() => finishAndClose(false)}
     >
-      <Pressable style={styles.backdrop} onPress={closeCombo}>
+      <View style={styles.sheetOverlay}>
         <Pressable
-          style={styles.sheet}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <View style={styles.grabber} />
-          <View style={styles.sheetHead}>
-            <View style={styles.sheetTitleRow}>
-              <Layers size={17} color={COLORS.betclicRed} strokeWidth={2.4} />
-              <Text style={styles.sheetTitle}>Betslip</Text>
-              {comboLegs.length > 0 ? (
-                <View style={styles.sheetCount}>
-                  <Text style={styles.sheetCountText}>{comboLegs.length}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Pressable onPress={closeCombo} style={styles.closeBtn}>
-              <X size={17} color={COLORS.mist} strokeWidth={2.2} />
-            </Pressable>
-          </View>
+          style={styles.sheetBackdrop}
+          onPress={
+            phase === "loading" ? undefined : () => finishAndClose(false)
+          }
+        />
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 14 }}
-          >
-            <ComboSlipBody onAfterSubmit={closeCombo} />
-          </ScrollView>
-        </Pressable>
-      </Pressable>
+        <View style={styles.sheetCard}>
+          {phase === "success" && placedInfo ? (
+            <View style={styles.successBox}>
+              <View style={styles.successIcon}>
+                <Check size={28} color={COLORS.win} strokeWidth={2.6} />
+              </View>
+              <Text style={styles.successTitle}>Pari combiné accepté !</Text>
+              <Text style={styles.successSub}>
+                Cote totale{" "}
+                <Text style={{ fontWeight: "700", color: COLORS.ink }}>
+                  {formatOdds(placedInfo.totalOdds, oddsFormat)}
+                </Text>
+                {placedInfo.boostPct > 0
+                  ? ` (+${placedInfo.boostPct}% Bonus inclus)`
+                  : ""}
+              </Text>
+
+              <View style={styles.successPayoutRow}>
+                <View>
+                  <Text style={styles.successStake}>
+                    Mise : {eur(placedInfo.stake)}
+                  </Text>
+                  <Text style={styles.successGainLabel}>Gain potentiel</Text>
+                </View>
+                <Text style={styles.successGainVal}>
+                  {eur(placedInfo.potentialWin)}
+                </Text>
+              </View>
+
+              <View style={styles.successActions}>
+                <Pressable
+                  onPress={() => finishAndClose(true)}
+                  style={styles.successPrimaryBtn}
+                >
+                  <Text style={styles.successPrimaryText}>Voir mes paris</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => finishAndClose(false)}
+                  style={styles.successSecondaryBtn}
+                >
+                  <Text style={styles.successSecondaryText}>Continuer</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.sheetHeader}>
+                <View style={styles.grabber} />
+                <View style={styles.sheetHeadRow}>
+                  <View style={styles.sheetHeadLeft}>
+                    <Text style={styles.sheetTitle}>Coupon combiné</Text>
+                    <View style={styles.sheetCountBadge}>
+                      <Text style={styles.sheetCountText}>
+                        {orderedLegs.length}/{MAX_COMBO_LEGS}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.sheetHeadRight}>
+                    {orderedLegs.length > 0 ? (
+                      <Pressable
+                        onPress={clearCombo}
+                        style={styles.sheetClearBtn}
+                      >
+                        <Trash2 size={13} color={COLORS.mist} strokeWidth={2.1} />
+                        <Text style={styles.sheetClearText}>Vider</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable
+                      onPress={() => finishAndClose(false)}
+                      style={styles.sheetCloseBtn}
+                    >
+                      <X size={16} color={COLORS.mist} strokeWidth={2.2} />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+
+              <ScrollView
+                style={{ maxHeight: 380 }}
+                contentContainerStyle={styles.sheetBody}
+                showsVerticalScrollIndicator={false}
+              >
+                {orderedLegs.length >= 2 ? (
+                  <View style={styles.boostCard}>
+                    <View style={styles.boostRow}>
+                      <View style={styles.boostLeft}>
+                        <Flame
+                          size={14}
+                          color={COLORS.betclicRed}
+                          strokeWidth={2.4}
+                        />
+                        <Text style={styles.boostTitle}>
+                          {quote.boostPct > 0
+                            ? `Bonus Combiné +${quote.boostPct}%`
+                            : "Bonus Combiné jusqu'à +20%"}
+                        </Text>
+                      </View>
+                      <Text style={styles.boostHint}>
+                        {nextBoost
+                          ? `+${nextBoost.needed} (≥${MIN_ELIGIBLE_BOOST_ODDS}) → +${nextBoost.pct}%`
+                          : "Max atteint"}
+                      </Text>
+                    </View>
+                    <View style={styles.boostTrack}>
+                      <View
+                        style={[
+                          styles.boostFill,
+                          {
+                            width: `${Math.min(100, (quote.eligibleLegs / 8) * 100)}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.needTwoBox}>
+                    <Text style={styles.needTwoText}>
+                      Ajoutez au moins 2 sélections pour valider un combiné (ou
+                      ouvrez l&apos;onglet Betslip pour un pari simple).
+                    </Text>
+                  </View>
+                )}
+
+                {orderedLegs.map((leg) => (
+                  <View key={leg.uid} style={styles.legItem}>
+                    <View style={styles.legTopRow}>
+                      <View style={styles.legMeta}>
+                        {leg.homeTeam ? (
+                          <TeamAvatar
+                            name={leg.homeTeam}
+                            logo={leg.homeLogo}
+                            size="2xs"
+                          />
+                        ) : null}
+                        <Text numberOfLines={1} style={styles.legTitle}>
+                          {leg.title}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => removeComboLeg(leg.uid)}
+                        style={styles.legRemoveBtn}
+                      >
+                        <X size={13} color={COLORS.mist} strokeWidth={2.2} />
+                      </Pressable>
+                    </View>
+                    <View style={styles.legPickRow}>
+                      <Text numberOfLines={1} style={styles.legPickText}>
+                        {leg.selectionLabel}
+                      </Text>
+                      <Text style={styles.legOddsText}>
+                        {formatOdds(leg.odds, oddsFormat)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+
+                <TouchStakePad
+                  value={stakeText}
+                  onChange={(next) => {
+                    setStakeText(next);
+                    setError(null);
+                  }}
+                  balance={balance}
+                  isLoggedIn={Boolean(user)}
+                  compact
+                />
+
+                {oddsChanged ? (
+                  <OddsLockControls
+                    policy={oddsPolicy}
+                    onChangePolicy={setOddsPolicy}
+                    details={oddsChanged}
+                    oddsFormat={oddsFormat}
+                    onAcceptNewOdds={() => {
+                      setOddsChanged(null);
+                      void submitCombo();
+                    }}
+                  />
+                ) : null}
+
+                {overBalance && user ? (
+                  <Pressable onPress={openRecharge} style={styles.rechargeHint}>
+                    <Text style={styles.rechargeHintText}>
+                      Solde insuffisant ({eur(balance)}) · Recharger
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                {error ? <Text style={styles.errText}>{error}</Text> : null}
+              </ScrollView>
+
+              <View style={styles.sheetFooter}>
+                <View style={styles.quoteSummaryRow}>
+                  <Text style={styles.quoteLabel}>
+                    Cote totale{" "}
+                    <Text style={styles.quoteOddsStrong}>
+                      {formatOdds(quote.totalOdds, oddsFormat)}
+                    </Text>
+                  </Text>
+                  <Text style={styles.quoteWin}>
+                    Gain : {eur(quote.potentialWin)}
+                  </Text>
+                </View>
+
+                <Pressable
+                  disabled={!canSubmit}
+                  onPress={() => void submitCombo()}
+                  style={[
+                    styles.submitBtn,
+                    !canSubmit && { opacity: 0.48 },
+                  ]}
+                >
+                  {phase === "loading" ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <Text style={styles.submitBtnText}>
+                      Valider le combiné · {eur(stake)}
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            </>
+          )}
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 11,
+  floatWrap: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    bottom: 66,
+    zIndex: 40,
   },
-  toolbar: {
+  floatCard: {
+    borderRadius: 16,
+    backgroundColor: COLORS.ink,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+    shadowColor: "#000000",
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
-  quickToggle: {
-    height: 32,
-    borderRadius: 999,
-    paddingHorizontal: 11,
-    backgroundColor: COLORS.pillDefault,
+  floatLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  countBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: COLORS.betclicRed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countBadgeText: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  floatTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  quickToggleActive: {
-    backgroundColor: COLORS.betclicRed,
-  },
-  quickToggleText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: COLORS.ink,
-  },
-  clearBtn: {
-    height: 32,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    backgroundColor: COLORS.pillDefault,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  clearBtnText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: COLORS.mist,
-  },
-  emptyCard: {
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    padding: 20,
-    alignItems: "center",
-    gap: 8,
-  },
-  emptyIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "rgba(225, 0, 20, 0.09)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.ink,
-  },
-  emptyDesc: {
-    fontSize: 12.5,
-    color: COLORS.dim,
-    textAlign: "center",
-    lineHeight: 18,
-  },
-  browseBtn: {
-    marginTop: 4,
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  browseBtnText: {
+  floatTitle: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: "700",
     color: "#ffffff",
   },
-  boostCard: {
+  floatBoostBadge: {
+    borderRadius: 6,
+    backgroundColor: "rgba(16, 185, 129, 0.25)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  floatBoostText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#6ee7b7",
+  },
+  floatSub: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.70)",
+  },
+  floatSubStrong: {
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  floatRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  quickModeBtn: {
+    height: 32,
     borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  quickModeBtnActive: {
+    backgroundColor: "rgba(16,185,129,0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(52,211,153,0.4)",
+  },
+  quickModeText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.75)",
+  },
+  openBtn: {
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  openBtnText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  clearIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  sheetCard: {
+    maxHeight: "88%",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
+    overflow: "hidden",
+  },
+  sheetHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.edge,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  grabber: {
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.edge,
+    alignSelf: "center",
+  },
+  sheetHeadRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sheetHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  sheetCountBadge: {
+    borderRadius: 999,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  sheetCountText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  sheetHeadRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sheetClearBtn: {
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  sheetClearText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.mist,
+  },
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetBody: {
+    padding: 16,
+    gap: 10,
+  },
+  boostCard: {
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.edge,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    gap: 2,
+    backgroundColor: COLORS.elev,
+    padding: 10,
+    gap: 6,
   },
   boostRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  boostLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
   boostTitle: {
-    fontSize: 12.5,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "700",
     color: COLORS.ink,
   },
-  boostSub: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: COLORS.dim,
-  },
-  legsList: {
-    gap: 8,
-  },
-  legCard: {
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    padding: 11,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  legMain: {
-    flex: 1,
-    gap: 3,
-  },
-  legMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-  },
-  legLeague: {
+  boostHint: {
     fontSize: 10.5,
     fontWeight: "600",
-    color: COLORS.dim,
-    flexShrink: 1,
+    color: COLORS.mist,
   },
-  legLivePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(225, 0, 20, 0.10)",
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-  },
-  legLiveDot: {
-    width: 5,
+  boostTrack: {
     height: 5,
-    borderRadius: 2.5,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
+  },
+  boostFill: {
+    height: "100%",
+    borderRadius: 999,
     backgroundColor: COLORS.betclicRed,
   },
-  legLiveText: {
-    fontSize: 9.5,
-    fontWeight: "800",
-    color: COLORS.betclicRed,
+  needTwoBox: {
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
+    padding: 10,
   },
-  legDate: {
-    fontSize: 10.5,
-    fontWeight: "600",
-    color: COLORS.dim,
-    fontVariant: ["tabular-nums"],
+  needTwoText: {
+    fontSize: 11.5,
+    color: COLORS.mist,
+    lineHeight: 16,
   },
-  legTitleRow: {
+  legItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    padding: 10,
+    gap: 6,
+  },
+  legTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  legMeta: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
   legTitle: {
-    fontSize: 13,
+    flex: 1,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
-    flexShrink: 1,
   },
-  legPick: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: COLORS.betclicRed,
-  },
-  legRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legOddsPill: {
-    borderRadius: 9,
-    backgroundColor: COLORS.elev,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  legOddsText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: COLORS.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  removeBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
+  legRemoveBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
   },
-  errorBox: {
-    borderRadius: 12,
-    backgroundColor: "rgba(225, 0, 20, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(225, 0, 20, 0.24)",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+  legPickRow: {
+    borderRadius: 8,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
   },
-  errorText: {
+  legPickText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: COLORS.ink,
+  },
+  legOddsText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+    fontVariant: ["tabular-nums"],
+  },
+  rechargeHint: {
+    borderRadius: 10,
+    backgroundColor: "rgba(225,0,20,0.08)",
+    padding: 9,
+    alignItems: "center",
+  },
+  rechargeHintText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+  },
+  errText: {
     fontSize: 12,
     fontWeight: "600",
     color: COLORS.betclicRed,
-    flex: 1,
   },
-  rechargeBtn: {
-    borderRadius: 8,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  sheetFooter: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.edge,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    gap: 8,
   },
-  rechargeText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  quoteCard: {
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    gap: 6,
-  },
-  quoteRow: {
+  quoteSummaryRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   quoteLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.dim,
+    fontSize: 12.5,
+    color: COLORS.mist,
   },
-  quoteVal: {
-    fontSize: 13.5,
-    fontWeight: "800",
-    color: COLORS.ink,
-    fontVariant: ["tabular-nums"],
-  },
-  quoteTotalRow: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.edgeSoft,
-    paddingTop: 7,
-    marginTop: 2,
-  },
-  quoteTotalLabel: {
-    fontSize: 13,
+  quoteOddsStrong: {
     fontWeight: "700",
     color: COLORS.ink,
   },
-  quoteTotalWin: {
-    fontSize: 17,
+  quoteWin: {
+    fontSize: 15,
     fontWeight: "800",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
   submitBtn: {
-    height: 48,
-    borderRadius: 13,
-    backgroundColor: COLORS.betclicRed,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  submitText: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: "#ffffff",
-    fontVariant: ["tabular-nums"],
-  },
-  floatWrap: {
-    paddingHorizontal: 12,
-    paddingBottom: 6,
-    backgroundColor: "transparent",
-  },
-  floatBar: {
-    height: 48,
+    height: 46,
     borderRadius: 14,
-    backgroundColor: COLORS.ink,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    elevation: 6,
-    shadowColor: "#000000",
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-  },
-  floatLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  floatCountBadge: {
-    minWidth: 26,
-    height: 26,
-    borderRadius: 8,
     backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
   },
-  floatCountText: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    color: "#ffffff",
-    fontVariant: ["tabular-nums"],
-  },
-  floatTitle: {
-    fontSize: 12.5,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-  floatSub: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.72)",
-    fontVariant: ["tabular-nums"],
-  },
-  floatRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: 9,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  floatOpenText: {
-    fontSize: 12,
+  submitBtnText: {
+    fontSize: 14,
     fontWeight: "700",
     color: "#ffffff",
   },
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(17, 24, 39, 0.45)",
-    justifyContent: "flex-end",
+  successBox: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 28,
+    alignItems: "center",
   },
-  sheet: {
-    backgroundColor: COLORS.deep,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 20,
-    maxHeight: "92%",
+  successIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(21,128,61,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  grabber: {
-    alignSelf: "center",
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.edge,
-    marginBottom: 10,
+  successTitle: {
+    marginTop: 12,
+    fontSize: 19,
+    fontWeight: "700",
+    color: COLORS.ink,
   },
-  sheetHead: {
+  successSub: {
+    marginTop: 4,
+    fontSize: 12.5,
+    color: COLORS.mist,
+  },
+  successPayoutRow: {
+    marginTop: 16,
+    width: "100%",
+    borderRadius: 16,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
   },
-  sheetTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
+  successStake: {
+    fontSize: 11,
+    color: COLORS.dim,
   },
-  sheetTitle: {
-    fontSize: 16,
-    fontWeight: "800",
+  successGainLabel: {
+    fontSize: 12.5,
+    fontWeight: "600",
     color: COLORS.ink,
   },
-  sheetCount: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+  successGainVal: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.win,
+    fontVariant: ["tabular-nums"],
+  },
+  successActions: {
+    marginTop: 16,
+    width: "100%",
+    flexDirection: "row",
+    gap: 8,
+  },
+  successPrimaryBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: COLORS.betclicRed,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 5,
   },
-  sheetCountText: {
-    fontSize: 11,
-    fontWeight: "800",
+  successPrimaryText: {
+    fontSize: 13,
+    fontWeight: "700",
     color: "#ffffff",
   },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
+  successSecondaryBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
+  },
+  successSecondaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.ink,
   },
 });
