@@ -47,12 +47,16 @@ const UPCOMING_POLL_MS = 12_000;
 
 function defaultOpenMarkets(match: ClientMatch | null | undefined): Record<string, boolean> {
   const groups = match?.markets ?? [];
+  const isDesktop = typeof window !== "undefined" && window.innerWidth >= 1024;
+  const preferred = isDesktop
+    ? ["result", "total_ou", "double_chance", "btts"]
+    : ["result", "total_ou"];
   const initial: Record<string, boolean> = {};
-  for (const key of ["result", "total_ou", "double_chance", "btts"]) {
+  for (const key of preferred) {
     if (groups.some((g) => g.key === key)) initial[key] = true;
   }
   if (Object.keys(initial).length === 0) {
-    for (const g of groups.slice(0, 3)) initial[g.key] = true;
+    for (const g of groups.slice(0, 2)) initial[g.key] = true;
   }
   return initial;
 }
@@ -90,7 +94,9 @@ export default function MatchDetailPage() {
     invalidId ? null : (getCachedClientMatch(matchId) ?? undefined)
   );
   const [category, setCategory] = useState<SheetCategory>("all");
-  const [showTracker, setShowTracker] = useState(true);
+  const [showTracker, setShowTracker] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1024
+  );
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(() =>
     defaultOpenMarkets(invalidId ? null : getCachedClientMatch(matchId))
   );
@@ -121,7 +127,6 @@ export default function MatchDetailPage() {
 
   const match = invalidId ? null : (sharedFromFeed ?? fetchedMatch);
 
-  // Dès que les marchés arrivent du réseau pour la 1re fois, ouvre les marchés principaux
   const hasAnyOpen = Object.keys(openMap).length > 0;
   if (match && !hasAnyOpen && (match.markets?.length ?? 0) > 0) {
     setOpenMap(defaultOpenMarkets(match));
@@ -203,117 +208,111 @@ export default function MatchDetailPage() {
   const hasGoals = homeGoals.length > 0 || awayGoals.length > 0;
 
   return (
-    <div className="pb-8">
-      {/* En-tête collant : retour + ligue (sans label Virtuel) + date/heure du match */}
-      <div className="sticky top-[52px] z-30 border-b border-edge bg-white/95 px-3.5 py-2.5 backdrop-blur lg:top-0 lg:rounded-t-2xl lg:px-5">
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined" && window.history.length > 1) {
-                  router.back();
-                } else {
-                  router.push("/matchs");
-                }
-              }}
-              aria-label="Retour aux matchs"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elev text-ink transition-colors hover:bg-edge active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4" strokeWidth={2.3} />
-            </button>
+    <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
+      {/* En-tête compact en ligne (sans double barre collante) */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/matchs");
+              }
+            }}
+            aria-label="Retour aux matchs"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:h-9 lg:w-9"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
+          </button>
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[12.5px] font-bold text-ink">
-                <SportIcon
-                  sport={match?.sport ?? "football"}
-                  className="h-3.5 w-3.5 shrink-0 text-betclic-red"
-                />
-                <h1 className="truncate font-display text-[14.5px] font-extrabold text-ink">
-                  {match?.league ?? "Match"}
-                </h1>
-              </div>
-              {match && (
-                <p className="truncate text-[11px] text-dim">
-                  {groups.length > 0
-                    ? `${groups.length} marchés disponibles`
-                    : isFinished
-                      ? "Rencontre terminée"
-                      : "Cotes fixes temps réel"}
-                </p>
-              )}
-            </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <SportIcon
+              sport={match?.sport ?? "football"}
+              className="h-3.5 w-3.5 shrink-0 text-betclic-red"
+            />
+            <h1 className="truncate font-display text-[14px] font-extrabold text-ink lg:text-[18px]">
+              {match?.league ?? "Match"}
+            </h1>
           </div>
-
-          {match && (
-            <div className="flex shrink-0 items-center gap-2">
-              {isLive ? (
-                <LiveStatusBadge
-                  minute={match.minute}
-                  suspended={match.suspended}
-                />
-              ) : isFinished ? (
-                <span className="rounded-full bg-elev px-2.5 py-1 font-display text-[10.5px] font-bold uppercase tracking-wider text-mist">
-                  Terminé
-                </span>
-              ) : null}
-              <span className="shrink-0 rounded-full bg-elev px-2.5 py-1 font-display text-[11px] font-bold tabular-nums text-mist">
-                {formatMatchDateTime(match.startsAt)}
-              </span>
-            </div>
-          )}
         </div>
+
+        {match && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {isLive ? (
+              <LiveStatusBadge
+                minute={match.minute}
+                suspended={match.suspended}
+              />
+            ) : isFinished ? (
+              <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-mist">
+                Terminé
+              </span>
+            ) : null}
+            <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-mist lg:px-2.5 lg:py-1 lg:text-[11px]">
+              {formatMatchDateTime(match.startsAt)}
+            </span>
+          </div>
+        )}
       </div>
 
-      <div className="px-3.5 pt-3.5 lg:px-0 lg:pt-4">
+      <div className="mt-2.5 lg:mt-4">
         {match === undefined ? (
-          <div className="space-y-3">
-            <div className="skeleton h-[150px] rounded-2xl" />
-            <div className="skeleton h-[44px] rounded-full" />
-            <div className="skeleton h-[220px] rounded-2xl" />
+          <div className="space-y-2.5">
+            <div className="skeleton h-[96px] rounded-xl" />
+            <div className="skeleton h-[34px] rounded-full" />
+            <div className="skeleton h-[160px] rounded-xl" />
           </div>
         ) : match === null ? (
-          <div className="glass-card rounded-2xl p-6 text-center">
-            <AlertTriangle className="mx-auto h-6 w-6 text-betclic-red" />
-            <p className="mt-2 font-display text-[16px] font-bold text-ink">
+          <div className="glass-card rounded-xl p-4 text-center">
+            <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
+            <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
               Match introuvable
             </p>
-            <p className="mt-1 text-[12.5px] text-mist">
+            <p className="mt-0.5 text-[11.5px] text-mist">
               {loadError ?? "Cette affiche n'est plus disponible."}
             </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => void fetchMatch()}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-elev px-4 py-2 font-display text-[12px] font-bold text-ink"
+                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[11.5px] font-bold text-ink"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className="h-3 w-3" />
                 Réessayer
               </button>
               <Link
                 href="/matchs"
-                className="btn-red rounded-xl px-4 py-2 text-[12px]"
+                className="btn-red rounded-lg px-3.5 py-1.5 text-[11.5px]"
               >
-                Voir tous les matchs
+                Tous les matchs
               </Link>
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Scoreboard complet (noms des clubs intégraux sans troncature) */}
-            <section className="glass-card overflow-hidden rounded-2xl p-4">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
-                <div className="flex flex-col items-center gap-1.5 text-center">
+          <div className="space-y-2.5 lg:space-y-4">
+            {/* Scoreboard compact sur mobile (écussons sm, noms intégraux) */}
+            <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="flex flex-col items-center gap-1 text-center">
                   <TeamAvatar
                     name={match.homeTeam}
                     logo={match.homeLogo}
-                    size="lg"
+                    size="sm"
+                    className="lg:hidden"
                   />
-                  <span className="font-display text-[13px] font-extrabold leading-tight text-ink">
+                  <TeamAvatar
+                    name={match.homeTeam}
+                    logo={match.homeLogo}
+                    size="md"
+                    className="hidden lg:grid"
+                  />
+                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
                     {match.homeTeam}
                   </span>
                   {(match.redHome ?? 0) > 0 && (
-                    <span className="rounded bg-betclic-red px-1.5 py-0.5 font-display text-[9.5px] font-bold text-white">
+                    <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-bold text-white">
                       🟥 ×{match.redHome}
                     </span>
                   )}
@@ -321,7 +320,7 @@ export default function MatchDetailPage() {
 
                 <div className="flex flex-col items-center">
                   {isLive || isFinished ? (
-                    <div className="flex items-center gap-1.5 rounded-xl bg-elev px-4 py-2 font-display text-[24px] font-black tabular-nums leading-none text-ink">
+                    <div className="flex items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[18px] font-black tabular-nums leading-none text-ink lg:rounded-xl lg:px-4 lg:py-2 lg:text-[24px]">
                       <span
                         className={cn(
                           isFinished &&
@@ -331,7 +330,7 @@ export default function MatchDetailPage() {
                       >
                         {match.homeScore ?? 0}
                       </span>
-                      <span className="text-[15px] text-dim">-</span>
+                      <span className="text-[12px] text-dim lg:text-[15px]">-</span>
                       <span
                         className={cn(
                           isFinished &&
@@ -343,29 +342,36 @@ export default function MatchDetailPage() {
                       </span>
                     </div>
                   ) : (
-                    <div className="rounded-xl bg-elev px-3.5 py-2 text-center font-display text-[13px] font-extrabold text-mist">
+                    <div className="rounded-lg bg-elev px-2.5 py-1 text-center font-display text-[11.5px] font-extrabold text-mist lg:rounded-xl lg:px-3.5 lg:py-2 lg:text-[13px]">
                       VS
                     </div>
                   )}
 
                   {match.htHomeScore != null && match.htAwayScore != null && (
-                    <span className="mt-1 text-[10.5px] font-semibold tabular-nums text-dim">
+                    <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim lg:mt-1 lg:text-[10.5px]">
                       MT {match.htHomeScore}-{match.htAwayScore}
                     </span>
                   )}
                 </div>
 
-                <div className="flex flex-col items-center gap-1.5 text-center">
+                <div className="flex flex-col items-center gap-1 text-center">
                   <TeamAvatar
                     name={match.awayTeam}
                     logo={match.awayLogo}
-                    size="lg"
+                    size="sm"
+                    className="lg:hidden"
                   />
-                  <span className="font-display text-[13px] font-extrabold leading-tight text-ink">
+                  <TeamAvatar
+                    name={match.awayTeam}
+                    logo={match.awayLogo}
+                    size="md"
+                    className="hidden lg:grid"
+                  />
+                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
                     {match.awayTeam}
                   </span>
                   {(match.redAway ?? 0) > 0 && (
-                    <span className="rounded bg-betclic-red px-1.5 py-0.5 font-display text-[9.5px] font-bold text-white">
+                    <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-bold text-white">
                       🟥 ×{match.redAway}
                     </span>
                   )}
@@ -373,7 +379,7 @@ export default function MatchDetailPage() {
               </div>
 
               {(isLive || isFinished) && hasGoals && (
-                <div className="mt-3 grid grid-cols-2 gap-3 border-t border-edge/70 pt-2.5 text-[11px] text-mist">
+                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-edge/60 pt-1.5 text-[10px] text-mist lg:mt-3 lg:pt-2.5 lg:text-[11px]">
                   <div className="space-y-0.5">
                     {homeGoals.map((g, i) => (
                       <div key={i} className="truncate">
@@ -391,49 +397,49 @@ export default function MatchDetailPage() {
                 </div>
               )}
 
-              {/* Boutons de bascule Tracker 2D / Stats ESPN / Rapport post-match */}
+              {/* Bascules compactes (Terrain 2D / Stats / Rapport) */}
               {(isLive && !isReal) || realStatsAvailable || isFinished ? (
-                <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-edge/80 pt-3">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-edge/70 pt-2">
                   {((isLive && !isReal) || realStatsAvailable) && (
                     <button
                       type="button"
                       onClick={() => setShowTracker((v) => !v)}
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-[11px] font-bold transition-colors",
+                        "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-bold transition-colors",
                         showTracker
                           ? "bg-ink text-white"
                           : "bg-elev text-ink hover:bg-edge"
                       )}
                     >
                       {isReal ? (
-                        <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
+                        <BarChart3 className="h-3 w-3 text-emerald-400" />
                       ) : (
-                        <Radio className="h-3.5 w-3.5 text-betclic-red" />
+                        <Radio className="h-3 w-3 text-betclic-red" />
                       )}
                       {showTracker
                         ? isReal
-                          ? "Masquer les stats"
-                          : "Masquer le terrain 2D"
+                          ? "Masquer stats"
+                          : "Masquer 2D"
                         : isReal
                           ? "Stats officielles"
-                          : "Terrain 2D en direct"}
+                          : "Terrain 2D"}
                     </button>
                   )}
 
                   {isFinished && (
                     <Link
                       href={`/resultats/${match.id}`}
-                      className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-3 py-1.5 font-display text-[11px] font-bold text-betclic-red transition-colors hover:bg-betclic-red/15"
+                      className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red/10 px-2.5 font-display text-[10.5px] font-bold text-betclic-red"
                     >
-                      Rapport complet du résultat
-                      <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      Bilan du résultat
+                      <ChevronRight className="h-3 w-3" strokeWidth={2.4} />
                     </Link>
                   )}
                 </div>
               ) : null}
             </section>
 
-            {/* Terrain 2D live (virtuel) ou statistiques officielles ESPN (réel) */}
+            {/* Terrain 2D live ou statistiques ESPN (replié par défaut sur mobile) */}
             {showTracker && isLive && !isReal && (
               <LiveMatchTracker match={match} />
             )}
@@ -447,30 +453,31 @@ export default function MatchDetailPage() {
                 awayLogo={match.awayLogo}
                 htHomeScore={match.htHomeScore}
                 htAwayScore={match.htAwayScore}
+                compact
               />
             )}
 
-            {/* Onglets de catégories de marchés + accordéons complets */}
+            {/* Onglets de catégories compacts + accordéons */}
             {isFinished || groups.length === 0 ? (
-              <div className="glass-card rounded-2xl p-5 text-center">
-                <p className="font-display text-[14px] font-bold text-ink">
+              <div className="glass-card rounded-xl p-3.5 text-center">
+                <p className="font-display text-[12.5px] font-bold text-ink">
                   {isFinished
-                    ? "Cette rencontre est terminée — les marchés sont clôturés."
+                    ? "Rencontre terminée — marchés clôturés."
                     : "Aucun marché ouvert pour le moment."}
                 </p>
                 {isFinished && (
                   <Link
                     href={`/resultats/${match.id}`}
-                    className="btn-red mt-3 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px]"
+                    className="btn-red mt-2.5 inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[11.5px]"
                   >
-                    Consulter le bilan détaillé
+                    Bilan détaillé
                     <ChevronRight className="h-3.5 w-3.5" />
                   </Link>
                 )}
               </div>
             ) : (
-              <section className="space-y-3">
-                <div className="no-scrollbar -mx-3.5 flex gap-1.5 overflow-x-auto px-3.5 py-0.5 lg:mx-0 lg:px-0">
+              <section className="space-y-2 lg:space-y-3">
+                <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 py-0.5 lg:mx-0 lg:px-0">
                   {CATEGORY_TABS.map((t) => {
                     const count =
                       t.key === "all"
@@ -484,7 +491,7 @@ export default function MatchDetailPage() {
                         type="button"
                         onClick={() => setCategory(t.key)}
                         className={cn(
-                          "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 font-display text-[12px] font-bold transition-colors",
+                          "inline-flex h-7.5 shrink-0 items-center gap-1 rounded-full px-2.5 font-display text-[11px] font-bold transition-colors lg:h-9 lg:px-3.5 lg:text-[12px]",
                           active
                             ? "bg-betclic-red text-white shadow-xs"
                             : "bg-elev text-mist hover:text-ink"
@@ -493,7 +500,7 @@ export default function MatchDetailPage() {
                         {t.label}
                         <span
                           className={cn(
-                            "text-[10.5px] font-semibold tabular-nums",
+                            "text-[10px] font-semibold tabular-nums",
                             active ? "text-white/80" : "text-dim"
                           )}
                         >
@@ -505,12 +512,12 @@ export default function MatchDetailPage() {
                 </div>
 
                 {suspended && (
-                  <div className="rounded-xl border border-amber-500/35 bg-amber-500/12 px-3.5 py-2 text-center font-display text-[12px] font-bold text-amber-800">
-                    Marchés momentanément suspendus suite à une action décisive…
+                  <div className="rounded-lg border border-amber-500/35 bg-amber-500/12 px-3 py-1.5 text-center font-display text-[11px] font-bold text-amber-800">
+                    Marchés suspendus momentanément…
                   </div>
                 )}
 
-                <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
                   {filteredGroups.map((g) => {
                     const isOpen =
                       category !== "all"
@@ -596,23 +603,23 @@ export default function MatchDetailPage() {
               </section>
             )}
 
-            {/* Chronologie des événements */}
+            {/* Chronologie compacte */}
             {cleanEvents.length > 0 && (
-              <section className="glass-card overflow-hidden rounded-2xl p-4">
-                <h2 className="font-display text-[13px] font-extrabold uppercase tracking-wider text-mist">
-                  Chronologie du match ({cleanEvents.length})
+              <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+                <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+                  Chronologie ({cleanEvents.length})
                 </h2>
-                <div className="mt-2.5 divide-y divide-edge/70">
+                <div className="mt-1.5 divide-y divide-edge/60">
                   {cleanEvents.map((ev, idx) => (
                     <div
                       key={`${ev.minute}-${ev.type}-${idx}`}
-                      className="flex items-center justify-between gap-2 py-2 text-[12px]"
+                      className="flex items-center justify-between gap-2 py-1.5 text-[11px]"
                     >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="inline-flex min-w-[34px] justify-center rounded-md bg-elev px-1.5 py-0.5 font-display text-[11px] font-bold tabular-nums text-ink">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[10px] font-bold tabular-nums text-ink">
                           {ev.minute}&apos;
                         </span>
-                        <span>
+                        <span className="text-[11px]">
                           {ev.type === "goal"
                             ? "⚽"
                             : ev.type === "red"
@@ -623,7 +630,7 @@ export default function MatchDetailPage() {
                           {ev.player}
                         </span>
                       </div>
-                      <span className="shrink-0 text-[11px] font-medium text-dim">
+                      <span className="shrink-0 text-[10px] font-medium text-dim">
                         {ev.team === "home" ? match.homeTeam : match.awayTeam}
                       </span>
                     </div>
@@ -632,21 +639,21 @@ export default function MatchDetailPage() {
               </section>
             )}
 
-            {/* Vos paris engagés sur cette affiche */}
+            {/* Vos paris sur ce match */}
             {myMatchBets.length > 0 && (
-              <section className="space-y-2.5">
+              <section className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h2 className="font-display text-[14px] font-extrabold text-ink">
+                  <h2 className="font-display text-[12.5px] font-extrabold text-ink lg:text-[14px]">
                     Vos paris sur ce match ({myMatchBets.length})
                   </h2>
                   <Link
                     href="/paris"
-                    className="font-display text-[12px] font-bold text-betclic-red"
+                    className="font-display text-[11px] font-bold text-betclic-red"
                   >
-                    Tous mes paris
+                    Mes paris
                   </Link>
                 </div>
-                <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
                   {myMatchBets.map((b) => (
                     <BetTicket
                       key={`${b.kind}-${b.id}`}

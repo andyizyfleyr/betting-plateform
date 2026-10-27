@@ -6,8 +6,10 @@ import { useParams, useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  BarChart3,
   ChevronRight,
   Clock,
+  Radio,
   RefreshCw,
   Share2,
   TrendingUp,
@@ -96,6 +98,9 @@ export default function SingleBetDetailPage() {
       ? (getCachedPrediction(initial.questionId) ?? null)
       : null;
   });
+  const [showTracker, setShowTracker] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1024
+  );
 
   if (params?.id !== prevSlug) {
     setPrevSlug(params?.id);
@@ -149,7 +154,7 @@ export default function SingleBetDetailPage() {
           const mr = await api.matchById(found.matchId);
           if (mr.match) setLinkedMatch(mr.match);
         } catch {
-          /* match archivé hors cache : conservé tel quel */
+          /* match archivé hors cache */
         }
       } else if (found?.kind === "prediction" && found.questionId) {
         try {
@@ -264,15 +269,15 @@ export default function SingleBetDetailPage() {
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-xl px-4 pt-6 pb-8">
-        <div className="glass-card rounded-2xl p-6 text-center">
-          <p className="font-display text-[17px] font-bold text-ink">
+      <div className="mx-auto max-w-xl px-3 pt-4 pb-6">
+        <div className="glass-card rounded-xl p-4 text-center">
+          <p className="font-display text-[14.5px] font-bold text-ink">
             Connectez-vous pour consulter ce pari
           </p>
-          <div className="mt-4 flex justify-center gap-2.5">
+          <div className="mt-3 flex justify-center">
             <Link
               href="/auth?mode=login"
-              className="btn-red rounded-xl px-5 py-2.5 text-[12.5px]"
+              className="btn-red rounded-xl px-4 py-2 text-[12px]"
             >
               Connexion
             </Link>
@@ -294,7 +299,12 @@ export default function SingleBetDetailPage() {
   const awayScore = linkedMatch?.awayScore ?? bet?.matchAwayScore ?? null;
   const hasScore = homeScore != null && awayScore != null;
   const isReal = (linkedMatch?.source ?? bet?.matchSource) === "manual";
-  const realStatsAvailable = isReal && hasAnyRealStats(linkedMatch?.realStats);
+  const realStatsAvailable = Boolean(
+    isReal && hasAnyRealStats(linkedMatch?.realStats)
+  );
+  const canToggleTracker = Boolean(
+    linkedMatch && ((!isReal && matchStatus === "live") || realStatsAvailable)
+  );
   const { homeGoals, awayGoals } = formatGoalSummary(
     linkedMatch?.events,
     homeScore ?? 0,
@@ -302,208 +312,182 @@ export default function SingleBetDetailPage() {
   );
 
   return (
-    <div className="pb-8">
-      {/* En-tête collant */}
-      <div className="sticky top-[52px] z-30 border-b border-edge bg-white/95 px-3.5 py-2.5 backdrop-blur lg:top-0 lg:rounded-t-2xl lg:px-5">
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex min-w-0 items-center gap-2.5">
+    <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
+      {/* En-tête compact en ligne */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/paris");
+              }
+            }}
+            aria-label="Retour à Mes paris"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:h-9 lg:w-9"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
+          </button>
+
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-[15px] font-bold leading-tight text-ink lg:text-[21px]">
+              {isPrediction ? "Pari prédiction" : "Pari simple"}
+            </h1>
+            {bet && (
+              <p className="truncate text-[10.5px] leading-tight text-mist lg:text-[11.5px]">
+                Ticket #{bet.id} · {formatPlacedAt(bet.placedAt)}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {bet && (
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              onClick={() => {
-                if (typeof window !== "undefined" && window.history.length > 1) {
-                  router.back();
-                } else {
-                  router.push("/paris");
-                }
-              }}
-              aria-label="Retour à Mes paris"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elev text-ink transition-colors hover:bg-edge active:scale-95"
+              onClick={() => setSharing(true)}
+              aria-label="Partager ce pari"
+              className="inline-flex h-7 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-ink active:scale-95 lg:h-8 lg:px-2.5 lg:text-[11px]"
             >
-              <ArrowLeft className="h-4 w-4" strokeWidth={2.3} />
+              <Share2 className="h-3 w-3 text-betclic-red" strokeWidth={2.2} />
+              Flex
             </button>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                {isPrediction ? (
-                  <TrendingUp
-                    className="h-3.5 w-3.5 shrink-0 text-betclic-red"
-                    strokeWidth={2.3}
-                  />
-                ) : (
-                  <SportIcon
-                    sport={bet?.sport ?? "football"}
-                    className="h-3.5 w-3.5 shrink-0 text-betclic-red"
-                  />
-                )}
-                <h1 className="truncate font-display text-[15px] font-extrabold text-ink">
-                  {isPrediction ? "Pari prédiction" : "Pari simple"}
-                </h1>
-              </div>
-              {bet && (
-                <p className="truncate text-[11px] text-dim">
-                  Ticket #{bet.id} · placé {formatPlacedAt(bet.placedAt)}
-                </p>
-              )}
-            </div>
+            <StatusPill
+              status={bet.status}
+              live={live}
+              minute={linkedMatch?.minute ?? bet.matchMinute}
+            />
           </div>
-
-          {bet && (
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setSharing(true)}
-                aria-label="Partager ce pari"
-                className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[11px] font-bold text-ink transition-colors hover:bg-edge active:scale-95"
-              >
-                <Share2 className="h-3.5 w-3.5" strokeWidth={2.2} />
-                Flex
-              </button>
-              <StatusPill
-                status={bet.status}
-                live={live}
-                minute={linkedMatch?.minute ?? bet.matchMinute}
-              />
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
-      <div className="px-3.5 pt-3.5 lg:px-0 lg:pt-4">
+      <div className="mt-2.5 lg:mt-3.5">
         {loadError && bet === undefined ? (
-          <div className="rounded-2xl border border-rose-500/35 bg-rose-500/10 p-5 text-center">
-            <AlertTriangle className="mx-auto h-6 w-6 text-rose-600" />
-            <p className="mt-2 font-display text-[14px] font-bold text-ink">
+          <div className="rounded-xl border border-rose-500/35 bg-rose-500/10 p-4 text-center">
+            <AlertTriangle className="mx-auto h-5 w-5 text-rose-600" />
+            <p className="mt-1.5 font-display text-[13.5px] font-bold text-ink">
               Chargement interrompu
             </p>
-            <p className="mt-1 text-[12px] text-mist">{loadError}</p>
+            <p className="mt-0.5 text-[11.5px] text-mist">{loadError}</p>
             <button
               type="button"
               onClick={() => {
                 setLoadError(null);
                 setReloadNonce((n) => n + 1);
               }}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-betclic-red px-4 py-2 font-display text-[12px] font-bold text-white"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-betclic-red px-3.5 py-1.5 font-display text-[11.5px] font-bold text-white"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="h-3 w-3" />
               Réessayer
             </button>
           </div>
         ) : bet === undefined ? (
-          <div className="space-y-3">
-            <div className="skeleton h-[156px] rounded-2xl" />
-            <div className="skeleton h-[180px] rounded-2xl" />
+          <div className="space-y-2.5">
+            <div className="skeleton h-[112px] rounded-xl" />
+            <div className="skeleton h-[126px] rounded-xl" />
           </div>
         ) : bet === null ? (
-          <div className="glass-card rounded-2xl p-6 text-center">
-            <p className="font-display text-[16px] font-bold text-ink">
+          <div className="glass-card rounded-xl p-4 text-center">
+            <p className="font-display text-[14.5px] font-bold text-ink">
               Pari introuvable
             </p>
-            <p className="mt-1 text-[12.5px] text-mist">
+            <p className="mt-1 text-[11.5px] text-mist">
               Ce ticket n&apos;existe pas ou n&apos;appartient pas à votre compte.
             </p>
             <Link
               href="/paris"
-              className="btn-red mt-4 inline-flex rounded-xl px-5 py-2.5 text-[12.5px]"
+              className="btn-red mt-3 inline-flex rounded-xl px-4 py-2 text-[12px]"
             >
               Retour à Mes paris
             </Link>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Carte financière & sélection verrouillée */}
+          <div className="space-y-2.5 lg:space-y-4">
+            {/* Carte compacte : sélection verrouillée + montants en ligne + Cash Out */}
             <section
               className={cn(
-                "glass-card overflow-hidden rounded-2xl p-4",
+                "glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4",
                 won && "ticket-won",
                 lost && "border-betclic-red/25"
               )}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {shortMarketBadge(bet.market) && (
-                      <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-mist">
-                        {shortMarketBadge(bet.market)}
-                      </span>
-                    )}
-                    <span className="text-[11.5px] font-medium text-mist">
-                      Cote fixe verrouillée
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-elev px-2.5 py-1.5 lg:rounded-xl lg:px-3 lg:py-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {shortMarketBadge(bet.market) && (
+                    <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase text-mist ring-1 ring-edge/80">
+                      {shortMarketBadge(bet.market)}
                     </span>
-                  </div>
-                  <p className="mt-1.5 font-display text-[16px] font-extrabold leading-snug text-ink">
+                  )}
+                  <span className="truncate text-[12.5px] font-semibold text-ink lg:text-[13.5px]">
                     {bet.selectionLabel}
-                  </p>
+                  </span>
                 </div>
-
-                <div className="shrink-0 rounded-xl bg-betclic-red/10 px-3 py-1.5 text-right">
-                  <div className="text-[9.5px] font-bold uppercase tracking-wider text-betclic-red">
-                    Cote
-                  </div>
-                  <div className="font-display text-[16px] font-black tabular-nums text-betclic-red">
-                    {formatOdds(bet.odds, oddsFormat)}
-                  </div>
-                </div>
+                <span className="shrink-0 font-display text-[13px] font-extrabold tabular-nums text-betclic-red lg:text-[14px]">
+                  {formatOdds(bet.odds, oddsFormat)}
+                </span>
               </div>
 
-              {/* Montants financiers alignés horizontalement */}
-              <div className="mt-3.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-edge/80 pt-3">
-                <div className="inline-flex items-baseline gap-1">
-                  <span className="text-[10.5px] font-medium text-dim">Mise :</span>
-                  <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+              {/* Montants financiers alignés sur une seule ligne compacte */}
+              <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge/80 pt-2">
+                <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-[10px] font-medium text-dim">Mise :</span>
+                  <span className="font-display text-[13px] font-bold tabular-nums text-ink lg:text-[13.5px]">
                     {eur(bet.stake)}
                   </span>
                 </div>
 
-                <div className="inline-flex items-baseline gap-1">
-                  <span className="text-[10.5px] font-medium text-dim">Cote :</span>
-                  <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+                <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
+                  <span className="text-[10px] font-medium text-dim">Cote :</span>
+                  <span className="font-display text-[13px] font-bold tabular-nums text-ink lg:text-[13.5px]">
                     ×{formatOdds(bet.odds, oddsFormat)}
                   </span>
                 </div>
 
-                <div className="inline-flex items-baseline gap-1">
+                <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
                   {won ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">
+                      <span className="text-[10px] font-medium text-dim">
                         Gain reçu :
                       </span>
-                      <span className="font-display text-[14px] font-extrabold tabular-nums text-win">
+                      <span className="font-display text-[13px] font-extrabold tabular-nums text-win lg:text-[14px]">
                         +{eur(bet.potentialWin)}
                       </span>
                     </>
                   ) : cashed ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">
+                      <span className="text-[10px] font-medium text-dim">
                         Vendu pour :
                       </span>
-                      <span className="font-display text-[14px] font-extrabold tabular-nums text-sky-700">
+                      <span className="font-display text-[13px] font-extrabold tabular-nums text-sky-700 lg:text-[14px]">
                         {eur(bet.cashOutAmount ?? 0)}
                       </span>
                     </>
                   ) : voided ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">
+                      <span className="text-[10px] font-medium text-dim">
                         Remboursé :
                       </span>
-                      <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+                      <span className="font-display text-[13px] font-bold tabular-nums text-ink">
                         {eur(bet.stake)}
                       </span>
                     </>
                   ) : lost ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">
+                      <span className="text-[10px] font-medium text-dim">
                         Résultat :
                       </span>
-                      <span className="font-display text-[14px] font-extrabold tabular-nums text-betclic-red">
+                      <span className="font-display text-[13px] font-extrabold tabular-nums text-betclic-red lg:text-[14px]">
                         -{eur(bet.stake)}
                       </span>
                     </>
                   ) : (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">
+                      <span className="text-[10px] font-medium text-dim">
                         Gain max :
                       </span>
-                      <span className="font-display text-[14px] font-extrabold tabular-nums text-ink">
+                      <span className="font-display text-[13px] font-extrabold tabular-nums text-ink lg:text-[14px]">
                         {eur(bet.potentialWin)}
                       </span>
                     </>
@@ -512,17 +496,17 @@ export default function SingleBetDetailPage() {
               </div>
 
               {bet.settledAt && bet.status !== "pending" && (
-                <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-dim">
-                  <Clock className="h-3.5 w-3.5 shrink-0" />
-                  <span>Résultat validé {formatPlacedAt(bet.settledAt)}</span>
+                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-dim">
+                  <Clock className="h-3 w-3 shrink-0" />
+                  <span>Validé {formatPlacedAt(bet.settledAt)}</span>
                 </div>
               )}
 
-              {/* Vendre le coupon (vert créatif + glisser-confirmer) */}
+              {/* Vendre le coupon (inchangé de l'avant-dernier push) */}
               {canCashOut && (
-                <div className="mt-3.5 space-y-2 border-t border-edge/80 pt-3.5">
+                <div className="mt-2.5 space-y-2 border-t border-edge/80 pt-2.5">
                   {cashoutChanged && (
-                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/12 px-3 py-2 text-[11.5px] text-amber-900">
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/12 px-2.5 py-1.5 text-[11px] text-amber-900">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
                       <div className="min-w-0 flex-1">
                         <div className="font-semibold">
@@ -530,9 +514,6 @@ export default function SingleBetDetailPage() {
                           <span className="font-bold">
                             {eur(cashoutChanged.currentCashout)}
                           </span>
-                        </div>
-                        <div className="text-[10.5px] text-amber-800/90">
-                          Glissez à nouveau pour confirmer la vente à ce montant.
                         </div>
                       </div>
                     </div>
@@ -548,21 +529,22 @@ export default function SingleBetDetailPage() {
               )}
             </section>
 
-            {/* Détail complet de l'événement (Sport ou Prédiction) */}
+            {/* Détail compact de l'événement (Sport ou Prédiction) */}
             {isPrediction ? (
-              <section className="glass-card overflow-hidden rounded-2xl p-4">
+              <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[10.5px] font-bold uppercase tracking-wide text-betclic-red">
+                  <span className="inline-flex items-center gap-1 rounded bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
+                    <TrendingUp className="h-3 w-3" />
                     {bet.league}
                   </span>
                   {linkedPrediction?.resolvesAt && (
-                    <span className="text-[11px] font-medium tabular-nums text-dim">
+                    <span className="text-[10px] font-medium tabular-nums text-dim">
                       Clôture · {formatKickoff(linkedPrediction.resolvesAt)}
                     </span>
                   )}
                 </div>
 
-                <h2 className="mt-2.5 font-display text-[16px] font-extrabold leading-snug text-ink">
+                <h2 className="mt-1.5 font-display text-[13.5px] font-bold leading-snug text-ink lg:text-[15.5px]">
                   {bet.question}
                 </h2>
 
@@ -585,7 +567,7 @@ export default function SingleBetDetailPage() {
                   const weights = opts.map((o) => (o.odds > 0 ? 1 / o.odds : 0));
                   const wSum = weights.reduce((a, b) => a + b, 0) || 1;
                   return (
-                    <div className="mt-3.5 space-y-2">
+                    <div className="mt-2.5 space-y-1.5">
                       {opts.map((opt, idx) => {
                         const sharePct = Math.round((weights[idx] / wSum) * 100);
                         const picked = opt.key === bet.selection;
@@ -596,7 +578,7 @@ export default function SingleBetDetailPage() {
                           <div
                             key={opt.key}
                             className={cn(
-                              "relative overflow-hidden rounded-xl border px-3 py-2.5",
+                              "relative overflow-hidden rounded-lg border px-2.5 py-1.5",
                               winner
                                 ? "border-win/50 bg-win/8"
                                 : picked
@@ -618,21 +600,21 @@ export default function SingleBetDetailPage() {
                               }}
                             />
                             <div className="relative flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="truncate font-display text-[13px] font-bold text-ink">
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate font-display text-[12px] font-bold text-ink">
                                   {opt.label}
                                 </span>
                                 {picked && (
-                                  <span className="shrink-0 rounded-full bg-betclic-red px-2 py-0.5 font-display text-[9.5px] font-bold text-white">
-                                    Votre choix
+                                  <span className="shrink-0 rounded-full bg-betclic-red px-1.5 py-0.5 font-display text-[9px] font-bold text-white">
+                                    Choisi
                                   </span>
                                 )}
                               </div>
-                              <div className="flex shrink-0 items-center gap-2">
-                                <span className="text-[11.5px] font-semibold tabular-nums text-mist">
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <span className="text-[10.5px] font-semibold tabular-nums text-mist">
                                   {sharePct}%
                                 </span>
-                                <span className="font-display text-[13px] font-extrabold tabular-nums text-ink">
+                                <span className="font-display text-[12px] font-extrabold tabular-nums text-ink">
                                   {formatOdds(opt.odds, oddsFormat)}
                                 </span>
                               </div>
@@ -647,18 +629,18 @@ export default function SingleBetDetailPage() {
                 {bet.questionId && (
                   <Link
                     href={`/predictions/${bet.questionId}`}
-                    className="mt-4 flex items-center justify-between rounded-xl bg-elev px-3.5 py-2.5 font-display text-[12.5px] font-bold text-ink transition-colors hover:bg-edge active:scale-[0.99]"
+                    className="mt-2.5 flex h-8 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink transition-colors hover:bg-edge active:scale-[0.99]"
                   >
-                    <span>Ouvrir la page dédiée de cette prédiction</span>
-                    <ChevronRight className="h-4 w-4 text-dim" strokeWidth={2.3} />
+                    <span>Marché complet de la prédiction</span>
+                    <ChevronRight className="h-3.5 w-3.5 text-dim" strokeWidth={2.3} />
                   </Link>
                 )}
               </section>
             ) : (
-              <section className="space-y-3.5">
-                <div className="glass-card overflow-hidden rounded-2xl p-4">
+              <section className="space-y-2.5 lg:space-y-3.5">
+                <div className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-semibold text-mist">
+                    <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-mist">
                       <SportIcon
                         sport={bet.sport}
                         className="h-3.5 w-3.5 shrink-0 text-betclic-red"
@@ -668,7 +650,7 @@ export default function SingleBetDetailPage() {
 
                     <div className="flex shrink-0 items-center gap-1.5">
                       {bet.matchStartsAt && (
-                        <span className="text-[11px] font-medium tabular-nums text-dim">
+                        <span className="text-[10.5px] font-medium tabular-nums text-dim">
                           {formatKickoff(bet.matchStartsAt)}
                         </span>
                       )}
@@ -678,105 +660,134 @@ export default function SingleBetDetailPage() {
                           suspended={linkedMatch.suspended}
                         />
                       ) : matchStatus === "finished" ? (
-                        <span className="rounded-full bg-elev px-2.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-mist">
+                        <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wider text-mist">
                           Terminé
                         </span>
                       ) : null}
                     </div>
                   </div>
 
-                  {/* Scoreboard complet sans troncature des clubs */}
-                  <div className="mt-3.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
-                    <div className="flex flex-col items-center gap-1.5 text-center">
-                      <TeamAvatar
-                        name={bet.homeTeam}
-                        logo={linkedMatch?.homeLogo ?? bet.homeLogo}
-                        size="lg"
-                      />
-                      <span className="font-display text-[12.5px] font-bold leading-tight text-ink">
-                        {bet.homeTeam}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col items-center">
-                      {hasScore ? (
-                        <div className="flex items-center gap-1.5 rounded-xl bg-elev px-3.5 py-1.5 font-display text-[22px] font-black tabular-nums leading-none text-ink">
-                          <span>{homeScore}</span>
-                          <span className="text-[14px] text-dim">-</span>
-                          <span>{awayScore}</span>
-                        </div>
-                      ) : (
-                        <span className="rounded-xl bg-elev px-3 py-1.5 font-display text-[13px] font-extrabold text-mist">
-                          VS
+                  {/* Équipes & scores en lignes compactes horizontales */}
+                  <div className="mt-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <TeamAvatar
+                          name={bet.homeTeam}
+                          logo={linkedMatch?.homeLogo ?? bet.homeLogo}
+                          size="xs"
+                        />
+                        <span className="font-display text-[12.5px] font-bold leading-snug text-ink lg:text-[13.5px]">
+                          {bet.homeTeam}
+                        </span>
+                      </div>
+                      {hasScore && (
+                        <span
+                          className={cn(
+                            "shrink-0 font-display text-[14.5px] font-black tabular-nums",
+                            matchStatus === "live"
+                              ? "text-betclic-red"
+                              : (homeScore ?? 0) > (awayScore ?? 0)
+                                ? "text-ink"
+                                : "text-mist"
+                          )}
+                        >
+                          {homeScore}
                         </span>
                       )}
-                      {linkedMatch &&
-                        linkedMatch.htHomeScore != null &&
-                        linkedMatch.htAwayScore != null && (
-                          <span className="mt-1 text-[10.5px] font-semibold tabular-nums text-dim">
-                            MT {linkedMatch.htHomeScore}-{linkedMatch.htAwayScore}
-                          </span>
-                        )}
                     </div>
 
-                    <div className="flex flex-col items-center gap-1.5 text-center">
-                      <TeamAvatar
-                        name={bet.awayTeam ?? ""}
-                        logo={linkedMatch?.awayLogo ?? bet.awayLogo}
-                        size="lg"
-                      />
-                      <span className="font-display text-[12.5px] font-bold leading-tight text-ink">
-                        {bet.awayTeam}
-                      </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <TeamAvatar
+                          name={bet.awayTeam ?? ""}
+                          logo={linkedMatch?.awayLogo ?? bet.awayLogo}
+                          size="xs"
+                        />
+                        <span className="font-display text-[12.5px] font-bold leading-snug text-ink lg:text-[13.5px]">
+                          {bet.awayTeam}
+                        </span>
+                      </div>
+                      {hasScore && (
+                        <span
+                          className={cn(
+                            "shrink-0 font-display text-[14.5px] font-black tabular-nums",
+                            matchStatus === "live"
+                              ? "text-betclic-red"
+                              : (awayScore ?? 0) > (homeScore ?? 0)
+                                ? "text-ink"
+                                : "text-mist"
+                          )}
+                        >
+                          {awayScore}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {(homeGoals.length > 0 || awayGoals.length > 0) && (
-                    <div className="mt-3 grid grid-cols-2 gap-3 border-t border-edge/70 pt-2.5 text-[11px] text-mist">
-                      <div className="space-y-0.5">
-                        {homeGoals.map((g, i) => (
-                          <div key={i} className="truncate">
-                            ⚽ {g}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="space-y-0.5 text-right">
-                        {awayGoals.map((g, i) => (
-                          <div key={i} className="truncate">
-                            {g} ⚽
-                          </div>
-                        ))}
-                      </div>
+                  {(linkedMatch?.htHomeScore != null ||
+                    homeGoals.length > 0 ||
+                    awayGoals.length > 0) && (
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
+                      {linkedMatch?.htHomeScore != null &&
+                        linkedMatch?.htAwayScore != null && (
+                          <span className="rounded bg-elev px-1.5 py-0.5 font-semibold tabular-nums">
+                            MT {linkedMatch.htHomeScore}-{linkedMatch.htAwayScore}
+                          </span>
+                        )}
+                      {(homeGoals.length > 0 || awayGoals.length > 0) && (
+                        <span className="truncate">
+                          ⚽ {[...homeGoals, ...awayGoals].join(" · ")}
+                        </span>
+                      )}
                     </div>
                   )}
 
-                  {/* Actions rapides vers la page dédiée du match / résultat */}
+                  {/* Actions compactes côte à côte */}
                   {bet.matchId && (
-                    <div className="mt-3.5 grid grid-cols-1 gap-2 border-t border-edge/80 pt-3 sm:grid-cols-2">
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-edge/70 pt-2">
+                      {canToggleTracker && (
+                        <button
+                          type="button"
+                          onClick={() => setShowTracker((s) => !s)}
+                          className={cn(
+                            "inline-flex h-7.5 items-center gap-1 rounded-lg px-2.5 font-display text-[10.5px] font-bold transition-colors",
+                            showTracker
+                              ? "bg-ink text-white"
+                              : "bg-elev text-ink"
+                          )}
+                        >
+                          {isReal ? (
+                            <BarChart3 className="h-3 w-3 text-emerald-400" />
+                          ) : (
+                            <Radio className="h-3 w-3 text-betclic-red" />
+                          )}
+                          {isReal ? "Stats" : "Terrain 2D"}
+                        </button>
+                      )}
                       <Link
                         href={`/matchs/${bet.matchId}`}
-                        className="flex items-center justify-between rounded-xl bg-elev px-3.5 py-2.5 font-display text-[12px] font-bold text-ink transition-colors hover:bg-edge active:scale-[0.99]"
+                        className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink active:scale-[0.99]"
                       >
-                        <span>Fiche du match & marchés</span>
-                        <ChevronRight className="h-4 w-4 text-dim" strokeWidth={2.3} />
+                        <span className="truncate">Match & cotes</span>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.3} />
                       </Link>
                       <Link
                         href={`/resultats?match=${bet.matchId}`}
-                        className="flex items-center justify-between rounded-xl bg-elev px-3.5 py-2.5 font-display text-[12px] font-bold text-ink transition-colors hover:bg-edge active:scale-[0.99]"
+                        className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink active:scale-[0.99]"
                       >
-                        <span>Voir dans les résultats</span>
-                        <ChevronRight className="h-4 w-4 text-dim" strokeWidth={2.3} />
+                        <span className="truncate">Résultats</span>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.3} />
                       </Link>
                     </div>
                   )}
                 </div>
 
-                {/* Tracker 2D temps réel ou statistiques officielles ESPN */}
-                {linkedMatch && !isReal && matchStatus === "live" && (
+                {/* Tracker 2D ou Stats ESPN à la demande sur mobile */}
+                {showTracker && linkedMatch && !isReal && matchStatus === "live" && (
                   <LiveMatchTracker match={linkedMatch} />
                 )}
 
-                {linkedMatch && realStatsAvailable && (
+                {showTracker && linkedMatch && realStatsAvailable && (
                   <RealMatchStatsCard
                     stats={linkedMatch.realStats}
                     homeTeam={linkedMatch.homeTeam}
@@ -785,26 +796,27 @@ export default function SingleBetDetailPage() {
                     awayLogo={linkedMatch.awayLogo}
                     htHomeScore={linkedMatch.htHomeScore}
                     htAwayScore={linkedMatch.htAwayScore}
+                    compact
                   />
                 )}
 
-                {/* Chronologie minute par minute s'il y a des faits de jeu */}
+                {/* Chronologie compacte des faits de jeu */}
                 {cleanEvents.length > 0 && (
-                  <div className="glass-card overflow-hidden rounded-2xl p-4">
-                    <h3 className="font-display text-[13px] font-extrabold uppercase tracking-wider text-mist">
+                  <div className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+                    <h3 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
                       Faits de match ({cleanEvents.length})
                     </h3>
-                    <div className="mt-2.5 divide-y divide-edge/70">
+                    <div className="mt-1.5 divide-y divide-edge/60">
                       {cleanEvents.map((ev, i) => (
                         <div
                           key={`${ev.minute}-${ev.type}-${i}`}
-                          className="flex items-center justify-between gap-2 py-2 text-[12px]"
+                          className="flex items-center justify-between gap-2 py-1.5 text-[11px]"
                         >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="inline-flex min-w-[34px] justify-center rounded-md bg-elev px-1.5 py-0.5 font-display text-[11px] font-bold tabular-nums text-ink">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[10px] font-bold tabular-nums text-ink">
                               {ev.minute}&apos;
                             </span>
-                            <span>
+                            <span className="text-[11px]">
                               {ev.type === "goal"
                                 ? "⚽"
                                 : ev.type === "red"
@@ -815,7 +827,7 @@ export default function SingleBetDetailPage() {
                               {ev.player}
                             </span>
                           </div>
-                          <span className="shrink-0 text-[11px] font-medium text-dim">
+                          <span className="shrink-0 text-[10px] font-medium text-dim">
                             {ev.team === "home" ? bet.homeTeam : bet.awayTeam}
                           </span>
                         </div>

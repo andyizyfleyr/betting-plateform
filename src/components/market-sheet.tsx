@@ -572,22 +572,22 @@ export function AccordionItem({
   });
 
   return (
-    <div className="rounded-2xl border border-edge bg-white">
+    <div className="rounded-xl border border-edge bg-white lg:rounded-2xl">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         className={cn(
-          "flex min-h-[46px] w-full items-center justify-between bg-elev/40 px-3.5 py-2.5 text-left transition-colors active:bg-elev/80",
-          open ? "rounded-t-2xl" : "rounded-2xl"
+          "flex min-h-[38px] w-full items-center justify-between bg-elev/40 px-3 py-2 text-left transition-colors active:bg-elev/80 lg:min-h-[46px] lg:px-3.5 lg:py-2.5",
+          open ? "rounded-t-xl lg:rounded-t-2xl" : "rounded-xl lg:rounded-2xl"
         )}
       >
-        <span className="pr-2 font-display text-[13px] font-bold leading-snug text-ink">
+        <span className="pr-2 font-display text-[12px] font-bold leading-snug text-ink lg:text-[13px]">
           {group.label}
         </span>
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-dim transition-transform duration-200",
+            "h-3.5 w-3.5 shrink-0 text-dim transition-transform duration-200 lg:h-4 lg:w-4",
             open && "rotate-180 text-ink"
           )}
           strokeWidth={2.2}
@@ -595,18 +595,18 @@ export function AccordionItem({
       </button>
 
       {open && (
-        <div className="rounded-b-2xl border-t border-edge/70 bg-white p-3">
+        <div className="rounded-b-xl border-t border-edge/70 bg-white p-2 lg:rounded-b-2xl lg:p-3">
           {group.rows ? (
-            <div className="space-y-2">
+            <div className="space-y-1.5 lg:space-y-2">
               {(group.rows[0]?.outcomes.length ?? 2) === 3 ? (
-                <div className="grid grid-cols-[50px_1fr_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
+                <div className="grid grid-cols-[44px_1fr_1fr_1fr] items-center gap-1.5 px-1 text-[9.5px] font-bold uppercase tracking-wider text-dim lg:grid-cols-[50px_1fr_1fr_1fr] lg:gap-2 lg:text-[10px]">
                   <span className="text-center">Hcap</span>
                   <span className="text-center">V1</span>
                   <span className="text-center">X</span>
                   <span className="text-center">V2</span>
                 </div>
               ) : (
-                <div className="grid grid-cols-[50px_1fr_1fr] items-center gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-dim">
+                <div className="grid grid-cols-[44px_1fr_1fr] items-center gap-1.5 px-1 text-[9.5px] font-bold uppercase tracking-wider text-dim lg:grid-cols-[50px_1fr_1fr] lg:gap-2 lg:text-[10px]">
                   <span className="text-center">Total</span>
                   <span className="text-center">Plus de</span>
                   <span className="text-center">Moins de</span>
@@ -616,13 +616,13 @@ export function AccordionItem({
                 <div
                   key={row.label}
                   className={cn(
-                    "grid items-center gap-2",
+                    "grid items-center gap-1.5 lg:gap-2",
                     row.outcomes.length === 3
-                      ? "grid-cols-[50px_1fr_1fr_1fr]"
-                      : "grid-cols-[50px_1fr_1fr]"
+                      ? "grid-cols-[44px_1fr_1fr_1fr] lg:grid-cols-[50px_1fr_1fr_1fr]"
+                      : "grid-cols-[44px_1fr_1fr] lg:grid-cols-[50px_1fr_1fr]"
                   )}
                 >
-                  <span className="flex h-11 items-center justify-center rounded-xl bg-elev font-display text-[12px] font-bold tabular-nums text-ink">
+                  <span className="flex h-9 items-center justify-center rounded-lg bg-elev font-display text-[11px] font-bold tabular-nums text-ink lg:h-11 lg:rounded-xl lg:text-[12px]">
                     {row.label}
                   </span>
                   {row.outcomes.map((o) => (
@@ -641,7 +641,7 @@ export function AccordionItem({
               ))}
             </div>
           ) : isScoreExact ? (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5 lg:gap-2">
               {group.outcomes.map((o) => (
                 <OutcomeCell
                   key={o.key}
@@ -656,7 +656,7 @@ export function AccordionItem({
               ))}
             </div>
           ) : (
-            <div className={cn("grid gap-2", twoCols ? "grid-cols-2" : "grid-cols-3")}>
+            <div className={cn("grid gap-1.5 lg:gap-2", twoCols ? "grid-cols-2" : "grid-cols-3")}>
               {group.outcomes.map((o, idx) => {
                 // Si marché à 2 colonnes avec un nombre impair d'issues ouvertes, la dernière prend toute la ligne
                 const spanFull =
@@ -719,7 +719,7 @@ function OutcomeCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "relative flex h-11 items-center justify-between gap-2 rounded-xl border px-3 transition-all active:scale-[0.98]",
+        "relative flex h-9 items-center justify-between gap-1.5 rounded-lg border px-2.5 transition-all active:scale-[0.98] lg:h-11 lg:gap-2 lg:rounded-xl lg:px-3",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
@@ -733,18 +733,18 @@ function OutcomeCell({
       {!suspended && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
-          "truncate text-[12px] font-semibold",
+          "truncate text-[11px] font-semibold lg:text-[12px]",
           active ? "text-white/90" : "text-mist"
         )}
       >
         {o.short}
       </span>
       {suspended ? (
-        <Lock className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.3} />
+        <Lock className="h-3 w-3 shrink-0 text-dim lg:h-3.5 lg:w-3.5" strokeWidth={2.3} />
       ) : (
         <span
           className={cn(
-            "shrink-0 font-display text-[13.5px] font-bold tabular-nums transition-colors duration-200",
+            "shrink-0 font-display text-[12.5px] font-bold tabular-nums transition-colors duration-200 lg:text-[13.5px]",
             oddsTrendTextClass(trend, active)
           )}
         >

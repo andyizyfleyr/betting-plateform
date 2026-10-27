@@ -132,25 +132,25 @@ export default function ResultDetailPage() {
     const btts = hs > 0 && as > 0;
     const winnerLabel =
       item.winnerCode === "V1"
-        ? `1 · ${item.homeTeam}`
+        ? `V1 · ${item.homeTeam}`
         : item.winnerCode === "V2"
-          ? `2 · ${item.awayTeam}`
-          : "X · Match nul";
+          ? `V2 · ${item.awayTeam}`
+          : "X · Nul";
     return [
-      { label: "Résultat 1X2", value: winnerLabel },
+      { label: "1X2", value: winnerLabel },
       { label: "Score exact", value: `${hs} - ${as}` },
       {
-        label: "Total de buts (2.5)",
-        value: total >= 3 ? `Plus de 2.5 (${total})` : `Moins de 2.5 (${total})`,
+        label: "Total 2.5",
+        value: total >= 3 ? `TP 2.5 (${total} b.)` : `TM 2.5 (${total} b.)`,
       },
       {
-        label: "Les 2 équipes marquent",
+        label: "Les 2 marquent",
         value: btts ? "Oui" : "Non",
       },
       ...(item.htHome != null && item.htAway != null
         ? [
             {
-              label: "Score 1ère mi-temps",
+              label: "Mi-temps",
               value: `${item.htHome} - ${item.htAway}`,
             },
           ]
@@ -159,100 +159,105 @@ export default function ResultDetailPage() {
   }, [item]);
 
   return (
-    <div className="pb-8">
-      {/* En-tête collant */}
-      <div className="sticky top-[52px] z-30 border-b border-edge bg-white/95 px-3.5 py-2.5 backdrop-blur lg:top-0 lg:rounded-t-2xl lg:px-5">
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== "undefined" && window.history.length > 1) {
-                  router.back();
-                } else {
-                  router.push("/resultats");
-                }
-              }}
-              aria-label="Retour aux résultats"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-elev text-ink transition-colors hover:bg-edge active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4" strokeWidth={2.3} />
-            </button>
+    <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
+      {/* En-tête compact en ligne */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/resultats");
+              }
+            }}
+            aria-label="Retour aux résultats"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:h-9 lg:w-9"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
+          </button>
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <SportIcon
-                  sport={item?.sport ?? "football"}
-                  className="h-3.5 w-3.5 shrink-0 text-betclic-red"
-                />
-                <h1 className="truncate font-display text-[14.5px] font-extrabold text-ink">
-                  {item?.league ?? "Résultat du match"}
-                </h1>
-              </div>
-              {item && (
-                <p className="truncate text-[11px] text-dim">
-                  Terminé · {formatKickoff(item.finishedAt ?? item.startsAt)}
-                </p>
-              )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <SportIcon
+                sport={item?.sport ?? "football"}
+                className="h-3.5 w-3.5 shrink-0 text-betclic-red"
+              />
+              <h1 className="truncate font-display text-[14px] font-extrabold text-ink lg:text-[18px]">
+                {item?.league ?? "Résultat"}
+              </h1>
             </div>
+            {item && (
+              <p className="truncate text-[10px] leading-tight text-dim lg:text-[11px]">
+                {formatKickoff(item.finishedAt ?? item.startsAt)}
+              </p>
+            )}
           </div>
-
-          <span className="shrink-0 rounded-full bg-win/12 px-2.5 py-1 font-display text-[10.5px] font-bold text-win">
-            Officiel FT
-          </span>
         </div>
+
+        <span className="shrink-0 rounded-full bg-win/12 px-2 py-0.5 font-display text-[10px] font-bold text-win">
+          Officiel FT
+        </span>
       </div>
 
-      <div className="px-3.5 pt-3.5 lg:px-0 lg:pt-4">
+      <div className="mt-2.5 lg:mt-4">
         {item === undefined ? (
-          <div className="space-y-3">
-            <div className="skeleton h-[150px] rounded-2xl" />
-            <div className="skeleton h-[190px] rounded-2xl" />
+          <div className="space-y-2.5">
+            <div className="skeleton h-[106px] rounded-xl" />
+            <div className="skeleton h-[110px] rounded-xl" />
           </div>
         ) : item === null ? (
-          <div className="glass-card rounded-2xl p-6 text-center">
-            <AlertTriangle className="mx-auto h-6 w-6 text-betclic-red" />
-            <p className="mt-2 font-display text-[16px] font-bold text-ink">
+          <div className="glass-card rounded-xl p-4 text-center">
+            <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
+            <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
               Résultat introuvable
             </p>
-            <p className="mt-1 text-[12.5px] text-mist">
+            <p className="mt-0.5 text-[11.5px] text-mist">
               {loadError ?? "Ce match n'est pas encore terminé ou n'existe plus."}
             </p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => void fetchResult()}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-elev px-4 py-2 font-display text-[12px] font-bold text-ink"
+                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[11.5px] font-bold text-ink"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className="h-3 w-3" />
                 Réessayer
               </button>
               <Link
                 href={`/matchs/${matchId}`}
-                className="btn-red rounded-xl px-4 py-2 text-[12px]"
+                className="btn-red rounded-lg px-3.5 py-1.5 text-[11.5px]"
               >
-                Ouvrir la fiche du match
+                Fiche du match
               </Link>
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Scoreboard final */}
-            <section className="glass-card overflow-hidden rounded-2xl p-4">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
-                <div className="flex flex-col items-center gap-1.5 text-center">
+          <div className="space-y-2.5 lg:space-y-4">
+            {/* Scoreboard final compact */}
+            <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="flex flex-col items-center gap-1 text-center">
                   <TeamAvatar
                     name={item.homeTeam}
                     logo={item.homeLogo}
-                    size="lg"
+                    size="sm"
+                    className="lg:hidden"
                   />
-                  <span className="font-display text-[13px] font-extrabold leading-tight text-ink">
+                  <TeamAvatar
+                    name={item.homeTeam}
+                    logo={item.homeLogo}
+                    size="md"
+                    className="hidden lg:grid"
+                  />
+                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
                     {item.homeTeam}
                   </span>
                 </div>
 
                 <div className="flex flex-col items-center">
-                  <div className="flex items-center gap-1.5 rounded-xl bg-elev px-4 py-2 font-display text-[24px] font-black tabular-nums leading-none text-ink">
+                  <div className="flex items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[18px] font-black tabular-nums leading-none text-ink lg:rounded-xl lg:px-4 lg:py-2 lg:text-[24px]">
                     <span
                       className={cn(
                         (item.homeScore ?? 0) > (item.awayScore ?? 0) && "text-win"
@@ -260,7 +265,7 @@ export default function ResultDetailPage() {
                     >
                       {item.homeScore ?? 0}
                     </span>
-                    <span className="text-[15px] text-dim">-</span>
+                    <span className="text-[12px] text-dim lg:text-[15px]">-</span>
                     <span
                       className={cn(
                         (item.awayScore ?? 0) > (item.homeScore ?? 0) && "text-win"
@@ -270,26 +275,33 @@ export default function ResultDetailPage() {
                     </span>
                   </div>
                   {item.htHome != null && item.htAway != null && (
-                    <span className="mt-1 text-[10.5px] font-semibold tabular-nums text-dim">
+                    <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim lg:mt-1 lg:text-[10.5px]">
                       MT {item.htHome}-{item.htAway}
                     </span>
                   )}
                 </div>
 
-                <div className="flex flex-col items-center gap-1.5 text-center">
+                <div className="flex flex-col items-center gap-1 text-center">
                   <TeamAvatar
                     name={item.awayTeam}
                     logo={item.awayLogo}
-                    size="lg"
+                    size="sm"
+                    className="lg:hidden"
                   />
-                  <span className="font-display text-[13px] font-extrabold leading-tight text-ink">
+                  <TeamAvatar
+                    name={item.awayTeam}
+                    logo={item.awayLogo}
+                    size="md"
+                    className="hidden lg:grid"
+                  />
+                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
                     {item.awayTeam}
                   </span>
                 </div>
               </div>
 
-              {/* Cotes 1X2 de clôture */}
-              <div className="mt-4 grid grid-cols-3 gap-2 border-t border-edge/80 pt-3">
+              {/* Cotes 1X2 de clôture compactes */}
+              <div className="mt-2.5 grid grid-cols-3 gap-1.5 border-t border-edge/70 pt-2">
                 {[
                   { code: "V1", label: "1", odds: item.oddsHome },
                   { code: "X", label: "N", odds: item.oddsDraw },
@@ -300,16 +312,16 @@ export default function ResultDetailPage() {
                     <div
                       key={c.code}
                       className={cn(
-                        "flex items-center justify-between rounded-xl border px-3 py-2",
+                        "flex items-center justify-between rounded-lg border px-2.5 py-1.5",
                         won
                           ? "border-win/45 bg-win/10 text-win"
                           : "border-edge bg-elev/50 text-mist"
                       )}
                     >
-                      <span className="font-display text-[11.5px] font-bold">
+                      <span className="font-display text-[10.5px] font-bold">
                         {c.label}
                       </span>
-                      <span className="font-display text-[13px] font-extrabold tabular-nums">
+                      <span className="font-display text-[12px] font-extrabold tabular-nums">
                         {c.odds ? formatOdds(c.odds, oddsFormat) : "—"}
                       </span>
                     </div>
@@ -318,22 +330,24 @@ export default function ResultDetailPage() {
               </div>
             </section>
 
-            {/* Marchés principaux validés */}
-            <section className="glass-card overflow-hidden rounded-2xl p-4">
-              <h2 className="font-display text-[13px] font-extrabold uppercase tracking-wider text-mist">
+            {/* Marchés principaux validés en grille 2 colonnes compacte */}
+            <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+              <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
                 Marchés réglés
               </h2>
-              <div className="mt-2.5 divide-y divide-edge/70">
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
                 {settledSummary.map((row) => (
                   <div
                     key={row.label}
-                    className="flex items-center justify-between gap-2 py-2.5 text-[12.5px]"
+                    className="rounded-lg bg-elev/60 px-2.5 py-1.5"
                   >
-                    <span className="text-mist">{row.label}</span>
-                    <span className="inline-flex items-center gap-1.5 font-display font-bold text-ink">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-win" />
-                      {row.value}
-                    </span>
+                    <p className="text-[9.5px] font-semibold uppercase tracking-wide text-dim">
+                      {row.label}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1 truncate font-display text-[11.5px] font-bold text-ink">
+                      <CheckCircle2 className="h-3 w-3 shrink-0 text-win" />
+                      <span className="truncate">{row.value}</span>
+                    </p>
                   </div>
                 ))}
               </div>
@@ -349,15 +363,16 @@ export default function ResultDetailPage() {
                 awayLogo={item.awayLogo}
                 htHomeScore={item.htHome}
                 htAwayScore={item.htAway}
+                compact
               />
             )}
 
             {item.source !== "manual" && item.telemetry && (
-              <section className="glass-card overflow-hidden rounded-2xl p-4">
-                <h2 className="font-display text-[13px] font-extrabold uppercase tracking-wider text-mist">
-                  Statistiques du match
+              <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+                <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+                  Statistiques
                 </h2>
-                <div className="mt-3 space-y-2.5 text-[12px]">
+                <div className="mt-2 space-y-1 text-[11px]">
                   {[
                     {
                       label: "Possession",
@@ -365,7 +380,7 @@ export default function ResultDetailPage() {
                       right: `${item.telemetry.possessionAway}%`,
                     },
                     {
-                      label: "xG (Buts attendus)",
+                      label: "xG",
                       left: item.telemetry.xgHome.toFixed(2),
                       right: item.telemetry.xgAway.toFixed(2),
                     },
@@ -380,19 +395,19 @@ export default function ResultDetailPage() {
                       right: String(item.telemetry.cornersAway),
                     },
                     {
-                      label: "Attaques dangereuses",
+                      label: "Attaques dang.",
                       left: String(item.telemetry.dangerousAttacksHome),
                       right: String(item.telemetry.dangerousAttacksAway),
                     },
                   ].map((s) => (
                     <div
                       key={s.label}
-                      className="flex items-center justify-between rounded-xl bg-elev/55 px-3 py-2"
+                      className="flex items-center justify-between rounded-lg bg-elev/55 px-2.5 py-1.5"
                     >
                       <span className="font-display font-bold tabular-nums text-ink">
                         {s.left}
                       </span>
-                      <span className="text-[11.5px] font-medium text-mist">
+                      <span className="text-[10.5px] font-medium text-mist">
                         {s.label}
                       </span>
                       <span className="font-display font-bold tabular-nums text-ink">
@@ -404,23 +419,23 @@ export default function ResultDetailPage() {
               </section>
             )}
 
-            {/* Chronologie des faits de jeu */}
+            {/* Chronologie compacte */}
             {cleanEvents.length > 0 && (
-              <section className="glass-card overflow-hidden rounded-2xl p-4">
-                <h2 className="font-display text-[13px] font-extrabold uppercase tracking-wider text-mist">
+              <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+                <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
                   Faits de match ({cleanEvents.length})
                 </h2>
-                <div className="mt-2.5 divide-y divide-edge/70">
+                <div className="mt-1.5 divide-y divide-edge/60">
                   {cleanEvents.map((ev, idx) => (
                     <div
                       key={`${ev.minute}-${ev.type}-${idx}`}
-                      className="flex items-center justify-between gap-2 py-2 text-[12px]"
+                      className="flex items-center justify-between gap-2 py-1.5 text-[11px]"
                     >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="inline-flex min-w-[34px] justify-center rounded-md bg-elev px-1.5 py-0.5 font-display text-[11px] font-bold tabular-nums text-ink">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[10px] font-bold tabular-nums text-ink">
                           {ev.minute}&apos;
                         </span>
-                        <span>
+                        <span className="text-[11px]">
                           {ev.type === "goal"
                             ? "⚽"
                             : ev.type === "red"
@@ -431,7 +446,7 @@ export default function ResultDetailPage() {
                           {ev.player}
                         </span>
                       </div>
-                      <span className="shrink-0 text-[11px] font-medium text-dim">
+                      <span className="shrink-0 text-[10px] font-medium text-dim">
                         {ev.team === "home" ? item.homeTeam : item.awayTeam}
                       </span>
                     </div>
@@ -442,11 +457,11 @@ export default function ResultDetailPage() {
 
             {/* Vos paris sur ce match */}
             {myMatchBets.length > 0 && (
-              <section className="space-y-2.5">
-                <h2 className="font-display text-[14px] font-extrabold text-ink">
+              <section className="space-y-2">
+                <h2 className="font-display text-[12.5px] font-extrabold text-ink lg:text-[14px]">
                   Vos paris sur ce match ({myMatchBets.length})
                 </h2>
-                <div className="space-y-2.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
                   {myMatchBets.map((b) => (
                     <BetTicket
                       key={`${b.kind}-${b.id}`}
