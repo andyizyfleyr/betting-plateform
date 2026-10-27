@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, History, RefreshCw, Search, TicketX, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, RefreshCw, Search, TicketX, X } from "lucide-react";
 import { api, type ClientBet } from "@/lib/api";
 import { BetTicket } from "@/components/bet-ticket";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
-import { AnimatedNumber } from "@/components/animated-number";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
   InfiniteScrollSentinel,
@@ -324,66 +323,81 @@ export default function ParisPage() {
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
     <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
-            Mes paris
-          </h1>
-          <p className="hidden text-[13px] text-mist lg:block">
-            Coupons en cours et historique des paris
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+          Mes paris
+        </h1>
 
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Link
-            href="/resultats"
-            className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
-          >
-            <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
-            Résultats
-          </Link>
+        <button
+          type="button"
+          onClick={toggleMobileSearch}
+          aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un pari"}
+          className={cn(
+            "grid h-8.5 w-8.5 shrink-0 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
+            mobileSearchOpen || query
+              ? "bg-betclic-red text-white"
+              : "bg-elev text-ink"
+          )}
+        >
+          {mobileSearchOpen ? (
+            <X className="h-4 w-4" strokeWidth={2.3} />
+          ) : (
+            <Search className="h-4 w-4" strokeWidth={2.2} />
+          )}
+        </button>
 
-          <button
-            type="button"
-            onClick={toggleMobileSearch}
-            aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un pari"}
-            className={cn(
-              "grid h-8.5 w-8.5 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
-              mobileSearchOpen || query
-                ? "bg-betclic-red text-white"
-                : "bg-elev text-ink"
-            )}
-          >
-            {mobileSearchOpen ? (
-              <X className="h-4 w-4" strokeWidth={2.3} />
-            ) : (
-              <Search className="h-4 w-4" strokeWidth={2.2} />
-            )}
-          </button>
+        {/* Recherche en ligne sur desktop */}
+        <div className="hidden h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:flex lg:w-[340px] xl:w-[380px]">
+          <Search className="h-4 w-4 shrink-0 text-dim" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Rechercher un match, un coupon, un combiné…"
+            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Effacer la recherche"
+              className="text-dim hover:text-ink"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Ruban mobile 1 ligne ultra-compact (sans doublon du solde déjà visible dans le Header) */}
-      <div className="mt-2.5 grid grid-cols-3 divide-x divide-edge rounded-xl border border-edge bg-white px-2 py-2 text-center shadow-2xs lg:hidden">
-        <div className="px-1">
-          <p className="text-[10px] font-medium text-dim">En jeu</p>
-          <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink">
-            {eur(staked)}
-          </p>
+      {/* Synthèse contextuelle uniquement s'il y a des paris */}
+      {bets !== null && (staked > 0 || settled > 0) && (
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-edge bg-white px-3 py-2 text-[12px] shadow-2xs">
+          {staked > 0 && (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <span className="text-mist">
+                En jeu :{" "}
+                <strong className="font-display font-bold tabular-nums text-ink">
+                  {eur(staked)}
+                </strong>
+              </span>
+              <span className="text-mist">
+                Gain max :{" "}
+                <strong className="font-display font-bold tabular-nums text-win">
+                  {eur(potential)}
+                </strong>
+              </span>
+            </div>
+          )}
+          {settled > 0 && (
+            <span className="text-mist">
+              Réussite :{" "}
+              <strong className="font-display font-bold tabular-nums text-ink">
+                {winRate}%
+              </strong>
+            </span>
+          )}
         </div>
-        <div className="px-1">
-          <p className="text-[10px] font-medium text-dim">Gain potentiel</p>
-          <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-win">
-            {eur(potential)}
-          </p>
-        </div>
-        <div className="px-1">
-          <p className="text-[10px] font-medium text-dim">Réussite</p>
-          <p className="mt-0.5 font-display text-[13px] font-bold tabular-nums text-ink">
-            {settled ? `${winRate}%` : "—"}
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Barre de recherche mobile dépliable au clic sur la loupe */}
       {(mobileSearchOpen || query) && (
@@ -410,64 +424,6 @@ export default function ParisPage() {
           </button>
         </div>
       )}
-
-      {/* Résumé portefeuille complet + Recherche (desktop >= lg) */}
-      <div className="mt-3 hidden space-y-2.5 lg:block">
-        <section className="glass-card rounded-2xl lg:flex lg:items-center lg:justify-between lg:gap-6 lg:px-5 lg:py-4">
-          <div className="flex items-center justify-between gap-4 lg:shrink-0">
-            <div>
-              <p className="text-[11px] font-medium text-dim">Solde disponible</p>
-              <AnimatedNumber
-                value={user?.balance ?? 0}
-                format={eur}
-                className="mt-0.5 block font-display text-[24px] font-bold leading-none tabular-nums text-ink"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 divide-x divide-edge text-center lg:flex-1 lg:border-l lg:pl-6">
-            <div className="px-1">
-              <p className="text-[10px] font-medium text-dim">En jeu</p>
-              <p className="mt-0.5 font-display text-[15px] font-bold tabular-nums text-ink">
-                {eur(staked)}
-              </p>
-            </div>
-            <div className="px-1">
-              <p className="text-[10px] font-medium text-dim">Gain potentiel</p>
-              <p className="mt-0.5 font-display text-[15px] font-bold tabular-nums text-win">
-                {eur(potential)}
-              </p>
-            </div>
-            <div className="px-1">
-              <p className="text-[10px] font-medium text-dim">Réussite</p>
-              <p className="mt-0.5 font-display text-[15px] font-bold tabular-nums text-ink">
-                {settled ? `${winRate}%` : "—"}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <div className="flex h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-4">
-          <Search className="h-4 w-4 shrink-0 text-dim" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un match, un coupon, un combiné…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Effacer la recherche"
-              className="text-dim hover:text-ink"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* Rangée unique collante de 3 pastilles dropdown */}
       <FilterDropdownRow

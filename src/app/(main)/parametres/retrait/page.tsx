@@ -258,33 +258,23 @@ export default function WithdrawPage() {
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-2.5 lg:space-y-4">
-            {/* Barre d'éligibilité compacte */}
-            <section className="glass-card rounded-xl px-3 py-2.5 lg:rounded-2xl lg:p-4">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[11px] font-semibold text-mist">
-                  Montant retirable
-                </span>
-                <span className="font-display text-[16px] font-black tabular-nums text-win lg:text-[20px]">
-                  {eur(withdrawable)}
-                </span>
-              </div>
-              {bonusRemaining > 0 && (
-                <div className="mt-2 border-t border-edge/80 pt-2 text-[10px] text-mist">
-                  <div className="flex justify-between">
-                    <span>Déblocage bonus ({progressPct}%)</span>
-                    <span className="font-semibold tabular-nums text-ink">
-                      Reste {eur(bonusRemaining)}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-elev">
-                    <div
-                      className="h-full rounded-full bg-betclic-red"
-                      style={{ width: `${progressPct}%` }}
-                    />
-                  </div>
+            {/* Barre de déblocage bonus uniquement si applicable */}
+            {bonusRemaining > 0 && (
+              <section className="glass-card rounded-xl px-3 py-2.5 text-[10.5px] text-mist lg:rounded-2xl lg:p-4">
+                <div className="flex justify-between">
+                  <span>Déblocage bonus ({progressPct}%)</span>
+                  <span className="font-semibold tabular-nums text-ink">
+                    Reste {eur(bonusRemaining)}
+                  </span>
                 </div>
-              )}
-            </section>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-elev">
+                  <div
+                    className="h-full rounded-full bg-betclic-red"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </section>
+            )}
 
             {/* Formulaire compact */}
             <section className="glass-card space-y-2.5 rounded-xl p-3 lg:space-y-3.5 lg:rounded-2xl lg:p-4">

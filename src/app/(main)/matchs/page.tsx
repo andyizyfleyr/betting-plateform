@@ -16,7 +16,6 @@ import {
   CalendarClock,
   ChevronRight,
   Cpu,
-  History,
   Loader2,
   RefreshCw,
   Search,
@@ -274,10 +273,6 @@ export default function MatchsPage() {
     () => searchedMatches.filter((m) => m.status === "finished"),
     [searchedMatches]
   );
-  const liveCount = useMemo(
-    () => activeMatches.filter((m) => m.status === "live").length,
-    [activeMatches]
-  );
 
   const baseForTab = useMemo(() => {
     if (filter === "live") return activeMatches.filter((m) => m.status === "live");
@@ -402,53 +397,20 @@ export default function MatchsPage() {
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
       <div className="mx-auto w-full max-w-[1440px] px-4 pb-6 pt-2.5 lg:px-0 lg:py-0">
         {/* En-tête desktop uniquement (masqué sur mobile) */}
-        <div className="hidden items-center justify-between gap-2 lg:flex">
-          <div>
-            <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
-              {isRealUniverse && effectiveLeague !== "all" ? effectiveLeague : "Matchs"}
-            </h1>
-            <p className="capitalize text-[12px] text-mist lg:text-[13px]">
-              {todayLabel()}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/resultats?universe=${universe}`}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
-            >
-              <History className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
-              Résultats
-            </Link>
-
-            {liveCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setFilter(filter === "live" ? "all" : "live")}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-display text-[11.5px] font-bold active:scale-95",
-                  isRealUniverse
-                    ? "bg-emerald-600/12 text-emerald-700"
-                    : "bg-betclic-red/12 text-betclic-red"
-                )}
-              >
-                <span
-                  className={cn(
-                    "live-dot h-1.5 w-1.5 rounded-full",
-                    isRealUniverse ? "bg-emerald-600" : "bg-betclic-red"
-                  )}
-                />
-                {liveCount === 1 ? "En direct" : `${liveCount} en direct`}
-              </button>
-            )}
-          </div>
+        <div className="hidden items-baseline justify-between gap-2 lg:flex">
+          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+            {isRealUniverse && effectiveLeague !== "all" ? effectiveLeague : "Matchs"}
+          </h1>
+          <p className="capitalize text-[12px] text-mist lg:text-[13px]">
+            {todayLabel()}
+          </p>
         </div>
 
         {/* Hero publicitaire mobile */}
         <MobileHeroCarousel onAction={handleHeroAction} />
 
         {/* Sélecteur d'univers (desktop uniquement) + Barre de recherche */}
-        <div className="mb-3.5 lg:mb-0 lg:mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
+        <div className="mb-3.5 lg:mb-4 lg:mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
           <div className="hidden grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1 lg:grid">
             <button
               type="button"
@@ -541,26 +503,6 @@ export default function MatchsPage() {
               </button>
             )}
           </div>
-        </div>
-
-        {/* Bandeau explicatif du mode actif (desktop uniquement) */}
-        <div
-          className={cn(
-            "mb-4 mt-2 hidden items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-[11px] font-medium lg:flex",
-            isRealUniverse
-              ? "bg-emerald-600/8 text-emerald-800"
-              : "bg-elev/80 text-mist"
-          )}
-        >
-          {isRealUniverse ? (
-            <span>
-              Compétitions officielles · Cotes fixes opérateur · Coup d&apos;envoi réel
-            </span>
-          ) : (
-            <span>
-              Simulateur 24h/24 · Matchs de 2-3 min · Multiplex 4 directs simultanés
-            </span>
-          )}
         </div>
 
         {/* Contenu */}

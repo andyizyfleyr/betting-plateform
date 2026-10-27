@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CalendarClock,
-  ChevronDown,
+  ChevronRight,
   Cpu,
   History,
   Search,
@@ -19,11 +19,9 @@ import {
   InfiniteScrollSentinel,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
-import { hasAnyRealStats, RealMatchStatsCard } from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/components/providers";
-import { sanitizeMatchEvents } from "@/lib/match-events";
 import { cn, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 
 type Universe = "real" | "virtual";
@@ -53,19 +51,14 @@ function formatDayHeading(iso: string): string {
 
 function MatchHistoryCard({
   match,
-  expanded,
   highlighted = false,
-  onToggle,
 }: {
   match: ClientMatchHistoryItem;
-  expanded: boolean;
   highlighted?: boolean;
-  onToggle: () => void;
 }) {
   const { oddsFormat } = useApp();
   const isFinished = match.status === "finished";
   const isLive = match.status === "live";
-  const isReal = match.source === "manual";
   const hasScore = match.homeScore != null && match.awayScore != null;
   const h = match.homeScore ?? 0;
   const a = match.awayScore ?? 0;
@@ -79,408 +72,123 @@ function MatchHistoryCard({
           ? match.oddsAway
           : null;
 
-  const doubleChanceLabel =
-    match.winnerCode === "V1"
-      ? "1X & 12"
-      : match.winnerCode === "X"
-        ? "1X & 2X"
-        : match.winnerCode === "V2"
-          ? "12 & 2X"
-          : "—";
-
-  const sortedEvents = useMemo(
-    () =>
-      sanitizeMatchEvents(match.events, match.homeScore, match.awayScore).sort(
-        (x, y) => x.minute - y.minute
-      ),
-    [match.events, match.homeScore, match.awayScore]
-  );
+  const targetHref = isFinished ? `/resultats/${match.id}` : `/matchs/${match.id}`;
 
   return (
-    <article
+    <Link
+      href={targetHref}
       className={cn(
-        "glass-card overflow-hidden rounded-2xl transition-all",
+        "glass-card block overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/35 active:bg-elev/60",
         highlighted && "ring-2 ring-betclic-red/45 shadow-sm"
       )}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full p-3.5 text-left active:bg-elev/50"
-      >
-        {/* En-tête ligue + heure + statut */}
-        <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-mist">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={cn(
-                "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide",
-                isReal
-                  ? "bg-emerald-600/12 text-emerald-700"
-                  : "bg-elev text-dim"
-              )}
-            >
-              {isReal ? "Réel" : "Virtuel"}
-            </span>
-            <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
-            <span className="truncate">{match.league}</span>
-            <span className="text-dim">·</span>
-            <span className="shrink-0 text-dim">
-              {isFinished
-                ? formatPlacedAt(match.finishedAt ?? match.startsAt)
-                : isLive
-                  ? match.minute ?? "LIVE"
-                  : formatKickoff(match.startsAt)}
-            </span>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            {isLive ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
-                <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
-                {match.minute ?? "LIVE"}
-              </span>
-            ) : isFinished && match.winnerCode ? (
-              <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-bold text-ink">
-                {match.winnerCode}
-                {winningOdds != null ? ` · ${formatOdds(winningOdds, oddsFormat)}` : ""}
-              </span>
-            ) : (
-              <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-semibold text-mist">
-                À venir
-              </span>
-            )}
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 text-dim transition-transform duration-150",
-                expanded && "rotate-180 text-ink"
-              )}
-              strokeWidth={2.2}
-            />
-          </div>
+      {/* En-tête ligue + heure + statut */}
+      <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-mist">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
+          <span className="truncate">{match.league}</span>
+          <span className="text-dim">·</span>
+          <span className="shrink-0 text-dim">
+            {isFinished
+              ? formatPlacedAt(match.finishedAt ?? match.startsAt)
+              : isLive
+                ? match.minute ?? "LIVE"
+                : formatKickoff(match.startsAt)}
+          </span>
         </div>
 
-        {/* Équipes + score */}
-        <div className="mt-2.5 space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="xs" />
-              <span
-                className={cn(
-                  "truncate font-display text-[13.5px]",
-                  hasScore && h > a ? "font-bold text-ink" : "font-semibold text-ink/85"
-                )}
-              >
-                {match.homeTeam}
-              </span>
-              {match.redHome > 0 && (
-                <span className="inline-block h-2.5 w-2 rounded-[2px] bg-betclic-red" />
-              )}
-            </div>
-            <span
-              className={cn(
-                "font-display text-[15px] tabular-nums",
-                hasScore && h > a ? "font-extrabold text-ink" : "font-bold text-mist"
-              )}
-            >
-              {hasScore ? h : "–"}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isLive ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+              <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
+              {match.minute ?? "LIVE"}
             </span>
-          </div>
+          ) : isFinished && match.winnerCode ? (
+            <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-bold text-ink">
+              {match.winnerCode}
+              {winningOdds != null ? ` · ${formatOdds(winningOdds, oddsFormat)}` : ""}
+            </span>
+          ) : (
+            <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-semibold text-mist">
+              À venir
+            </span>
+          )}
+          <ChevronRight className="h-4 w-4 text-dim" strokeWidth={2.2} />
+        </div>
+      </div>
 
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="xs" />
-              <span
-                className={cn(
-                  "truncate font-display text-[13.5px]",
-                  hasScore && a > h ? "font-bold text-ink" : "font-semibold text-ink/85"
-                )}
-              >
-                {match.awayTeam}
-              </span>
-              {match.redAway > 0 && (
-                <span className="inline-block h-2.5 w-2 rounded-[2px] bg-betclic-red" />
-              )}
-            </div>
+      {/* Équipes + score */}
+      <div className="mt-2.5 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="xs" />
             <span
               className={cn(
-                "font-display text-[15px] tabular-nums",
-                hasScore && a > h ? "font-extrabold text-ink" : "font-bold text-mist"
+                "truncate font-display text-[13.5px]",
+                hasScore && h > a ? "font-bold text-ink" : "font-semibold text-ink/85"
               )}
             >
-              {hasScore ? a : "–"}
+              {match.homeTeam}
             </span>
+            {match.redHome > 0 && (
+              <span className="inline-block h-2.5 w-2 rounded-[2px] bg-betclic-red" />
+            )}
           </div>
+          <span
+            className={cn(
+              "font-display text-[15px] tabular-nums",
+              hasScore && h > a ? "font-extrabold text-ink" : "font-bold text-mist"
+            )}
+          >
+            {hasScore ? h : "–"}
+          </span>
         </div>
 
-        {/* Résumé rapide sous les scores */}
-        {hasScore && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10.5px] font-semibold text-mist">
-            {match.htHome != null && match.htAway != null && (
-              <span className="rounded-md bg-elev px-2 py-0.5 tabular-nums">
-                MT {match.htHome}-{match.htAway}
-              </span>
-            )}
-            {match.totalGoals != null && (
-              <span className="rounded-md bg-elev px-2 py-0.5">
-                {match.totalGoals >= 3 ? "TP 2.5" : "TM 2.5"} ({match.totalGoals} b.)
-              </span>
-            )}
-            {match.btts != null && (
-              <span className="rounded-md bg-elev px-2 py-0.5">
-                Les 2 marquent : {match.btts ? "Oui" : "Non"}
-              </span>
-            )}
-          </div>
-        )}
-      </button>
-
-      {/* Détail dépliable : marchés réglés + chronologie + statistiques */}
-      {expanded && (
-        <div className="border-t border-edge bg-elev/40 px-3.5 py-3 space-y-3">
-          {!isFinished && (
-            <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 ring-1 ring-edge">
-              <span className="text-[12px] font-medium text-mist">
-                {isLive ? "Ce match est actuellement en direct." : "Ce match n'a pas encore débuté."}
-              </span>
-              <Link
-                href="/matchs"
-                className="shrink-0 rounded-lg bg-betclic-red px-2.5 py-1 font-display text-[11px] font-bold text-white"
-              >
-                Voir l&apos;affiche
-              </Link>
-            </div>
-          )}
-
-          {/* Marchés clés réglés (terminologie 1xBet) */}
-          {hasScore && isFinished && (
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10.5px] font-bold uppercase tracking-wider text-dim">
-                  Marchés réglés
-                </p>
-                <Link
-                  href={`/resultats/${match.id}`}
-                  className="font-display text-[11px] font-bold text-betclic-red hover:underline"
-                >
-                  Fiche complète →
-                </Link>
-              </div>
-              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                <SettledPill
-                  label="1x2"
-                  value={
-                    match.winnerCode === "V1"
-                      ? `V1 (${match.homeTeam})`
-                      : match.winnerCode === "V2"
-                        ? `V2 (${match.awayTeam})`
-                        : "X (Match nul)"
-                  }
-                />
-                <SettledPill label="Double chance" value={doubleChanceLabel} />
-                {match.htWinnerCode && match.winnerCode && (
-                  <SettledPill
-                    label="MT-Fin"
-                    value={`${match.htWinnerCode}-${match.winnerCode}`}
-                  />
-                )}
-                <SettledPill label="Score exact" value={`${h}-${a}`} />
-                <SettledPill
-                  label="Total (2.5)"
-                  value={(match.totalGoals ?? 0) >= 3 ? "Plus de (2.5)" : "Moins de (2.5)"}
-                />
-                <SettledPill
-                  label="Les 2 marquent"
-                  value={match.btts ? "Oui" : "Non"}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Chronologie des faits de jeu */}
-          <div>
-            <p className="text-[10.5px] font-bold uppercase tracking-wider text-dim">
-              Faits de match
-            </p>
-            {sortedEvents.length === 0 ? (
-              <p className="mt-1 text-[12px] text-mist">
-                {hasScore && h === 0 && a === 0
-                  ? "Aucun but ni carton rouge (0 - 0)."
-                  : "Aucun événement détaillé enregistré."}
-              </p>
-            ) : (
-              <div className="mt-1.5 space-y-1">
-                {sortedEvents.map((ev, idx) => {
-                  const teamName = ev.team === "home" ? match.homeTeam : match.awayTeam;
-                  const isGoal = ev.type === "goal";
-                  return (
-                    <div
-                      key={`${ev.minute}-${ev.type}-${idx}`}
-                      className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] ring-1 ring-edge/70"
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="w-7 shrink-0 font-display text-[11px] font-bold tabular-nums text-betclic-red">
-                          {ev.minute}&prime;
-                        </span>
-                        <span className="shrink-0 text-[12px]">
-                          {isGoal ? "⚽" : "🟥"}
-                        </span>
-                        <span className="truncate font-medium text-ink">
-                          {isGoal
-                            ? ev.player
-                              ? `${ev.player} (${teamName})`
-                              : `But ${teamName}`
-                            : ev.player
-                              ? `${ev.player} — Carton rouge (${teamName})`
-                              : `Carton rouge ${teamName}`}
-                        </span>
-                      </div>
-                      <span className="shrink-0 text-[10.5px] font-semibold text-dim">
-                        {ev.team === "home" ? "DOM" : "EXT"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Statistiques officielles (Match réel) */}
-          {match.source === "manual" && hasAnyRealStats(match.realStats) && (
-            <RealMatchStatsCard
-              stats={match.realStats}
-              homeTeam={match.homeTeam}
-              awayTeam={match.awayTeam}
-              homeLogo={match.homeLogo}
-              awayLogo={match.awayLogo}
-              htHomeScore={match.htHome}
-              htAwayScore={match.htAway}
-              className="bg-white ring-1 ring-edge/70 border-0 shadow-none"
-            />
-          )}
-
-          {/* Statistiques du match (Virtuel) */}
-          {match.source !== "manual" && match.telemetry && (
-            <div>
-              <p className="text-[10.5px] font-bold uppercase tracking-wider text-dim">
-                Statistiques
-              </p>
-              <div className="mt-1.5 space-y-1.5 rounded-xl bg-white p-2.5 ring-1 ring-edge/70">
-                <StatRow
-                  label="Possession"
-                  left={`${match.telemetry.possessionHome}%`}
-                  right={`${match.telemetry.possessionAway}%`}
-                  leftShare={match.telemetry.possessionHome}
-                />
-                <StatRow
-                  label="Tirs cadrés"
-                  left={String(match.telemetry.shotsOnTargetHome)}
-                  right={String(match.telemetry.shotsOnTargetAway)}
-                  leftShare={sharePct(
-                    match.telemetry.shotsOnTargetHome,
-                    match.telemetry.shotsOnTargetAway
-                  )}
-                />
-                <StatRow
-                  label="xG (Buts attendus)"
-                  left={match.telemetry.xgHome.toFixed(2)}
-                  right={match.telemetry.xgAway.toFixed(2)}
-                  leftShare={sharePct(match.telemetry.xgHome, match.telemetry.xgAway)}
-                />
-                <StatRow
-                  label="Corners"
-                  left={String(match.telemetry.cornersHome)}
-                  right={String(match.telemetry.cornersAway)}
-                  leftShare={sharePct(match.telemetry.cornersHome, match.telemetry.cornersAway)}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Cotes de départ / clôture */}
-          <div className="flex items-center justify-between gap-1.5 pt-0.5 text-[11px] text-dim">
-            <span>Cotes 1x2</span>
-            <div className="flex items-center gap-1.5 font-display font-bold tabular-nums">
-              <span
-                className={cn(
-                  "rounded-md px-2 py-0.5",
-                  match.winnerCode === "V1"
-                    ? "bg-win/15 text-win"
-                    : "bg-white text-mist ring-1 ring-edge"
-                )}
-              >
-                V1 {formatOdds(match.oddsHome, oddsFormat)}
-              </span>
-              {match.oddsDraw != null && (
-                <span
-                  className={cn(
-                    "rounded-md px-2 py-0.5",
-                    match.winnerCode === "X"
-                      ? "bg-win/15 text-win"
-                      : "bg-white text-mist ring-1 ring-edge"
-                  )}
-                >
-                  X {formatOdds(match.oddsDraw, oddsFormat)}
-                </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="xs" />
+            <span
+              className={cn(
+                "truncate font-display text-[13.5px]",
+                hasScore && a > h ? "font-bold text-ink" : "font-semibold text-ink/85"
               )}
-              <span
-                className={cn(
-                  "rounded-md px-2 py-0.5",
-                  match.winnerCode === "V2"
-                    ? "bg-win/15 text-win"
-                    : "bg-white text-mist ring-1 ring-edge"
-                )}
-              >
-                V2 {formatOdds(match.oddsAway, oddsFormat)}
-              </span>
-            </div>
+            >
+              {match.awayTeam}
+            </span>
+            {match.redAway > 0 && (
+              <span className="inline-block h-2.5 w-2 rounded-[2px] bg-betclic-red" />
+            )}
           </div>
+          <span
+            className={cn(
+              "font-display text-[15px] tabular-nums",
+              hasScore && a > h ? "font-extrabold text-ink" : "font-bold text-mist"
+            )}
+          >
+            {hasScore ? a : "–"}
+          </span>
+        </div>
+      </div>
+
+      {/* Résumé compact sur une ligne */}
+      {hasScore && match.htHome != null && match.htAway != null && (
+        <div className="mt-2 flex items-center gap-1.5 text-[10.5px] font-semibold text-mist">
+          <span className="rounded-md bg-elev px-2 py-0.5 tabular-nums">
+            MT {match.htHome}-{match.htAway}
+          </span>
+          {match.totalGoals != null && (
+            <span className="rounded-md bg-elev px-2 py-0.5">
+              {match.totalGoals >= 3 ? "TP 2.5" : "TM 2.5"}
+            </span>
+          )}
+          {match.btts != null && (
+            <span className="rounded-md bg-elev px-2 py-0.5">
+              BTTS : {match.btts ? "Oui" : "Non"}
+            </span>
+          )}
         </div>
       )}
-    </article>
-  );
-}
-
-function sharePct(a: number, b: number): number {
-  const sum = a + b;
-  if (sum <= 0) return 50;
-  return Math.round((a / sum) * 100);
-}
-
-function SettledPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-edge/70">
-      <p className="text-[10px] font-medium text-dim">{label}</p>
-      <p className="truncate font-display text-[11.5px] font-bold text-ink">{value}</p>
-    </div>
-  );
-}
-
-function StatRow({
-  label,
-  left,
-  right,
-  leftShare,
-}: {
-  label: string;
-  left: string;
-  right: string;
-  leftShare: number;
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="font-display font-bold tabular-nums text-ink">{left}</span>
-        <span className="text-[10.5px] font-medium text-mist">{label}</span>
-        <span className="font-display font-bold tabular-nums text-ink">{right}</span>
-      </div>
-      <div className="flex h-1.5 overflow-hidden rounded-full bg-elev">
-        <div
-          className="bg-betclic-red transition-all"
-          style={{ width: `${Math.max(6, Math.min(94, leftShare))}%` }}
-        />
-        <div className="flex-1 bg-ink/20" />
-      </div>
-    </div>
+    </Link>
   );
 }
 
@@ -492,9 +200,12 @@ function ResultatsContent() {
   const requestedMatchId = matchParam ? Number(matchParam) : undefined;
 
   const [history, setHistory] = useState<ClientMatchHistoryItem[] | null>(null);
-  const [focusedMatch, setFocusedMatch] = useState<ClientMatchHistoryItem | null>(null);
-  const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Record<number, boolean>>({});
+  const [focusedMatch, setFocusedMatch] = useState<ClientMatchHistoryItem | null>(
+    null
+  );
+  const [selectedUniverse, setSelectedUniverse] = useState<Universe | null>(
+    universeParam === "real" || universeParam === "virtual" ? universeParam : null
+  );
   const [query, setQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -511,7 +222,7 @@ function ResultatsContent() {
 
   const load = useCallback(async () => {
     try {
-      // Appelle d'abord systématiquement l'URL canonique `/api/matches/history` (100 % mutualisée au CDN Edge)
+      // Appelle systématiquement l'URL canonique `/api/matches/history` en premier (CDN Edge)
       const baseRes = await api.matchHistory();
       setHistory(baseRes.matches);
 
@@ -519,20 +230,15 @@ function ResultatsContent() {
         const inBase = baseRes.matches.find((m) => m.id === validId) ?? null;
         if (inBase) {
           setFocusedMatch(inBase);
-          setExpandedIds((prev) => ({ ...prev, [inBase.id]: true }));
         } else {
-          // Repli ciblé uniquement si le match demandé est une archive hors des 240 derniers matchs
           const detailRes = await api.matchHistory(validId);
           setFocusedMatch(detailRes.focusedMatch);
-          if (detailRes.focusedMatch) {
-            setExpandedIds((prev) => ({ ...prev, [detailRes.focusedMatch!.id]: true }));
-          }
         }
       } else {
         setFocusedMatch(null);
       }
     } catch {
-      // ignore transient error
+      /* ignore transient error */
     }
   }, [validId]);
 
@@ -542,10 +248,6 @@ function ResultatsContent() {
     const id = setInterval(() => void load(), 10000);
     return () => clearInterval(id);
   }, [load]);
-
-  const toggleExpand = (id: number) => {
-    setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
 
   const realHistory = useMemo(
     () =>
@@ -610,7 +312,9 @@ function ResultatsContent() {
 
   const effectiveLeague = useMemo(() => {
     if (leagueFilter === "all") return "all";
-    return leaguesWithCounts.some((l) => l.league === leagueFilter) ? leagueFilter : "all";
+    return leaguesWithCounts.some((l) => l.league === leagueFilter)
+      ? leagueFilter
+      : "all";
   }, [leagueFilter, leaguesWithCounts]);
 
   const byLeague = useMemo(() => {
@@ -650,7 +354,8 @@ function ResultatsContent() {
   );
 
   const visible = useMemo(() => {
-    if (goalsFilter === "over25") return byWinner.filter((m) => (m.totalGoals ?? 0) >= 3);
+    if (goalsFilter === "over25")
+      return byWinner.filter((m) => (m.totalGoals ?? 0) >= 3);
     if (goalsFilter === "under25")
       return byWinner.filter((m) => m.totalGoals != null && m.totalGoals < 3);
     if (goalsFilter === "btts") return byWinner.filter((m) => m.btts === true);
@@ -698,7 +403,6 @@ function ResultatsContent() {
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 pt-3.5 pb-6 lg:px-0 lg:py-0">
-      {/* En-tête compact + Loupe dépliable sur mobile (Point 10) */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <button
@@ -709,42 +413,28 @@ function ResultatsContent() {
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
           </button>
-          <div>
-            <h1 className="font-display text-[20px] font-bold tracking-tight text-ink lg:text-[25px]">
-              Résultats
-            </h1>
-            <p className="hidden text-[13px] text-mist lg:block">
-              Historique des matchs terminés
-            </p>
-          </div>
+          <h1 className="font-display text-[20px] font-bold tracking-tight text-ink lg:text-[25px]">
+            Résultats
+          </h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Link
-            href="/matchs"
-            className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-elev px-3 font-display text-[11.5px] font-bold text-ink active:scale-95"
-          >
-            Affiche live
-          </Link>
-
-          <button
-            type="button"
-            onClick={toggleMobileSearch}
-            aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un résultat"}
-            className={cn(
-              "grid h-8.5 w-8.5 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
-              mobileSearchOpen || query
-                ? "bg-betclic-red text-white"
-                : "bg-elev text-ink"
-            )}
-          >
-            {mobileSearchOpen ? (
-              <X className="h-4 w-4" strokeWidth={2.3} />
-            ) : (
-              <Search className="h-4 w-4" strokeWidth={2.2} />
-            )}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={toggleMobileSearch}
+          aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un résultat"}
+          className={cn(
+            "grid h-8.5 w-8.5 shrink-0 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
+            mobileSearchOpen || query
+              ? "bg-betclic-red text-white"
+              : "bg-elev text-ink"
+          )}
+        >
+          {mobileSearchOpen ? (
+            <X className="h-4 w-4" strokeWidth={2.3} />
+          ) : (
+            <Search className="h-4 w-4" strokeWidth={2.2} />
+          )}
+        </button>
       </div>
 
       {/* Sélecteur d'univers + Recherche en ligne sur desktop */}
@@ -867,15 +557,10 @@ function ResultatsContent() {
               onClick={() => router.replace(`/resultats?universe=${universe}`)}
               className="text-[11.5px] font-semibold text-mist hover:text-ink"
             >
-              Fermer le focus
+              Fermer
             </button>
           </div>
-          <MatchHistoryCard
-            match={focusedMatch}
-            expanded={expandedIds[focusedMatch.id] ?? true}
-            highlighted
-            onToggle={() => toggleExpand(focusedMatch.id)}
-          />
+          <MatchHistoryCard match={focusedMatch} highlighted />
         </section>
       )}
 
@@ -943,9 +628,7 @@ function ResultatsContent() {
         }}
         resultCountText={
           history !== null
-            ? `${visible.length} résultat${visible.length > 1 ? "s" : ""} ${
-                isRealUniverse ? "réel" : "virtuel"
-              }${visible.length > 1 ? "s" : ""}`
+            ? `${visible.length} résultat${visible.length > 1 ? "s" : ""}`
             : null
         }
       />
@@ -953,9 +636,9 @@ function ResultatsContent() {
       {/* Liste groupée par journée */}
       {history === null ? (
         <div className="grid grid-cols-1 gap-2.5">
-          <div className="shimmer h-[118px] rounded-2xl" />
-          <div className="shimmer h-[118px] rounded-2xl" />
-          <div className="shimmer h-[118px] rounded-2xl" />
+          <div className="shimmer h-[112px] rounded-2xl" />
+          <div className="shimmer h-[112px] rounded-2xl" />
+          <div className="shimmer h-[112px] rounded-2xl" />
         </div>
       ) : groupedByDay.length === 0 && !focusedMatch ? (
         <div className="mt-10 flex flex-col items-center text-center">
@@ -978,12 +661,7 @@ function ResultatsContent() {
               </h2>
               <div className="grid grid-cols-1 items-start gap-3">
                 {group.items.map((m) => (
-                  <MatchHistoryCard
-                    key={m.id}
-                    match={m}
-                    expanded={!!expandedIds[m.id]}
-                    onToggle={() => toggleExpand(m.id)}
-                  />
+                  <MatchHistoryCard key={m.id} match={m} />
                 ))}
               </div>
             </section>
@@ -1005,8 +683,8 @@ export default function ResultatsPage() {
       fallback={
         <div className="mx-auto w-full max-w-[1440px] px-4 pt-4 space-y-3 lg:px-0 lg:py-0">
           <div className="shimmer h-10 rounded-xl" />
-          <div className="shimmer h-[120px] rounded-2xl" />
-          <div className="shimmer h-[120px] rounded-2xl" />
+          <div className="shimmer h-[112px] rounded-2xl" />
+          <div className="shimmer h-[112px] rounded-2xl" />
         </div>
       }
     >

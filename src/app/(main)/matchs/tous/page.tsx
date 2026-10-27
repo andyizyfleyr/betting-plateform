@@ -149,10 +149,6 @@ function AllMatchesContent() {
     () => (matches ?? []).filter((m) => m.source === "manual"),
     [matches]
   );
-  const virtualLiveCount = useMemo(
-    () => (matches ?? []).filter((m) => m.source !== "manual" && m.status === "live").length,
-    [matches]
-  );
 
   const qNorm = query.trim().toLowerCase();
   const selectedSlug = useMemo(
@@ -275,7 +271,7 @@ function AllMatchesContent() {
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
       <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
-        {/* En-tête compact + icône loupe sur mobile (Point 10) */}
+        {/* En-tête compact + icône loupe sur mobile */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
             <button
@@ -286,30 +282,12 @@ function AllMatchesContent() {
             >
               <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
             </button>
-            <div className="min-w-0">
-              <h1 className="truncate font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
-                {leagueFilter !== "all" ? leagueFilter : "Tous les matchs"}
-              </h1>
-              <p className="hidden text-[12.5px] text-mist lg:block">
-                Catalogue complet aligné en liste verticale · Cotes fixes
-              </p>
-            </div>
+            <h1 className="truncate font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+              {leagueFilter !== "all" ? leagueFilter : "Tous les matchs"}
+            </h1>
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            <Link
-              href="/matchs/virtuels"
-              className="inline-flex h-8.5 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
-            >
-              <Cpu className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
-              <span>Virtuels</span>
-              {virtualLiveCount > 0 && (
-                <span className="rounded-full bg-betclic-red/12 px-1.5 py-0.5 text-[10px] font-extrabold tabular-nums text-betclic-red">
-                  {virtualLiveCount}
-                </span>
-              )}
-            </Link>
-
             <button
               type="button"
               onClick={toggleMobileSearch}

@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowDownLeft,
   ArrowLeft,
   ArrowUpRight,
-  Plus,
+  Loader2,
+  X,
 } from "lucide-react";
 import { api, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/client-entity-cache";
@@ -17,17 +18,21 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { useApp } from "@/components/providers";
+import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { cn, eur, formatPlacedAt } from "@/lib/format";
 
 type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits";
 
 export default function TransactionsPage() {
   const router = useRouter();
-  const { user, betsVersion } = useApp();
+  const { user, setBalance, toast, betsVersion } = useApp();
   const [wallet, setWallet] = useState<ClientWalletData | null>(() =>
     getCachedWallet()
   );
   const [kindFilter, setKindFilter] = useState<TxKindFilter>("all");
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const cancelSlotRef = useRef<Map<number, string>>(new Map());
+  const cancelInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -43,6 +48,31 @@ export default function TransactionsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load, betsVersion]);
+
+  const cancelWithdrawal = async (withdrawalId: number) => {
+    if (cancellingId != null || cancelInFlightRef.current) return;
+    cancelInFlightRef.current = true;
+    const idemKey =
+      cancelSlotRef.current.get(withdrawalId) ?? generateIdempotencyKey("wdcancel");
+    cancelSlotRef.current.set(withdrawalId, idemKey);
+    setCancellingId(withdrawalId);
+    try {
+      const res = await api.cancelWithdrawal(withdrawalId, idemKey);
+      cancelSlotRef.current.delete(withdrawalId);
+      setBalance(res.balance);
+      void load();
+      toast({ kind: "success", title: "Retrait annulé et recrédité" });
+    } catch (e) {
+      toast({
+        kind: "error",
+        title: "Annulation impossible",
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      cancelInFlightRef.current = false;
+      setCancellingId(null);
+    }
+  };
 
   const filteredTx = useMemo(() => {
     const list = [...(wallet?.entries ?? [])].sort(
@@ -89,39 +119,24 @@ export default function TransactionsPage() {
   return (
     <div className="mx-auto w-full max-w-2xl px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined" && window.history.length > 1) {
-                router.back();
-              } else {
-                router.push("/parametres");
-              }
-            }}
-            aria-label="Retour au compte"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:h-9 lg:w-9"
-          >
-            <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
-          </button>
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-[14.5px] font-extrabold leading-tight text-ink lg:text-[18px]">
-              Mouvements
-            </h1>
-            <p className="truncate text-[10px] leading-tight text-dim lg:text-[11px]">
-              Du plus récent au plus ancien
-            </p>
-          </div>
-        </div>
-
-        <Link
-          href="/parametres/depot"
-          className="inline-flex h-7.5 shrink-0 items-center gap-1 rounded-full bg-win px-2.5 font-display text-[10.5px] font-bold text-white shadow-2xs"
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== "undefined" && window.history.length > 1) {
+              router.back();
+            } else {
+              router.push("/parametres");
+            }
+          }}
+          aria-label="Retour au compte"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:h-9 lg:w-9"
         >
-          <Plus className="h-3 w-3" strokeWidth={2.6} />
-          Déposer
-        </Link>
+          <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
+        </button>
+        <h1 className="truncate font-display text-[15px] font-extrabold leading-tight text-ink lg:text-[18px]">
+          Mouvements
+        </h1>
       </div>
 
       <div className="mt-1">
@@ -169,6 +184,10 @@ export default function TransactionsPage() {
             <div className="space-y-1.5">
               {visibleTx.map((t) => {
                 const positive = t.amount >= 0;
+                const canCancel = Boolean(
+                  t.type === "withdrawal" && t.canCancel && t.rawId != null
+                );
+
                 return (
                   <div
                     key={t.id}
@@ -199,14 +218,34 @@ export default function TransactionsPage() {
                       </div>
                     </div>
 
-                    <span
-                      className={cn(
-                        "shrink-0 font-display text-[12.5px] font-extrabold tabular-nums lg:text-[13.5px]",
-                        positive ? "text-win" : "text-betclic-red"
+                    <div className="flex shrink-0 items-center gap-2">
+                      {canCancel && (
+                        <button
+                          type="button"
+                          disabled={cancellingId === t.rawId}
+                          onClick={() =>
+                            t.rawId != null && cancelWithdrawal(t.rawId)
+                          }
+                          className="inline-flex h-7 items-center gap-1 rounded-lg border border-edge bg-elev px-2 font-display text-[10.5px] font-bold text-ink active:scale-95 disabled:opacity-50"
+                        >
+                          {cancellingId === t.rawId ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <X className="h-3 w-3 text-betclic-red" strokeWidth={2.4} />
+                          )}
+                          Annuler
+                        </button>
                       )}
-                    >
-                      {positive ? `+${eur(t.amount)}` : eur(t.amount)}
-                    </span>
+
+                      <span
+                        className={cn(
+                          "font-display text-[12.5px] font-extrabold tabular-nums lg:text-[13.5px]",
+                          positive ? "text-win" : "text-betclic-red"
+                        )}
+                      >
+                        {positive ? `+${eur(t.amount)}` : eur(t.amount)}
+                      </span>
+                    </div>
                   </div>
                 );
               })}

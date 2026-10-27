@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, ListChecks, RefreshCw, Search, TrendingUp, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock, RefreshCw, Search, TrendingUp, X } from "lucide-react";
 import { api, type ClientPrediction, type PredictionOptionClient } from "@/lib/api";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
@@ -293,14 +293,9 @@ export default function PredictionsPage() {
     <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
       {/* En-tête compact + Loupe dépliable sur mobile / Recherche en ligne sur desktop */}
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
-            Prédictions
-          </h1>
-          <p className="hidden text-[13px] text-mist lg:block">
-            Choix multiples & Oui / Non à cotes fixes
-          </p>
-        </div>
+        <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+          Prédictions
+        </h1>
 
         <button
           type="button"
@@ -634,15 +629,9 @@ function MultiChoiceQuestionCard({
   return (
     <article className={cn("glass-card rounded-2xl p-3.5", expired && "opacity-70")}>
       <div className="flex items-center justify-between gap-2 text-[11px]">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
-            {q.category}
-          </span>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
-            <ListChecks className="h-3 w-3" strokeWidth={2.3} />
-            {sortedOptions.length} choix
-          </span>
-        </div>
+        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
+          {q.category}
+        </span>
         <span className="flex shrink-0 items-center gap-1 font-medium text-dim">
           <Clock className="h-3 w-3" strokeWidth={2.2} />
           {expired ? "Clos" : formatResolves(q.resolvesAt, nowMs)}
@@ -729,17 +718,12 @@ function BinaryQuestionCard({
   const expired = new Date(q.resolvesAt).getTime() <= nowMs;
   const comboUid = `pred-${q.id}`;
 
-  const pYes = Math.round(((1 / q.oddsYes) / (1 / q.oddsYes + 1 / q.oddsNo)) * 100);
-
   return (
     <article className={cn("glass-card rounded-2xl p-3.5", expired && "opacity-70")}>
       <div className="flex items-center justify-between gap-2 text-[11px]">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
-            {q.category}
-          </span>
-          <span className="truncate text-dim">Oui / Non · Cote fixe</span>
-        </div>
+        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
+          {q.category}
+        </span>
         <span className="flex shrink-0 items-center gap-1 font-medium text-dim">
           <Clock className="h-3 w-3" strokeWidth={2.2} />
           {expired ? "Clos" : formatResolves(q.resolvesAt, nowMs)}
@@ -753,26 +737,13 @@ function BinaryQuestionCard({
         {q.question}
       </Link>
 
-      <div className="mt-2.5">
-        <div className="flex justify-between text-[11px] font-medium text-mist">
-          <span>Oui · {pYes}%</span>
-          <span>Non · {100 - pYes}%</span>
-        </div>
-        <div className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-elev">
-          <div
-            className="bg-betclic-red transition-all duration-300"
-            style={{ width: `${pYes}%` }}
-          />
-        </div>
-      </div>
-
       {q.myBet && (
-        <p className="mt-2.5 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
+        <p className="mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
           Votre mise : {q.myBet.selection === "yes" ? "Oui" : "Non"} · {eur(q.myBet.stake)}
         </p>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-2.5 grid grid-cols-2 gap-2">
         <SideButton
           label="Oui"
           odds={q.oddsYes}
