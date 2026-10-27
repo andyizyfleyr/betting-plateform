@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 220" width="1880" height="440">
+    <defs>
+    <linearGradient id="hz-dark-bg" x1="64" y1="36" x2="448" y2="476" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2638" />
+      <stop offset="46%" stop-color="#E10014" />
+      <stop offset="100%" stop-color="#96000D" />
+    </linearGradient>
+    <radialGradient id="hz-dark-glow" cx="156" cy="112" r="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF7A85" stop-opacity="0.38" />
+      <stop offset="65%" stop-color="#FF2638" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="hz-dark-rim" x1="60" y1="40" x2="420" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.48" />
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.04" />
+    </linearGradient>
+    <linearGradient id="hz-dark-bolt" x1="180" y1="88" x2="330" y2="428" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FFEef0" />
+    </linearGradient>
+    <filter id="hz-dark-shadow" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#520007" flood-opacity="0.42" />
+    </filter>
+  </defs>
+    <!-- Écusson PULSE BET -->
+    <g transform="translate(18, 18) scale(0.359375)">
+      <rect x="24" y="24" width="464" height="464" rx="118" fill="url(#hz-dark-bg)" />
+      <rect x="24" y="24" width="464" height="464" rx="118" fill="url(#hz-dark-glow)" />
+      <rect x="30" y="30" width="452" height="452" rx="112" fill="none" stroke="url(#hz-dark-rim)" stroke-width="6" />
+      
+    <g filter="url(#hz-dark-shadow)">
+      <!-- Onde ECG gauche menant à l'éclair -->
+      <path
+        d="M 76 274 H 128 L 150 232 L 174 302 L 198 258"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="26"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <!-- Éclair sportif central haute tension -->
+      <path
+        d="M 298 84 L 368 84 L 284 232 H 374 L 198 432 L 244 278 H 168 Z"
+        fill="#FFFFFF"
+      />
+      <!-- Onde ECG droite de sortie -->
+      <path
+        d="M 356 286 L 378 252 L 398 286 H 436"
+        fill="none"
+        stroke="#FFFFFF"
+        stroke-width="24"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <!-- Point LIVE signature en haut à droite -->
+      <circle cx="404" cy="132" r="22" fill="#FFFFFF" />
+    </g>
+  
+    </g>
+
+    <!-- Typographie sportive PULSE + badge BET -->
+    <g transform="translate(226, 0)">
+      <text
+        x="0"
+        y="126"
+        fill="#FFFFFF"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="102"
+        font-weight="900"
+        font-style="italic"
+        letter-spacing="-2"
+      >PULSE</text>
+
+      <!-- Cartouche rouge signature BET parfaitement espacé après PULSE -->
+      <rect x="404" y="46" width="214" height="94" rx="22" fill="#E10014" />
+      <text
+        x="511"
+        y="116"
+        text-anchor="middle"
+        fill="#FFFFFF"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="66"
+        font-weight="900"
+        font-style="italic"
+        letter-spacing="1"
+      >BET</text>
+
+      <text
+        x="4"
+        y="174"
+        fill="#9CA3AF"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="21"
+        font-weight="700"
+        letter-spacing="3.2"
+      >PARIS SPORTIFS &amp; PRÉDICTIONS LIVE</text>
+    </g>
+  </svg>

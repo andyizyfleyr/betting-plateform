@@ -119,32 +119,42 @@ function buildSdk52Manifest(origin, host) {
     extra: {
       eas: {},
       expoClient: {
-        name: "PulseBets",
+        name: "Pulse Bet",
         slug: "pulsebets-android",
-        version: "1.0.0",
+        version: "1.1.0",
         sdkVersion: "52.0.0",
         platforms: ["android"],
         orientation: "portrait",
         primaryColor: "#e10014",
         userInterfaceStyle: "light",
-        backgroundColor: "#f4f5f7",
+        backgroundColor: "#090D16",
         jsEngine: "hermes",
         hostUri: host,
         icon: "./assets/icon.png",
         iconUrl: `${origin}/expo-sdk52/icon.png`,
+        notification: {
+          icon: "./assets/notification-icon.png",
+          color: "#e10014",
+          iconUrl: `${origin}/expo-sdk52/notification-icon.png`,
+        },
         splash: {
           image: "./assets/splash-icon.png",
           resizeMode: "contain",
-          backgroundColor: "#ffffff",
+          backgroundColor: "#090D16",
           imageUrl: `${origin}/expo-sdk52/splash-icon.png`,
         },
         android: {
           package: "app.pulsebets.android",
-          versionCode: 1,
+          versionCode: 2,
+          backgroundColor: "#090D16",
           adaptiveIcon: {
             foregroundImage: "./assets/adaptive-icon.png",
+            backgroundImage: "./assets/adaptive-icon-background.png",
+            monochromeImage: "./assets/monochrome-icon.png",
             backgroundColor: "#e10014",
             foregroundImageUrl: `${origin}/expo-sdk52/adaptive-icon.png`,
+            backgroundImageUrl: `${origin}/expo-sdk52/adaptive-icon-background.png`,
+            monochromeImageUrl: `${origin}/expo-sdk52/monochrome-icon.png`,
           },
         },
         extra: {
@@ -177,7 +187,8 @@ async function renderLauncherHtml() {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PulseBets Android · Expo Go SDK 52</title>
+  <title>Pulse Bet Android · Expo Go SDK 52</title>
+  <link rel="icon" type="image/png" href="/expo-sdk52/favicon.png" />
   <style>
     * { box-sizing: border-box; }
     body {
@@ -292,7 +303,10 @@ async function renderLauncherHtml() {
 <body>
   <div class="card">
     <div class="brand-row">
-      <div class="brand"><span class="brand-dot">⚡</span><span>PulseBets Android</span></div>
+      <div class="brand">
+        <img src="/expo-sdk52/icon.png" alt="Pulse Bet" style="width:32px;height:32px;border-radius:8px;display:block;" />
+        <span>PULSE <span style="background:#e10014;color:#fff;padding:2px 6px;border-radius:6px;font-size:12px;font-style:italic;vertical-align:middle;">BET</span></span>
+      </div>
       <span class="sdk-pill">Expo Go SDK 52 · Hermes</span>
     </div>
     <span class="badge">● Prêt · Bundle Hermes SDK 52 actif 24h/24</span>

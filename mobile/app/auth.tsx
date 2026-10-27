@@ -20,6 +20,7 @@ import {
   User,
   Zap,
 } from "lucide-react-native";
+import { PulseLogo } from "@/components/pulse-logo";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
 import { useRouter, useSearchParams } from "@/lib/router";
@@ -101,15 +102,11 @@ export default function AuthScreen() {
           <View>
             {/* En-tête identique à src/app/auth/page.tsx */}
             <View style={styles.brandRow}>
-              <View style={styles.brandIcon}>
-                <Zap size={18} color="#ffffff" fill="#ffffff" strokeWidth={2.2} />
-              </View>
-              <View>
-                <Text style={styles.brandTitle}>PULSE</Text>
-                <Text style={styles.brandSubtitle}>
-                  Paris sportifs & prédictions
-                </Text>
-              </View>
+              <PulseLogo
+                size="md"
+                variant="light"
+                subtitle="Paris sportifs & prédictions"
+              />
             </View>
 
             <View style={styles.headingBlock}>

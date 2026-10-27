@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
+    <defs>
+    <linearGradient id="mark-bg" x1="64" y1="36" x2="448" y2="476" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2638" />
+      <stop offset="46%" stop-color="#E10014" />
+      <stop offset="100%" stop-color="#96000D" />
+    </linearGradient>
+    <radialGradient id="mark-glow" cx="156" cy="112" r="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF7A85" stop-opacity="0.38" />
+      <stop offset="65%" stop-color="#FF2638" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="mark-rim" x1="60" y1="40" x2="420" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.48" />
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.04" />
+    </linearGradient>
+    <linearGradient id="mark-bolt" x1="180" y1="88" x2="330" y2="428" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FFEef0" />
+    </linearGradient>
+    <filter id="mark-shadow" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#520007" flood-opacity="0.42" />
+    </filter>
+  </defs>
+    <rect x="24" y="24" width="464" height="464" rx="118" fill="url(#mark-bg)" />
+    <rect x="24" y="24" width="464" height="464" rx="118" fill="url(#mark-glow)" />
+    <rect x="30" y="30" width="452" height="452" rx="112" fill="none" stroke="url(#mark-rim)" stroke-width="6" />
+    
+    <g filter="url(#mark-shadow)">
+      <!-- Onde ECG gauche menant à l'éclair -->
+      <path
+        d="M 76 274 H 128 L 150 232 L 174 302 L 198 258"
+        fill="none"
+        stroke="url(#mark-bolt)"
+        stroke-width="26"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <!-- Éclair sportif central haute tension -->
+      <path
+        d="M 298 84 L 368 84 L 284 232 H 374 L 198 432 L 244 278 H 168 Z"
+        fill="url(#mark-bolt)"
+      />
+      <!-- Onde ECG droite de sortie -->
+      <path
+        d="M 356 286 L 378 252 L 398 286 H 436"
+        fill="none"
+        stroke="url(#mark-bolt)"
+        stroke-width="24"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <!-- Point LIVE signature en haut à droite -->
+      <circle cx="404" cy="132" r="22" fill="#FFFFFF" />
+    </g>
+  
+  </svg>
