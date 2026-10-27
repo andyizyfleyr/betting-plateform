@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pulse-bet",
+  "main": "party/index.ts",
+  "compatibility_date": "2026-04-07",
+  "vars": {
+    "APP_URL": "https://be-plateform.vercel.app"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "Main",
+        "class_name": "Main"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Main"]
+    }
+  ]
+}

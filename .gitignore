@@ -49,5 +49,9 @@ next-env.d.ts
 /mobile/ios/
 /mobile/.env.local
 
-# PartyKit local build artifacts
+# PartyServer / Cloudflare Wrangler local artifacts
 /.partykit/
+/.wrangler/
+.dev.vars
+.wrangler-secrets*.json
+.wrangler-deploy*.jsonl

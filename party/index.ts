@@ -1,7 +1,15 @@
-import type * as Party from "partykit/server";
+import {
+  routePartykitRequest,
+  Server,
+  type Connection,
+  type WSMessage,
+} from "partyserver";
 
 /**
- * Serveur temps réel PartyKit — Pulse Bet (Web Next.js + Android Expo Go SDK 52)
+ * Serveur temps réel PartyServer officiel (Cloudflare PartyKit v2 / Durable Objects SQLite)
+ * — Pulse Bet (Web Next.js + Android Expo Go SDK 52)
+ *
+ * Routage 100 % compatible `PartySocket` : `/parties/main/<salon>` (binding `Main` -> `main`).
  *
  * Salons pris en charge :
  * - `live-matches` (public) : conserve le dernier snapshot des matchs/cotes en RAM pour un
@@ -12,17 +20,24 @@ import type * as Party from "partykit/server";
  *   instantanément le joueur dès qu'un pari est placé, vendu (Cash Out) ou réglé (Gagné/Perdu/Remboursé).
  */
 
+export interface Env {
+  Main: DurableObjectNamespace<Main>;
+  PARTYKIT_SECRET?: string;
+  APP_URL?: string;
+  NEXT_PUBLIC_APP_URL?: string;
+}
+
 const LIVE_ROOM_ID = "live-matches";
 const ALARM_INTERVAL_MS = 3_500;
 const SNAPSHOT_MAX_AGE_MS = 15_000;
 
-function getSecret(env: Record<string, unknown>): string {
+function getSecret(env: Env): string {
   const s = env.PARTYKIT_SECRET;
   if (typeof s === "string" && s.trim().length > 0) return s.trim();
   return "pulse-bet-dev-partykit-secret";
 }
 
-function getAppUrl(env: Record<string, unknown>): string | null {
+function getAppUrl(env: Env): string | null {
   const raw = env.APP_URL ?? env.NEXT_PUBLIC_APP_URL;
   if (typeof raw === "string" && raw.trim().length > 0) {
     return raw.trim().replace(/\/+$/, "");
@@ -73,49 +88,32 @@ async function verifyUserRoomToken(
   return timingSafeHexEquals(sigHex.toLowerCase(), expectedSig.toLowerCase());
 }
 
-export default class PulseBetRealtimeServer implements Party.Server {
-  readonly options: Party.ServerOptions = {
+export class Main extends Server<Env> {
+  static options = {
     hibernate: true,
   };
 
   private lastSnapshotJson: string | null = null;
   private lastSnapshotAt = 0;
 
-  constructor(readonly room: Party.Room) {}
-
-  static async onBeforeConnect(req: Party.Request, lobby: Party.Lobby) {
-    // Les salons privés `user-<id>` exigent un jeton HMAC valide signé par Next.js
-    if (lobby.id.startsWith("user-")) {
-      const expectedUid = lobby.id.slice("user-".length);
-      const url = new URL(req.url);
-      const token = url.searchParams.get("token");
-      const secret = getSecret(lobby.env);
-      const ok = await verifyUserRoomToken(token, expectedUid, secret);
-      if (!ok) {
-        return new Response("Accès temps réel non autorisé", { status: 401 });
-      }
-    }
-    return req;
-  }
-
   private hasActiveConnections(): boolean {
-    for (const _ of this.room.getConnections()) {
+    for (const _ of this.getConnections()) {
       return true;
     }
     return false;
   }
 
   private async ensureLiveAlarmScheduled(): Promise<void> {
-    if (this.room.id !== LIVE_ROOM_ID) return;
-    if (!getAppUrl(this.room.env)) return;
-    const currentAlarm = await this.room.storage.getAlarm();
+    if (this.name !== LIVE_ROOM_ID) return;
+    if (!getAppUrl(this.env)) return;
+    const currentAlarm = await this.ctx.storage.getAlarm();
     if (currentAlarm === null) {
-      await this.room.storage.setAlarm(Date.now() + ALARM_INTERVAL_MS);
+      await this.ctx.storage.setAlarm(Date.now() + ALARM_INTERVAL_MS);
     }
   }
 
-  async onConnect(conn: Party.Connection): Promise<void> {
-    if (this.room.id === LIVE_ROOM_ID) {
+  async onConnect(conn: Connection): Promise<void> {
+    if (this.name === LIVE_ROOM_ID) {
       // Hydratation instantanée (0 ms, 0 requête SQL) si un snapshot frais est en mémoire
       if (
         this.lastSnapshotJson &&
@@ -126,7 +124,7 @@ export default class PulseBetRealtimeServer implements Party.Server {
         conn.send(
           JSON.stringify({
             type: "CONNECTED",
-            room: this.room.id,
+            room: this.name,
             ts: Date.now(),
           })
         );
@@ -138,19 +136,19 @@ export default class PulseBetRealtimeServer implements Party.Server {
     conn.send(
       JSON.stringify({
         type: "CONNECTED",
-        room: this.room.id,
+        room: this.name,
         ts: Date.now(),
       })
     );
   }
 
   async onClose(): Promise<void> {
-    if (this.room.id === LIVE_ROOM_ID && !this.hasActiveConnections()) {
-      await this.room.storage.deleteAlarm();
+    if (this.name === LIVE_ROOM_ID && !this.hasActiveConnections()) {
+      await this.ctx.storage.deleteAlarm();
     }
   }
 
-  onMessage(message: string | ArrayBuffer, sender: Party.Connection): void {
+  onMessage(sender: Connection, message: WSMessage): void {
     if (typeof message !== "string") return;
     if (message === "PING" || message === '{"type":"PING"}') {
       sender.send(JSON.stringify({ type: "PONG", ts: Date.now() }));
@@ -162,14 +160,14 @@ export default class PulseBetRealtimeServer implements Party.Server {
    * Dès que le dernier joueur quitte l'app, l'alarme s'arrête et le salon hiberne à 0 % CPU.
    */
   async onAlarm(): Promise<void> {
-    if (this.room.id !== LIVE_ROOM_ID || !this.hasActiveConnections()) {
+    if (this.name !== LIVE_ROOM_ID || !this.hasActiveConnections()) {
       return;
     }
 
-    const appUrl = getAppUrl(this.room.env);
+    const appUrl = getAppUrl(this.env);
     if (!appUrl) return;
 
-    const secret = getSecret(this.room.env);
+    const secret = getSecret(this.env);
     try {
       const res = await fetch(`${appUrl}/api/realtime/tick`, {
         method: "POST",
@@ -193,7 +191,7 @@ export default class PulseBetRealtimeServer implements Party.Server {
           if (msg !== this.lastSnapshotJson) {
             this.lastSnapshotJson = msg;
             this.lastSnapshotAt = Date.now();
-            this.room.broadcast(msg);
+            this.broadcast(msg);
           } else {
             this.lastSnapshotAt = Date.now();
           }
@@ -203,7 +201,7 @@ export default class PulseBetRealtimeServer implements Party.Server {
       /* Tolérance réseau : la prochaine alarme reprendra automatiquement */
     } finally {
       if (this.hasActiveConnections()) {
-        await this.room.storage.setAlarm(Date.now() + ALARM_INTERVAL_MS);
+        await this.ctx.storage.setAlarm(Date.now() + ALARM_INTERVAL_MS);
       }
     }
   }
@@ -211,13 +209,13 @@ export default class PulseBetRealtimeServer implements Party.Server {
   /**
    * Réception directe des événements poussés par les Route Handlers Next.js (`POST` authentifié).
    */
-  async onRequest(req: Party.Request): Promise<Response> {
+  async onRequest(req: Request): Promise<Response> {
     if (req.method === "GET") {
       let connections = 0;
-      for (const _ of this.room.getConnections()) connections++;
+      for (const _ of this.getConnections()) connections++;
       return Response.json({
         ok: true,
-        room: this.room.id,
+        room: this.name,
         connections,
         hasSnapshot: Boolean(this.lastSnapshotJson),
       });
@@ -228,27 +226,65 @@ export default class PulseBetRealtimeServer implements Party.Server {
     }
 
     const authHeader = req.headers.get("Authorization") ?? "";
-    const expected = `Bearer ${getSecret(this.room.env)}`;
+    const expected = `Bearer ${getSecret(this.env)}`;
     if (!timingSafeHexEquals(authHeader, expected)) {
       return new Response("Unauthorized", { status: 401 });
     }
 
     const rawBody = await req.text();
     if (!rawBody) {
-      return Response.json({ ok: false, error: "Empty payload" }, { status: 400 });
+      return Response.json(
+        { ok: false, error: "Empty payload" },
+        { status: 400 }
+      );
     }
 
     try {
       const parsed = JSON.parse(rawBody) as { type?: string };
-      if (this.room.id === LIVE_ROOM_ID && parsed.type === "MATCHES_SNAPSHOT") {
+      if (this.name === LIVE_ROOM_ID && parsed.type === "MATCHES_SNAPSHOT") {
         this.lastSnapshotJson = rawBody;
         this.lastSnapshotAt = Date.now();
       }
     } catch {
-      return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+      return Response.json(
+        { ok: false, error: "Invalid JSON" },
+        { status: 400 }
+      );
     }
 
-    this.room.broadcast(rawBody);
+    this.broadcast(rawBody);
     return Response.json({ ok: true });
   }
 }
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === "/" || url.pathname === "/health") {
+      return Response.json({
+        ok: true,
+        service: "pulse-bet-partyserver",
+      });
+    }
+
+    const partyResponse = await routePartykitRequest(request, env, {
+      cors: true,
+      onBeforeConnect: async (req, lobby) => {
+        if (lobby.name.startsWith("user-")) {
+          const expectedUid = lobby.name.slice("user-".length);
+          const reqUrl = new URL(req.url);
+          const token = reqUrl.searchParams.get("token");
+          const secret = getSecret(env);
+          const ok = await verifyUserRoomToken(token, expectedUid, secret);
+          if (!ok) {
+            return new Response("Accès temps réel non autorisé", {
+              status: 401,
+            });
+          }
+        }
+      },
+    });
+
+    return partyResponse ?? new Response("Not Found", { status: 404 });
+  },
+} satisfies ExportedHandler<Env>;

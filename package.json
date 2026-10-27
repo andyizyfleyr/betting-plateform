@@ -5,11 +5,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "party:dev": "partykit dev",
-    "party:deploy": "partykit deploy",
+    "party:dev": "wrangler dev -c wrangler.jsonc --port 1999",
+    "party:deploy": "wrangler deploy -c wrangler.jsonc --autoconfig=false",
     "party:setup": "node scripts/setup-partykit.mjs",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p party/tsconfig.json --noEmit",
     "test:concurrency": "node scripts/test-concurrency.mjs"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261027.1",
     "@tailwindcss/postcss": "4.1.17",
     "@types/node": "22.19.15",
     "@types/pg": "8.18.0",
@@ -34,10 +35,11 @@
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
-    "partykit": "^0.0.115",
+    "partyserver": "^0.5.10",
     "postcss": "8.5.8",
     "tailwindcss": "4.1.17",
     "tsx": "^4.23.11",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "wrangler": "^4.153.0"
   }
 }
