@@ -588,8 +588,20 @@ function SingleBetTicket({
             </span>
           )}
           <span className="truncate">{bet.league}</span>
-          <span className="text-dim">·</span>
-          <span className="shrink-0 text-[11px] tabular-nums text-dim">
+          <span
+            className={cn(
+              "text-dim",
+              !isPrediction && bet.matchStartsAt && !live && "hidden sm:inline"
+            )}
+          >
+            ·
+          </span>
+          <span
+            className={cn(
+              "shrink-0 text-[11px] tabular-nums text-dim",
+              !isPrediction && bet.matchStartsAt && !live && "hidden sm:inline"
+            )}
+          >
             {formatPlacedAt(
               bet.status !== "pending" ? (bet.settledAt ?? bet.placedAt) : bet.placedAt
             )}
@@ -598,7 +610,7 @@ function SingleBetTicket({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {!isPrediction && bet.matchStartsAt && !live && (
-            <span className="text-[10.5px] font-medium tabular-nums text-dim">
+            <span className="text-[10px] font-medium tabular-nums text-dim sm:text-[10.5px]">
               {formatKickoff(bet.matchStartsAt)}
             </span>
           )}
