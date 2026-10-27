@@ -18,6 +18,7 @@ import {
 } from "lucide-react-native";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import { LiveStatusBadge } from "@/components/match-card";
+import { useMobileMatchDetailQuery } from "@/lib/party-realtime";
 import {
   AccordionItem,
   CATEGORY_TABS,
@@ -56,58 +57,57 @@ export default function MatchDetailScreen() {
     comboQuickMode,
     toggleComboLeg,
     toast,
+    dataSaverMode,
   } = useApp();
 
   const [prevId, setPrevId] = useState<number>(matchId);
-  const [match, setMatch] = useState<ClientMatch | null | undefined>(() =>
-    invalidId ? null : (getCachedClientMatch(matchId) ?? undefined)
-  );
   const [category, setCategory] = useState<SheetCategory>("all");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [initializedMatchId, setInitializedMatchId] = useState<number | null>(
     null
   );
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [showTracker, setShowTracker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   if (matchId !== prevId) {
     setPrevId(matchId);
-    setMatch(invalidId ? null : (getCachedClientMatch(matchId) ?? undefined));
     setCategory("all");
     setInitializedMatchId(null);
     setOpenMap({});
-    setLoadError(null);
     setShowTracker(false);
   }
 
+  const cachedInitial = useMemo(
+    () => (invalidId ? null : getCachedClientMatch(matchId)),
+    [invalidId, matchId]
+  );
+
+  const detailQuery = useMobileMatchDetailQuery(matchId, {
+    enabled: !invalidId,
+    dataSaver: dataSaverMode,
+    initialMatch: cachedInitial,
+    isFinished: cachedInitial?.status === "finished",
+  });
+
+  const match = invalidId
+    ? null
+    : detailQuery.data?.match ??
+      (detailQuery.isError ? null : undefined);
+
+  const loadError =
+    !detailQuery.data && detailQuery.error instanceof Error
+      ? detailQuery.error.message
+      : detailQuery.isError && !detailQuery.data
+        ? "Impossible de charger cette rencontre."
+        : null;
+
   const fetchMatch = useCallback(async () => {
     if (invalidId) return;
-    try {
-      const r = await api.matchById(matchId);
-      setMatch(r.match ?? null);
-      setLoadError(null);
-    } catch (e) {
-      setMatch((prev) => (prev === undefined ? null : prev));
-      setLoadError(
-        e instanceof Error
-          ? e.message
-          : "Impossible de charger cette rencontre."
-      );
-    }
-  }, [invalidId, matchId]);
+    await detailQuery.refetch();
+  }, [detailQuery, invalidId]);
 
   const isFinished = match?.status === "finished";
   const isLive = match?.status === "live";
-
-  useEffect(() => {
-    if (invalidId) return;
-    void fetchMatch();
-    if (isFinished) return;
-    const interval = isLive ? POLL_LIVE_MS : POLL_IDLE_MS;
-    const id = setInterval(() => void fetchMatch(), interval);
-    return () => clearInterval(id);
-  }, [invalidId, fetchMatch, isLive, isFinished]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

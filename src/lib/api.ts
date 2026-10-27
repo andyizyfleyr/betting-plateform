@@ -513,7 +513,19 @@ export interface ClientSavedCouponLeg {
   odds: number;
 }
 
+export interface RealtimeConfigResponse {
+  enabled: boolean;
+  host: string | null;
+  protocol: "ws" | "wss";
+  publicRoom: string;
+  userRoom: string | null;
+  userToken: string | null;
+}
+
 export const api = {
+  realtime: () => request<RealtimeConfigResponse>("/api/realtime"),
+  matchesSlim: () =>
+    request<{ matches: ClientMatch[]; serverTime?: string }>("/api/matches/slim"),
   matches: () =>
     request<{ matches: ClientMatch[]; serverTime?: string }>("/api/matches").then(
       (res) => {

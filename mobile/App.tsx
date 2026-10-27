@@ -2,9 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "@/context/app-context";
 import { PulseSplashScreen } from "@/components/pulse-splash-screen";
+import {
+  ensureMobileFocusManagerBound,
+  mobileQueryClient,
+} from "@/lib/query-client";
 import { RouterProvider, usePathname } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 import { ToastHost } from "@/components/toast-host";
@@ -35,6 +40,7 @@ import AdminScreen from "./app/(main)/admin";
 
 // Maintient le splash système Android jusqu'au premier rendu du Splash HD React Native
 SplashScreen.preventAutoHideAsync().catch(() => {});
+ensureMobileFocusManagerBound();
 
 function ActiveScreenSwitch() {
   const pathname = usePathname();
@@ -155,13 +161,15 @@ function RootBootCoordinator() {
 export default function App() {
   return (
     <View style={styles.root}>
-      <SafeAreaProvider>
-        <RouterProvider initialHref="/">
-          <AppProvider>
-            <RootBootCoordinator />
-          </AppProvider>
-        </RouterProvider>
-      </SafeAreaProvider>
+      <QueryClientProvider client={mobileQueryClient}>
+        <SafeAreaProvider>
+          <RouterProvider initialHref="/">
+            <AppProvider>
+              <RootBootCoordinator />
+            </AppProvider>
+          </RouterProvider>
+        </SafeAreaProvider>
+      </QueryClientProvider>
     </View>
   );
 }

@@ -30,6 +30,7 @@ import {
 import { MatchCard } from "@/components/match-card";
 import { useApp } from "@/components/providers";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import { useMatchesFeedQuery } from "@/lib/party-realtime";
 import {
   deduplicateLeagueNames,
   isClearFavoriteMatch,
@@ -69,81 +70,41 @@ function AllMatchesContent() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [matches, setMatches] = useState<ClientMatch[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const lastMatchesRef = useRef<ClientMatch[] | null>(null);
-
   const basePollMs =
     filter === "finished" || filter === "upcoming" ? 18_000 : POLL_INTERVAL;
-  const pollIntervalMs = getAdaptiveIntervalMs(basePollMs, isConstrained);
+
+  const matchesQuery = useMatchesFeedQuery({
+    baseFallbackIntervalMs: basePollMs,
+  });
+
+  const matches = useMemo(
+    () => matchesQuery.data?.matches ?? (matchesQuery.isError ? [] : null),
+    [matchesQuery.data, matchesQuery.isError]
+  );
+
+  const loadError =
+    !matchesQuery.data && matchesQuery.error instanceof Error
+      ? matchesQuery.error.message
+      : matchesQuery.isError && !matchesQuery.data
+        ? "Impossible de charger les matchs pour le moment."
+        : null;
+
+  useEffect(() => {
+    if (matchesQuery.data?.matches) {
+      setFeedMatches(matchesQuery.data.matches);
+    }
+  }, [matchesQuery.data, setFeedMatches]);
 
   const handlePullRefresh = useCallback(async () => {
     try {
-      const r = await api.matches();
-      if (lastMatchesRef.current !== r.matches) {
-        lastMatchesRef.current = r.matches;
-        setMatches(r.matches);
-        setFeedMatches(r.matches);
+      const res = await matchesQuery.refetch();
+      if (res.data?.matches) {
+        setFeedMatches(res.data.matches);
       }
-      setLoadError(null);
     } catch {
       /* conserve l'affichage actuel sur réseau mobile instable */
     }
-  }, [setFeedMatches]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchMatches(isBackground = false) {
-      if (isBackground && typeof document !== "undefined" && document.hidden) return;
-      if (isBackground && typeof navigator !== "undefined" && navigator.onLine === false) {
-        return;
-      }
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const r = await api.matches();
-          if (cancelled) return;
-          if (lastMatchesRef.current !== r.matches) {
-            lastMatchesRef.current = r.matches;
-            setMatches(r.matches);
-            setFeedMatches(r.matches);
-          }
-          setLoadError((prev) => (prev === null ? prev : null));
-          return;
-        } catch (err) {
-          if (cancelled) return;
-          if (attempt < MAX_RETRIES) {
-            await new Promise((r) => setTimeout(r, RETRY_DELAY * (attempt + 1)));
-            continue;
-          }
-          if (!isBackground && !cancelled) {
-            setLoadError(
-              err instanceof Error
-                ? err.message
-                : "Impossible de charger les matchs pour le moment."
-            );
-            setMatches((prev) => prev ?? []);
-          }
-        }
-      }
-    }
-
-    void fetchMatches(false);
-    const id = setInterval(() => void fetchMatches(true), pollIntervalMs);
-    const onVisible = () => {
-      if (!document.hidden) void fetchMatches(true);
-    };
-    const onOnline = () => void fetchMatches(true);
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [setFeedMatches, reloadNonce, pollIntervalMs, isOffline]);
+  }, [matchesQuery, setFeedMatches]);
 
   const realMatchesAll = useMemo(
     () => (matches ?? []).filter((m) => m.source === "manual"),
@@ -466,9 +427,7 @@ function AllMatchesContent() {
             <button
               type="button"
               onClick={() => {
-                setMatches(null);
-                setLoadError(null);
-                setReloadNonce((n) => n + 1);
+                void matchesQuery.refetch();
               }}
               className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
             >

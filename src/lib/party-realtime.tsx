@@ -1,0 +1,441 @@
+"use client";
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import PartySocket from "partysocket";
+import {
+  api,
+  type ClientMatch,
+  type ClientMatchHistoryItem,
+  type ClientPrediction,
+} from "@/lib/api";
+import { rememberMatches } from "@/lib/client-entity-cache";
+import {
+  calibrateServerClockOffset,
+  registerLiveClockMatches,
+} from "@/lib/live-clock";
+import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
+import {
+  mergeSlimIntoFullMatches,
+  pulseQueryKeys,
+} from "@/lib/query-client";
+
+interface RealtimeContextValue {
+  /** `true` dès que la connexion WebSocket PartyKit `live-matches` est ouverte */
+  wsConnected: boolean;
+  /** `true` dès que le salon privé `user-<id>` du joueur est ouvert */
+  userWsConnected: boolean;
+  /** Indique si PartyKit est activé sur le serveur */
+  partyEnabled: boolean;
+}
+
+const RealtimeContext = createContext<RealtimeContextValue>({
+  wsConnected: false,
+  userWsConnected: false,
+  partyEnabled: false,
+});
+
+export function useRealtimeStatus(): RealtimeContextValue {
+  return useContext(RealtimeContext);
+}
+
+/**
+ * Pont temps réel PartyKit + TanStack Query (Web Next.js) :
+ * - Découvre dynamiquement l'hôte PartyKit et le jeton HMAC du joueur via `/api/realtime`.
+ * - Maintient le WebSocket `live-matches` (scores, cotes, Cash Out, chronos) et le salon
+ *   privé `user-<id>` (solde, paris gagnés/vendus/remboursés) synchronisés avec `QueryClient`.
+ * - Coupe automatiquement le polling rapide dès que le WebSocket est actif (`wsConnected = true`),
+ *   et bascule sans coupure sur `TanStack Query` en cas d'absence de configuration ou de réseau 3G filtré.
+ */
+export function PartyRealtimeBridge({
+  userId,
+  disabled = false,
+  onMatchesUpdated,
+  children,
+}: {
+  userId: number | null;
+  disabled?: boolean;
+  onMatchesUpdated?: (matches: ClientMatch[]) => void;
+  children: ReactNode;
+}) {
+  const queryClient = useQueryClient();
+  const [wsConnected, setWsConnected] = useState(false);
+  const [userWsConnected, setUserWsConnected] = useState(false);
+
+  const realtimeQuery = useQuery({
+    queryKey: pulseQueryKeys.realtime(userId),
+    queryFn: () => api.realtime(),
+    enabled: !disabled,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const cfg = realtimeQuery.data;
+  const partyHost =
+    (cfg?.enabled && cfg.host ? cfg.host : null) ||
+    (process.env.NEXT_PUBLIC_PARTYKIT_HOST?.trim() || null);
+  const partyProtocol =
+    cfg?.protocol ??
+    (partyHost &&
+    (partyHost.startsWith("localhost") || partyHost.startsWith("127.0.0.1"))
+      ? "ws"
+      : "wss");
+  const partyEnabled = Boolean(!disabled && partyHost);
+
+  // 1) Salon public `live-matches`
+  useEffect(() => {
+    if (!partyEnabled || !partyHost) {
+      setWsConnected(false);
+      return;
+    }
+
+    const socket = new PartySocket({
+      host: partyHost,
+      room: cfg?.publicRoom || "live-matches",
+      protocol: partyProtocol,
+    });
+
+    const handleOpen = () => {
+      setWsConnected(true);
+    };
+
+    const handleClose = () => {
+      setWsConnected(false);
+    };
+
+    const handleMessage = (ev: MessageEvent) => {
+      if (typeof ev.data !== "string") return;
+      try {
+        const msg = JSON.parse(ev.data) as {
+          type?: string;
+          matches?: ClientMatch[];
+          matchIds?: number[];
+          serverTime?: string;
+        };
+
+        if (msg.type === "MATCHES_SNAPSHOT" && Array.isArray(msg.matches)) {
+          if (msg.serverTime) {
+            calibrateServerClockOffset({ serverTimeIso: msg.serverTime });
+          }
+          registerLiveClockMatches(msg.matches);
+
+          queryClient.setQueryData(pulseQueryKeys.matchesSlim, {
+            matches: msg.matches,
+            serverTime: msg.serverTime,
+          });
+
+          let shouldRefetchFull = false;
+          let newlyFinished: number[] = [];
+
+          queryClient.setQueryData<{
+            matches: ClientMatch[];
+            serverTime?: string;
+          }>(pulseQueryKeys.matches, (prev) => {
+            const { merged, hasNewMatch, newlyFinishedIds } =
+              mergeSlimIntoFullMatches(prev?.matches, msg.matches!);
+            shouldRefetchFull = !prev || hasNewMatch;
+            newlyFinished = newlyFinishedIds;
+            rememberMatches(merged);
+            onMatchesUpdated?.(merged);
+            return {
+              matches: merged,
+              serverTime: msg.serverTime ?? prev?.serverTime,
+            };
+          });
+
+          // Met aussi à jour instantanément toute fiche détail `/matchs/[id]` en cache
+          for (const slim of msg.matches) {
+            queryClient.setQueryData<{
+              match: ClientMatch;
+              serverTime?: string;
+            }>(pulseQueryKeys.matchDetail(slim.id), (prevDetail) => {
+              if (!prevDetail) return prevDetail;
+              const { merged } = mergeSlimIntoFullMatches(
+                [prevDetail.match],
+                [slim]
+              );
+              return {
+                match: merged[0] ?? prevDetail.match,
+                serverTime: msg.serverTime ?? prevDetail.serverTime,
+              };
+            });
+          }
+
+          if (shouldRefetchFull) {
+            void queryClient.invalidateQueries({
+              queryKey: pulseQueryKeys.matches,
+            });
+          }
+          if (newlyFinished.length > 0) {
+            void queryClient.invalidateQueries({
+              queryKey: pulseQueryKeys.matchHistory,
+            });
+          }
+          return;
+        }
+
+        if (msg.type === "MATCHES_INVALIDATE") {
+          void queryClient.invalidateQueries({
+            queryKey: pulseQueryKeys.matches,
+          });
+          if (Array.isArray(msg.matchIds)) {
+            for (const mid of msg.matchIds) {
+              void queryClient.invalidateQueries({
+                queryKey: pulseQueryKeys.matchDetail(mid),
+              });
+            }
+          } else {
+            void queryClient.invalidateQueries({
+              queryKey: ["matches", "detail"],
+            });
+          }
+          return;
+        }
+
+        if (msg.type === "PREDICTIONS_INVALIDATE") {
+          void queryClient.invalidateQueries({
+            queryKey: pulseQueryKeys.predictionsCatalog,
+          });
+          return;
+        }
+
+        if (msg.type === "USER_PULSE_INVALIDATE" && userId) {
+          void queryClient.invalidateQueries({
+            queryKey: pulseQueryKeys.userPulse(userId),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["bets", userId],
+          });
+        }
+      } catch {
+        /* ignore malformed frame */
+      }
+    };
+
+    socket.addEventListener("open", handleOpen);
+    socket.addEventListener("close", handleClose);
+    socket.addEventListener("error", handleClose);
+    socket.addEventListener("message", handleMessage);
+
+    return () => {
+      setWsConnected(false);
+      socket.removeEventListener("open", handleOpen);
+      socket.removeEventListener("close", handleClose);
+      socket.removeEventListener("error", handleClose);
+      socket.removeEventListener("message", handleMessage);
+      socket.close();
+    };
+  }, [
+    cfg?.publicRoom,
+    onMatchesUpdated,
+    partyEnabled,
+    partyHost,
+    partyProtocol,
+    queryClient,
+    userId,
+  ]);
+
+  // 2) Salon privé authentifié `user-<id>`
+  useEffect(() => {
+    if (
+      !partyEnabled ||
+      !partyHost ||
+      !userId ||
+      !cfg?.userRoom ||
+      !cfg?.userToken
+    ) {
+      setUserWsConnected(false);
+      return;
+    }
+
+    const userSocket = new PartySocket({
+      host: partyHost,
+      room: cfg.userRoom,
+      protocol: partyProtocol,
+      query: { token: cfg.userToken },
+    });
+
+    const handleOpen = () => setUserWsConnected(true);
+    const handleClose = () => setUserWsConnected(false);
+    const handleMessage = (ev: MessageEvent) => {
+      if (typeof ev.data !== "string") return;
+      try {
+        const msg = JSON.parse(ev.data) as { type?: string };
+        if (msg.type === "USER_PULSE_INVALIDATE") {
+          void queryClient.invalidateQueries({
+            queryKey: pulseQueryKeys.userPulse(userId),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["bets", userId],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: pulseQueryKeys.myPredictionBets(userId),
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    userSocket.addEventListener("open", handleOpen);
+    userSocket.addEventListener("close", handleClose);
+    userSocket.addEventListener("error", handleClose);
+    userSocket.addEventListener("message", handleMessage);
+
+    return () => {
+      setUserWsConnected(false);
+      userSocket.removeEventListener("open", handleOpen);
+      userSocket.removeEventListener("close", handleClose);
+      userSocket.removeEventListener("error", handleClose);
+      userSocket.removeEventListener("message", handleMessage);
+      userSocket.close();
+    };
+  }, [
+    cfg?.userRoom,
+    cfg?.userToken,
+    partyEnabled,
+    partyHost,
+    partyProtocol,
+    queryClient,
+    userId,
+  ]);
+
+  const ctxValue = useMemo<RealtimeContextValue>(
+    () => ({
+      wsConnected,
+      userWsConnected,
+      partyEnabled,
+    }),
+    [partyEnabled, userWsConnected, wsConnected]
+  );
+
+  return (
+    <RealtimeContext.Provider value={ctxValue}>
+      {children}
+    </RealtimeContext.Provider>
+  );
+}
+
+/* ============================================================================
+ *  HOOKS TANSTACK QUERY PARTAGÉS (AVEC BASCULE AUTOMATIQUE WEBSOCKET / POLLING)
+ * ============================================================================ */
+
+export function useMatchesFeedQuery(options?: {
+  enabled?: boolean;
+  baseFallbackIntervalMs?: number;
+  initialMatches?: ClientMatch[];
+}) {
+  const { wsConnected } = useRealtimeStatus();
+  const { isConstrained, isOffline } = useNetworkQuality();
+  const baseMs = options?.baseFallbackIntervalMs ?? 5_000;
+  const fallbackMs = getAdaptiveIntervalMs(baseMs, isConstrained);
+
+  return useQuery({
+    queryKey: pulseQueryKeys.matches,
+    queryFn: () => api.matches(),
+    enabled: (options?.enabled ?? true) && !isOffline,
+    initialData:
+      options?.initialMatches && options.initialMatches.length > 0
+        ? { matches: options.initialMatches }
+        : undefined,
+    initialDataUpdatedAt:
+      options?.initialMatches && options.initialMatches.length > 0
+        ? Date.now() - 4_000
+        : undefined,
+    // Lorsque le WebSocket PartyKit est actif, simple réconciliation de sécurité à 60 s
+    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useMatchDetailQuery(
+  matchId: number,
+  options?: {
+    enabled?: boolean;
+    initialMatch?: ClientMatch | null;
+    isFinished?: boolean;
+  }
+) {
+  const { wsConnected } = useRealtimeStatus();
+  const { isConstrained, isOffline } = useNetworkQuality();
+  const fallbackMs = getAdaptiveIntervalMs(5_000, isConstrained);
+
+  return useQuery({
+    queryKey: pulseQueryKeys.matchDetail(matchId),
+    queryFn: () => api.matchById(matchId),
+    enabled:
+      (options?.enabled ?? true) &&
+      Number.isInteger(matchId) &&
+      matchId > 0 &&
+      !isOffline,
+    initialData: options?.initialMatch
+      ? { match: options.initialMatch }
+      : undefined,
+    initialDataUpdatedAt: options?.initialMatch ? Date.now() - 4_000 : undefined,
+    refetchInterval: options?.isFinished
+      ? false
+      : wsConnected
+        ? 45_000
+        : fallbackMs,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function usePredictionsCatalogQuery(options?: {
+  enabled?: boolean;
+  initialQuestions?: ClientPrediction[];
+}) {
+  const { wsConnected } = useRealtimeStatus();
+  const { isConstrained, isOffline } = useNetworkQuality();
+  const fallbackMs = getAdaptiveIntervalMs(15_000, isConstrained);
+
+  return useQuery({
+    queryKey: pulseQueryKeys.predictionsCatalog,
+    queryFn: () => api.predictionsCatalog(),
+    enabled: (options?.enabled ?? true) && !isOffline,
+    initialData:
+      options?.initialQuestions && options.initialQuestions.length > 0
+        ? { questions: options.initialQuestions }
+        : undefined,
+    initialDataUpdatedAt:
+      options?.initialQuestions && options.initialQuestions.length > 0
+        ? Date.now() - 5_000
+        : undefined,
+    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useMatchHistoryQuery(options?: {
+  enabled?: boolean;
+  initialHistory?: ClientMatchHistoryItem[];
+}) {
+  const { wsConnected } = useRealtimeStatus();
+  const { isConstrained, isOffline } = useNetworkQuality();
+  const fallbackMs = getAdaptiveIntervalMs(10_000, isConstrained);
+
+  return useQuery({
+    queryKey: pulseQueryKeys.matchHistory,
+    queryFn: () => api.matchHistory(),
+    enabled: (options?.enabled ?? true) && !isOffline,
+    initialData:
+      options?.initialHistory && options.initialHistory.length > 0
+        ? { matches: options.initialHistory, focusedMatch: null }
+        : undefined,
+    initialDataUpdatedAt:
+      options?.initialHistory && options.initialHistory.length > 0
+        ? Date.now() - 5_000
+        : undefined,
+    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchIntervalInBackground: false,
+  });
+}

@@ -28,8 +28,14 @@ import {
   hydrateEntityCacheFromDisk,
   seedPredictionsSnapshot,
 } from "@/lib/entity-cache";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { hydrateAuthToken, onUnauthorizedResponse } from "@/lib/http";
-import { useSmartPolling } from "@/lib/polling";
+import {
+  MobilePartyRealtimeBridge,
+  useMobileMatchesSlimQuery,
+  useMobileRealtimeStatus,
+} from "@/lib/party-realtime";
+import { mobileQueryKeys } from "@/lib/query-client";
 import { triggerHaptic } from "@/theme/tokens";
 
 export interface BetTarget {
@@ -149,7 +155,89 @@ const DATASAVER_STORAGE_KEY = "pulse_android_datasaver_v1";
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+function MobileBackgroundQueries({
+  authReady,
+  dataSaverMode,
+  user,
+  pendingCount,
+  betsVersion,
+  setFeedMatchesState,
+  setBalance,
+  setPendingCount,
+  toast,
+  seenSettledTicketIds,
+}: {
+  authReady: boolean;
+  dataSaverMode: boolean;
+  user: ClientUser | null;
+  pendingCount: number;
+  betsVersion: number;
+  setFeedMatchesState: (list: ClientMatch[]) => void;
+  setBalance: (b: number) => void;
+  setPendingCount: (n: number) => void;
+  toast: (t: Omit<ToastItem, "id">) => void;
+  seenSettledTicketIds: React.MutableRefObject<Set<string>>;
+}) {
+  const { userWsConnected } = useMobileRealtimeStatus();
+
+  const matchesQuery = useMobileMatchesSlimQuery({
+    enabled: authReady,
+    dataSaver: dataSaverMode,
+    baseIntervalMs: 5_000,
+  });
+
+  useEffect(() => {
+    if (matchesQuery.data?.matches) {
+      setFeedMatchesState(matchesQuery.data.matches);
+    }
+  }, [matchesQuery.data, setFeedMatchesState]);
+
+  const pulseIntervalMs = Math.round(12_000 * (dataSaverMode ? 2.4 : 1));
+  const shouldPollPulse =
+    authReady && Boolean(user) && user?.role !== "admin" && !userWsConnected && pendingCount > 0;
+
+  const pulseQuery = useQuery({
+    queryKey: [...mobileQueryKeys.userPulse(user?.id), betsVersion],
+    queryFn: () => api.pulse(),
+    enabled: authReady && Boolean(user) && user?.role !== "admin",
+    staleTime: 2_000,
+    refetchInterval: shouldPollPulse ? pulseIntervalMs : false,
+    refetchIntervalInBackground: false,
+  });
+
+  useEffect(() => {
+    const res = pulseQuery.data;
+    if (!res || !user) return;
+    if (typeof res.balance === "number") {
+      setBalance(res.balance);
+    }
+    setPendingCount(res.pendingCount ?? 0);
+    for (const tk of res.tickets ?? []) {
+      if (tk.status === "pending") continue;
+      const key = `${tk.kind}:${tk.id}:${tk.status}`;
+      if (seenSettledTicketIds.current.has(key)) continue;
+      seenSettledTicketIds.current.add(key);
+      if (tk.status === "won" && (user.notifications ?? true)) {
+        toast({
+          kind: "win",
+          title: `Pari gagné ! +${tk.potentialWin.toFixed(2).replace(".", ",")} €`,
+          description: `${tk.title} · ${tk.selectionLabel}`,
+        });
+      } else if (tk.status === "void" && (user.notifications ?? true)) {
+        toast({
+          kind: "info",
+          title: "Pari remboursé",
+          description: `${tk.title} · Mise restituée`,
+        });
+      }
+    }
+  }, [pulseQuery.data, seenSettledTicketIds, setBalance, setPendingCount, toast, user]);
+
+  return null;
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<ClientUser | null>(null);
   const [balance, setBalanceState] = useState<number>(0);
@@ -213,7 +301,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const bumpBets = useCallback(() => {
     setBetsVersion((v) => v + 1);
-  }, []);
+    void queryClient.invalidateQueries({ queryKey: ["pulse"] });
+    void queryClient.invalidateQueries({ queryKey: ["bets"] });
+    void queryClient.invalidateQueries({ queryKey: ["predictions", "my-bets"] });
+  }, [queryClient]);
 
   const applyUser = useCallback((u: ClientUser | null) => {
     setUser(u);
@@ -272,6 +363,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const diskMatches = getCachedMatchesList();
         if (diskMatches && diskMatches.length > 0) {
           setFeedMatchesState(diskMatches);
+          queryClient.setQueryData(mobileQueryKeys.matchesSlim, {
+            matches: diskMatches,
+          });
         }
       }
 
@@ -317,56 +411,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshFeedMatches = useCallback(async () => {
     try {
-      const res = await api.matchesSlim();
+      const res = await queryClient.fetchQuery({
+        queryKey: mobileQueryKeys.matchesSlim,
+        queryFn: () => api.matchesSlim(),
+        staleTime: 0,
+      });
       setFeedMatchesState(res.matches);
     } catch {
       /* conserve l'affichage */
     }
-  }, []);
+  }, [queryClient]);
 
   const refreshPulseNow = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await api.pulse();
-      if (typeof res.balance === "number") {
-        setBalance(res.balance);
-      }
-      setPendingCount(res.pendingCount ?? 0);
-      for (const tk of res.tickets ?? []) {
-        if (tk.status === "pending") continue;
-        const key = `${tk.kind}:${tk.id}:${tk.status}`;
-        if (seenSettledTicketIds.current.has(key)) continue;
-        seenSettledTicketIds.current.add(key);
-        if (tk.status === "won" && (user.notifications ?? true)) {
-          toast({
-            kind: "win",
-            title: `Pari gagné ! +${tk.potentialWin.toFixed(2).replace(".", ",")} €`,
-            description: `${tk.title} · ${tk.selectionLabel}`,
-          });
-        } else if (tk.status === "void" && (user.notifications ?? true)) {
-          toast({
-            kind: "info",
-            title: "Pari remboursé",
-            description: `${tk.title} · Mise restituée`,
-          });
-        }
-      }
+      await queryClient.invalidateQueries({
+        queryKey: mobileQueryKeys.userPulse(user.id),
+      });
     } catch {
       /* silencieux */
     }
-  }, [setBalance, toast, user]);
-
-  useSmartPolling(refreshFeedMatches, 5_000, {
-    enabled: authReady,
-    dataSaver: dataSaverMode,
-    runImmediately: true,
-  });
-
-  useSmartPolling(refreshPulseNow, 12_000, {
-    enabled: authReady && Boolean(user) && user?.role !== "admin",
-    dataSaver: dataSaverMode,
-    runImmediately: true,
-  });
+  }, [queryClient, user]);
 
   const persistCombo = useCallback((next: ComboSelection[]) => {
     setComboLegs(next);
@@ -654,7 +719,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ]
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      <MobilePartyRealtimeBridge
+        userId={user?.id ?? null}
+        enabled={authReady && user?.role !== "admin"}
+        onMatchesUpdated={setFeedMatchesState}
+      >
+        <MobileBackgroundQueries
+          authReady={authReady}
+          dataSaverMode={dataSaverMode}
+          user={user}
+          pendingCount={pendingCount}
+          betsVersion={betsVersion}
+          setFeedMatchesState={setFeedMatchesState}
+          setBalance={setBalance}
+          setPendingCount={setPendingCount}
+          toast={toast}
+          seenSettledTicketIds={seenSettledTicketIds}
+        />
+        {children}
+      </MobilePartyRealtimeBridge>
+    </AppContext.Provider>
+  );
 }
 
 export function useApp(): AppContextValue {

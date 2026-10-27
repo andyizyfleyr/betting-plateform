@@ -15,6 +15,7 @@ import { api, type ClientMatch } from "@/lib/api";
 import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
+import { useMatchDetailQuery } from "@/lib/party-realtime";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import {
   AccordionItem,
@@ -80,9 +81,6 @@ export default function MatchDetailPage() {
   );
 
   const [prevId, setPrevId] = useState(matchId);
-  const [fetchedMatch, setFetchedMatch] = useState<ClientMatch | null | undefined>(() =>
-    invalidId ? null : (getCachedClientMatch(matchId) ?? undefined)
-  );
   const [category, setCategory] = useState<SheetCategory>("all");
   const [showTracker, setShowTracker] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 1024
@@ -90,15 +88,36 @@ export default function MatchDetailPage() {
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(() =>
     defaultOpenMarkets(invalidId ? null : getCachedClientMatch(matchId))
   );
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   if (matchId !== prevId) {
     setPrevId(matchId);
     const cached = invalidId ? null : (getCachedClientMatch(matchId) ?? undefined);
-    setFetchedMatch(cached);
     setCategory("all");
     setOpenMap(defaultOpenMarkets(cached));
   }
+
+  const cachedInitialMatch = useMemo(
+    () => (invalidId ? null : getCachedClientMatch(matchId)),
+    [invalidId, matchId]
+  );
+
+  const detailQuery = useMatchDetailQuery(matchId, {
+    enabled: !invalidId && !sharedFromFeed,
+    initialMatch: cachedInitialMatch,
+    isFinished: sharedFromFeed?.status === "finished",
+  });
+
+  const fetchedMatch = invalidId
+    ? null
+    : detailQuery.data?.match ??
+      (detailQuery.isError ? null : undefined);
+
+  const loadError =
+    !detailQuery.data && detailQuery.error instanceof Error
+      ? detailQuery.error.message
+      : detailQuery.isError && !detailQuery.data
+        ? "Impossible de charger ce match."
+        : null;
 
   const match = invalidId ? null : (sharedFromFeed ?? fetchedMatch);
 
@@ -108,34 +127,9 @@ export default function MatchDetailPage() {
   }
 
   const fetchMatch = useCallback(async () => {
-    if (invalidId || isOffline) return;
-    if (typeof document !== "undefined" && document.hidden) return;
-    try {
-      const r = await api.matchById(matchId);
-      setFetchedMatch(r.match);
-      setLoadError(null);
-    } catch (e) {
-      setFetchedMatch((prev) => (prev === undefined ? null : prev));
-      setLoadError(
-        e instanceof Error ? e.message : "Impossible de charger ce match."
-      );
-    }
-  }, [invalidId, isOffline, matchId]);
-
-  const status = match?.status;
-  const pollMs = getAdaptiveIntervalMs(
-    status === "live" ? LIVE_POLL_MS : UPCOMING_POLL_MS,
-    isConstrained
-  );
-
-  useEffect(() => {
-    if (invalidId || sharedFromFeed) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchMatch();
-    if (status === "finished") return;
-    const id = setInterval(() => void fetchMatch(), pollMs);
-    return () => clearInterval(id);
-  }, [invalidId, sharedFromFeed, fetchMatch, status, pollMs]);
+    if (invalidId) return;
+    await detailQuery.refetch();
+  }, [detailQuery, invalidId]);
 
   const groups = useMemo(() => sanitizeMatchMarkets(match?.markets), [match]);
   const filteredGroups = useMemo(() => {

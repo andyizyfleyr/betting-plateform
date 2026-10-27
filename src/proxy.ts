@@ -51,6 +51,8 @@ export async function proxy(req: NextRequest) {
 
     const unauthedAllowedApi =
       pathname === "/api/health" ||
+      pathname === "/api/realtime" ||
+      pathname.startsWith("/api/realtime/") ||
       pathname.startsWith("/api/auth") ||
       // Webhook Stripe : appelé par Stripe SANS cookie (signature HMAC vérifiée dans la route).
       pathname === "/api/payments/stripe/webhook" ||

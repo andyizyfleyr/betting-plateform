@@ -12,7 +12,10 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
+import { useRealtimeStatus } from "@/lib/party-realtime";
+import { pulseQueryKeys } from "@/lib/query-client";
 import { getAllCachedBets } from "@/lib/client-entity-cache";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur } from "@/lib/format";
@@ -43,6 +46,8 @@ function settledOrPlacedIso(b: ClientBet): string {
 }
 
 export default function ParisPage() {
+  const queryClient = useQueryClient();
+  const { wsConnected, userWsConnected } = useRealtimeStatus();
   const { betsVersion, user, setBalance } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
@@ -52,61 +57,49 @@ export default function ParisPage() {
   const [query, setQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const [bets, setBets] = useState<ClientBet[] | null>(() => {
-    const cached = getAllCachedBets();
-    return cached.length > 0 ? cached : null;
-  });
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [sharingBet, setSharingBet] = useState<ClientBet | null>(null);
+
+  const initialCachedBets = useMemo(() => {
+    const cached = getAllCachedBets();
+    return cached.length > 0 ? { bets: cached, balance: null } : undefined;
+  }, []);
+
+  // 1) Liste complète des paris gérée par TanStack Query + invalidation instantanée PartyKit (`user-<id>`)
+  const allBetsQuery = useQuery({
+    queryKey: [...pulseQueryKeys.userBets(user?.id, "all"), betsVersion],
+    queryFn: () => api.allBets(),
+    enabled: !isOffline,
+    initialData: initialCachedBets,
+    initialDataUpdatedAt: initialCachedBets ? Date.now() - 4_000 : undefined,
+    staleTime: 2_500,
+  });
+
+  useEffect(() => {
+    if (typeof allBetsQuery.data?.balance === "number") {
+      setBalance(allBetsQuery.data.balance);
+    }
+  }, [allBetsQuery.data?.balance, setBalance]);
+
+  const bets = useMemo(
+    () => allBetsQuery.data?.bets ?? (allBetsQuery.isError ? [] : null),
+    [allBetsQuery.data, allBetsQuery.isError]
+  );
+
+  const loadError =
+    !allBetsQuery.data && allBetsQuery.error instanceof Error
+      ? allBetsQuery.error.message
+      : allBetsQuery.isError && !allBetsQuery.data
+        ? "Impossible de charger vos paris pour le moment."
+        : null;
 
   const handlePullRefresh = useCallback(async () => {
     try {
-      const r = await api.allBets();
-      setBets(r.bets);
-      if (typeof r.balance === "number") setBalance(r.balance);
-      setLoadError(null);
+      const r = await allBetsQuery.refetch();
+      if (typeof r.data?.balance === "number") setBalance(r.data.balance);
     } catch {
       /* conserve la liste affichée si la 3G coupe brièvement */
     }
-  }, [setBalance]);
-
-  // 1) Chargement complet initial (et lors d'une action joueur : mise, cash-out, réessai)
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadInitial() {
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const r = await api.allBets();
-          if (cancelled) return;
-          setBets(r.bets);
-          if (typeof r.balance === "number") setBalance(r.balance);
-          setLoadError(null);
-          return;
-        } catch (err) {
-          if (cancelled) return;
-          if (attempt < MAX_RETRIES) {
-            await new Promise((r) => setTimeout(r, RETRY_DELAY * (attempt + 1)));
-            continue;
-          }
-          if (!cancelled) {
-            setLoadError(
-              err instanceof Error
-                ? err.message
-                : "Impossible de charger vos paris pour le moment."
-            );
-            setBets((prev) => prev ?? []);
-          }
-        }
-      }
-    }
-
-    void loadInitial();
-    return () => {
-      cancelled = true;
-    };
-  }, [betsVersion, reloadNonce, setBalance]);
+  }, [allBetsQuery, setBalance]);
 
   const allBets = useMemo(() => bets ?? [], [bets]);
 
@@ -117,67 +110,50 @@ export default function ParisPage() {
     [allBets]
   );
 
-  // 2) Rafraîchissement live léger (`?filter=ongoing`) UNIQUEMENT s'il existe >= 1 pari en cours
-  //    (0 requête périodique lorsque le joueur consulte uniquement ses paris terminés !)
+  // 2) Suivi Cash Out temps réel (`?filter=ongoing`) :
+  //    - Si PartyKit WebSocket est actif : cadencé souplement à 15 s uniquement s'il y a >= 1 pari en cours
+  //      (les règlements `won`/`lost`/`void` arrivent déjà instantanément sur `user-<id>` !).
+  //    - Sinon : repli TanStack Query sur `pollIntervalMs`.
+  const ongoingQuery = useQuery({
+    queryKey: pulseQueryKeys.userBets(user?.id, "ongoing"),
+    queryFn: () => api.bets("ongoing"),
+    enabled: hasAnyOngoing && !isOffline,
+    refetchInterval:
+      wsConnected && userWsConnected ? 15_000 : pollIntervalMs,
+    refetchIntervalInBackground: false,
+  });
+
   useEffect(() => {
-    if (!hasAnyOngoing) return;
-    let cancelled = false;
+    const ongoingRes = ongoingQuery.data;
+    if (!ongoingRes) return;
+    if (typeof ongoingRes.balance === "number") {
+      setBalance(ongoingRes.balance);
+    }
 
-    const refreshOngoingOnly = async () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-      try {
-        const ongoingRes = await api.bets("ongoing");
-        if (cancelled) return;
-        if (typeof ongoingRes.balance === "number") {
-          setBalance(ongoingRes.balance);
+    let ticketJustSettled = false;
+    queryClient.setQueryData<{ bets: ClientBet[]; balance: number | null }>(
+      [...pulseQueryKeys.userBets(user?.id, "all"), betsVersion],
+      (prev) => {
+        if (!prev) return ongoingRes;
+        const prevOngoingCount = prev.bets.filter((b) => b.status === "pending").length;
+        if (ongoingRes.bets.length < prevOngoingCount) {
+          ticketJustSettled = true;
+          return prev;
         }
-
-        const freshOngoingMap = new Map(
-          ongoingRes.bets.map((b) => [`${b.kind}-${b.id}`, b])
-        );
-
-        let ticketJustSettled = false;
-        setBets((prev) => {
-          if (!prev) return ongoingRes.bets;
-          const prevOngoingCount = prev.filter((b) => b.status === "pending").length;
-          if (ongoingRes.bets.length < prevOngoingCount) {
-            ticketJustSettled = true;
-            return prev;
-          }
-          const finishedPart = prev.filter((b) => b.status !== "pending");
-          return [...ongoingRes.bets, ...finishedPart].sort(
+        const finishedPart = prev.bets.filter((b) => b.status !== "pending");
+        return {
+          balance: ongoingRes.balance ?? prev.balance,
+          bets: [...ongoingRes.bets, ...finishedPart].sort(
             (a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime()
-          );
-        });
-
-        // Un pari vient d'être réglé : recharge une seule fois la liste complète pour l'onglet Terminés
-        if (ticketJustSettled || freshOngoingMap.size === 0) {
-          const full = await api.allBets();
-          if (!cancelled) {
-            setBets(full.bets);
-            if (typeof full.balance === "number") setBalance(full.balance);
-          }
-        }
-      } catch {
-        /* silencieux en arrière-plan */
+          ),
+        };
       }
-    };
+    );
 
-    const id = setInterval(() => void refreshOngoingOnly(), pollIntervalMs);
-    const onVisible = () => {
-      if (!document.hidden) void refreshOngoingOnly();
-    };
-    const onOnline = () => void refreshOngoingOnly();
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onOnline);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onOnline);
-    };
-  }, [hasAnyOngoing, pollIntervalMs, isOffline, setBalance]);
+    if (ticketJustSettled || ongoingRes.bets.length === 0) {
+      void allBetsQuery.refetch();
+    }
+  }, [allBetsQuery, betsVersion, ongoingQuery.data, queryClient, setBalance, user?.id]);
   const hasAnyFinished = useMemo(
     () => allBets.some((b) => b.status !== "pending"),
     [allBets]
@@ -554,9 +530,7 @@ export default function ParisPage() {
           <button
             type="button"
             onClick={() => {
-              setBets(null);
-              setLoadError(null);
-              setReloadNonce((n) => n + 1);
+              void allBetsQuery.refetch();
             }}
             className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
           >

@@ -24,10 +24,13 @@ import {
   InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
+import { useQuery } from "@tanstack/react-query";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { useApp } from "@/context/app-context";
 import { api, type UnifiedBet } from "@/lib/api";
 import { eur, formatDayHeading } from "@/lib/format";
+import { useMobileRealtimeStatus } from "@/lib/party-realtime";
+import { mobileQueryKeys } from "@/lib/query-client";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
@@ -69,11 +72,9 @@ function matchesSearch(b: UnifiedBet, qNorm: string): boolean {
 
 export default function ParisScreen() {
   const router = useRouter();
-  const { user, betsVersion, setBalance } = useApp();
+  const { user, betsVersion, setBalance, dataSaverMode } = useApp();
+  const { wsConnected, userWsConnected } = useMobileRealtimeStatus();
 
-  const [bets, setBets] = useState<UnifiedBet[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const [tabChoice, setTabChoice] = useState<Tab | null>(null);
@@ -84,56 +85,61 @@ export default function ParisScreen() {
   const searchInputRef = useRef<TextInput | null>(null);
   const [sharingBet, setSharingBet] = useState<UnifiedBet | null>(null);
 
-  const fetchBets = useCallback(
-    async (isBackground = false) => {
-      if (!user) return;
-      try {
-        const r = await api.bets.list();
-        setBets(r.bets);
-        if (r.balance != null) setBalance(r.balance);
-        setLoadError(null);
-      } catch (err) {
-        if (!isBackground) {
-          setLoadError(
-            err instanceof Error
-              ? err.message
-              : "Impossible de charger vos paris."
-          );
-          setBets((prev) => prev ?? []);
-        }
-      }
-    },
-    [user, setBalance]
-  );
-
-  const hasLivePending = useMemo(
-    () =>
-      Boolean(
-        bets?.some(
+  const betsQuery = useQuery({
+    queryKey: [...mobileQueryKeys.userBets(user?.id, "all"), betsVersion],
+    queryFn: () => api.bets.list(),
+    enabled: Boolean(user),
+    staleTime: 2_500,
+    refetchInterval: (q) => {
+      const currentBets = q.state.data?.bets;
+      const livePending = Boolean(
+        currentBets?.some(
           (b) =>
             b.status === "pending" &&
             (b.matchStatus === "live" ||
               b.legs?.some((l) => l.matchStatus === "live"))
         )
-      ),
-    [bets]
-  );
+      );
+      const anyPending = Boolean(
+        currentBets?.some((b) => b.status === "pending")
+      );
+      if (!anyPending) return false;
+      if (wsConnected && userWsConnected) {
+        return livePending ? 15_000 : false;
+      }
+      const base = livePending ? POLL_LIVE : POLL_IDLE;
+      return Math.round(base * (dataSaverMode ? 2.4 : 1));
+    },
+    refetchIntervalInBackground: false,
+  });
 
   useEffect(() => {
-    if (!user) return;
-    void fetchBets(false);
-    const id = setInterval(
-      () => void fetchBets(true),
-      hasLivePending ? POLL_LIVE : POLL_IDLE
-    );
-    return () => clearInterval(id);
-  }, [user, betsVersion, hasLivePending, fetchBets, reloadNonce]);
+    if (betsQuery.data?.balance != null) {
+      setBalance(betsQuery.data.balance);
+    }
+  }, [betsQuery.data?.balance, setBalance]);
+
+  const bets = useMemo(
+    () => betsQuery.data?.bets ?? (betsQuery.isError ? [] : null),
+    [betsQuery.data, betsQuery.isError]
+  );
+
+  const loadError =
+    !betsQuery.data && betsQuery.error instanceof Error
+      ? betsQuery.error.message
+      : betsQuery.isError && !betsQuery.data
+        ? "Impossible de charger vos paris."
+        : null;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchBets(true);
-    setRefreshing(false);
-  }, [fetchBets]);
+    try {
+      const r = await betsQuery.refetch();
+      if (r.data?.balance != null) setBalance(r.data.balance);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [betsQuery, setBalance]);
 
   const qNorm = query.trim().toLowerCase();
 
@@ -516,9 +522,7 @@ export default function ParisScreen() {
             <Text style={styles.errorSub}>{loadError}</Text>
             <Pressable
               onPress={() => {
-                setBets(null);
-                setLoadError(null);
-                setReloadNonce((n) => n + 1);
+                void betsQuery.refetch();
               }}
               style={styles.retryBtn}
             >

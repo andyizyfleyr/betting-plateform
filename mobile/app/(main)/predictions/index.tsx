@@ -20,7 +20,10 @@ import {
   TrendingUp,
   X,
 } from "lucide-react-native";
+import { useQuery } from "@tanstack/react-query";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { useMobilePredictionsCatalogQuery } from "@/lib/party-realtime";
+import { mobileQueryKeys } from "@/lib/query-client";
 import {
   InfiniteScrollLoader,
   useInfiniteBatch,
@@ -72,16 +75,9 @@ export default function PredictionsScreen() {
     toggleComboLeg,
     toast,
     hapticsEnabled,
+    dataSaverMode,
   } = useApp();
 
-  const [catalogQuestions, setCatalogQuestions] = useState<
-    ClientPrediction[] | null
-  >(null);
-  const [myBetsMap, setMyBetsMap] = useState<
-    Record<number, NonNullable<ClientPrediction["myBet"]>>
-  >({});
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
 
@@ -97,58 +93,53 @@ export default function PredictionsScreen() {
     selection: string;
   } | null>(null);
 
-  const fetchCatalog = useCallback(async (isBackground = false) => {
-    try {
-      const r = await api.predictionsCatalog();
-      setCatalogQuestions(r.questions);
-      setLoadError(null);
+  const catalogQuery = useMobilePredictionsCatalogQuery({
+    dataSaver: dataSaverMode,
+  });
+
+  const catalogQuestions = useMemo(
+    () => catalogQuery.data?.questions ?? (catalogQuery.isError ? [] : null),
+    [catalogQuery.data, catalogQuery.isError]
+  );
+
+  const loadError =
+    !catalogQuery.data && catalogQuery.error instanceof Error
+      ? catalogQuery.error.message
+      : catalogQuery.isError && !catalogQuery.data
+        ? "Impossible de charger les prédictions."
+        : null;
+
+  useEffect(() => {
+    if (catalogQuery.dataUpdatedAt > 0) {
       setNowMs(Date.now());
-    } catch (err) {
-      if (!isBackground) {
-        setLoadError(
-          err instanceof Error
-            ? err.message
-            : "Impossible de charger les prédictions."
-        );
-        setCatalogQuestions((prev) => prev ?? []);
-      }
     }
-  }, []);
+  }, [catalogQuery.dataUpdatedAt]);
 
-  useEffect(() => {
-    void fetchCatalog(false);
-    const id = setInterval(() => void fetchCatalog(true), POLL_INTERVAL);
-    return () => clearInterval(id);
-  }, [fetchCatalog, reloadNonce]);
+  const myBetsQuery = useQuery({
+    queryKey: [...mobileQueryKeys.myPredictionBets(user?.id), betsVersion],
+    queryFn: () => api.predictionsMine(),
+    enabled: Boolean(user),
+    staleTime: 5_000,
+    refetchInterval: false,
+  });
 
-  useEffect(() => {
-    if (!user) {
-      setMyBetsMap({});
-      return;
-    }
-    void api
-      .predictionsMine()
-      .then((r) => setMyBetsMap(r.myBets))
-      .catch(() => {});
-  }, [user, betsVersion]);
+  const myBetsMap = useMemo(
+    () => (user ? (myBetsQuery.data?.myBets ?? {}) : {}),
+    [myBetsQuery.data, user]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [catRes, mineRes] = await Promise.all([
-        api.predictionsCatalog(),
-        user ? api.predictionsMine().catch(() => null) : Promise.resolve(null),
+      await Promise.all([
+        catalogQuery.refetch(),
+        user ? myBetsQuery.refetch() : Promise.resolve(),
       ]);
-      setCatalogQuestions(catRes.questions);
-      if (mineRes) setMyBetsMap(mineRes.myBets);
-      setLoadError(null);
       setNowMs(Date.now());
-    } catch {
-      /* garde la liste actuelle */
     } finally {
       setRefreshing(false);
     }
-  }, [user]);
+  }, [catalogQuery, myBetsQuery, user]);
 
   const questions = useMemo(() => {
     if (!catalogQuestions) return null;
@@ -435,9 +426,8 @@ export default function PredictionsScreen() {
             <Text style={styles.errorSub}>{loadError}</Text>
             <Pressable
               onPress={() => {
-                setCatalogQuestions(null);
-                setLoadError(null);
-                setReloadNonce((n) => n + 1);
+                void catalogQuery.refetch();
+                if (user) void myBetsQuery.refetch();
               }}
               style={styles.retryBtn}
             >
