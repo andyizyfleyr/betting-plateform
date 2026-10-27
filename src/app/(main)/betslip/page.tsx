@@ -28,6 +28,7 @@ import {
   MAX_COMBO_LEGS,
   MIN_ELIGIBLE_BOOST_ODDS,
   nextComboBoostTier,
+  sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
@@ -47,7 +48,7 @@ import {
 import { TeamAvatar } from "@/components/team-avatar";
 import { TouchStakePad } from "@/components/touch-stake-pad";
 import { useApp } from "@/components/providers";
-import { cn, eur, formatOdds } from "@/lib/format";
+import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
 function LegLiveOddsBadge({
   odds,
@@ -157,7 +158,7 @@ export default function BetslipPage() {
   const enrichedLegs = useMemo(() => {
     const activeOverrides =
       legOverrides && nowMs < legOverrides.until ? legOverrides.byUid : null;
-    return comboLegs.map((leg) => {
+    const mapped = comboLegs.map((leg) => {
       const overrideOdds = activeOverrides?.[leg.uid];
       if (leg.kind === "sport" && leg.matchId) {
         const m = matchMap.get(leg.matchId);
@@ -166,9 +167,10 @@ export default function BetslipPage() {
             ...leg,
             resolvedSource: leg.matchSource ?? null,
             liveOdds: roundOdds2(overrideOdds ?? leg.odds),
-            isLive: false,
+            isLive: Boolean(leg.isLive),
             closed: false,
             suspended: false,
+            startsAt: leg.startsAt ?? null,
             matchObj: null,
           };
         }
@@ -180,6 +182,7 @@ export default function BetslipPage() {
             isLive: false,
             closed: true,
             suspended: false,
+            startsAt: m.startsAt,
             matchObj: m,
           };
         }
@@ -202,6 +205,7 @@ export default function BetslipPage() {
           isLive: m.status === "live",
           closed: grp != null && !out,
           suspended: Boolean(m.suspended || m.kickoffReached),
+          startsAt: m.startsAt,
           matchObj: m,
         };
       }
@@ -216,6 +220,7 @@ export default function BetslipPage() {
             isLive: false,
             closed: false,
             suspended: false,
+            startsAt: leg.startsAt ?? null,
             matchObj: null,
           };
         }
@@ -234,6 +239,7 @@ export default function BetslipPage() {
           isLive: false,
           closed: expired,
           suspended: false,
+          startsAt: q.resolvesAt,
           matchObj: null,
         };
       }
@@ -242,12 +248,14 @@ export default function BetslipPage() {
         ...leg,
         resolvedSource: leg.matchSource ?? null,
         liveOdds: roundOdds2(overrideOdds ?? leg.odds),
-        isLive: false,
+        isLive: Boolean(leg.isLive),
         closed: false,
         suspended: false,
+        startsAt: leg.startsAt ?? null,
         matchObj: null,
       };
     });
+    return sortSlipSelectionsChronologically(mapped);
   }, [comboLegs, matchMap, predMap, nowMs, legOverrides]);
 
   const parsed = Number(stakeText.replace(",", "."));
@@ -671,6 +679,11 @@ export default function BetslipPage() {
                         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
                           <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
                           {leg.matchObj?.minute ?? "LIVE"}
+                        </span>
+                      )}
+                      {!leg.isLive && !leg.closed && leg.startsAt && (
+                        <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-semibold tabular-nums text-ink">
+                          {formatKickoff(leg.startsAt)}
                         </span>
                       )}
                       {leg.closed && (

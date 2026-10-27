@@ -33,6 +33,7 @@ import {
   computeComboQuote,
   MAX_COMBO_LEGS,
   nextComboBoostTier,
+  sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur, formatOdds } from "@/lib/format";
@@ -298,7 +299,7 @@ export function DesktopBetslipSidebar() {
   const enrichedLegs = useMemo(() => {
     const activeOverrides =
       legOverrides && nowMs < legOverrides.until ? legOverrides.byUid : null;
-    return comboLegs.map((leg) => {
+    const mapped = comboLegs.map((leg) => {
       const overrideOdds = activeOverrides?.[leg.uid];
       if (leg.kind === "sport" && leg.matchId) {
         const m = liveMatchMap.get(leg.matchId);
@@ -306,8 +307,10 @@ export function DesktopBetslipSidebar() {
           return {
             ...leg,
             liveOdds: roundOdds2(overrideOdds ?? leg.odds),
+            isLive: Boolean(leg.isLive),
             closed: false,
             suspended: false,
+            startsAt: leg.startsAt ?? null,
             liveMatch: null as ClientMatch | null,
           };
         }
@@ -324,8 +327,10 @@ export function DesktopBetslipSidebar() {
           homeLogo: m.homeLogo,
           awayLogo: m.awayLogo,
           liveOdds: roundOdds2(overrideOdds ?? resolved.odds ?? leg.odds),
+          isLive: m.status === "live",
           closed: resolved.closed,
           suspended: resolved.suspended,
+          startsAt: m.startsAt,
           liveMatch: m,
         };
       }
@@ -335,8 +340,10 @@ export function DesktopBetslipSidebar() {
           return {
             ...leg,
             liveOdds: roundOdds2(overrideOdds ?? leg.odds),
+            isLive: false,
             closed: false,
             suspended: false,
+            startsAt: leg.startsAt ?? null,
             liveMatch: null as ClientMatch | null,
           };
         }
@@ -344,19 +351,24 @@ export function DesktopBetslipSidebar() {
         return {
           ...leg,
           liveOdds: roundOdds2(overrideOdds ?? resolved.odds ?? leg.odds),
+          isLive: false,
           closed: resolved.closed,
           suspended: false,
+          startsAt: q.resolvesAt,
           liveMatch: null as ClientMatch | null,
         };
       }
       return {
         ...leg,
         liveOdds: roundOdds2(overrideOdds ?? leg.odds),
+        isLive: Boolean(leg.isLive),
         closed: false,
         suspended: false,
+        startsAt: leg.startsAt ?? null,
         liveMatch: null as ClientMatch | null,
       };
     });
+    return sortSlipSelectionsChronologically(mapped);
   }, [comboLegs, liveMatchMap, livePredMap, nowMs, legOverrides]);
 
   const isSingle = enrichedLegs.length === 1;

@@ -10,6 +10,7 @@ import {
   MAX_COMBO_LEGS,
   MIN_COMBO_LEGS,
   nextComboBoostTier,
+  sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
@@ -41,6 +42,8 @@ export interface ComboSelection {
   selection: string;
   selectionLabel: string;
   odds: number;
+  startsAt?: string | null;
+  isLive?: boolean;
 }
 
 export function ComboFloatingBar() {
@@ -412,9 +415,9 @@ export function ComboSheet() {
                   </div>
                 </div>
 
-                {/* Liste des sélections */}
+                {/* Liste des sélections (du plus présent au plus futur) */}
                 <div className="mt-3 space-y-2.5">
-                  {comboLegs.map((leg) => {
+                  {sortSlipSelectionsChronologically(comboLegs).map((leg) => {
                     const splitTeams =
                       leg.kind === "sport" && (!leg.homeTeam || !leg.awayTeam) && leg.title.includes("–")
                         ? leg.title.split("–").map((s) => s.trim())

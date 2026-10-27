@@ -159,7 +159,8 @@ export async function GET(req: NextRequest) {
       .where(eq(matches.source, "manual"))
       .orderBy(
         sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`,
-        desc(matches.id)
+        sql`CASE WHEN ${matches.status} IN ('live', 'upcoming') THEN EXTRACT(EPOCH FROM ${matches.startsAt}) ELSE -EXTRACT(EPOCH FROM COALESCE(${matches.finishedAt}, ${matches.startsAt})) END ASC`,
+        matches.id
       )
       .limit(150),
     db
@@ -168,7 +169,8 @@ export async function GET(req: NextRequest) {
       .where(ne(matches.source, "manual"))
       .orderBy(
         sql`CASE ${matches.status} WHEN 'live' THEN 0 WHEN 'upcoming' THEN 1 ELSE 2 END`,
-        desc(matches.id)
+        sql`CASE WHEN ${matches.status} IN ('live', 'upcoming') THEN EXTRACT(EPOCH FROM ${matches.startsAt}) ELSE -EXTRACT(EPOCH FROM COALESCE(${matches.finishedAt}, ${matches.startsAt})) END ASC`,
+        matches.id
       )
       .limit(50),
     db.select().from(predictionQuestions).orderBy(desc(predictionQuestions.id)).limit(200),

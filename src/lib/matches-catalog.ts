@@ -142,11 +142,22 @@ export function sortRealLiveByPopularity(list: ClientMatch[]): ClientMatch[] {
     .map((x) => x.m);
 }
 
+function parseKickoffMs(iso: string | null | undefined): number {
+  if (!iso) return Number.MAX_SAFE_INTEGER;
+  const parsed = Date.parse(iso);
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Trie les matchs à venir strictement par date et heure de coup d'envoi
+ * la plus proche d'abord (du plus présent au plus futur).
+ * La notoriété ne départage que deux matchs programmés exactement à la même minute.
+ */
 export function sortRealUpcomingByPopularity(list: ClientMatch[]): ClientMatch[] {
   if (list.length <= 1) return list;
   const withTime = list.map((m) => ({
     m,
-    t: Date.parse(m.startsAt) || 0,
+    t: parseKickoffMs(m.startsAt),
   }));
   let earliestMs = Infinity;
   for (const x of withTime) {
@@ -158,14 +169,14 @@ export function sortRealUpcomingByPopularity(list: ClientMatch[]): ClientMatch[]
       t: x.t,
       s: scoreRealPreMatchPopularity(x.m, earliestMs),
     }))
-    .sort((a, b) => b.s - a.s || a.t - b.t || a.m.id - b.m.id)
+    .sort((a, b) => a.t - b.t || b.s - a.s || a.m.id - b.m.id)
     .map((x) => x.m);
 }
 
 export function sortByKickoffAsc(list: ClientMatch[]): ClientMatch[] {
   if (list.length <= 1) return list;
   return list
-    .map((m) => ({ m, t: Date.parse(m.startsAt) || 0 }))
+    .map((m) => ({ m, t: parseKickoffMs(m.startsAt) }))
     .sort((a, b) => a.t - b.t || a.m.id - b.m.id)
     .map((x) => x.m);
 }

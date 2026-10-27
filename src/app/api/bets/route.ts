@@ -25,6 +25,7 @@ import {
 } from "@/lib/active-state-cache";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut, resolveComboLegStatus } from "@/lib/combo";
+import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import {
   isKnownMarket,
   isRealMatchKickoffReached,
@@ -371,9 +372,13 @@ export async function GET(req: NextRequest) {
   }
 
   const comboMapped = comboRows.map((cb) => {
-    const legs = (cb.legs ?? []).map((l) => {
+    const rawLegs = (cb.legs ?? []).map((l) => {
       const resolvedStatus = resolveComboLegStatus(l, comboMatchMap, comboQuestionMap);
       const m = l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined;
+      const q =
+        l.kind === "prediction" && l.questionId
+          ? comboQuestionMap.get(l.questionId)
+          : undefined;
       const titleParts =
         l.kind === "sport" && (!l.homeTeam || !l.awayTeam) && l.title.includes("–")
           ? l.title.split("–").map((s) => s.trim())
@@ -391,6 +396,12 @@ export async function GET(req: NextRequest) {
           ? (marketLabelFor(l.market, l.selection, homeTeam, awayTeam) ?? l.selectionLabel)
           : l.selectionLabel;
 
+      const startsAtIso = m?.startsAt
+        ? m.startsAt.toISOString()
+        : q?.resolvesAt
+          ? q.resolvesAt.toISOString()
+          : null;
+
       return {
         ...l,
         homeTeam,
@@ -403,14 +414,17 @@ export async function GET(req: NextRequest) {
         selectionLabel: resolvedSelLabel,
         matchStatus: m
           ? (m.status === "live" || m.status === "finished" ? m.status : "upcoming")
-          : null,
+          : q
+            ? (q.status === "open" ? "upcoming" : "finished")
+            : null,
         matchHomeScore: m?.homeScore ?? null,
         matchAwayScore: m?.awayScore ?? null,
         matchMinute: m?.minute ?? null,
-        matchStartsAt: m?.startsAt ? m.startsAt.toISOString() : null,
+        matchStartsAt: startsAtIso,
         matchSource: m ? (m.source === "manual" ? "manual" : "virtual") : null,
       };
     });
+    const legs = sortComboBetLegsChronologically(rawLegs);
     const liveMatch = legs
       .map((l) => (l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined))
       .find((m) => m?.status === "live");

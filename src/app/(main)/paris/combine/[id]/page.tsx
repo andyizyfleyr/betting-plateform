@@ -45,6 +45,7 @@ import {
   generateIdempotencyKey,
   type CashoutChangedDetails,
 } from "@/lib/odds-lock";
+import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 
 const POLL_INTERVAL = 5_000;
@@ -236,7 +237,10 @@ export default function ComboDetailPage() {
     };
   }, [isPending, invalidId, comboId, pollIntervalMs, isOffline, setBalance]);
 
-  const legs = useMemo(() => bet?.legs ?? [], [bet]);
+  const legs = useMemo(
+    () => sortComboBetLegsChronologically(bet?.legs ?? []),
+    [bet]
+  );
   const totalLegs = legs.length;
   const legsBatch = useInfiniteBatch(totalLegs, String(comboId));
   const pagedLegs = useMemo(
