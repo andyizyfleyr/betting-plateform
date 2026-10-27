@@ -1,11 +1,11 @@
 "use client";
 
 import { memo, useState } from "react";
-import Link from "next/link";
 import { BarChart3, ChevronRight, Lock, Radio } from "lucide-react";
 import type { ClientMatch, ClientMatchEvent } from "@/lib/api";
 import { rememberSingleMatch } from "@/lib/client-entity-cache";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
+import { CardOverlayLink } from "./card-overlay-link";
 import type { ComboSelection } from "./combo-slip";
 import {
   OddsTrendCorner,
@@ -98,8 +98,14 @@ function MatchCardInner({
         className
       )}
     >
+      <CardOverlayLink
+        href={detailHref}
+        label={`${match.homeTeam} – ${match.awayTeam}`}
+        onBeforeNavigate={() => rememberSingleMatch(match)}
+      />
+
       {/* En-tête : ligue + statut (compact sur mobile, sans bouton Stats mobile) */}
-      <div className="flex items-center justify-between gap-2 text-[11.5px]">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11.5px]">
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
           {isReal && (
             <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-emerald-700 lg:inline-block">
@@ -119,7 +125,7 @@ function MatchCardInner({
                     type="button"
                     onClick={() => setShowTracker((s) => !s)}
                     className={cn(
-                      "relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
+                      "pointer-events-auto relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
                       showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                     )}
                   >
@@ -132,7 +138,7 @@ function MatchCardInner({
                   type="button"
                   onClick={() => setShowTracker((s) => !s)}
                   className={cn(
-                    "relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
+                    "pointer-events-auto relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
                     showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                   )}
                 >
@@ -180,12 +186,8 @@ function MatchCardInner({
         </div>
       </div>
 
-      {/* Équipes & scores aérés + lien étendu vers la page dédiée */}
-      <Link
-        href={detailHref}
-        onClick={() => rememberSingleMatch(match)}
-        className="mt-3.5 flex flex-col gap-2.5 after:absolute after:inset-0 after:z-0 after:content-[''] lg:mt-2.5 lg:gap-1.5"
-      >
+      {/* Équipes & scores aérés */}
+      <div className="pointer-events-none relative z-[1] mt-3.5 flex flex-col gap-2.5 lg:mt-2.5 lg:gap-1.5">
         <TeamRow
           name={match.homeTeam}
           logo={match.homeLogo}
@@ -202,16 +204,16 @@ function MatchCardInner({
           winner={isFinished && (match.awayScore ?? 0) > (match.homeScore ?? 0)}
           isLive={isLive}
         />
-      </Link>
+      </div>
 
       {/* Tracker 2D virtuel ou statistiques officielles (desktop uniquement) */}
       {!isReal && isLive && showTracker && (
-        <div className="hidden lg:block">
+        <div className="pointer-events-auto relative z-10 hidden lg:block">
           <LiveMatchTracker match={match} className="mt-2.5" />
         </div>
       )}
       {isReal && isLive && showTracker && realStatsAvailable && (
-        <div className="hidden lg:block">
+        <div className="pointer-events-auto relative z-10 hidden lg:block">
           <RealMatchStatsCard
             stats={match.realStats}
             homeTeam={match.homeTeam}
@@ -228,7 +230,7 @@ function MatchCardInner({
 
       {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés sur desktop */}
       {!isFinished && (
-        <div className="mt-auto pt-3.5 lg:pt-3">
+        <div className="pointer-events-none relative z-[1] mt-auto pt-3.5 lg:pt-3">
           <ResultOdds match={match} />
           {marketCount > 1 && (
             <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[11px] lg:flex">
@@ -380,7 +382,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
   return (
     <div
       className={cn(
-        "relative z-10 grid gap-1.5",
+        "pointer-events-auto relative z-10 grid gap-1.5",
         cells.length === 3 ? "grid-cols-3" : "grid-cols-2"
       )}
     >

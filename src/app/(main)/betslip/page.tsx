@@ -30,6 +30,7 @@ import {
   sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import { CardOverlayLink } from "@/components/card-overlay-link";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import {
   generateBetIdempotencyKey,
@@ -658,12 +659,17 @@ export default function BetslipPage() {
                 <div
                   key={leg.uid}
                   className={cn(
-                    "glass-card relative cursor-pointer rounded-2xl p-3 transition-colors hover:bg-elev/20 active:bg-elev/40 lg:p-3.5",
+                    "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3 transition-colors hover:bg-elev/20 active:bg-elev/40 lg:p-3.5",
                     leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
                   )}
                 >
+                  <CardOverlayLink
+                    href={legHref}
+                    label={hasSportTeams ? `${hName} – ${aName}` : leg.title}
+                  />
+
                   {/* En-tête : ligue + statut + retrait */}
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-mist">
                       <span className="truncate font-semibold">{leg.league}</span>
                       {leg.isLive && (
@@ -703,17 +709,14 @@ export default function BetslipPage() {
                       type="button"
                       onClick={() => removeComboLeg(leg.uid)}
                       aria-label="Retirer cette sélection"
-                      className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
+                      className="pointer-events-auto relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
                     >
                       <X className="h-3.5 w-3.5" strokeWidth={2.2} />
                     </button>
                   </div>
 
-                  {/* Lien étendu vers la page dédiée du match ou de la prédiction */}
-                  <Link
-                    href={legHref}
-                    className="mt-2.5 block w-full text-left after:absolute after:inset-0 after:z-0 after:content-['']"
-                  >
+                  {/* Corps de la sélection */}
+                  <div className="pointer-events-none relative z-[1] mt-2.5 block w-full text-left">
                     {hasSportTeams ? (
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center gap-2.5">
@@ -769,7 +772,7 @@ export default function BetslipPage() {
                       </span>
                       <LegLiveOddsBadge odds={leg.liveOdds} oddsFormat={oddsFormat} />
                     </div>
-                  </Link>
+                  </div>
                 </div>
               );
             })}

@@ -12,7 +12,7 @@ import {
   roundOdds2,
   type OddsChangedDetails,
 } from "@/lib/odds-lock";
-import { useApp, type BetTarget } from "./providers";
+import { useApp, useFeedMatches, type BetTarget } from "./providers";
 import { OddsLockControls } from "./odds-lock-controls";
 import { LiveMatchClock } from "./live-match-clock";
 import { TeamAvatar } from "./team-avatar";
@@ -64,9 +64,9 @@ function BetModalSheet({
     openRecharge,
     comboLegs,
     toggleComboLeg,
-    feedMatches,
     user,
   } = useApp();
+  const feedMatches = useFeedMatches();
   const dragControls = useDragControls();
 
   const [stakeText, setStakeText] = useState(() => {

@@ -35,6 +35,7 @@ import {
   type CashoutChangedDetails,
 } from "@/lib/odds-lock";
 import { StatusPill, shortMarketBadge } from "@/components/bet-ticket";
+import { CardOverlayLink } from "@/components/card-overlay-link";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import { LiveStatusBadge } from "@/components/match-card";
 import { useApp } from "@/components/providers";
@@ -533,115 +534,142 @@ export default function SingleBetDetailPage() {
 
             {/* Détail compact de l'événement (Sport ou Prédiction) */}
             {isPrediction ? (
-              <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1 rounded bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
-                    <TrendingUp className="h-3 w-3" />
-                    {bet.league}
-                  </span>
-                  {linkedPrediction?.resolvesAt && (
-                    <span className="text-[10px] font-medium tabular-nums text-dim">
-                      Clôture · {formatKickoff(linkedPrediction.resolvesAt)}
+              <section
+                className={cn(
+                  "glass-card relative overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4",
+                  Boolean(bet.questionId) && "cursor-pointer transition-colors hover:bg-elev/20 active:bg-elev/40"
+                )}
+              >
+                {Boolean(bet.questionId) && (
+                  <CardOverlayLink
+                    href={`/predictions/${bet.questionId}`}
+                    label={bet.question ?? "Ouvrir la prédiction"}
+                    className="rounded-xl lg:rounded-2xl"
+                  />
+                )}
+                <div className="pointer-events-none relative z-[1]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1 rounded bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
+                      <TrendingUp className="h-3 w-3" />
+                      {bet.league}
                     </span>
-                  )}
-                </div>
+                    {linkedPrediction?.resolvesAt && (
+                      <span className="text-[10px] font-medium tabular-nums text-dim">
+                        Clôture · {formatKickoff(linkedPrediction.resolvesAt)}
+                      </span>
+                    )}
+                  </div>
 
-                <h2 className="mt-1.5 font-display text-[13.5px] font-bold leading-snug text-ink lg:text-[15.5px]">
-                  {bet.question}
-                </h2>
+                  <h2 className="mt-1.5 font-display text-[13.5px] font-bold leading-snug text-ink lg:text-[15.5px]">
+                    {bet.question}
+                  </h2>
 
-                {linkedPrediction && (() => {
-                  const opts =
-                    linkedPrediction.options && linkedPrediction.options.length >= 2
-                      ? linkedPrediction.options
-                      : [
-                          {
-                            key: "yes",
-                            label: "Oui",
-                            odds: linkedPrediction.oddsYes,
-                          },
-                          {
-                            key: "no",
-                            label: "Non",
-                            odds: linkedPrediction.oddsNo,
-                          },
-                        ];
-                  const weights = opts.map((o) => (o.odds > 0 ? 1 / o.odds : 0));
-                  const wSum = weights.reduce((a, b) => a + b, 0) || 1;
-                  return (
-                    <div className="mt-2.5 space-y-1.5">
-                      {opts.map((opt, idx) => {
-                        const sharePct = Math.round((weights[idx] / wSum) * 100);
-                        const picked = opt.key === bet.selection;
-                        const winner =
-                          linkedPrediction.status === "resolved" &&
-                          linkedPrediction.resolution === opt.key;
-                        return (
-                          <div
-                            key={opt.key}
-                            className={cn(
-                              "relative overflow-hidden rounded-lg border px-2.5 py-1.5",
-                              winner
-                                ? "border-win/50 bg-win/8"
-                                : picked
-                                  ? "border-betclic-red/40 bg-betclic-red/6"
-                                  : "border-edge bg-elev/45"
-                            )}
-                          >
+                  {linkedPrediction && (() => {
+                    const opts =
+                      linkedPrediction.options && linkedPrediction.options.length >= 2
+                        ? linkedPrediction.options
+                        : [
+                            {
+                              key: "yes",
+                              label: "Oui",
+                              odds: linkedPrediction.oddsYes,
+                            },
+                            {
+                              key: "no",
+                              label: "Non",
+                              odds: linkedPrediction.oddsNo,
+                            },
+                          ];
+                    const weights = opts.map((o) => (o.odds > 0 ? 1 / o.odds : 0));
+                    const wSum = weights.reduce((a, b) => a + b, 0) || 1;
+                    return (
+                      <div className="mt-2.5 space-y-1.5">
+                        {opts.map((opt, idx) => {
+                          const sharePct = Math.round((weights[idx] / wSum) * 100);
+                          const picked = opt.key === bet.selection;
+                          const winner =
+                            linkedPrediction.status === "resolved" &&
+                            linkedPrediction.resolution === opt.key;
+                          return (
                             <div
+                              key={opt.key}
                               className={cn(
-                                "pointer-events-none absolute inset-y-0 left-0",
+                                "relative overflow-hidden rounded-lg border px-2.5 py-1.5",
                                 winner
-                                  ? "bg-win/15"
+                                  ? "border-win/50 bg-win/8"
                                   : picked
-                                    ? "bg-betclic-red/12"
-                                    : "bg-ink/[0.04]"
+                                    ? "border-betclic-red/40 bg-betclic-red/6"
+                                    : "border-edge bg-elev/45"
                               )}
-                              style={{
-                                width: `${Math.max(4, Math.min(100, sharePct))}%`,
-                              }}
-                            />
-                            <div className="relative flex items-center justify-between gap-2">
-                              <div className="flex min-w-0 items-center gap-1.5">
-                                <span className="truncate font-display text-[12px] font-bold text-ink">
-                                  {opt.label}
-                                </span>
-                                {picked && (
-                                  <span className="shrink-0 rounded-full bg-betclic-red px-1.5 py-0.5 font-display text-[9px] font-bold text-white">
-                                    Choisi
-                                  </span>
+                            >
+                              <div
+                                className={cn(
+                                  "pointer-events-none absolute inset-y-0 left-0",
+                                  winner
+                                    ? "bg-win/15"
+                                    : picked
+                                      ? "bg-betclic-red/12"
+                                      : "bg-ink/[0.04]"
                                 )}
-                              </div>
-                              <div className="flex shrink-0 items-center gap-1.5">
-                                <span className="text-[10.5px] font-semibold tabular-nums text-mist">
-                                  {sharePct}%
-                                </span>
-                                <span className="font-display text-[12px] font-extrabold tabular-nums text-ink">
-                                  {formatOdds(opt.odds, oddsFormat)}
-                                </span>
+                                style={{
+                                  width: `${Math.max(4, Math.min(100, sharePct))}%`,
+                                }}
+                              />
+                              <div className="relative flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <span className="truncate font-display text-[12px] font-bold text-ink">
+                                    {opt.label}
+                                  </span>
+                                  {picked && (
+                                    <span className="shrink-0 rounded-full bg-betclic-red px-1.5 py-0.5 font-display text-[9px] font-bold text-white">
+                                      Choisi
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                  <span className="text-[10.5px] font-semibold tabular-nums text-mist">
+                                    {sharePct}%
+                                  </span>
+                                  <span className="font-display text-[12px] font-extrabold tabular-nums text-ink">
+                                    {formatOdds(opt.odds, oddsFormat)}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
-                {bet.questionId && (
-                  <Link
-                    href={`/predictions/${bet.questionId}`}
-                    className="mt-2.5 flex h-8 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink transition-colors hover:bg-edge active:scale-[0.99]"
-                  >
-                    <span>Marché complet de la prédiction</span>
-                    <ChevronRight className="h-3.5 w-3.5 text-dim" strokeWidth={2.3} />
-                  </Link>
-                )}
+                  {bet.questionId && (
+                    <div className="mt-2.5 flex h-8 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink">
+                      <span>Marché complet de la prédiction</span>
+                      <ChevronRight className="h-3.5 w-3.5 text-dim" strokeWidth={2.3} />
+                    </div>
+                  )}
+                </div>
               </section>
             ) : (
               <section className="space-y-2.5 lg:space-y-3.5">
-                <div className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-                  <div className="flex items-center justify-between gap-2">
+                <div
+                  className={cn(
+                    "glass-card relative overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4",
+                    Boolean(bet.matchId) && "cursor-pointer transition-colors hover:bg-elev/20 active:bg-elev/40"
+                  )}
+                >
+                  {Boolean(bet.matchId) && (
+                    <CardOverlayLink
+                      href={
+                        matchStatus === "finished"
+                          ? `/resultats/${bet.matchId}`
+                          : `/matchs/${bet.matchId}`
+                      }
+                      label={`${bet.homeTeam} – ${bet.awayTeam ?? ""}`}
+                      className="rounded-xl lg:rounded-2xl"
+                    />
+                  )}
+                  <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-mist">
                       <SportIcon
                         sport={bet.sport}
@@ -683,7 +711,7 @@ export default function SingleBetDetailPage() {
                   </div>
 
                   {/* Équipes & scores en lignes compactes horizontales */}
-                  <div className="mt-2.5 space-y-1.5">
+                  <div className="pointer-events-none relative z-[1] mt-2.5 space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <TeamAvatar
@@ -741,7 +769,7 @@ export default function SingleBetDetailPage() {
 
                   {linkedMatch?.htHomeScore != null &&
                     linkedMatch?.htAwayScore != null && (
-                      <div className="mt-2 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
+                      <div className="pointer-events-none relative z-[1] mt-2 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
                         <span className="rounded bg-elev px-1.5 py-0.5 font-semibold tabular-nums">
                           MT {linkedMatch.htHomeScore}-{linkedMatch.htAwayScore}
                         </span>
@@ -750,13 +778,13 @@ export default function SingleBetDetailPage() {
 
                   {/* Action contextuelle unique vers le match ou son résultat */}
                   {bet.matchId && (
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-edge/70 pt-2">
+                    <div className="pointer-events-none relative z-[1] mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-edge/70 pt-2">
                       {canToggleTracker && (
                         <button
                           type="button"
                           onClick={() => setShowTracker((s) => !s)}
                           className={cn(
-                            "inline-flex h-7.5 items-center gap-1 rounded-lg px-2.5 font-display text-[10.5px] font-bold transition-colors",
+                            "pointer-events-auto relative z-10 inline-flex h-7.5 items-center gap-1 rounded-lg px-2.5 font-display text-[10.5px] font-bold transition-colors",
                             showTracker
                               ? "bg-ink text-white"
                               : "bg-elev text-ink"
@@ -770,21 +798,14 @@ export default function SingleBetDetailPage() {
                           {isReal ? "Stats" : "Terrain 2D"}
                         </button>
                       )}
-                      <Link
-                        href={
-                          matchStatus === "finished"
-                            ? `/resultats/${bet.matchId}`
-                            : `/matchs/${bet.matchId}`
-                        }
-                        className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink active:scale-[0.99]"
-                      >
+                      <div className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink">
                         <span className="truncate">
                           {matchStatus === "finished"
                             ? "Voir le résultat du match"
                             : "Voir le match & les cotes"}
                         </span>
                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.3} />
-                      </Link>
+                      </div>
                     </div>
                   )}
                 </div>

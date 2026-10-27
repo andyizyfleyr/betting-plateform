@@ -20,6 +20,7 @@ import {
   type OddsChangedDetails,
 } from "@/lib/odds-lock";
 import { AnimatedNumber } from "./animated-number";
+import { CardOverlayLink } from "./card-overlay-link";
 import { OddsLockControls } from "./odds-lock-controls";
 import { TeamAvatar } from "./team-avatar";
 import { TouchStakePad } from "./touch-stake-pad";
@@ -425,13 +426,24 @@ export function ComboSheet() {
                     const homeName = leg.homeTeam || splitTeams?.[0] || "";
                     const awayName = leg.awayTeam || splitTeams?.[1] || "";
                     const hasSportTeams = leg.kind === "sport" && Boolean(homeName && awayName);
+                    const legHref =
+                      leg.kind === "sport" && leg.matchId
+                        ? `/matchs/${leg.matchId}`
+                        : leg.kind === "prediction" && leg.questionId
+                          ? `/predictions/${leg.questionId}`
+                          : "/predictions";
 
                     return (
                       <div
                         key={leg.uid}
-                        className="rounded-2xl border border-edge bg-white p-3"
+                        className="relative cursor-pointer overflow-hidden rounded-2xl border border-edge bg-white p-3 transition-colors hover:bg-elev/20 active:bg-elev/45"
                       >
-                        <div className="flex items-center justify-between gap-2">
+                        <CardOverlayLink
+                          href={legHref}
+                          label={hasSportTeams ? `${homeName} – ${awayName}` : leg.title}
+                          onBeforeNavigate={() => finishAndClose(false)}
+                        />
+                        <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-1.5">
                             {leg.kind === "sport" && leg.matchSource && (
                               <span
@@ -452,7 +464,7 @@ export function ComboSheet() {
                           <button
                             type="button"
                             onClick={() => removeComboLeg(leg.uid)}
-                            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge"
+                            className="pointer-events-auto relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge"
                             aria-label="Retirer"
                           >
                             <X className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -460,7 +472,7 @@ export function ComboSheet() {
                         </div>
 
                         {hasSportTeams ? (
-                          <div className="mt-2 flex flex-col gap-1.5">
+                          <div className="pointer-events-none relative z-[1] mt-2 flex flex-col gap-1.5">
                             <div className="flex items-center gap-2.5">
                               <TeamAvatar
                                 name={homeName}
@@ -483,12 +495,12 @@ export function ComboSheet() {
                             </div>
                           </div>
                         ) : (
-                          <p className="mt-1.5 font-display text-[13.5px] font-bold text-ink">
+                          <p className="pointer-events-none relative z-[1] mt-1.5 font-display text-[13.5px] font-bold text-ink">
                             {leg.title}
                           </p>
                         )}
 
-                        <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
+                        <div className="pointer-events-none relative z-[1] mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
                           <span className="truncate pr-2 text-[12px] font-semibold text-ink">
                             {leg.selectionLabel}
                           </span>

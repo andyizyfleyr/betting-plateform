@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { cn, eur, initials } from "@/lib/format";
 import { AnimatedNumber } from "./animated-number";
 import { PulseLogo } from "./pulse-logo";
-import { useApp, type AdminTabKey } from "./providers";
+import { useApp, useFeedMatches, type AdminTabKey } from "./providers";
 
 const ADMIN_TAB_TITLES: Record<AdminTabKey, string> = {
   dashboard: "Synthèse globale",
@@ -30,7 +30,6 @@ export function AppHeader() {
     applyUser,
     clearCombo,
     openRecharge,
-    feedMatches,
     sportStatusFilter,
     setSportStatusFilter,
     setSportLeagueFilter,
@@ -42,11 +41,6 @@ export function AppHeader() {
 
   const isAdminShell =
     user?.role === "admin" || pathname === "/admin" || pathname.startsWith("/admin/");
-
-  const liveMatchesCount = useMemo(
-    () => (feedMatches ?? []).filter((m) => m.status === "live").length,
-    [feedMatches]
-  );
 
   const handleAdminLogout = async () => {
     if (loggingOut) return;
@@ -238,11 +232,7 @@ export function AppHeader() {
               )}
             >
               <span>Live</span>
-              {liveMatchesCount > 0 && (
-                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 font-display text-[10.5px] font-extrabold tabular-nums text-white">
-                  {liveMatchesCount}
-                </span>
-              )}
+              <DesktopLiveCountBadge />
             </Link>
 
             <Link
@@ -355,5 +345,19 @@ export function AppHeader() {
         </div>
       </div>
     </header>
+  );
+}
+
+function DesktopLiveCountBadge() {
+  const feedMatches = useFeedMatches();
+  const liveMatchesCount = useMemo(
+    () => (feedMatches ?? []).filter((m) => m.status === "live").length,
+    [feedMatches]
+  );
+  if (liveMatchesCount <= 0) return null;
+  return (
+    <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 font-display text-[10.5px] font-extrabold tabular-nums text-white">
+      {liveMatchesCount}
+    </span>
   );
 }
