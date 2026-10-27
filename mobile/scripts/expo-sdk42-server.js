@@ -111,6 +111,9 @@ function isExpoGoManifestRequest(req, pathname, searchParams) {
   return false;
 }
 
+const STABLE_RELEASE_UUID = "42e8a7c0-9b34-4f12-8d5e-6a1b2c3d4e42";
+const BOOT_ISO_TIME = new Date().toISOString();
+
 function buildSdk42Manifest(publicOrigin, publicHost) {
   return {
     ...expoConfig,
@@ -144,7 +147,10 @@ function buildSdk42Manifest(publicOrigin, publicHost) {
       ...(expoConfig.extra || {}),
     },
     id: `@anonymous/${expoConfig.slug || "pulsebets-android"}`,
-    revisionId: `1.0.0-${Date.now()}`,
+    releaseId: STABLE_RELEASE_UUID,
+    revisionId: `1.0.0-${BOOT_ISO_TIME}`,
+    commitTime: BOOT_ISO_TIME,
+    publishedTime: BOOT_ISO_TIME,
     loadedFromCache: false,
     isVerified: true,
     mainModuleName: "node_modules/expo/AppEntry",
@@ -368,6 +374,7 @@ async function main() {
   const metroConfig = await Metro.loadConfig({
     cwd: PROJECT_ROOT,
     config: path.join(PROJECT_ROOT, "metro.config.js"),
+    resetCache: process.env.METRO_RESET_CACHE === "1",
   });
 
   const { middleware, websocketEndpoints } =

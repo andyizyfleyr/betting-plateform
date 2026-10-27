@@ -6,6 +6,7 @@
   "scripts": {
     "start": "NODE_OPTIONS=--openssl-legacy-provider node scripts/expo-sdk42-server.js",
     "android": "NODE_OPTIONS=--openssl-legacy-provider node scripts/expo-sdk42-server.js",
+    "export:sdk42": "node scripts/export-sdk42-static.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

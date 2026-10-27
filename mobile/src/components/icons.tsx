@@ -1,5 +1,7 @@
 import React from "react";
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/build/Feather";
+import Ionicons from "@expo/vector-icons/build/Ionicons";
+import MaterialCommunityIcons from "@expo/vector-icons/build/MaterialCommunityIcons";
 import { colors } from "@/theme/tokens";
 
 export interface IconProps {
