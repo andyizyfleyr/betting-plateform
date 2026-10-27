@@ -111,7 +111,16 @@ export async function GET(req: NextRequest) {
   }
 
   const headerMode = req.headers.get("x-cron-mode")?.trim().toLowerCase();
-  const isLightMode = queryMode === "light" || headerMode === "light";
+  const ua = req.headers.get("user-agent")?.toLowerCase() ?? "";
+  const isVercelNightlyCron = ua.includes("vercel-cron");
+  // Par défaut, tout moniteur externe (cron-job.org, UptimeRobot…) exécute le mode `light`
+  // économe en quota Neon sans nécessiter ni header ni paramètre d'URL. Le cron nocturne
+  // Vercel (`03h00 UTC`, `vercel-cron/1.0`) ou `mode=full` exécute la maintenance complète + ML.
+  const isFullMode =
+    queryMode === "full" ||
+    headerMode === "full" ||
+    (isVercelNightlyCron && queryMode !== "light" && headerMode !== "light");
+  const isLightMode = !isFullMode;
 
   const cronSecret = process.env.CRON_SECRET?.trim();
   if (cronSecret) {
