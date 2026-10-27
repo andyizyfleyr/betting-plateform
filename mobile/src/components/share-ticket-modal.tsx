@@ -6,11 +6,21 @@ import { eur, formatFullDateTime, formatOdds } from "@/lib/format";
 import { COLORS } from "@/theme/tokens";
 import { BetStatusBadge } from "./bet-ticket";
 
-export function ShareTicketModal() {
-  const { shareTicketBet, closeShareTicket, oddsFormat } = useApp();
-  if (!shareTicketBet) return null;
+import type { ClientBet } from "@/lib/api";
 
-  const bet = shareTicketBet;
+export function ShareTicketModal({
+  bet: betProp,
+  onClose,
+}: {
+  bet?: ClientBet | null;
+  onClose?: () => void;
+} = {}) {
+  const { shareTicketBet, closeShareTicket, oddsFormat } = useApp();
+  const activeBet = betProp !== undefined ? betProp : shareTicketBet;
+  const handleClose = onClose ?? closeShareTicket;
+  if (!activeBet) return null;
+
+  const bet = activeBet;
   const title =
     bet.kind === "combo"
       ? `Combiné PULSE (${bet.legs?.length ?? 2} sélections)`
@@ -33,9 +43,9 @@ export function ShareTicketModal() {
       visible
       transparent
       animationType="fade"
-      onRequestClose={closeShareTicket}
+      onRequestClose={handleClose}
     >
-      <Pressable style={styles.backdrop} onPress={closeShareTicket}>
+      <Pressable style={styles.backdrop} onPress={handleClose}>
         <Pressable
           style={styles.card}
           onPress={(e) => e.stopPropagation()}
@@ -47,7 +57,7 @@ export function ShareTicketModal() {
               </View>
               <Text style={styles.brandText}>PULSE · TICKET #{bet.id}</Text>
             </View>
-            <Pressable onPress={closeShareTicket} style={styles.closeBtn}>
+            <Pressable onPress={handleClose} style={styles.closeBtn}>
               <X size={16} color={COLORS.mist} strokeWidth={2.2} />
             </Pressable>
           </View>

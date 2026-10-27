@@ -8,74 +8,106 @@ import {
   Text,
   View,
 } from "react-native";
-import { ArrowLeft, Clock, Lock } from "lucide-react-native";
-import { KickoffCountdown } from "@/components/kickoff-countdown";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BarChart3,
+  ChevronRight,
+  Radio,
+  RefreshCw,
+} from "lucide-react-native";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
-import { MarketGroupAccordion } from "@/components/market-sheet";
-import { RealMatchStatsCard } from "@/components/real-match-stats-card";
+import { LiveStatusBadge } from "@/components/match-card";
+import {
+  AccordionItem,
+  CATEGORY_TABS,
+  formatMatchDateTime,
+  inferCategory,
+  sanitizeMatchMarkets,
+  type SheetCategory,
+} from "@/components/market-sheet";
+import {
+  hasAnyRealStats,
+  RealMatchStatsCard,
+} from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
 import { api, type ClientMatch } from "@/lib/api";
-import { getCachedMatchSnapshot } from "@/lib/entity-cache";
+import { getCachedClientMatch } from "@/lib/entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
-import { useSmartPolling } from "@/lib/polling";
-import { useLocalSearchParams, useRouter } from "@/lib/router";
+import { useParams, useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
-const CATEGORIES = [
-  { key: "all", label: "Tous" },
-  { key: "main", label: "Principaux" },
-  { key: "goals", label: "Buts" },
-  { key: "halftime", label: "Mi-temps" },
-  { key: "teams", label: "Équipes" },
-  { key: "scores", label: "Score exact" },
-] as const;
+const POLL_LIVE_MS = 3_500;
+const POLL_IDLE_MS = 15_000;
 
 export default function MatchDetailScreen() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const matchId = Number(id);
-  const { dataSaverMode } = useApp();
+  const matchId = Number(params.id);
+  const invalidId = !Number.isInteger(matchId) || matchId <= 0;
 
-  const [match, setMatch] = useState<ClientMatch | null>(() =>
-    Number.isFinite(matchId) ? getCachedMatchSnapshot(matchId) : null
+  const {
+    openBet,
+    oddsFormat,
+    target,
+    comboLegs,
+    comboQuickMode,
+    toggleComboLeg,
+    toast,
+  } = useApp();
+
+  const [prevId, setPrevId] = useState<number>(matchId);
+  const [match, setMatch] = useState<ClientMatch | null | undefined>(() =>
+    invalidId ? null : (getCachedClientMatch(matchId) ?? undefined)
   );
-  const [loading, setLoading] = useState<boolean>(!match);
+  const [category, setCategory] = useState<SheetCategory>("all");
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
+  const [initializedMatchId, setInitializedMatchId] = useState<number | null>(
+    null
+  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [showTracker, setShowTracker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<"markets" | "stats">("markets");
-  const [category, setCategory] = useState<string>("all");
+
+  if (matchId !== prevId) {
+    setPrevId(matchId);
+    setMatch(invalidId ? null : (getCachedClientMatch(matchId) ?? undefined));
+    setCategory("all");
+    setInitializedMatchId(null);
+    setOpenMap({});
+    setLoadError(null);
+    setShowTracker(false);
+  }
 
   const fetchMatch = useCallback(async () => {
-    if (!Number.isFinite(matchId) || matchId <= 0) return;
+    if (invalidId) return;
     try {
-      const res = await api.matchById(matchId);
-      setMatch(res.match);
-    } catch {
-      /* garde le snapshot */
-    } finally {
-      setLoading(false);
+      const r = await api.matchById(matchId);
+      setMatch(r.match ?? null);
+      setLoadError(null);
+    } catch (e) {
+      setMatch((prev) => (prev === undefined ? null : prev));
+      setLoadError(
+        e instanceof Error
+          ? e.message
+          : "Impossible de charger cette rencontre."
+      );
     }
-  }, [matchId]);
+  }, [invalidId, matchId]);
+
+  const isFinished = match?.status === "finished";
+  const isLive = match?.status === "live";
 
   useEffect(() => {
-    setMatch(Number.isFinite(matchId) ? getCachedMatchSnapshot(matchId) : null);
-    setLoading(!getCachedMatchSnapshot(matchId));
+    if (invalidId) return;
     void fetchMatch();
-  }, [fetchMatch, matchId]);
-
-  useSmartPolling(
-    fetchMatch,
-    match?.status === "live" ? 3_500 : 7_000,
-    {
-      enabled:
-        Number.isFinite(matchId) &&
-        matchId > 0 &&
-        match?.status !== "finished",
-      dataSaver: dataSaverMode,
-      runImmediately: false,
-    }
-  );
+    if (isFinished) return;
+    const interval = isLive ? POLL_LIVE_MS : POLL_IDLE_MS;
+    const id = setInterval(() => void fetchMatch(), interval);
+    return () => clearInterval(id);
+  }, [invalidId, fetchMatch, isLive, isFinished]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -83,48 +115,40 @@ export default function MatchDetailScreen() {
     setRefreshing(false);
   }, [fetchMatch]);
 
-  const goals = useMemo(
-    () =>
-      sanitizeMatchEvents(
-        match?.events,
-        match?.homeScore ?? null,
-        match?.awayScore ?? null
-      ).filter((e) => e.type === "goal"),
-    [match?.awayScore, match?.events, match?.homeScore]
+  const groups = useMemo(
+    () => sanitizeMatchMarkets(match?.markets),
+    [match]
   );
 
-  if (loading && !match) {
-    return (
-      <View style={styles.centerLoader}>
-        <ActivityIndicator size="small" color={COLORS.betclicRed} />
-      </View>
-    );
+  if (match && match.id !== initializedMatchId && groups.length > 0) {
+    setInitializedMatchId(match.id);
+    const initial: Record<string, boolean> = {};
+    for (const k of ["result", "total_ou"]) {
+      if (groups.some((g) => g.key === k)) initial[k] = true;
+    }
+    if (Object.keys(initial).length === 0) {
+      for (const g of groups.slice(0, 2)) initial[g.key] = true;
+    }
+    setOpenMap(initial);
   }
 
-  if (!match) {
-    return (
-      <View style={styles.centerLoader}>
-        <Text style={styles.notFoundTitle}>Match introuvable</Text>
-        <Pressable
-          onPress={() => router.back("/matchs")}
-          style={styles.backFallbackBtn}
-        >
-          <Text style={styles.backFallbackText}>Retour aux matchs</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const filteredGroups = useMemo(() => {
+    if (category === "all") return groups;
+    return groups.filter((g) => inferCategory(g) === category);
+  }, [groups, category]);
 
-  const isLive = match.status === "live";
-  const isFinished = match.status === "finished";
-  const isPostGameVerifying =
-    match.source === "manual" &&
-    isLive &&
-    Boolean(match.suspended) &&
-    match.minute === "Fin · Vérif.";
+  const cleanEvents = useMemo(
+    () => (match ? sanitizeMatchEvents(match.events) : []),
+    [match]
+  );
 
-  const filteredGroups = match.markets.filter(
-    (g) => category === "all" || g.category === category
+  const isReal = match?.source === "manual";
+  const realStatsAvailable = Boolean(
+    isReal && hasAnyRealStats(match?.realStats)
+  );
+  const suspended = Boolean(match?.suspended);
+  const canToggleTracker = Boolean(
+    match && ((!isReal && isLive) || realStatsAvailable)
   );
 
   return (
@@ -141,220 +165,431 @@ export default function MatchDetailScreen() {
         />
       }
     >
-      {/* Barre supérieure : Retour + Ligue + Date / Statut */}
-      <View style={styles.navBar}>
-        <Pressable
-          onPress={() => router.back("/matchs")}
-          style={styles.backBtn}
-        >
-          <ArrowLeft size={17} color={COLORS.ink} strokeWidth={2.3} />
-        </Pressable>
-
-        <View style={styles.leagueWrap}>
-          <SportIcon sport={match.sport} size={14} color={COLORS.dim} />
-          <Text numberOfLines={1} style={styles.leagueText}>
-            {match.league}
-          </Text>
-        </View>
-
-        {isPostGameVerifying ? (
-          <View style={styles.verifyPill}>
-            <Clock size={11.5} color={COLORS.amber} strokeWidth={2.3} />
-            <Text style={styles.verifyText}>Fin · Vérif.</Text>
-          </View>
-        ) : isLive ? (
-          <View style={styles.livePill}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>{match.minute ?? "LIVE"}</Text>
-          </View>
-        ) : isFinished ? (
-          <View style={styles.finPill}>
-            <Text style={styles.finText}>Terminé</Text>
-          </View>
-        ) : (
-          <KickoffCountdown startsAt={match.startsAt} />
-        )}
-      </View>
-
-      {/* Scoreboard complet — Noms complets des clubs sans troncature */}
-      <View style={styles.scoreboardCard}>
-        <View style={styles.clubsRow}>
-          <View style={styles.clubCol}>
-            <TeamAvatar
-              name={match.homeTeam}
-              logo={match.homeLogo}
-              size="lg"
+      {/* En-tête compact en une seule ligne (identique à src/app/(main)/matchs/[id]/page.tsx) */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <Pressable
+            onPress={() => router.back("/matchs")}
+            style={({ pressed }) => [
+              styles.roundBackBtn,
+              pressed && { transform: [{ scale: 0.95 }] },
+            ]}
+          >
+            <ArrowLeft size={14} color={COLORS.ink} strokeWidth={2.3} />
+          </Pressable>
+          <View style={styles.leagueTitleRow}>
+            <SportIcon
+              sport={match?.sport ?? "football"}
+              size={14}
+              color={COLORS.betclicRed}
             />
-            <Text style={styles.clubName}>{match.homeTeam}</Text>
-            {(match.redHome ?? 0) > 0 ? (
-              <View style={styles.redBadge}>
-                <Text style={styles.redBadgeText}>
-                  {match.redHome} rouge
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          <View style={styles.scoreCenter}>
-            {isLive || isFinished ? (
-              <>
-                <Text style={styles.bigScore}>
-                  {match.homeScore ?? 0} : {match.awayScore ?? 0}
-                </Text>
-                {match.htHomeScore !== null &&
-                match.htHomeScore !== undefined &&
-                match.htAwayScore !== null &&
-                match.htAwayScore !== undefined ? (
-                  <Text style={styles.htScore}>
-                    MT {match.htHomeScore} - {match.htAwayScore}
-                  </Text>
-                ) : null}
-              </>
-            ) : (
-              <Text style={styles.vsLabel}>VS</Text>
-            )}
-          </View>
-
-          <View style={styles.clubCol}>
-            <TeamAvatar
-              name={match.awayTeam}
-              logo={match.awayLogo}
-              size="lg"
-            />
-            <Text style={styles.clubName}>{match.awayTeam}</Text>
-            {(match.redAway ?? 0) > 0 ? (
-              <View style={styles.redBadge}>
-                <Text style={styles.redBadgeText}>
-                  {match.redAway} rouge
-                </Text>
-              </View>
-            ) : null}
+            <Text numberOfLines={1} style={styles.leagueTitle}>
+              {match?.league ?? "Rencontre"}
+            </Text>
           </View>
         </View>
 
-        {goals.length > 0 ? (
-          <View style={styles.goalsBox}>
-            {goals.map((g, i) => (
-              <Text key={i} style={styles.goalLine}>
-                ⚽ {g.minute}&apos; {g.player ? `${g.player} · ` : ""}
-                {g.team === "home" ? match.homeTeam : match.awayTeam}
+        {match ? (
+          <View style={styles.headerRight}>
+            {isLive ? (
+              <LiveStatusBadge minute={match.minute} suspended={suspended} />
+            ) : isFinished ? (
+              <View style={styles.finBadge}>
+                <Text style={styles.finBadgeText}>TERMINÉ</Text>
+              </View>
+            ) : null}
+            <View style={styles.datePill}>
+              <Text style={styles.datePillText}>
+                {formatMatchDateTime(match.startsAt)}
               </Text>
-            ))}
+            </View>
           </View>
         ) : null}
       </View>
 
-      {/* Sélecteur Marchés / Statistiques */}
-      <View style={styles.tabsBar}>
-        <Pressable
-          onPress={() => setActiveTab("markets")}
-          style={[
-            styles.tabBtn,
-            activeTab === "markets" && styles.tabBtnActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "markets" && styles.tabTextActive,
-            ]}
-          >
-            Marchés ({match.markets.length})
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("stats")}
-          style={[
-            styles.tabBtn,
-            activeTab === "stats" && styles.tabBtnActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "stats" && styles.tabTextActive,
-            ]}
-          >
-            Direct & Stats
-          </Text>
-        </Pressable>
-      </View>
-
-      {activeTab === "markets" ? (
-        <View style={styles.marketsSection}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.catsRow}
-          >
-            {CATEGORIES.map((c) => {
-              const active = category === c.key;
-              return (
-                <Pressable
-                  key={c.key}
-                  onPress={() => setCategory(c.key)}
-                  style={[styles.catPill, active && styles.catPillActive]}
-                >
-                  <Text
-                    style={[styles.catText, active && styles.catTextActive]}
-                  >
-                    {c.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          {match.suspended ? (
-            <View style={styles.suspendedBanner}>
-              <Lock size={14} color={COLORS.amber} strokeWidth={2.2} />
-              <Text style={styles.suspendedText}>
-                {isPostGameVerifying
-                  ? "Fin du match · vérification du score officiel…"
-                  : "Marchés momentanément suspendus"}
-              </Text>
-            </View>
-          ) : null}
-
-          {match.markets.length <= 1 ? (
-            <View style={styles.inlineSpinner}>
-              <ActivityIndicator size="small" color={COLORS.betclicRed} />
-            </View>
-          ) : null}
-
-          <View style={styles.groupsStack}>
-            {filteredGroups.map((group) => (
-              <MarketGroupAccordion
-                key={group.key}
-                match={match}
-                group={group}
-              />
-            ))}
+      <View style={{ marginTop: 10 }}>
+        {match === undefined ? (
+          <View style={styles.loaderBox}>
+            <ActivityIndicator size="small" color={COLORS.betclicRed} />
           </View>
-        </View>
-      ) : (
-        <View style={styles.statsSection}>
-          <RealMatchStatsCard stats={match.realStats} />
-          <LiveMatchTracker
-            homeTeam={match.homeTeam}
-            awayTeam={match.awayTeam}
-            homeScore={match.homeScore}
-            awayScore={match.awayScore}
-            telemetry={match.telemetry}
-            events={match.events}
-          />
-          {!match.realStats &&
-          !match.telemetry &&
-          (!match.events || match.events.length === 0) ? (
-            <View style={styles.emptyStats}>
-              <Text style={styles.emptyStatsText}>
-                Les statistiques détaillées s&apos;afficheront dès le coup
-                d&apos;envoi.
-              </Text>
+        ) : match === null ? (
+          <View style={styles.notFoundCard}>
+            <AlertTriangle
+              size={20}
+              color={COLORS.betclicRed}
+              strokeWidth={2.2}
+            />
+            <Text style={styles.notFoundTitle}>Rencontre introuvable</Text>
+            <Text style={styles.notFoundSub}>
+              {loadError ?? "Ce match n'est plus disponible."}
+            </Text>
+            <View style={styles.notFoundActions}>
+              <Pressable
+                onPress={() => void fetchMatch()}
+                style={styles.retryGrayBtn}
+              >
+                <RefreshCw size={12} color={COLORS.ink} strokeWidth={2.2} />
+                <Text style={styles.retryGrayText}>Réessayer</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push("/matchs")}
+                style={styles.redBtn}
+              >
+                <Text style={styles.redBtnText}>Matchs</Text>
+              </Pressable>
             </View>
-          ) : null}
-        </View>
-      )}
+          </View>
+        ) : (
+          <View style={styles.stack}>
+            {/* Scoreboard compact */}
+            <View style={styles.scoreCard}>
+              <View style={styles.scoreGrid}>
+                <View style={styles.teamCol}>
+                  <TeamAvatar
+                    name={match.homeTeam}
+                    logo={match.homeLogo}
+                    size="sm"
+                  />
+                  <Text style={styles.teamName}>{match.homeTeam}</Text>
+                  {(match.redHome ?? 0) > 0 ? (
+                    <Text style={styles.redCardLabel}>
+                      🟥 ×{match.redHome}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.scoreCenter}>
+                  {isLive || isFinished ? (
+                    <>
+                      <View style={styles.scorePill}>
+                        <Text
+                          style={[
+                            styles.scoreDigit,
+                            isFinished &&
+                              (match.homeScore ?? 0) > (match.awayScore ?? 0) &&
+                              { color: COLORS.betclicRed },
+                          ]}
+                        >
+                          {match.homeScore ?? 0}
+                        </Text>
+                        <Text style={styles.scoreDash}>-</Text>
+                        <Text
+                          style={[
+                            styles.scoreDigit,
+                            isFinished &&
+                              (match.awayScore ?? 0) > (match.homeScore ?? 0) &&
+                              { color: COLORS.betclicRed },
+                          ]}
+                        >
+                          {match.awayScore ?? 0}
+                        </Text>
+                      </View>
+                      {match.htHomeScore != null && match.htAwayScore != null ? (
+                        <Text style={styles.htScore}>
+                          MT {match.htHomeScore}-{match.htAwayScore}
+                        </Text>
+                      ) : null}
+                    </>
+                  ) : (
+                    <View style={styles.vsPill}>
+                      <Text style={styles.vsText}>VS</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.teamCol}>
+                  <TeamAvatar
+                    name={match.awayTeam}
+                    logo={match.awayLogo}
+                    size="sm"
+                  />
+                  <Text style={styles.teamName}>{match.awayTeam}</Text>
+                  {(match.redAway ?? 0) > 0 ? (
+                    <Text style={styles.redCardLabel}>
+                      🟥 ×{match.redAway}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              {canToggleTracker || isFinished ? (
+                <View style={styles.scoreFooter}>
+                  {canToggleTracker ? (
+                    <Pressable
+                      onPress={() => setShowTracker((s) => !s)}
+                      style={[
+                        styles.trackerToggleBtn,
+                        showTracker && styles.trackerToggleBtnActive,
+                      ]}
+                    >
+                      {isReal ? (
+                        <BarChart3
+                          size={12}
+                          color={showTracker ? "#34d399" : "#059669"}
+                          strokeWidth={2.3}
+                        />
+                      ) : (
+                        <Radio
+                          size={12}
+                          color={COLORS.betclicRed}
+                          strokeWidth={2.3}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.trackerToggleText,
+                          showTracker && { color: "#ffffff" },
+                        ]}
+                      >
+                        {isReal
+                          ? showTracker
+                            ? "Masquer stats"
+                            : "Stats officielles"
+                          : showTracker
+                            ? "Masquer 2D"
+                            : "Terrain 2D"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+
+                  {isFinished ? (
+                    <Pressable
+                      onPress={() => router.push(`/resultats/${match.id}`)}
+                      style={styles.resultLinkPill}
+                    >
+                      <Text style={styles.resultLinkText}>
+                        Bilan du résultat
+                      </Text>
+                      <ChevronRight
+                        size={12}
+                        color={COLORS.betclicRed}
+                        strokeWidth={2.4}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+
+            {/* Terrain 2D ou Stats officielles à la demande */}
+            {showTracker && !isReal && isLive ? (
+              <LiveMatchTracker match={match} />
+            ) : null}
+
+            {showTracker && realStatsAvailable ? (
+              <RealMatchStatsCard
+                stats={match.realStats}
+                homeTeam={match.homeTeam}
+                awayTeam={match.awayTeam}
+                homeLogo={match.homeLogo}
+                awayLogo={match.awayLogo}
+                htHomeScore={match.htHomeScore}
+                htAwayScore={match.htAwayScore}
+                compact
+              />
+            ) : null}
+
+            {/* Onglets de catégories + accordéons de marchés */}
+            {isFinished || groups.length === 0 ? (
+              <View style={styles.closedMarketsCard}>
+                <Text style={styles.closedMarketsTitle}>
+                  {isFinished
+                    ? "Rencontre terminée — marchés clôturés."
+                    : "Aucun marché ouvert pour le moment."}
+                </Text>
+                {isFinished ? (
+                  <Pressable
+                    onPress={() => router.push(`/resultats/${match.id}`)}
+                    style={[styles.redBtn, { marginTop: 10 }]}
+                  >
+                    <Text style={styles.redBtnText}>Bilan détaillé</Text>
+                    <ChevronRight size={14} color="#ffffff" strokeWidth={2.4} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <View style={{ gap: 8 }}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.catTabsRow}
+                >
+                  {CATEGORY_TABS.map((t) => {
+                    const count =
+                      t.key === "all"
+                        ? groups.length
+                        : groups.filter((g) => inferCategory(g) === t.key)
+                            .length;
+                    if (t.key !== "all" && count === 0) return null;
+                    const active = category === t.key;
+                    return (
+                      <Pressable
+                        key={t.key}
+                        onPress={() => setCategory(t.key)}
+                        style={[
+                          styles.catTabPill,
+                          active && styles.catTabPillActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.catTabLabel,
+                            active && styles.catTabLabelActive,
+                          ]}
+                        >
+                          {t.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.catTabCount,
+                            active && styles.catTabCountActive,
+                          ]}
+                        >
+                          {count}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                {suspended ? (
+                  <View style={styles.suspendedNotice}>
+                    <Text style={styles.suspendedNoticeText}>
+                      Marchés suspendus momentanément…
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View style={{ gap: 8 }}>
+                  {filteredGroups.map((g) => {
+                    const isOpen =
+                      category !== "all"
+                        ? (openMap[g.key] ?? true)
+                        : Boolean(openMap[g.key]);
+                    const comboSelectedKey =
+                      comboLegs.find(
+                        (l) =>
+                          l.uid === `sport-${match.id}` && l.market === g.key
+                      )?.selection ?? null;
+
+                    return (
+                      <AccordionItem
+                        key={g.key}
+                        match={match}
+                        group={g}
+                        suspended={suspended}
+                        open={isOpen}
+                        oddsFormat={oddsFormat}
+                        selectedKey={
+                          target &&
+                          target.match.id === match.id &&
+                          target.market === g.key
+                            ? target.selection
+                            : null
+                        }
+                        comboSelectedKey={comboSelectedKey}
+                        onToggle={() =>
+                          setOpenMap((prev) => ({
+                            ...prev,
+                            [g.key]: !(category !== "all"
+                              ? (prev[g.key] ?? true)
+                              : Boolean(prev[g.key])),
+                          }))
+                        }
+                        onPick={(outcome) => {
+                          if (comboQuickMode) {
+                            const res = toggleComboLeg({
+                              uid: `sport-${match.id}`,
+                              kind: "sport",
+                              matchId: match.id,
+                              matchSource: match.source,
+                              title: `${match.homeTeam} – ${match.awayTeam}`,
+                              homeTeam: match.homeTeam,
+                              awayTeam: match.awayTeam,
+                              homeLogo: match.homeLogo ?? null,
+                              awayLogo: match.awayLogo ?? null,
+                              league: match.league,
+                              market: g.key,
+                              selection: outcome.key,
+                              selectionLabel: outcome.label,
+                              odds: outcome.odds,
+                              startsAt: match.startsAt,
+                              isLive: match.status === "live",
+                            });
+                            if (res === "full") {
+                              toast({
+                                kind: "error",
+                                title: "Betslip complet (8 sélections max)",
+                              });
+                            } else if (res === "source_conflict") {
+                              toast({
+                                kind: "error",
+                                title: "Mélange interdit",
+                                description:
+                                  "Impossible de mélanger match réel et match virtuel.",
+                              });
+                            }
+                            return;
+                          }
+                          openBet({
+                            match,
+                            selection: outcome.key,
+                            odds: outcome.odds,
+                            label: outcome.label,
+                            market: g.key,
+                            marketLabel: g.label,
+                          });
+                        }}
+                      />
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Chronologie compacte */}
+            {cleanEvents.length > 0 ? (
+              <View style={styles.timelineCard}>
+                <Text style={styles.timelineHeading}>
+                  CHRONOLOGIE ({cleanEvents.length})
+                </Text>
+                <View style={{ marginTop: 6 }}>
+                  {cleanEvents.map((ev, idx) => (
+                    <View
+                      key={`${ev.minute}-${ev.type}-${idx}`}
+                      style={[
+                        styles.timelineRow,
+                        idx > 0 && styles.timelineDivider,
+                      ]}
+                    >
+                      <View style={styles.timelineLeft}>
+                        <View style={styles.minuteBox}>
+                          <Text style={styles.minuteText}>
+                            {ev.minute}&apos;
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 11 }}>
+                          {ev.type === "goal"
+                            ? "⚽"
+                            : ev.type === "red"
+                              ? "🟥"
+                              : "🟨"}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.playerName}>
+                          {ev.player}
+                        </Text>
+                      </View>
+                      <Text style={styles.eventTeam}>
+                        {ev.team === "home" ? match.homeTeam : match.awayTeam}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -367,273 +602,363 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 12,
     paddingTop: 10,
-    paddingBottom: 26,
-    gap: 12,
+    paddingBottom: 28,
   },
-  centerLoader: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    padding: 24,
-  },
-  notFoundTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.ink,
-  },
-  backFallbackBtn: {
-    height: 38,
-    borderRadius: 11,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backFallbackText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  navBar: {
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  leagueWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  headerLeft: {
     flex: 1,
-  },
-  leagueText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: COLORS.mist,
-    flexShrink: 1,
-  },
-  livePill: {
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    borderRadius: 999,
-    backgroundColor: "rgba(225, 0, 20, 0.10)",
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.betclicRed,
-  },
-  liveText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: COLORS.betclicRed,
-    fontVariant: ["tabular-nums"],
-  },
-  verifyPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: 999,
-    backgroundColor: COLORS.amberSoft,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  verifyText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: COLORS.amber,
-  },
-  finPill: {
-    borderRadius: 8,
-    backgroundColor: COLORS.elev,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  finText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.dim,
-  },
-  scoreboardCard: {
-    borderRadius: 18,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    padding: 16,
-    gap: 12,
-  },
-  clubsRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
     gap: 8,
   },
-  clubCol: {
-    flex: 1,
-    alignItems: "center",
-    gap: 7,
-  },
-  clubName: {
-    fontSize: 13.5,
-    fontWeight: "800",
-    color: COLORS.ink,
-    textAlign: "center",
-    lineHeight: 17.5,
-  },
-  redBadge: {
-    borderRadius: 5,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-  },
-  redBadgeText: {
-    fontSize: 9.5,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-  scoreCenter: {
-    minWidth: 74,
-    paddingTop: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  bigScore: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: COLORS.ink,
-    fontVariant: ["tabular-nums"],
-    letterSpacing: -0.5,
-  },
-  htScore: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.dim,
-    fontVariant: ["tabular-nums"],
-  },
-  vsLabel: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.dim,
-  },
-  goalsBox: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.edgeSoft,
-    paddingTop: 9,
-    gap: 3,
-  },
-  goalLine: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: COLORS.mist,
-    textAlign: "center",
-  },
-  tabsBar: {
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.pillDefault,
-    padding: 3,
-    flexDirection: "row",
-  },
-  tabBtn: {
-    flex: 1,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabBtnActive: {
-    backgroundColor: "#ffffff",
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.mist,
-  },
-  tabTextActive: {
-    fontWeight: "800",
-    color: COLORS.ink,
-  },
-  marketsSection: {
-    gap: 10,
-  },
-  catsRow: {
-    flexDirection: "row",
-    gap: 7,
-  },
-  catPill: {
-    height: 36,
-    borderRadius: 11,
-    paddingHorizontal: 13,
-    backgroundColor: COLORS.pillDefault,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  catPillActive: {
-    backgroundColor: COLORS.betclicRed,
-  },
-  catText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.ink,
-  },
-  catTextActive: {
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  suspendedBanner: {
-    borderRadius: 12,
-    backgroundColor: COLORS.amberSoft,
-    borderWidth: 1,
-    borderColor: COLORS.amberBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  suspendedText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.amber,
-    flex: 1,
-  },
-  inlineSpinner: {
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  groupsStack: {
-    gap: 10,
-  },
-  statsSection: {
-    gap: 10,
-  },
-  emptyStats: {
+  roundBackBtn: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: COLORS.edge,
-    padding: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leagueTitleRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  leagueTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800",
+    color: COLORS.ink,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  finBadge: {
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  finBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.mist,
+    letterSpacing: 0.4,
+  },
+  datePill: {
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+  },
+  datePillText: {
+    fontSize: 10.5,
+    fontWeight: "600",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  loaderBox: {
+    paddingVertical: 44,
     alignItems: "center",
   },
-  emptyStatsText: {
-    fontSize: 12.5,
+  notFoundCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    padding: 16,
+    alignItems: "center",
+  },
+  notFoundTitle: {
+    marginTop: 6,
+    fontSize: 14.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  notFoundSub: {
+    marginTop: 2,
+    fontSize: 11.5,
+    color: COLORS.mist,
+    textAlign: "center",
+  },
+  notFoundActions: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 8,
+  },
+  retryGrayBtn: {
+    borderRadius: 8,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  retryGrayText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  redBtn: {
+    borderRadius: 8,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  redBtnText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  stack: {
+    gap: 10,
+  },
+  scoreCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    padding: 12,
+  },
+  scoreGrid: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  teamCol: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  teamName: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+    textAlign: "center",
+    lineHeight: 15,
+  },
+  redCardLabel: {
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+  },
+  scoreCenter: {
+    alignItems: "center",
+  },
+  scorePill: {
+    borderRadius: 8,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  scoreDigit: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  scoreDash: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.dim,
+  },
+  htScore: {
+    marginTop: 2,
+    fontSize: 9.5,
     fontWeight: "600",
     color: COLORS.dim,
+    fontVariant: ["tabular-nums"],
+  },
+  vsPill: {
+    borderRadius: 8,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  vsText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: COLORS.mist,
+  },
+  scoreFooter: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(228,230,235,0.7)",
+    paddingTop: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  trackerToggleBtn: {
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  trackerToggleBtnActive: {
+    backgroundColor: COLORS.ink,
+  },
+  trackerToggleText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  resultLinkPill: {
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: "rgba(225,0,20,0.10)",
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  resultLinkText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: COLORS.betclicRed,
+  },
+  closedMarketsCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    padding: 14,
+    alignItems: "center",
+  },
+  closedMarketsTitle: {
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: COLORS.ink,
     textAlign: "center",
+  },
+  catTabsRow: {
+    marginHorizontal: -12,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
+    flexDirection: "row",
+    gap: 6,
+  },
+  catTabPill: {
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  catTabPillActive: {
+    backgroundColor: COLORS.betclicRed,
+  },
+  catTabLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.mist,
+  },
+  catTabLabelActive: {
+    color: "#ffffff",
+  },
+  catTabCount: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: COLORS.dim,
+    fontVariant: ["tabular-nums"],
+  },
+  catTabCountActive: {
+    color: "rgba(255,255,255,0.8)",
+  },
+  suspendedNotice: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.35)",
+    backgroundColor: "rgba(245,158,11,0.12)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  suspendedNoticeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#92400e",
+  },
+  timelineCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    padding: 12,
+  },
+  timelineHeading: {
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: COLORS.mist,
+  },
+  timelineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingVertical: 6,
+  },
+  timelineDivider: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(228,230,235,0.6)",
+  },
+  timelineLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  minuteBox: {
+    minWidth: 28,
+    borderRadius: 4,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    alignItems: "center",
+  },
+  minuteText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  playerName: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.ink,
+  },
+  eventTeam: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: COLORS.dim,
   },
 });

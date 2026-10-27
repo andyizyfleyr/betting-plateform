@@ -174,3 +174,25 @@ export function resolveEspnSlugForLeague(leagueNameOrSlug: string | null | undef
 export function officialLeagueLabel(slug: string, fallback = "Football"): string {
   return OFFICIAL_SOCCER_LEAGUES.find((l) => l.slug === slug)?.label ?? fallback;
 }
+
+export function resolveRealLeagueBySlug(
+  availableLeagues: string[],
+  slug: string
+): string | null {
+  for (const lg of availableLeagues) {
+    if (resolveEspnSlugForLeague(lg) === slug) return lg;
+  }
+  return null;
+}
+
+export function sortRealLeaguesByPriority(leagues: string[]): string[] {
+  const rankOf = (name: string): number => {
+    const slug = resolveEspnSlugForLeague(name);
+    if (!slug) return 999;
+    const idx = OFFICIAL_SOCCER_LEAGUES.findIndex((l) => l.slug === slug);
+    return idx === -1 ? 999 : idx;
+  };
+  return [...leagues].sort(
+    (a, b) => rankOf(a) - rankOf(b) || a.localeCompare(b, "fr")
+  );
+}

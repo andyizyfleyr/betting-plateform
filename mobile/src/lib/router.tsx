@@ -170,6 +170,24 @@ export function useLocalSearchParams<
   return (ctx?.current.params ?? {}) as unknown as T;
 }
 
+export const useParams = useLocalSearchParams;
+
+export function useSearchParams(): {
+  get: (key: string) => string | null;
+} {
+  const ctx = useContext(RouterContext);
+  const params = ctx?.current.params ?? {};
+  return useMemo(
+    () => ({
+      get: (key: string): string | null =>
+        Object.prototype.hasOwnProperty.call(params, key) && params[key] !== undefined
+          ? params[key]
+          : null,
+    }),
+    [params]
+  );
+}
+
 export function Redirect({ href }: { href: string }) {
   const { replace } = useRouter();
   useEffect(() => {

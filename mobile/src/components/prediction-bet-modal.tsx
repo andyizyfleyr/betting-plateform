@@ -16,6 +16,7 @@ import {
   generateBetIdempotencyKey,
   ODDS_CHANGED_CODE,
   roundOdds2,
+  type ClientPrediction,
   type OddsChangedDetails,
 } from "@/lib/api";
 import { eur, formatOdds } from "@/lib/format";
@@ -24,14 +25,24 @@ import { COLORS } from "@/theme/tokens";
 import { OddsLockControls } from "./odds-lock-controls";
 import { TouchStakePad } from "./touch-stake-pad";
 
-export function PredictionBetModal() {
+export function PredictionBetModal({
+  question: questionProp,
+  selection: selectionProp,
+  onClose,
+}: {
+  question?: ClientPrediction | null;
+  selection?: string | null;
+  onClose?: () => void;
+} = {}) {
   const router = useRouter();
   const {
-    predictionTarget,
-    closePredictionBet,
+    predictionTarget: ctxTarget,
+    closePredictionBet: ctxClose,
     user,
     balance,
     setBalance,
+    pendingCount,
+    setPendingCount,
     bumpBets,
     oddsFormat,
     oddsPolicy,
@@ -41,6 +52,14 @@ export function PredictionBetModal() {
     openRecharge,
     toast,
   } = useApp();
+
+  const predictionTarget =
+    questionProp !== undefined
+      ? questionProp && selectionProp
+        ? { question: questionProp, selection: selectionProp }
+        : null
+      : ctxTarget;
+  const closePredictionBet = onClose ?? ctxClose;
 
   const [stake, setStake] = useState("10");
   const [lockedOdds, setLockedOdds] = useState(1.85);
@@ -138,6 +157,9 @@ export function PredictionBetModal() {
         idempotencyKey: idempotencyRef.current,
       });
       setBalance(res.balance);
+      if (!res.deduplicated) {
+        setPendingCount(pendingCount + 1);
+      }
       bumpBets();
       toast({
         kind: "success",

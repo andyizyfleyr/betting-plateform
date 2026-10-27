@@ -9,14 +9,19 @@ import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { RechargeModal } from "@/components/recharge-modal";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { ToastHost } from "@/components/toast-host";
+import { usePathname } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
 export function MainShellLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isFullscreenGame =
+    pathname.startsWith("/tap") || pathname.startsWith("/accelerator");
+
   return (
     <View style={styles.root}>
-      <AppHeader />
+      {!isFullscreenGame ? <AppHeader /> : null}
       <View style={styles.body}>{children}</View>
-      <ComboFloatingBar />
+      {!isFullscreenGame ? <ComboFloatingBar /> : null}
       <BottomNav />
 
       <BetModal />

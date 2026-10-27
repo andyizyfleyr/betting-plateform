@@ -7,15 +7,23 @@ import { COLORS } from "@/theme/tokens";
 
 export function OddsLockControls({
   oddsFormat,
-  oddsPolicy,
+  oddsPolicy: oddsPolicyProp,
+  policy,
   onChangePolicy,
-  oddsChanged,
+  oddsChanged: oddsChangedProp,
+  details,
 }: {
   oddsFormat: "decimal" | "fractional";
-  oddsPolicy: OddsChangePolicy;
+  oddsPolicy?: OddsChangePolicy;
+  policy?: OddsChangePolicy;
   onChangePolicy: (policy: OddsChangePolicy) => void;
-  oddsChanged: OddsChangedDetails | null;
+  oddsChanged?: OddsChangedDetails | null;
+  details?: OddsChangedDetails | null;
+  feedKind?: string;
+  onAcceptNewOdds?: () => void;
 }) {
+  const oddsChanged = oddsChangedProp ?? details ?? null;
+  const oddsPolicy = oddsPolicyProp ?? policy ?? "confirm_all";
   // Sur mobile (< lg dans Next.js), aucun bandeau permanent n'est affiché tant que la cote n'a pas varié.
   if (!oddsChanged) return null;
 

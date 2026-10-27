@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -9,26 +9,156 @@ import {
   Text,
   TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
-import { CalendarClock, ChevronRight, Search, X } from "lucide-react-native";
-import {
-  InfiniteScrollLoader,
-  useInfiniteBatch,
-} from "@/components/infinite-scroll-loader";
+import { ChevronRight, Search, Trophy, X } from "lucide-react-native";
 import { MatchCard } from "@/components/match-card";
 import {
   MobileHeroCarousel,
   type HeroPromoAction,
 } from "@/components/mobile-hero-carousel";
 import { useApp } from "@/context/app-context";
+import type { ClientMatch } from "@/lib/api";
 import {
   matchesSearchAndOdds,
   sortByKickoffAsc,
   sortRealLiveByPopularity,
   sortRealUpcomingByPopularity,
 } from "@/lib/matches-catalog";
+import { resolveRealLeagueBySlug } from "@/lib/real-leagues";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
+
+const INITIAL_CAROUSEL_WINDOW = 10;
+const CAROUSEL_WINDOW_STEP = 10;
+
+function RealMatchCarouselRow({
+  label,
+  items,
+  resetKey,
+  live,
+  virtualFallback,
+  markFirstAsNextUp,
+  trailingHref,
+  trailingLabel,
+  emptyMessage,
+}: {
+  label: string;
+  items: ClientMatch[];
+  resetKey: string;
+  live?: boolean;
+  virtualFallback?: boolean;
+  markFirstAsNextUp?: boolean;
+  trailingHref?: string;
+  trailingLabel?: string;
+  emptyMessage?: string;
+}) {
+  const router = useRouter();
+  const [limit, setLimit] = useState(INITIAL_CAROUSEL_WINDOW);
+  const [prevKey, setPrevKey] = useState(resetKey);
+
+  if (resetKey !== prevKey) {
+    setPrevKey(resetKey);
+    setLimit(INITIAL_CAROUSEL_WINDOW);
+  }
+
+  const screenWidth = Dimensions.get("window").width;
+  const cardWidth =
+    items.length === 1
+      ? screenWidth - 32
+      : Math.min(336, Math.round(screenWidth * 0.86));
+
+  const visibleItems = useMemo(
+    () => (items.length <= limit ? items : items.slice(0, limit)),
+    [items, limit]
+  );
+  const hasMore = limit < items.length;
+
+  const onHorizontalScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!hasMore) return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      if (contentSize.width - (layoutMeasurement.width + contentOffset.x) < 420) {
+        setLimit((prev) => Math.min(items.length, prev + CAROUSEL_WINDOW_STEP));
+      }
+    },
+    [hasMore, items.length]
+  );
+
+  return (
+    <View>
+      <View style={styles.rowHeader}>
+        <View style={styles.rowTitleWrap}>
+          {live ? (
+            <View
+              style={[
+                styles.liveDot,
+                {
+                  backgroundColor: virtualFallback
+                    ? COLORS.betclicRed
+                    : "#059669",
+                },
+              ]}
+            />
+          ) : null}
+          <Text numberOfLines={1} style={styles.rowTitle}>
+            {label}
+          </Text>
+        </View>
+
+        {trailingHref && trailingLabel ? (
+          <Pressable
+            onPress={() => router.push(trailingHref)}
+            style={({ pressed }) => [
+              styles.seeAllPill,
+              pressed && { transform: [{ scale: 0.95 }] },
+            ]}
+          >
+            <Text style={styles.seeAllText}>{trailingLabel}</Text>
+            <ChevronRight
+              size={14}
+              color={COLORS.betclicRed}
+              strokeWidth={2.5}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {items.length === 0 ? (
+        <View style={styles.emptyCarouselBox}>
+          <Text style={styles.emptyCarouselText}>
+            {emptyMessage ?? "Aucun match disponible"}
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={items.length > 1 ? cardWidth + 12 : undefined}
+          decelerationRate="fast"
+          onScroll={onHorizontalScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.carouselTrack}
+        >
+          {visibleItems.map((m, idx) => (
+            <MatchCard
+              key={m.id}
+              match={m}
+              nextUp={Boolean(markFirstAsNextUp && idx === 0)}
+              width={cardWidth}
+            />
+          ))}
+          {hasMore ? (
+            <View style={styles.horizontalSpinnerWrap}>
+              <ActivityIndicator size="small" color={COLORS.betclicRed} />
+            </View>
+          ) : null}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
 
 export default function MatchsHomeScreen() {
   const router = useRouter();
@@ -37,14 +167,17 @@ export default function MatchsHomeScreen() {
     refreshFeedMatches,
     setComboQuickMode,
     openCombo,
+    openRecharge,
     comboLegs,
+    toast,
   } = useApp();
 
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
-  const screenWidth = Dimensions.get("window").width;
-  const carouselCardWidth = Math.min(336, Math.round(screenWidth * 0.86));
+  useEffect(() => {
+    void refreshFeedMatches();
+  }, [refreshFeedMatches]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -52,100 +185,117 @@ export default function MatchsHomeScreen() {
     setRefreshing(false);
   }, [refreshFeedMatches]);
 
+  const realMatchesAll = useMemo(
+    () => (feedMatches ?? []).filter((m) => m.source === "manual"),
+    [feedMatches]
+  );
+  const virtualMatchesAll = useMemo(
+    () => (feedMatches ?? []).filter((m) => m.source !== "manual"),
+    [feedMatches]
+  );
+
   const handleHeroAction = useCallback(
     (action: HeroPromoAction) => {
       if (action.type === "virtual") {
         router.push("/matchs/virtuels");
-      } else if (action.type === "live") {
+        return;
+      }
+      if (action.type === "live") {
         router.push("/matchs/tous?status=live");
-      } else if (action.type === "league") {
-        router.push(
-          `/matchs/tous?league=${encodeURIComponent(action.slug)}`
+        return;
+      }
+      if (action.type === "league") {
+        const availableRealLeagues = Array.from(
+          new Set(realMatchesAll.map((m) => m.league))
         );
-      } else if (action.type === "combo") {
+        const matched = resolveRealLeagueBySlug(
+          availableRealLeagues,
+          action.slug
+        );
+        const target = matched ?? action.defaultLabel;
+        router.push(`/matchs/tous?league=${encodeURIComponent(target)}`);
+        return;
+      }
+      if (action.type === "combo") {
         setComboQuickMode(true);
         if (comboLegs.length > 0) {
           openCombo();
         } else {
-          router.push("/betslip");
+          toast({
+            kind: "info",
+            title: "Mode Combiné activé",
+            description:
+              "Touchez vos cotes préférées pour composer votre combiné.",
+          });
         }
+        return;
+      }
+      if (action.type === "recharge") {
+        openRecharge();
       }
     },
-    [comboLegs.length, openCombo, router, setComboQuickMode]
+    [
+      comboLegs.length,
+      openCombo,
+      openRecharge,
+      realMatchesAll,
+      router,
+      setComboQuickMode,
+      toast,
+    ]
   );
 
-  const allMatches = feedMatches ?? [];
-  const qNorm = query.trim().toLowerCase();
+  const mobileRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
 
-  const searchResults = useMemo(() => {
-    if (!qNorm) return [];
-    const active = allMatches.filter(
-      (m) => m.status !== "finished" && matchesSearchAndOdds(m, qNorm, "all")
+    const realMatching = realMatchesAll.filter(
+      (m) => m.status !== "finished" && matchesSearchAndOdds(m, q, "all")
     );
-    const live = active.filter((m) => m.status === "live");
-    const up = sortByKickoffAsc(active.filter((m) => m.status === "upcoming"));
-    return [...live, ...up];
-  }, [allMatches, qNorm]);
+    const virtualMatching = virtualMatchesAll.filter(
+      (m) => m.status !== "finished" && matchesSearchAndOdds(m, q, "all")
+    );
 
-  const {
-    visibleItems: visibleSearch,
-    hasMore: searchHasMore,
-    onScrollCheck,
-  } = useInfiniteBatch(searchResults, 10, qNorm);
+    const realLive = sortRealLiveByPopularity(
+      realMatching.filter((m) => m.status === "live")
+    );
+    const realUpcoming = sortRealUpcomingByPopularity(
+      realMatching.filter((m) => m.status === "upcoming")
+    );
 
-  const realLive = useMemo(
-    () =>
-      sortRealLiveByPopularity(
-        allMatches.filter(
-          (m) => m.source === "manual" && m.status === "live"
-        )
-      ).slice(0, 12),
-    [allMatches]
-  );
+    const vLive = [...virtualMatching.filter((m) => m.status === "live")].sort(
+      (a, b) =>
+        new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime() ||
+        a.id - b.id
+    );
+    const vUpcoming = sortByKickoffAsc(
+      virtualMatching.filter((m) => m.status === "upcoming")
+    );
+    const virtualAllActive = [...vLive, ...vUpcoming];
 
-  const virtualLive = useMemo(
-    () =>
-      allMatches
-        .filter((m) => m.source === "virtual" && m.status === "live")
-        .slice(0, 10),
-    [allMatches]
-  );
+    const liveRowUsesVirtual = realLive.length === 0;
+    const liveRowItems = liveRowUsesVirtual
+      ? vLive.length > 0
+        ? vLive
+        : virtualAllActive
+      : realLive;
 
-  const realUpcoming = useMemo(
-    () =>
-      sortRealUpcomingByPopularity(
-        allMatches.filter(
-          (m) => m.source === "manual" && m.status === "upcoming"
-        )
-      ).slice(0, 14),
-    [allMatches]
-  );
+    const upcomingRowUsesVirtual = realUpcoming.length === 0;
+    const upcomingRowItems = upcomingRowUsesVirtual ? vUpcoming : realUpcoming;
 
-  const virtualUpcoming = useMemo(
-    () =>
-      sortByKickoffAsc(
-        allMatches.filter(
-          (m) => m.source === "virtual" && m.status === "upcoming"
-        )
-      ).slice(0, 10),
-    [allMatches]
-  );
-
-  const showingRealLive = realLive.length > 0;
-  const liveCarouselItems = showingRealLive ? realLive : virtualLive;
-
-  const showingRealUpcoming = realUpcoming.length > 0;
-  const upcomingCarouselItems = showingRealUpcoming
-    ? realUpcoming
-    : virtualUpcoming;
+    return {
+      liveRowItems,
+      liveRowUsesVirtual,
+      upcomingRowItems,
+      upcomingRowUsesVirtual,
+      hasAny: liveRowItems.length > 0 || upcomingRowItems.length > 0,
+    };
+  }, [realMatchesAll, virtualMatchesAll, query]);
 
   return (
     <ScrollView
       style={styles.page}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
-      onScroll={qNorm ? onScrollCheck : undefined}
-      scrollEventThrottle={16}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -155,15 +305,16 @@ export default function MatchsHomeScreen() {
         />
       }
     >
+      {/* Hero publicitaire mobile */}
       <MobileHeroCarousel onAction={handleHeroAction} />
 
-      {/* Barre de recherche juste sous le HeroCarousel (sans boutons de filtre) */}
+      {/* Barre de recherche juste sous MobileHeroCarousel */}
       <View style={styles.searchBar}>
-        <Search size={16} color={COLORS.dim} strokeWidth={2.2} />
+        <Search size={16} color={COLORS.dim} strokeWidth={2.1} />
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Rechercher un club ou une ligue…"
+          placeholder="Rechercher un match, un club ou une ligue…"
           placeholderTextColor={COLORS.dim}
           style={styles.searchInput}
           returnKeyType="search"
@@ -176,131 +327,60 @@ export default function MatchsHomeScreen() {
       </View>
 
       {feedMatches === null ? (
-        <View style={styles.initialLoader}>
+        <View style={styles.loaderBox}>
           <ActivityIndicator size="small" color={COLORS.betclicRed} />
         </View>
-      ) : qNorm ? (
-        <View style={styles.searchResultsWrap}>
-          <Text style={styles.resultCount}>
-            {searchResults.length} match
-            {searchResults.length > 1 ? "s" : ""} trouvé
-            {searchResults.length > 1 ? "s" : ""}
+      ) : !mobileRows.hasAny ? (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyCircle}>
+            <Trophy size={20} color={COLORS.dim} strokeWidth={1.9} />
+          </View>
+          <Text style={styles.emptyTitle}>Aucun match trouvé</Text>
+          <Text style={styles.emptySub}>
+            Effacez la recherche pour retrouver toutes les rencontres.
           </Text>
-          {visibleSearch.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>
-                Aucun match ne correspond à « {query.trim()} ».
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.verticalStack}>
-              {visibleSearch.map((m) => (
-                <MatchCard key={m.id} match={m} />
-              ))}
-              <InfiniteScrollLoader hasMore={searchHasMore} />
-            </View>
-          )}
         </View>
       ) : (
-        <View style={styles.sectionsWrap}>
-          {/* Carrousel 1 : Populaire EN DIRECT (ou Matchs virtuels EN DIRECT sans badge ni compteur) */}
-          {liveCarouselItems.length > 0 ? (
-            <View style={styles.sectionBlock}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleRow}>
-                  <View style={styles.liveDot} />
-                  <Text numberOfLines={1} style={styles.sectionTitle}>
-                    {showingRealLive
-                      ? "Populaire EN DIRECT"
-                      : "Matchs virtuels EN DIRECT"}
-                  </Text>
-                  {showingRealLive ? (
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countBadgeText}>
-                        {realLive.length}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                <Pressable
-                  onPress={() =>
-                    router.push(
-                      showingRealLive
-                        ? "/matchs/tous?status=live"
-                        : "/matchs/virtuels"
-                    )
-                  }
-                  style={styles.seeAllPill}
-                >
-                  <Text style={styles.seeAllText}>Voir tout</Text>
-                  <ChevronRight
-                    size={12}
-                    color={COLORS.betclicRed}
-                    strokeWidth={2.6}
-                  />
-                </Pressable>
-              </View>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={carouselCardWidth + 12}
-                decelerationRate="fast"
-                contentContainerStyle={styles.carouselRow}
-              >
-                {liveCarouselItems.map((m) => (
-                  <MatchCard key={m.id} match={m} width={carouselCardWidth} />
-                ))}
-              </ScrollView>
-            </View>
+        <View style={styles.rowsStack}>
+          {mobileRows.liveRowItems.length > 0 ? (
+            <RealMatchCarouselRow
+              label={
+                mobileRows.liveRowUsesVirtual
+                  ? "Matchs virtuels EN DIRECT"
+                  : "Populaire EN DIRECT"
+              }
+              items={mobileRows.liveRowItems}
+              resetKey={`live|${query.trim().toLowerCase()}|${
+                mobileRows.liveRowUsesVirtual ? "v" : "r"
+              }`}
+              live
+              virtualFallback={mobileRows.liveRowUsesVirtual}
+              trailingHref={
+                mobileRows.liveRowUsesVirtual
+                  ? "/matchs/virtuels"
+                  : "/matchs/tous?status=live"
+              }
+              trailingLabel="Voir tout"
+              emptyMessage="Aucun match en direct pour le moment"
+            />
           ) : null}
 
-          {/* Carrousel 2 : Populaire en avant-match (sans chevrons < >, avec « Voir tout » -> /matchs/tous) */}
-          {upcomingCarouselItems.length > 0 ? (
-            <View style={styles.sectionBlock}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleRow}>
-                  <CalendarClock
-                    size={16}
-                    color={COLORS.betclicRed}
-                    strokeWidth={2.3}
-                  />
-                  <Text numberOfLines={1} style={styles.sectionTitle}>
-                    Populaire en avant-match
-                  </Text>
-                </View>
-
-                <Pressable
-                  onPress={() =>
-                    router.push(
-                      showingRealUpcoming ? "/matchs/tous" : "/matchs/virtuels"
-                    )
-                  }
-                  style={styles.seeAllPill}
-                >
-                  <Text style={styles.seeAllText}>Voir tout</Text>
-                  <ChevronRight
-                    size={12}
-                    color={COLORS.betclicRed}
-                    strokeWidth={2.6}
-                  />
-                </Pressable>
-              </View>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={carouselCardWidth + 12}
-                decelerationRate="fast"
-                contentContainerStyle={styles.carouselRow}
-              >
-                {upcomingCarouselItems.map((m) => (
-                  <MatchCard key={m.id} match={m} width={carouselCardWidth} />
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
+          <RealMatchCarouselRow
+            label="Populaire en avant-match"
+            items={mobileRows.upcomingRowItems}
+            resetKey={`upcoming|${query.trim().toLowerCase()}|${
+              mobileRows.upcomingRowUsesVirtual ? "v" : "r"
+            }`}
+            virtualFallback={mobileRows.upcomingRowUsesVirtual}
+            markFirstAsNextUp={mobileRows.upcomingRowUsesVirtual}
+            trailingHref={
+              mobileRows.upcomingRowUsesVirtual
+                ? "/matchs/virtuels"
+                : "/matchs/tous"
+            }
+            trailingLabel="Voir tout"
+            emptyMessage="Aucun match en avant-match dans cette sélection"
+          />
         </View>
       )}
     </ScrollView>
@@ -313,17 +393,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 22,
-    gap: 6,
+    paddingBottom: 28,
   },
   searchBar: {
+    marginBottom: 14,
     height: 40,
     borderRadius: 12,
-    backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
@@ -331,103 +411,116 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "500",
+    fontSize: 14,
     color: COLORS.ink,
     paddingVertical: 0,
   },
-  initialLoader: {
-    paddingVertical: 40,
+  loaderBox: {
+    paddingVertical: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyState: {
+    marginTop: 40,
     alignItems: "center",
   },
-  sectionsWrap: {
-    marginTop: 8,
-    gap: 18,
+  emptyCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  sectionBlock: {
-    gap: 10,
+  emptyTitle: {
+    marginTop: 12,
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.ink,
   },
-  sectionHeader: {
+  emptySub: {
+    marginTop: 4,
+    maxWidth: 290,
+    textAlign: "center",
+    fontSize: 12.5,
+    color: COLORS.dim,
+  },
+  rowsStack: {
+    marginTop: 4,
+    gap: 20,
+  },
+  rowHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
+    paddingHorizontal: 2,
   },
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
+  rowTitleWrap: {
     flex: 1,
     minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.betclicRed,
   },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: "800",
+  rowTitle: {
+    flexShrink: 1,
+    fontSize: 13.5,
+    fontWeight: "700",
     color: COLORS.ink,
     letterSpacing: -0.2,
-    flexShrink: 1,
-  },
-  countBadge: {
-    borderRadius: 999,
-    backgroundColor: "rgba(225, 0, 20, 0.10)",
-    paddingHorizontal: 7,
-    paddingVertical: 1.5,
-  },
-  countBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: COLORS.betclicRed,
-    fontVariant: ["tabular-nums"],
   },
   seeAllPill: {
     height: 28,
     borderRadius: 999,
-    backgroundColor: "rgba(225, 0, 20, 0.09)",
-    paddingHorizontal: 10,
+    backgroundColor: "rgba(225, 0, 20, 0.10)",
+    paddingLeft: 10,
+    paddingRight: 6,
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    flexShrink: 0,
   },
   seeAllText: {
     fontSize: 11.5,
     fontWeight: "700",
     color: COLORS.betclicRed,
   },
-  carouselRow: {
-    gap: 12,
-    paddingRight: 4,
-  },
-  searchResultsWrap: {
+  emptyCarouselBox: {
     marginTop: 8,
-    gap: 8,
-  },
-  resultCount: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.dim,
-  },
-  verticalStack: {
-    gap: 10,
-  },
-  emptyBox: {
+    height: 48,
     borderRadius: 16,
-    backgroundColor: "#ffffff",
     borderWidth: 1,
+    borderStyle: "dashed",
     borderColor: COLORS.edge,
-    padding: 24,
+    backgroundColor: "rgba(255,255,255,0.75)",
     alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
   },
-  emptyText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.dim,
-    textAlign: "center",
+  emptyCarouselText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: COLORS.mist,
+  },
+  carouselTrack: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    marginTop: 10,
+    paddingBottom: 4,
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 12,
+  },
+  horizontalSpinnerWrap: {
+    width: 64,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

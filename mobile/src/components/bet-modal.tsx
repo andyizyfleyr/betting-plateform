@@ -34,6 +34,7 @@ export function BetModal() {
     user,
     balance,
     setBalance,
+    pendingCount,
     setPendingCount,
     bumpBets,
     oddsFormat,
@@ -153,7 +154,7 @@ export function BetModal() {
       });
       setBalance(res.balance);
       if (!res.deduplicated) {
-        setPendingCount(Math.max(0, (user ? 1 : 0)) + 0);
+        setPendingCount(pendingCount + 1);
       }
       bumpBets();
       toast({

@@ -25,6 +25,8 @@ export interface OddsChangedDetails {
 export interface CashoutChangedDetails {
   previousCashout: number;
   currentCashout: number;
+  previousValue?: number;
+  currentValue?: number;
 }
 
 const TOKEN_STORE_KEY = "pulse_android_jwt_v1";
@@ -176,6 +178,8 @@ export function generateBetIdempotencyKey(): string {
   return generateIdempotencyKey("bet");
 }
 
+export const createIdempotencyKey = generateIdempotencyKey;
+
 export function roundOdds2(odds: number): number {
   return Math.round(odds * 100) / 100;
 }
@@ -306,7 +310,13 @@ export async function requestJson<T>(
           {
             code,
             details: isCashoutChanged ? undefined : rawDetails,
-            cashoutDetails: isCashoutChanged ? rawDetails : undefined,
+            cashoutDetails: isCashoutChanged && rawDetails
+              ? {
+                  ...rawDetails,
+                  previousValue: rawDetails.previousValue ?? rawDetails.previousCashout,
+                  currentValue: rawDetails.currentValue ?? rawDetails.currentCashout,
+                }
+              : undefined,
             currentOdds:
               typeof data.currentOdds === "number" ? data.currentOdds : undefined,
             currentCashOut:
