@@ -266,7 +266,11 @@ export async function GET(req: NextRequest) {
       matchHomeScore: match?.homeScore ?? null,
       matchAwayScore: match?.awayScore ?? null,
       matchMinute: match?.minute ?? null,
-      matchStartsAt: match?.startsAt ?? null,
+      matchStartsAt: match?.startsAt
+        ? match.startsAt instanceof Date
+          ? match.startsAt.toISOString()
+          : String(match.startsAt)
+        : null,
       matchSource: match ? (match.source === "manual" ? "manual" : "virtual") : null,
     };
   });
@@ -311,11 +315,17 @@ export async function GET(req: NextRequest) {
       cashOut: cashOutVal,
       placedAt: pb.placedAt,
       settledAt: pb.settledAt ?? null,
-      matchStatus: null,
+      matchStatus: q
+        ? (q.status === "open" ? ("upcoming" as const) : ("finished" as const))
+        : null,
       matchHomeScore: null,
       matchAwayScore: null,
       matchMinute: null,
-      matchStartsAt: null,
+      matchStartsAt: q?.resolvesAt
+        ? q.resolvesAt instanceof Date
+          ? q.resolvesAt.toISOString()
+          : String(q.resolvesAt)
+        : null,
     };
   });
 
@@ -397,9 +407,13 @@ export async function GET(req: NextRequest) {
           : l.selectionLabel;
 
       const startsAtIso = m?.startsAt
-        ? m.startsAt.toISOString()
+        ? m.startsAt instanceof Date
+          ? m.startsAt.toISOString()
+          : String(m.startsAt)
         : q?.resolvesAt
-          ? q.resolvesAt.toISOString()
+          ? q.resolvesAt instanceof Date
+            ? q.resolvesAt.toISOString()
+            : String(q.resolvesAt)
           : null;
 
       return {
@@ -428,6 +442,11 @@ export async function GET(req: NextRequest) {
     const liveMatch = legs
       .map((l) => (l.kind === "sport" && l.matchId ? comboMatchMap.get(l.matchId) : undefined))
       .find((m) => m?.status === "live");
+    const firstActiveStartsAt =
+      legs.find((l) => l.status === "pending" && l.matchStatus !== "finished" && l.matchStartsAt)
+        ?.matchStartsAt ??
+      legs.find((l) => l.matchStartsAt)?.matchStartsAt ??
+      null;
 
     return {
       id: cb.id,
@@ -460,7 +479,7 @@ export async function GET(req: NextRequest) {
       matchHomeScore: null,
       matchAwayScore: null,
       matchMinute: liveMatch?.minute ?? null,
-      matchStartsAt: null,
+      matchStartsAt: firstActiveStartsAt,
     };
   });
 

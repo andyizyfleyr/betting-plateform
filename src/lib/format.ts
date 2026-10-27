@@ -60,6 +60,7 @@ export function formatKickoff(iso: string | Date) {
 
   if (diffDays === 0) return `Aujourd'hui · ${time}`;
   if (diffDays === 1) return `Demain · ${time}`;
+  if (diffDays === -1) return `Hier · ${time}`;
   const day = new Intl.DateTimeFormat("fr-FR", {
     weekday: "short",
     day: "numeric",

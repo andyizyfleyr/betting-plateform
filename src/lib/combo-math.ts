@@ -101,10 +101,10 @@ function parseStartsAtMs(iso?: string | null): number {
 }
 
 /**
- * Classe les sélections d'un pari combiné placé du plus présent au plus futur :
- *  0) Matchs actuellement EN DIRECT (du coup d'envoi le plus ancien au plus récent)
- *  1) Matchs / événements À JOUER (date et heure de coup d'envoi croissantes : du plus proche au plus futur)
- *  2) Sélections déjà terminées / réglées (ordre chronologique croissant)
+ * Classe les sélections d'un pari combiné dans l'ordre chronologique complet :
+ *  0) Matchs / sélections TERMINÉS en premier, selon la date et l'heure croissantes
+ *  1) Matchs actuellement EN DIRECT, selon la date et l'heure croissantes
+ *  2) Matchs / événements À JOUER, selon la date et l'heure croissantes (du plus proche au plus futur)
  */
 export function sortComboBetLegsChronologically<
   T extends {
@@ -116,13 +116,13 @@ export function sortComboBetLegsChronologically<
   if (legs.length <= 1) return [...legs];
   return legs
     .map((leg, idx) => {
-      const isPendingLeg = leg.status === "pending";
-      const phaseRank =
-        isPendingLeg && leg.matchStatus === "live"
-          ? 0
-          : isPendingLeg && leg.matchStatus !== "finished"
-            ? 1
-            : 2;
+      const isFinishedLeg =
+        leg.status !== "pending" || leg.matchStatus === "finished";
+      const phaseRank = isFinishedLeg
+        ? 0
+        : leg.matchStatus === "live"
+          ? 1
+          : 2;
       return {
         leg,
         idx,
@@ -140,8 +140,10 @@ export function sortComboBetLegsChronologically<
 }
 
 /**
- * Classe les sélections d'un coupon combiné en cours de préparation
- * du plus présent (en direct, puis date/heure la plus proche) au plus futur.
+ * Classe les sélections d'un coupon combiné en cours de préparation :
+ *  0) Sélections terminées / clôturées selon la date et l'heure croissantes
+ *  1) Matchs en direct selon la date et l'heure croissantes
+ *  2) Matchs / événements à jouer du plus proche au plus futur
  */
 export function sortSlipSelectionsChronologically<
   T extends {
@@ -153,7 +155,7 @@ export function sortSlipSelectionsChronologically<
   if (legs.length <= 1) return [...legs];
   return legs
     .map((leg, idx) => {
-      const phaseRank = leg.closed ? 2 : leg.isLive ? 0 : 1;
+      const phaseRank = leg.closed ? 0 : leg.isLive ? 1 : 2;
       return {
         leg,
         idx,
@@ -168,5 +170,102 @@ export function sortSlipSelectionsChronologically<
         a.idx - b.idx
     )
     .map((x) => x.leg);
+}
+
+/**
+ * Classe les paris en cours dans « Mes paris » exactement selon la même logique chronologique :
+ *  0) Tickets dont tous les événements sont déjà terminés (en attente de règlement), par date/heure croissante
+ *  1) Combinés déjà entamés comptant au moins un match terminé, par date/heure croissante du match terminé
+ *  2) Tickets actuellement EN DIRECT, par date/heure de coup d'envoi croissante
+ *  3) Tickets À JOUER, de la date et l'heure la plus proche à la plus éloignée dans le futur
+ */
+export function sortOngoingBetsChronologically<
+  T extends {
+    id: number;
+    kind: string;
+    placedAt: string | Date;
+    matchStatus?: string | null;
+    matchStartsAt?: string | null;
+    legs?: ReadonlyArray<{
+      status: string;
+      matchStatus?: string | null;
+      matchStartsAt?: string | null;
+    }>;
+  },
+>(betsList: readonly T[]): T[] {
+  if (betsList.length <= 1) return [...betsList];
+  return betsList
+    .map((bet, idx) => {
+      let phaseRank = 3;
+      let primaryMs = parseStartsAtMs(bet.matchStartsAt);
+      let secondaryMs = Number.MAX_SAFE_INTEGER;
+
+      if (bet.kind === "combo" && Array.isArray(bet.legs) && bet.legs.length > 0) {
+        const finishedTimes: number[] = [];
+        const liveTimes: number[] = [];
+        const upcomingTimes: number[] = [];
+
+        for (const l of bet.legs) {
+          const t = parseStartsAtMs(l.matchStartsAt);
+          if (l.status !== "pending" || l.matchStatus === "finished") {
+            finishedTimes.push(t);
+          } else if (l.matchStatus === "live") {
+            liveTimes.push(t);
+          } else {
+            upcomingTimes.push(t);
+          }
+        }
+
+        const minOf = (arr: number[]) =>
+          arr.length > 0 ? Math.min(...arr) : Number.MAX_SAFE_INTEGER;
+
+        if (finishedTimes.length === bet.legs.length) {
+          phaseRank = 0;
+          primaryMs = minOf(finishedTimes);
+        } else if (finishedTimes.length > 0) {
+          phaseRank = 1;
+          primaryMs = minOf(finishedTimes);
+          secondaryMs =
+            liveTimes.length > 0 ? minOf(liveTimes) : minOf(upcomingTimes);
+        } else if (liveTimes.length > 0 || bet.matchStatus === "live") {
+          phaseRank = 2;
+          primaryMs = minOf(liveTimes);
+          secondaryMs = minOf(upcomingTimes);
+        } else {
+          phaseRank = 3;
+          primaryMs = minOf(upcomingTimes);
+        }
+      } else if (bet.matchStatus === "finished") {
+        phaseRank = 0;
+      } else if (bet.matchStatus === "live") {
+        phaseRank = 2;
+      } else {
+        phaseRank = 3;
+      }
+
+      const placedMs =
+        bet.placedAt instanceof Date
+          ? bet.placedAt.getTime()
+          : Date.parse(bet.placedAt) || 0;
+
+      return {
+        bet,
+        idx,
+        phaseRank,
+        primaryMs,
+        secondaryMs,
+        placedMs,
+      };
+    })
+    .sort(
+      (a, b) =>
+        a.phaseRank - b.phaseRank ||
+        a.primaryMs - b.primaryMs ||
+        a.secondaryMs - b.secondaryMs ||
+        b.placedMs - a.placedMs ||
+        b.bet.id - a.bet.id ||
+        a.idx - b.idx
+    )
+    .map((x) => x.bet);
 }
 

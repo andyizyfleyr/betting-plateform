@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import {
   type ClientBet,
   type ClientComboLeg,
 } from "@/lib/api";
+import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
   CASHOUT_CHANGED_CODE,
@@ -133,16 +134,20 @@ function ComboBetTicket({
       : null;
   const canCashOut = bet.status === "pending" && effectiveCashOut != null;
 
-  const totalLegs = legs.length;
-  const wonCount = legs.filter((l) => l.status === "won").length;
-  const lostCount = legs.filter((l) => l.status === "lost").length;
-  const liveCount = legs.filter(
+  const sortedLegs = useMemo(
+    () => sortComboBetLegsChronologically(legs),
+    [legs]
+  );
+  const totalLegs = sortedLegs.length;
+  const wonCount = sortedLegs.filter((l) => l.status === "won").length;
+  const lostCount = sortedLegs.filter((l) => l.status === "lost").length;
+  const liveCount = sortedLegs.filter(
     (l) => l.status === "pending" && l.matchStatus === "live"
   ).length;
   const anyLive =
     bet.status === "pending" && (liveCount > 0 || bet.matchStatus === "live");
 
-  const previewLegs = legs.slice(0, 2);
+  const previewLegs = sortedLegs.slice(0, 2);
   const extraCount = Math.max(0, totalLegs - previewLegs.length);
 
   const progressSummary = (() => {
@@ -574,10 +579,12 @@ function SingleBetTicket({
           )}
           <span className="truncate">{bet.league}</span>
           <span className="text-dim">·</span>
-          <span className="shrink-0 text-[11px] text-dim">
-            {formatPlacedAt(
-              bet.status !== "pending" ? (bet.settledAt ?? bet.placedAt) : bet.placedAt
-            )}
+          <span className="shrink-0 text-[11px] tabular-nums text-dim">
+            {!isPrediction && bet.matchStartsAt && (bet.matchStatus === "finished" || bet.status !== "pending")
+              ? formatKickoff(bet.matchStartsAt)
+              : formatPlacedAt(
+                  bet.status !== "pending" ? (bet.settledAt ?? bet.placedAt) : bet.placedAt
+                )}
           </span>
         </div>
 

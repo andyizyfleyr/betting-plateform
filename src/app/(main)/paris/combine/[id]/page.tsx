@@ -694,6 +694,14 @@ export default function ComboDetailPage() {
                             />
                           )}
                           <span className="truncate">{leg.league || "Match"}</span>
+                          {legHasScore && leg.matchStartsAt && (
+                            <>
+                              <span className="shrink-0 text-dim">·</span>
+                              <span className="shrink-0 text-[11px] tabular-nums text-dim">
+                                {formatKickoff(leg.matchStartsAt)}
+                              </span>
+                            </>
+                          )}
                         </div>
 
                         <LegStatusBadge
