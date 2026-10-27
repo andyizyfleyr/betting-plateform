@@ -10,6 +10,7 @@ import {
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { jsonWithEtag } from "@/lib/response-cache";
 import { requireUserId } from "@/lib/session";
+import { recordVisitorActivity } from "@/lib/visitor-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
+    recordVisitorActivity();
     await ensureSeeded();
     const auth = await requireUserId(req);
     if (typeof auth !== "number") return auth;

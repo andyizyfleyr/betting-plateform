@@ -23,6 +23,7 @@ import {
 import { getAuthUserId } from "@/lib/session";
 import { settleFinishedBets } from "@/lib/settle";
 import { syncPlatformStateThrottled } from "@/lib/sync-throttle";
+import { checkActiveVisitorsForCron } from "@/lib/visitor-activity";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -49,6 +50,23 @@ function safeBearerEquals(headerValue: string | null, expectedSecret: string): b
  */
 async function runLightCronTick() {
   const now = Date.now();
+
+  // Ne démarre la synchronisation Cron que s'il y a 0 visiteur actif (< 3 min) :
+  // tant qu'au moins un visiteur navigue sur le site, ses requêtes font déjà tourner
+  // le moteur en temps réel — le Cron se met donc immédiatement en attente (0 SQL en RAM chaude).
+  const visitorStatus = await checkActiveVisitorsForCron(now);
+  if (visitorStatus.hasActiveVisitors) {
+    return {
+      ok: true,
+      mode: "light" as const,
+      skipped: true,
+      reason: "visitors_active" as const,
+      detectedVia: visitorStatus.detectedVia,
+      lastVisitorAgoSec: visitorStatus.lastVisitorAgoSec,
+      syncedAt: new Date(now).toISOString(),
+    };
+  }
+
   await ensureSeeded();
   await ensureMlLoaded();
   await ensureMatchStoreHydrated();
@@ -156,7 +174,7 @@ export async function GET(req: NextRequest) {
     }
 
     await ensureSeeded();
-    await syncPlatformStateThrottled(true);
+    await syncPlatformStateThrottled(true, { fromCron: true });
     await pruneExpiredIdempotencyKeys();
     const ml = await retrainAllMlModels();
     invalidatePublicApiCaches(true);
