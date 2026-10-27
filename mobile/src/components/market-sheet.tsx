@@ -16,6 +16,7 @@ import {
   type MarketOutcome,
 } from "@/lib/api";
 import { formatOdds } from "@/lib/format";
+import { mergeSlimIntoMobileMatch } from "@/lib/query-client";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 import { LiveMatchTracker } from "./live-match-tracker";
 import { formatGoalSummary, LiveStatusBadge } from "./match-card";
@@ -420,12 +421,6 @@ export function MarketSheet() {
     [marketMatch, feedMatches]
   );
 
-  const match =
-    sharedFromFeed ??
-    (liveMatch && marketMatch && liveMatch.id === marketMatch.id
-      ? liveMatch
-      : marketMatch);
-
   useEffect(() => {
     if (!marketMatch) return;
     let active = true;
@@ -446,11 +441,17 @@ export function MarketSheet() {
     };
   }, [marketMatch]);
 
-  const effectiveSource =
-    liveMatch && marketMatch && liveMatch.id === marketMatch.id
-      ? liveMatch
-      : match;
+  const effectiveSource = useMemo(() => {
+    if (!marketMatch) return null;
+    const detailCandidate =
+      liveMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
+    if (sharedFromFeed) {
+      return mergeSlimIntoMobileMatch(detailCandidate, sharedFromFeed);
+    }
+    return detailCandidate;
+  }, [liveMatch, marketMatch, sharedFromFeed]);
 
+  const hasFullMarketsOpen = Boolean(openMap.total_ou);
   if (effectiveSource && effectiveSource.id !== prevMatchId) {
     setPrevMatchId(effectiveSource.id);
     setCategory("all");
@@ -464,6 +465,13 @@ export function MarketSheet() {
       for (const g of groups.slice(0, 2)) initialOpen[g.key] = true;
     }
     setOpenMap(initialOpen);
+  } else if (
+    effectiveSource &&
+    !hasFullMarketsOpen &&
+    (effectiveSource.markets?.length ?? 0) > 1 &&
+    effectiveSource.markets?.some((g) => g.key === "total_ou")
+  ) {
+    setOpenMap((prev) => ({ total_ou: true, ...prev }));
   } else if (!effectiveSource && prevMatchId !== null) {
     setPrevMatchId(null);
     setOpenMap({});

@@ -88,7 +88,7 @@ function MatchCardInner({
   const isFinished = match.status === "finished";
   const isReal = match.source === "manual";
   const realStatsAvailable = isReal && hasAnyRealStats(match.realStats);
-  const marketCount = match.markets?.length ?? 0;
+  const marketCount = match.marketCount ?? match.markets?.length ?? 0;
 
   return (
     <article
@@ -282,8 +282,11 @@ function areMatchCardPropsEqual(
     a.awayTeam === b.awayTeam &&
     a.homeLogo === b.homeLogo &&
     a.awayLogo === b.awayLogo &&
+    (a.marketCount ?? a.markets?.length ?? 0) ===
+      (b.marketCount ?? b.markets?.length ?? 0) &&
     (a.markets?.length ?? 0) === (b.markets?.length ?? 0) &&
     (a.events?.length ?? 0) === (b.events?.length ?? 0) &&
+    Boolean(a.telemetry) === Boolean(b.telemetry) &&
     a.realStats?.updatedAt === b.realStats?.updatedAt
   );
 }
@@ -484,13 +487,13 @@ function OddsCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-all active:scale-[0.98] lg:h-10.5",
+        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-colors lg:h-10.5",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
             ? "border-ink bg-ink text-white shadow-xs ring-2 ring-betclic-red/35"
             : "border-edge bg-elev/75 hover:border-ink/20 active:border-betclic-red/50 active:bg-betclic-red/8",
-        pressing && !suspended && "scale-[0.96] ring-2 ring-betclic-red/50",
+        pressing && !suspended && "ring-2 ring-betclic-red/50",
         suspended && "cursor-not-allowed opacity-50"
       )}
     >

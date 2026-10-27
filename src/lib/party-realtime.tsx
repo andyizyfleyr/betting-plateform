@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/live-clock";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import {
+  mergeSingleSlimIntoFullMatch,
   mergeSlimIntoFullMatches,
   pulseQueryKeys,
 } from "@/lib/query-client";
@@ -68,6 +70,12 @@ export function PartyRealtimeBridge({
   const queryClient = useQueryClient();
   const [wsConnected, setWsConnected] = useState(false);
   const [userWsConnected, setUserWsConnected] = useState(false);
+  const lastFullHydrateAtRef = useRef<number>(0);
+  const hydratingFullRef = useRef<boolean>(false);
+  const onMatchesUpdatedRef = useRef(onMatchesUpdated);
+  useEffect(() => {
+    onMatchesUpdatedRef.current = onMatchesUpdated;
+  }, [onMatchesUpdated]);
 
   const realtimeQuery = useQuery({
     queryKey: pulseQueryKeys.realtime(userId),
@@ -133,24 +141,24 @@ export function PartyRealtimeBridge({
             serverTime: msg.serverTime,
           });
 
-          let shouldRefetchFull = false;
-          let newlyFinished: number[] = [];
+          const prevData = queryClient.getQueryData<{
+            matches: ClientMatch[];
+            serverTime?: string;
+          }>(pulseQueryKeys.matches);
+
+          const { merged, hasNewMatch, needsFullMarkets, newlyFinishedIds } =
+            mergeSlimIntoFullMatches(prevData?.matches, msg.matches);
 
           queryClient.setQueryData<{
             matches: ClientMatch[];
             serverTime?: string;
-          }>(pulseQueryKeys.matches, (prev) => {
-            const { merged, hasNewMatch, newlyFinishedIds } =
-              mergeSlimIntoFullMatches(prev?.matches, msg.matches!);
-            shouldRefetchFull = !prev || hasNewMatch;
-            newlyFinished = newlyFinishedIds;
-            rememberMatches(merged);
-            onMatchesUpdated?.(merged);
-            return {
-              matches: merged,
-              serverTime: msg.serverTime ?? prev?.serverTime,
-            };
+          }>(pulseQueryKeys.matches, {
+            matches: merged,
+            serverTime: msg.serverTime ?? prevData?.serverTime,
           });
+
+          rememberMatches(merged);
+          onMatchesUpdatedRef.current?.(merged);
 
           // Met aussi à jour instantanément toute fiche détail `/matchs/[id]` en cache
           for (const slim of msg.matches) {
@@ -159,23 +167,43 @@ export function PartyRealtimeBridge({
               serverTime?: string;
             }>(pulseQueryKeys.matchDetail(slim.id), (prevDetail) => {
               if (!prevDetail) return prevDetail;
-              const { merged } = mergeSlimIntoFullMatches(
-                [prevDetail.match],
-                [slim]
-              );
               return {
-                match: merged[0] ?? prevDetail.match,
+                match: mergeSingleSlimIntoFullMatch(prevDetail.match, slim),
                 serverTime: msg.serverTime ?? prevDetail.serverTime,
               };
             });
           }
 
-          if (shouldRefetchFull) {
+          if (!prevData || hasNewMatch || needsFullMarkets) {
             void queryClient.invalidateQueries({
               queryKey: pulseQueryKeys.matches,
             });
+            const now = Date.now();
+            if (
+              !hydratingFullRef.current &&
+              now - lastFullHydrateAtRef.current >= 5_000
+            ) {
+              hydratingFullRef.current = true;
+              lastFullHydrateAtRef.current = now;
+              void queryClient
+                .fetchQuery({
+                  queryKey: pulseQueryKeys.matches,
+                  queryFn: () => api.matches(),
+                  staleTime: 2_500,
+                })
+                .then((fullRes) => {
+                  if (fullRes?.matches) {
+                    rememberMatches(fullRes.matches);
+                    onMatchesUpdatedRef.current?.(fullRes.matches);
+                  }
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                  hydratingFullRef.current = false;
+                });
+            }
           }
-          if (newlyFinished.length > 0) {
+          if (newlyFinishedIds.length > 0) {
             void queryClient.invalidateQueries({
               queryKey: pulseQueryKeys.matchHistory,
             });
@@ -236,7 +264,6 @@ export function PartyRealtimeBridge({
     };
   }, [
     cfg?.publicRoom,
-    onMatchesUpdated,
     partyEnabled,
     partyHost,
     partyProtocol,

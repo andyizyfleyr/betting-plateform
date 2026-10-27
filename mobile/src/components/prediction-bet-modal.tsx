@@ -198,11 +198,12 @@ export function PredictionBetModal({
       animationType="slide"
       onRequestClose={closePredictionBet}
     >
-      <Pressable style={styles.backdrop} onPress={closePredictionBet}>
+      <View style={styles.backdrop}>
         <Pressable
-          style={styles.sheet}
-          onPress={(e) => e.stopPropagation()}
-        >
+          style={StyleSheet.absoluteFill}
+          onPress={closePredictionBet}
+        />
+        <View style={styles.sheet}>
           <View style={styles.grabber} />
 
           <View style={styles.topRow}>
@@ -321,8 +322,8 @@ export function PredictionBetModal({
               </Pressable>
             </View>
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

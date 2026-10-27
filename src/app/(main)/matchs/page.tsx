@@ -901,7 +901,7 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
         <div
           ref={scrollerRef}
           onScroll={handleScroll}
-          className="-mx-4 mt-2.5 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-3 overflow-x-auto px-4 pb-1 scroll-smooth no-scrollbar"
+          className="-mx-4 mt-2.5 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-3 overflow-x-auto px-4 pb-1 no-scrollbar"
         >
           {visibleItems.map((m, idx) => (
             <div

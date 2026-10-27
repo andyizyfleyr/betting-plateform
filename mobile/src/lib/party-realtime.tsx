@@ -3,6 +3,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/live-clock";
 import {
   mergeSlimIntoMobileMatch,
+  mergeSlimIntoMobileMatches,
   mobileQueryKeys,
 } from "@/lib/query-client";
 
@@ -67,6 +69,8 @@ export function MobilePartyRealtimeBridge({
   );
   const [wsConnected, setWsConnected] = useState(false);
   const [userWsConnected, setUserWsConnected] = useState(false);
+  const onMatchesUpdatedRef = useRef(onMatchesUpdated);
+  onMatchesUpdatedRef.current = onMatchesUpdated;
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
@@ -130,35 +134,42 @@ export function MobilePartyRealtimeBridge({
             calibrateServerClockOffset({ serverTimeIso: msg.serverTime });
           }
           registerLiveClockMatches(msg.matches);
-          seedMatchesSnapshot(msg.matches, false);
 
-          let newlyFinished = false;
           type MatchesCacheData = {
             matches: ClientMatch[];
             serverTime?: string;
           };
+          const prevCache = queryClient.getQueryData<MatchesCacheData>(
+            mobileQueryKeys.matchesSlim
+          );
+          let newlyFinished = false;
+          if (prevCache?.matches) {
+            const prevStatus = new Map(
+              prevCache.matches.map((m: ClientMatch) => [m.id, m.status])
+            );
+            for (const nextM of msg.matches) {
+              const oldS = prevStatus.get(nextM.id);
+              if (oldS && oldS !== "finished" && nextM.status === "finished") {
+                newlyFinished = true;
+              }
+            }
+          }
+
+          const mergedMatches = mergeSlimIntoMobileMatches(
+            prevCache?.matches,
+            msg.matches
+          );
+
           queryClient.setQueryData<MatchesCacheData>(
             mobileQueryKeys.matchesSlim,
-            (prev: MatchesCacheData | undefined) => {
-              if (prev?.matches) {
-                const prevStatus = new Map(
-                  prev.matches.map((m: ClientMatch) => [m.id, m.status])
-                );
-                for (const nextM of msg.matches!) {
-                  const oldS = prevStatus.get(nextM.id);
-                  if (oldS && oldS !== "finished" && nextM.status === "finished") {
-                    newlyFinished = true;
-                  }
-                }
-              }
-              return {
-                matches: msg.matches!,
-                serverTime: msg.serverTime ?? prev?.serverTime,
-              };
+            {
+              matches: mergedMatches,
+              serverTime: msg.serverTime ?? prevCache?.serverTime,
             }
           );
 
-          onMatchesUpdated?.(msg.matches);
+          seedMatchesSnapshot(mergedMatches, false);
+          onMatchesUpdatedRef.current?.(mergedMatches);
 
           // Met aussi à jour toute fiche détail `/matchs/[id]` en mémoire
           type MatchDetailCacheData = {
@@ -239,7 +250,6 @@ export function MobilePartyRealtimeBridge({
     };
   }, [
     cfg?.publicRoom,
-    onMatchesUpdated,
     partyActive,
     partyHost,
     partyProtocol,
@@ -370,6 +380,10 @@ export function useMobileMatchDetailQuery(
 ) {
   const { wsConnected } = useMobileRealtimeStatus();
   const fallbackMs = Math.round(5_000 * (options?.dataSaver ? 2.4 : 1));
+  const initialIsSlim =
+    Boolean(options?.initialMatch) &&
+    options?.initialMatch?.status !== "finished" &&
+    (options?.initialMatch?.markets?.length ?? 0) <= 1;
 
   return useQuery({
     queryKey: mobileQueryKeys.matchDetail(matchId),
@@ -379,7 +393,11 @@ export function useMobileMatchDetailQuery(
     initialData: options?.initialMatch
       ? { match: options.initialMatch }
       : undefined,
-    initialDataUpdatedAt: options?.initialMatch ? Date.now() - 4_000 : undefined,
+    initialDataUpdatedAt: options?.initialMatch
+      ? initialIsSlim
+        ? 0
+        : Date.now() - 4_000
+      : undefined,
     refetchInterval: options?.isFinished
       ? false
       : wsConnected

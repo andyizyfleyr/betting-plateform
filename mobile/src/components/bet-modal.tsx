@@ -195,11 +195,9 @@ export function BetModal() {
       animationType="slide"
       onRequestClose={closeBet}
     >
-      <Pressable style={styles.backdrop} onPress={closeBet}>
-        <Pressable
-          style={styles.sheet}
-          onPress={(e) => e.stopPropagation()}
-        >
+      <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={closeBet} />
+        <View style={styles.sheet}>
           <View style={styles.grabber} />
 
           <View style={styles.topRow}>
@@ -350,8 +348,8 @@ export function BetModal() {
               </Pressable>
             </View>
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

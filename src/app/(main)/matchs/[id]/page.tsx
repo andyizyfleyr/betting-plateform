@@ -16,6 +16,7 @@ import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { useMatchDetailQuery } from "@/lib/party-realtime";
+import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import {
   AccordionItem,
@@ -101,9 +102,31 @@ export default function MatchDetailPage() {
     [invalidId, matchId]
   );
 
+  const sharedHasFullData = useMemo(() => {
+    if (!sharedFromFeed) return false;
+    if (sharedFromFeed.status === "finished") return true;
+    const expectedCount = sharedFromFeed.marketCount ?? 0;
+    const actualCount = sharedFromFeed.markets?.length ?? 0;
+    if (expectedCount > 1 && actualCount <= 1) return false;
+    if (actualCount <= 1) return false;
+    if (
+      sharedFromFeed.status === "live" &&
+      sharedFromFeed.source !== "manual" &&
+      !sharedFromFeed.telemetry
+    ) {
+      return false;
+    }
+    return true;
+  }, [sharedFromFeed]);
+
   const detailQuery = useMatchDetailQuery(matchId, {
-    enabled: !invalidId && !sharedFromFeed,
-    initialMatch: cachedInitialMatch,
+    enabled: !invalidId && !sharedHasFullData,
+    initialMatch:
+      cachedInitialMatch &&
+      (cachedInitialMatch.status === "finished" ||
+        (cachedInitialMatch.markets?.length ?? 0) > 1)
+        ? cachedInitialMatch
+        : null,
     isFinished: sharedFromFeed?.status === "finished",
   });
 
@@ -119,11 +142,35 @@ export default function MatchDetailPage() {
         ? "Impossible de charger ce match."
         : null;
 
-  const match = invalidId ? null : (sharedFromFeed ?? fetchedMatch);
+  const match = useMemo(() => {
+    if (invalidId) return null;
+    if (sharedHasFullData && sharedFromFeed) return sharedFromFeed;
+    if (fetchedMatch && sharedFromFeed) {
+      return mergeSingleSlimIntoFullMatch(fetchedMatch, sharedFromFeed);
+    }
+    return fetchedMatch ?? sharedFromFeed;
+  }, [fetchedMatch, invalidId, sharedFromFeed, sharedHasFullData]);
+
+  const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
+    () =>
+      !invalidId && (cachedInitialMatch?.markets?.length ?? 0) > 1
+        ? matchId
+        : null
+  );
 
   const hasAnyOpen = Object.keys(openMap).length > 0;
   if (match && !hasAnyOpen && (match.markets?.length ?? 0) > 0) {
     setOpenMap(defaultOpenMarkets(match));
+    if ((match.markets?.length ?? 0) > 1) {
+      setFullMarketsOpenedId(match.id);
+    }
+  } else if (
+    match &&
+    (match.markets?.length ?? 0) > 1 &&
+    fullMarketsOpenedId !== match.id
+  ) {
+    setFullMarketsOpenedId(match.id);
+    setOpenMap((prev) => ({ ...defaultOpenMarkets(match), ...prev }));
   }
 
   const fetchMatch = useCallback(async () => {

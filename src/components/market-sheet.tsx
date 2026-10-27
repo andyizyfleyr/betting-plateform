@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { BarChart3, ChevronDown, Lock, Radio, X } from "lucide-react";
 import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
+import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
 import {
@@ -123,15 +124,37 @@ export function MarketSheet() {
     [marketMatch, feedMatches]
   );
 
-  const match =
-    sharedFromFeed ??
-    (liveMatch && marketMatch && liveMatch.id === marketMatch.id
-      ? liveMatch
-      : marketMatch);
+  const sharedHasFullData = useMemo(() => {
+    if (!sharedFromFeed) return false;
+    if (sharedFromFeed.status === "finished") return true;
+    const expectedCount = sharedFromFeed.marketCount ?? 0;
+    const actualCount = sharedFromFeed.markets?.length ?? 0;
+    if (expectedCount > 1 && actualCount <= 1) return false;
+    if (actualCount <= 1) return false;
+    if (
+      sharedFromFeed.status === "live" &&
+      sharedFromFeed.source !== "manual" &&
+      !sharedFromFeed.telemetry
+    ) {
+      return false;
+    }
+    return true;
+  }, [sharedFromFeed]);
 
-  // Ne lance un polling autonome que si MarketSheet est ouvert hors de la page /matchs
+  const match = useMemo(() => {
+    if (!marketMatch) return null;
+    if (sharedHasFullData && sharedFromFeed) return sharedFromFeed;
+    const detailCandidate =
+      liveMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
+    if (sharedFromFeed && detailCandidate) {
+      return mergeSingleSlimIntoFullMatch(detailCandidate, sharedFromFeed);
+    }
+    return detailCandidate;
+  }, [liveMatch, marketMatch, sharedFromFeed, sharedHasFullData]);
+
+  // Lance un polling autonome tant que le flux partagé ne contient pas les 18–19 marchés complets
   useEffect(() => {
-    if (!marketMatch || sharedFromFeed) return;
+    if (!marketMatch || sharedHasFullData) return;
     let active = true;
     const poll = async () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -149,8 +172,9 @@ export function MarketSheet() {
       active = false;
       clearInterval(id);
     };
-  }, [marketMatch, sharedFromFeed]);
+  }, [marketMatch, sharedHasFullData]);
 
+  const hasAnyOpen = Object.keys(openMap).length > 0;
   if (match && match.id !== prevMatchId) {
     setPrevMatchId(match.id);
     setCategory("all");
@@ -160,6 +184,16 @@ export function MarketSheet() {
     const groups = match.markets ?? [];
     const initialOpen: Record<string, boolean> = {};
     // Ouvre par défaut Résultat + Total de buts (ou les 2 premiers marchés disponibles)
+    for (const key of ["result", "total_ou"]) {
+      if (groups.some((g) => g.key === key)) initialOpen[key] = true;
+    }
+    if (Object.keys(initialOpen).length === 0) {
+      for (const g of groups.slice(0, 2)) initialOpen[g.key] = true;
+    }
+    setOpenMap(initialOpen);
+  } else if (match && !hasAnyOpen && (match.markets?.length ?? 0) > 1) {
+    const groups = match.markets ?? [];
+    const initialOpen: Record<string, boolean> = {};
     for (const key of ["result", "total_ou"]) {
       if (groups.some((g) => g.key === key)) initialOpen[key] = true;
     }
@@ -723,13 +757,13 @@ function OutcomeCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "relative flex h-9 items-center justify-between gap-1.5 rounded-lg border px-2.5 transition-all active:scale-[0.98] lg:h-11 lg:gap-2 lg:rounded-xl lg:px-3",
+        "relative flex h-9 items-center justify-between gap-1.5 rounded-lg border px-2.5 transition-colors lg:h-11 lg:gap-2 lg:rounded-xl lg:px-3",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
             ? "border-ink bg-ink text-white shadow-xs ring-2 ring-betclic-red/35"
             : "border-edge bg-elev/65 active:border-betclic-red/50 active:bg-betclic-red/8",
-        pressing && !suspended && "scale-[0.96] ring-2 ring-betclic-red/50",
+        pressing && !suspended && "ring-2 ring-betclic-red/50",
         suspended && "cursor-not-allowed opacity-50",
         className
       )}

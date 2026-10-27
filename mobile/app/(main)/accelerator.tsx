@@ -750,12 +750,12 @@ export default function AcceleratorScreen() {
         animationType="fade"
         onRequestClose={() => setModal((m) => ({ ...m, show: false }))}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setModal((m) => ({ ...m, show: false }))}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
-            onPress={(e) => e.stopPropagation()}
+            style={StyleSheet.absoluteFill}
+            onPress={() => setModal((m) => ({ ...m, show: false }))}
+          />
+          <View
             style={[
               styles.modalV2,
               modal.win ? styles.modalWin : styles.modalLose,
@@ -779,8 +779,8 @@ export default function AcceleratorScreen() {
             >
               <Text style={styles.btnCloseModalText}>Continuer</Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Modale règles */}
@@ -790,14 +790,12 @@ export default function AcceleratorScreen() {
         animationType="fade"
         onRequestClose={() => setRulesOpen(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setRulesOpen(false)}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={styles.modalV2}
-          >
+            style={StyleSheet.absoluteFill}
+            onPress={() => setRulesOpen(false)}
+          />
+          <View style={styles.modalV2}>
             <Text style={[styles.modalTitle, { color: "#ffffff" }]}>
               Règles
             </Text>
@@ -818,8 +816,8 @@ export default function AcceleratorScreen() {
             >
               <Text style={styles.btnCloseModalText}>Compris</Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );

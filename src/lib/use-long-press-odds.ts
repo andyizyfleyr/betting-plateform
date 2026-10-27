@@ -123,9 +123,14 @@ export function useLongPressOdds({
     clearTimer();
   }, [clearTimer]);
 
-  const onPointerLeave = useCallback(() => {
-    clearTimer();
-  }, [clearTimer]);
+  const onPointerLeave = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.pointerType === "mouse") {
+        clearTimer();
+      }
+    },
+    [clearTimer]
+  );
 
   const onContextMenu = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -157,6 +162,7 @@ export function useLongPressOdds({
       onClick,
     },
     style: {
+      touchAction: "manipulation" as const,
       WebkitTouchCallout: "none" as const,
       userSelect: "none" as const,
     },

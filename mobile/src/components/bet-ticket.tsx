@@ -461,63 +461,66 @@ function ComboBetTicket({
         lost && styles.cardLost,
       ]}
     >
-      <Pressable onPress={() => router.push(`/paris/combine/${bet.id}`)}>
-        {/* En-tête */}
-        <View style={styles.headRow}>
-          <View style={styles.headLeft}>
-            <Layers size={14} color={COLORS.betclicRed} strokeWidth={2.3} />
-            <Text style={styles.comboLabel}>Combiné</Text>
-            {bet.boostPct != null && bet.boostPct > 0 ? (
-              <View style={styles.boostMiniBadge}>
-                <Text style={styles.boostMiniText}>+{bet.boostPct}%</Text>
-              </View>
-            ) : null}
-            <Text style={styles.dot}>·</Text>
-            <Text numberOfLines={1} style={styles.dateText}>
-              {formatPlacedAt(
-                bet.status !== "pending"
-                  ? (bet.settledAt ?? bet.placedAt)
-                  : bet.placedAt
-              )}
-            </Text>
-          </View>
+      {/* En-tête */}
+      <View style={styles.headRow}>
+        <Pressable
+          onPress={() => router.push(`/paris/combine/${bet.id}`)}
+          style={styles.headLeft}
+        >
+          <Layers size={14} color={COLORS.betclicRed} strokeWidth={2.3} />
+          <Text style={styles.comboLabel}>Combiné</Text>
+          {bet.boostPct != null && bet.boostPct > 0 ? (
+            <View style={styles.boostMiniBadge}>
+              <Text style={styles.boostMiniText}>+{bet.boostPct}%</Text>
+            </View>
+          ) : null}
+          <Text style={styles.dot}>·</Text>
+          <Text numberOfLines={1} style={styles.dateText}>
+            {formatPlacedAt(
+              bet.status !== "pending"
+                ? (bet.settledAt ?? bet.placedAt)
+                : bet.placedAt
+            )}
+          </Text>
+        </Pressable>
 
-          <View style={styles.headRight}>
-            <Pressable
-              onPress={() => (onShare ? onShare(bet) : openShareTicket(bet))}
-              style={styles.flexPill}
-            >
-              <Share2 size={12} color={COLORS.mist} strokeWidth={2.2} />
-              <Text style={styles.flexText}>Flex</Text>
-            </Pressable>
-            <StatusPill
-              status={bet.status}
-              live={Boolean(anyLive)}
-              minute={bet.matchMinute}
-              clockSource={
-                anyLive
-                  ? (() => {
-                      const liveLeg = legs.find(
-                        (l) => l.status === "pending" && l.matchStatus === "live"
-                      );
-                      return {
-                        matchId: bet.liveMatchId ?? liveLeg?.matchId ?? null,
-                        status: "live",
-                        minute: bet.matchMinute ?? liveLeg?.matchMinute ?? null,
-                        startsAt:
-                          bet.liveMatchStartsAt ?? liveLeg?.matchStartsAt ?? null,
-                        source:
-                          bet.liveMatchSource ?? liveLeg?.matchSource ?? null,
-                        clockAnchor:
-                          bet.matchClockAnchor ?? liveLeg?.matchClockAnchor ?? null,
-                      };
-                    })()
-                  : null
-              }
-            />
-          </View>
+        <View style={styles.headRight}>
+          <Pressable
+            onPress={() => (onShare ? onShare(bet) : openShareTicket(bet))}
+            style={styles.flexPill}
+          >
+            <Share2 size={12} color={COLORS.mist} strokeWidth={2.2} />
+            <Text style={styles.flexText}>Flex</Text>
+          </Pressable>
+          <StatusPill
+            status={bet.status}
+            live={Boolean(anyLive)}
+            minute={bet.matchMinute}
+            clockSource={
+              anyLive
+                ? (() => {
+                    const liveLeg = legs.find(
+                      (l) => l.status === "pending" && l.matchStatus === "live"
+                    );
+                    return {
+                      matchId: bet.liveMatchId ?? liveLeg?.matchId ?? null,
+                      status: "live",
+                      minute: bet.matchMinute ?? liveLeg?.matchMinute ?? null,
+                      startsAt:
+                        bet.liveMatchStartsAt ?? liveLeg?.matchStartsAt ?? null,
+                      source:
+                        bet.liveMatchSource ?? liveLeg?.matchSource ?? null,
+                      clockAnchor:
+                        bet.matchClockAnchor ?? liveLeg?.matchClockAnchor ?? null,
+                    };
+                  })()
+                : null
+            }
+          />
         </View>
+      </View>
 
+      <Pressable onPress={() => router.push(`/paris/combine/${bet.id}`)}>
         {/* Aperçu 2 sélections + barre Détails */}
         <View style={styles.bodyWrap}>
           <View style={styles.previewRow}>
@@ -768,69 +771,72 @@ function SingleBetTicket({
         lost && styles.cardLost,
       ]}
     >
-      <Pressable onPress={() => router.push(detailHref)}>
-        {/* En-tête */}
-        <View style={styles.headRow}>
-          <View style={styles.headLeft}>
-            {isPrediction ? (
-              <TrendingUp
-                size={14}
-                color={COLORS.betclicRed}
-                strokeWidth={2.3}
-              />
-            ) : (
-              <SportIcon sport={bet.sport} size={14} color={COLORS.dim} />
-            )}
-            <Text numberOfLines={1} style={styles.leagueText}>
-              {bet.league}
-            </Text>
-            {isPrediction || !bet.matchStartsAt || live ? (
-              <>
-                <Text style={styles.dot}>·</Text>
-                <Text numberOfLines={1} style={styles.dateText}>
-                  {formatPlacedAt(
-                    bet.status !== "pending"
-                      ? (bet.settledAt ?? bet.placedAt)
-                      : bet.placedAt
-                  )}
-                </Text>
-              </>
-            ) : null}
-          </View>
-
-          <View style={styles.headRight}>
-            {!isPrediction && bet.matchStartsAt && !live ? (
-              <Text style={styles.kickoffText}>
-                {formatKickoff(bet.matchStartsAt)}
-              </Text>
-            ) : null}
-            <Pressable
-              onPress={() => (onShare ? onShare(bet) : openShareTicket(bet))}
-              style={styles.flexPill}
-            >
-              <Share2 size={12} color={COLORS.mist} strokeWidth={2.2} />
-              <Text style={styles.flexText}>Flex</Text>
-            </Pressable>
-            <StatusPill
-              status={bet.status}
-              live={live}
-              minute={bet.matchMinute}
-              clockSource={
-                live
-                  ? {
-                      matchId: bet.matchId,
-                      status: "live",
-                      minute: bet.matchMinute,
-                      startsAt: bet.matchStartsAt,
-                      source: bet.matchSource ?? null,
-                      clockAnchor: bet.matchClockAnchor ?? null,
-                    }
-                  : null
-              }
+      {/* En-tête */}
+      <View style={styles.headRow}>
+        <Pressable
+          onPress={() => router.push(detailHref)}
+          style={styles.headLeft}
+        >
+          {isPrediction ? (
+            <TrendingUp
+              size={14}
+              color={COLORS.betclicRed}
+              strokeWidth={2.3}
             />
-          </View>
-        </View>
+          ) : (
+            <SportIcon sport={bet.sport} size={14} color={COLORS.dim} />
+          )}
+          <Text numberOfLines={1} style={styles.leagueText}>
+            {bet.league}
+          </Text>
+          {isPrediction || !bet.matchStartsAt || live ? (
+            <>
+              <Text style={styles.dot}>·</Text>
+              <Text numberOfLines={1} style={styles.dateText}>
+                {formatPlacedAt(
+                  bet.status !== "pending"
+                    ? (bet.settledAt ?? bet.placedAt)
+                    : bet.placedAt
+                )}
+              </Text>
+            </>
+          ) : null}
+        </Pressable>
 
+        <View style={styles.headRight}>
+          {!isPrediction && bet.matchStartsAt && !live ? (
+            <Text style={styles.kickoffText}>
+              {formatKickoff(bet.matchStartsAt)}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() => (onShare ? onShare(bet) : openShareTicket(bet))}
+            style={styles.flexPill}
+          >
+            <Share2 size={12} color={COLORS.mist} strokeWidth={2.2} />
+            <Text style={styles.flexText}>Flex</Text>
+          </Pressable>
+          <StatusPill
+            status={bet.status}
+            live={live}
+            minute={bet.matchMinute}
+            clockSource={
+              live
+                ? {
+                    matchId: bet.matchId,
+                    status: "live",
+                    minute: bet.matchMinute,
+                    startsAt: bet.matchStartsAt,
+                    source: bet.matchSource ?? null,
+                    clockAnchor: bet.matchClockAnchor ?? null,
+                  }
+                : null
+            }
+          />
+        </View>
+      </View>
+
+      <Pressable onPress={() => router.push(detailHref)}>
         {/* Corps */}
         <View style={styles.bodyWrap}>
           {isPrediction ? (

@@ -131,11 +131,12 @@ export function FilterDropdownRow({
         animationType="fade"
         onRequestClose={() => setOpenId(null)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setOpenId(null)}>
+        <View style={styles.backdrop}>
           <Pressable
-            style={styles.menuCard}
-            onPress={(e) => e.stopPropagation()}
-          >
+            style={StyleSheet.absoluteFill}
+            onPress={() => setOpenId(null)}
+          />
+          <View style={styles.menuCard}>
             <ScrollView
               style={styles.optionsList}
               showsVerticalScrollIndicator={false}
@@ -185,8 +186,8 @@ export function FilterDropdownRow({
                 );
               })}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </>
   );
