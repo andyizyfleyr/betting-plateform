@@ -1,30 +1,27 @@
-import React from "react";
-import { ActivityIndicator, View } from "react-native";
-import { Redirect } from "@/lib/router";
+import React, { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
 import { useApp } from "@/context/app-context";
-import { COLORS } from "@/theme/tokens";
+import { useRouter } from "@/lib/router";
 
-export default function IndexRedirect() {
+export default function IndexRedirectScreen() {
   const { authReady, user } = useApp();
+  const router = useRouter();
 
-  if (!authReady) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: COLORS.deep,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <ActivityIndicator size="small" color={COLORS.betclicRed} />
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (!authReady) return;
+    if (user?.role === "admin") {
+      router.replace("/admin");
+    } else {
+      router.replace("/matchs");
+    }
+  }, [authReady, router, user?.role]);
 
-  if (user?.role === "admin") {
-    return <Redirect href="/admin" />;
-  }
-
-  return <Redirect href="/matchs" />;
+  return <View style={styles.bootBackdrop} />;
 }
+
+const styles = StyleSheet.create({
+  bootBackdrop: {
+    flex: 1,
+    backgroundColor: "#090D16",
+  },
+});

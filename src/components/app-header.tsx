@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, LogOut, Plus, ShieldCheck, User, Zap } from "lucide-react";
+import { Loader2, LogOut, Plus, ShieldCheck, User } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, eur, initials } from "@/lib/format";
 import { AnimatedNumber } from "./animated-number";
+import { PulseLogo } from "./pulse-logo";
 import { useApp, type AdminTabKey } from "./providers";
 
 const ADMIN_TAB_TITLES: Record<AdminTabKey, string> = {
@@ -68,12 +69,7 @@ export function AppHeader() {
         {/* Barre mobile (< lg) */}
         <div className="flex h-[52px] items-center justify-between px-4 lg:hidden">
           <Link href="/admin" className="flex items-center gap-2 active:opacity-80">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-betclic-red text-white">
-              <Zap className="h-4 w-4 fill-white" strokeWidth={2.2} />
-            </span>
-            <span className="font-display text-[17px] font-bold tracking-tight text-ink">
-              PULSE
-            </span>
+            <PulseLogo size="sm" variant="light" />
             <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-betclic-red">
               <ShieldCheck className="h-3 w-3" strokeWidth={2.4} />
               Admin
@@ -168,12 +164,7 @@ export function AppHeader() {
           }}
           className="flex items-center gap-2 active:opacity-80"
         >
-          <span className="grid h-7 w-7 place-items-center rounded-lg bg-betclic-red text-white">
-            <Zap className="h-4 w-4 fill-white" strokeWidth={2.2} />
-          </span>
-          <span className="font-display text-[17px] font-bold tracking-tight text-ink">
-            PULSE
-          </span>
+          <PulseLogo size="sm" variant="light" />
         </Link>
 
         <div className="flex items-center gap-2">
@@ -206,7 +197,7 @@ export function AppHeader() {
 
       {/* Barre de navigation supérieure desktop pleine largeur (lg+) */}
       <div className="mx-auto hidden h-[58px] w-full max-w-[1480px] items-center justify-between gap-6 px-5 lg:flex">
-        {/* Marque PULSE + Navigation horizontale */}
+        {/* Marque Pulse Bet + Navigation horizontale */}
         <div className="flex min-w-0 items-center gap-7">
           <Link
             href="/matchs"
@@ -216,12 +207,7 @@ export function AppHeader() {
             }}
             className="flex shrink-0 items-center gap-2 text-white transition-opacity hover:opacity-90"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-betclic-red shadow-xs">
-              <Zap className="h-4.5 w-4.5 fill-betclic-red" strokeWidth={2.3} />
-            </span>
-            <span className="font-display text-[21px] font-black italic tracking-tight text-white">
-              PULSE
-            </span>
+            <PulseLogo size="lg" variant="onRed" />
           </Link>
 
           <nav aria-label="Navigation principale" className="flex items-center gap-1.5">

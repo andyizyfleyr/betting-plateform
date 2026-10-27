@@ -1,10 +1,11 @@
 import React from "react";
 import { Modal, Pressable, Share, StyleSheet, Text, View } from "react-native";
-import { Share2, X, Zap } from "lucide-react-native";
+import { Share2, X } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { eur, formatFullDateTime, formatOdds } from "@/lib/format";
 import { COLORS } from "@/theme/tokens";
 import { BetStatusBadge } from "./bet-ticket";
+import { PulseMark } from "./pulse-logo";
 
 import type { ClientBet } from "@/lib/api";
 
@@ -52,10 +53,8 @@ export function ShareTicketModal({
         >
           <View style={styles.topRow}>
             <View style={styles.brand}>
-              <View style={styles.brandIcon}>
-                <Zap size={13} color="#ffffff" fill="#ffffff" strokeWidth={2.5} />
-              </View>
-              <Text style={styles.brandText}>PULSE · TICKET #{bet.id}</Text>
+              <PulseMark size={22} />
+              <Text style={styles.brandText}>PULSE BET · TICKET #{bet.id}</Text>
             </View>
             <Pressable onPress={handleClose} style={styles.closeBtn}>
               <X size={16} color={COLORS.mist} strokeWidth={2.2} />

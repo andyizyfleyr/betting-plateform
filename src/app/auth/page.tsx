@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, User, Zap } from "lucide-react";
+import { PulseLogo } from "@/components/pulse-logo";
 import { useApp } from "@/components/providers";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/format";
@@ -104,19 +105,13 @@ function AuthInner() {
   return (
     <main className="pt-safe pb-safe flex min-h-dvh w-full flex-1 flex-col justify-between px-5 py-6 lg:items-center lg:justify-center lg:px-10 lg:py-12">
       <div className="w-full lg:max-w-[440px] lg:rounded-3xl lg:border lg:border-edge lg:bg-white lg:p-8 lg:shadow-xs">
-        {/* En-tête sobre */}
+        {/* En-tête officiel Pulse Bet */}
         <div className="flex items-center gap-2.5">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-betclic-red text-white">
-            <Zap className="h-5 w-5 fill-white" strokeWidth={2.2} />
-          </span>
-          <div>
-            <p className="font-display text-[18px] font-bold leading-none tracking-tight text-ink">
-              PULSE
-            </p>
-            <p className="mt-0.5 text-[11px] font-medium text-dim">
-              Paris sportifs & prédictions
-            </p>
-          </div>
+          <PulseLogo
+            size="md"
+            variant="light"
+            subtitle="Paris sportifs & prédictions"
+          />
         </div>
 
         {/* Titre concis */}

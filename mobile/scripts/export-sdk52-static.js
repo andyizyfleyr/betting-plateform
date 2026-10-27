@@ -102,11 +102,20 @@ async function main() {
       });
     }
 
-    for (const ic of ["icon.png", "adaptive-icon.png", "splash-icon.png"]) {
-      fs.copyFileSync(
-        path.join(MOBILE_ROOT, "assets", ic),
-        path.join(PUBLIC_OUT, ic)
-      );
+    for (const ic of [
+      "icon.png",
+      "adaptive-icon.png",
+      "adaptive-icon-background.png",
+      "monochrome-icon.png",
+      "notification-icon.png",
+      "splash-icon.png",
+      "favicon.png",
+      "feature-graphic.png",
+    ]) {
+      const srcAsset = path.join(MOBILE_ROOT, "assets", ic);
+      if (fs.existsSync(srcAsset)) {
+        fs.copyFileSync(srcAsset, path.join(PUBLIC_OUT, ic));
+      }
     }
 
     const expoGoUrl = "exp://be-plateform.vercel.app:443/api/expo";

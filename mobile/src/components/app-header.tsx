@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LogOut, Plus, ShieldCheck, Zap } from "lucide-react-native";
+import { LogOut, Plus, ShieldCheck } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api } from "@/lib/api";
 import { eur } from "@/lib/format";
 import { usePathname, useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
+import { PulseLogo } from "./pulse-logo";
 
 export function AppHeader() {
   const pathname = usePathname();
@@ -53,10 +54,7 @@ export function AppHeader() {
             onPress={() => router.push("/admin")}
             style={({ pressed }) => [styles.brand, pressed && { opacity: 0.8 }]}
           >
-            <View style={styles.brandIcon}>
-              <Zap size={16} color="#ffffff" fill="#ffffff" strokeWidth={2.2} />
-            </View>
-            <Text style={styles.brandText}>PULSE</Text>
+            <PulseLogo size="sm" variant="light" />
             <View style={styles.adminPill}>
               <ShieldCheck size={12} color={COLORS.betclicRed} strokeWidth={2.4} />
               <Text style={styles.adminPillText}>ADMIN</Text>
@@ -98,10 +96,7 @@ export function AppHeader() {
           onPress={() => router.push("/matchs")}
           style={({ pressed }) => [styles.brand, pressed && { opacity: 0.8 }]}
         >
-          <View style={styles.brandIcon}>
-            <Zap size={16} color="#ffffff" fill="#ffffff" strokeWidth={2.2} />
-          </View>
-          <Text style={styles.brandText}>PULSE</Text>
+          <PulseLogo size="sm" variant="light" />
         </Pressable>
 
         <View style={styles.rightRow}>

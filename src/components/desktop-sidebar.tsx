@@ -29,6 +29,7 @@ import { api } from "@/lib/api";
 import { computeComboQuote } from "@/lib/combo-math";
 import { cn, eur, formatOdds, initials, teamHue } from "@/lib/format";
 import { AnimatedNumber } from "./animated-number";
+import { PulseLogo } from "./pulse-logo";
 import { useApp, type AdminTabKey } from "./providers";
 import { Toggle } from "./toggle";
 
@@ -104,21 +105,11 @@ export function DesktopSidebar() {
         {/* En-tête marque Admin */}
         <div className="flex h-[60px] items-center justify-between border-b border-edge px-5">
           <Link href="/admin" className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-betclic-red text-white shadow-xs">
-              <Zap className="h-4.5 w-4.5 fill-white" strokeWidth={2.2} />
+            <PulseLogo size="sm" variant="light" subtitle="Console opérateur" />
+            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
+              <ShieldCheck className="h-2.5 w-2.5" strokeWidth={2.5} />
+              Admin
             </span>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-display text-[17px] font-bold tracking-tight text-ink">
-                  PULSE
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
-                  <ShieldCheck className="h-2.5 w-2.5" strokeWidth={2.5} />
-                  Admin
-                </span>
-              </div>
-              <p className="text-[10.5px] font-medium text-dim">Console opérateur</p>
-            </div>
           </Link>
         </div>
 
@@ -230,17 +221,7 @@ export function DesktopSidebar() {
       {/* En-tête marque */}
       <div className="flex h-[60px] items-center justify-between border-b border-edge px-5">
         <Link href="/predictions" className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-betclic-red text-white shadow-xs">
-            <Zap className="h-4.5 w-4.5 fill-white" strokeWidth={2.2} />
-          </span>
-          <div>
-            <span className="block font-display text-[17.5px] font-bold leading-none tracking-tight text-ink">
-              PULSE
-            </span>
-            <span className="mt-0.5 block text-[10.5px] font-medium text-dim">
-              Paris &amp; Prédictions
-            </span>
-          </div>
+          <PulseLogo size="sm" variant="light" subtitle="Paris & Prédictions" />
         </Link>
       </div>
 

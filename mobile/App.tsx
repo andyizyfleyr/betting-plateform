@@ -1,8 +1,10 @@
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { AppProvider } from "@/context/app-context";
+import { AppProvider, useApp } from "@/context/app-context";
+import { PulseSplashScreen } from "@/components/pulse-splash-screen";
 import { RouterProvider, usePathname } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 import { ToastHost } from "@/components/toast-host";
@@ -31,6 +33,9 @@ import TapGameScreen from "./app/(main)/tap";
 import AcceleratorGameScreen from "./app/(main)/accelerator";
 import AdminScreen from "./app/(main)/admin";
 
+// Maintient le splash système Android jusqu'au premier rendu du Splash HD React Native
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 function ActiveScreenSwitch() {
   const pathname = usePathname();
   const isDarkGame = pathname === "/tap" || pathname === "/accelerator";
@@ -38,7 +43,7 @@ function ActiveScreenSwitch() {
   if (pathname === "/" || pathname === "") {
     return (
       <>
-        <StatusBar style="dark" backgroundColor={COLORS.white} />
+        <StatusBar style="light" backgroundColor="#090D16" />
         <IndexRedirect />
       </>
     );
@@ -111,13 +116,49 @@ function ActiveScreenSwitch() {
   );
 }
 
+function RootBootCoordinator() {
+  const { authReady } = useApp();
+  const [minSplashDone, setMinSplashDone] = useState(false);
+  const [splashMounted, setSplashMounted] = useState(true);
+  const nativeHiddenRef = useRef(false);
+
+  const hideNativeSplash = useCallback(() => {
+    if (nativeHiddenRef.current) return;
+    nativeHiddenRef.current = true;
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const fallbackHide = setTimeout(hideNativeSplash, 140);
+    const minDisplay = setTimeout(() => setMinSplashDone(true), 1150);
+    return () => {
+      clearTimeout(fallbackHide);
+      clearTimeout(minDisplay);
+    };
+  }, [hideNativeSplash]);
+
+  const splashReadyToExit = authReady && minSplashDone;
+
+  return (
+    <View style={styles.root} onLayout={hideNativeSplash}>
+      <ActiveScreenSwitch />
+      {splashMounted ? (
+        <PulseSplashScreen
+          exiting={splashReadyToExit}
+          onExited={() => setSplashMounted(false)}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 export default function App() {
   return (
     <View style={styles.root}>
       <SafeAreaProvider>
         <RouterProvider initialHref="/">
           <AppProvider>
-            <ActiveScreenSwitch />
+            <RootBootCoordinator />
           </AppProvider>
         </RouterProvider>
       </SafeAreaProvider>
