@@ -2,13 +2,13 @@ import { eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { appUser } from "@/db/schema";
-import { clearAuthCookie, invalidateUserSessionCache } from "@/lib/session";
-import { verifyJwt, revokeToken, AUTH_COOKIE } from "@/lib/jwt";
+import { clearAuthCookie, extractAuthToken, invalidateUserSessionCache } from "@/lib/session";
+import { verifyJwt, revokeToken } from "@/lib/jwt";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get(AUTH_COOKIE)?.value;
+  const token = extractAuthToken(req);
   if (token) {
     const payload = await verifyJwt(token);
     if (payload?.jti) {

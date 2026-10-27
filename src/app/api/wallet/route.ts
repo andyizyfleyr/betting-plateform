@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { db } from "@/db";
 import {
   acceleratorRounds,
@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { isKnownMarket, marketLabelFor } from "@/lib/markets";
+import { jsonWithEtag } from "@/lib/response-cache";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 import { computeWithdrawalEligibility } from "@/lib/wager";
@@ -361,7 +362,7 @@ export async function GET(req: NextRequest) {
     depRows.filter((d) => d.status === "pending_review").reduce((s, d) => s + d.amount, 0)
   );
 
-  return NextResponse.json({
+  return jsonWithEtag(req, {
     balance: eligibility.balance,
     summary: {
       totalDeposited,

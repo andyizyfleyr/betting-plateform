@@ -40,3 +40,11 @@ next-env.d.ts
 
 # unselected AI image candidates
 /Unselected files/
+
+# Expo Android mobile build artifacts
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/dist/
+/mobile/android/
+/mobile/ios/
+/mobile/.env.local
