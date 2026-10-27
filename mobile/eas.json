@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 14.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -24,9 +24,8 @@
       }
     },
     "production": {
-      "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "apk"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app"
