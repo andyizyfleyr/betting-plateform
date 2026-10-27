@@ -14,6 +14,7 @@ import {
 } from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useApp } from "@/components/providers";
+import { sortOngoingBetsChronologically } from "@/lib/combo-math";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur } from "@/lib/format";
 
@@ -220,25 +221,28 @@ export default function ParisPage() {
 
   const ongoingAll = useMemo(
     () =>
-      searchedBets
-        .filter((b) => b.status === "pending")
-        .sort(
-          (a, b) =>
-            new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() || b.id - a.id
-        ),
+      sortOngoingBetsChronologically(
+        searchedBets.filter((b) => b.status === "pending")
+      ),
     [searchedBets]
   );
   const finishedAll = useMemo(
     () =>
       searchedBets
         .filter((b) => b.status !== "pending")
-        .sort(
-          (a, b) =>
+        .sort((a, b) => {
+          const settledDiff =
             new Date(settledOrPlacedIso(b)).getTime() -
-              new Date(settledOrPlacedIso(a)).getTime() ||
+            new Date(settledOrPlacedIso(a)).getTime();
+          if (Math.abs(settledDiff) > 2_000) return settledDiff;
+          const startA = a.matchStartsAt ? Date.parse(a.matchStartsAt) : 0;
+          const startB = b.matchStartsAt ? Date.parse(b.matchStartsAt) : 0;
+          if (startA && startB && startA !== startB) return startA - startB;
+          return (
             new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() ||
             b.id - a.id
-        ),
+          );
+        }),
     [searchedBets]
   );
 
