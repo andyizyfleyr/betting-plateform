@@ -31,5 +31,8 @@
         "EXPO_PUBLIC_API_URL": "https://be-plateform.vercel.app"
       }
     }
+  },
+  "submit": {
+    "production": {}
   }
 }
