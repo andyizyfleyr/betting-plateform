@@ -1,8 +1,19 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import type { MatchTimelineEvent } from "@/db/fixtures";
-import { adminSettings, matches, type MatchRow, type RealMatchStats } from "@/db/schema";
-import { isFirstHalfCompleted, isRealMatchPostIncidentSuspended } from "@/lib/markets";
+import {
+  adminSettings,
+  matches,
+  type MatchRow,
+  type RealLiveFeedProbs,
+  type RealMatchStats,
+  type RealStatSnapshot,
+} from "@/db/schema";
+import {
+  computeRealLiveHeadline1x2Odds,
+  isFirstHalfCompleted,
+  isRealMatchPostIncidentSuspended,
+} from "@/lib/markets";
 import {
   ensureMatchStoreHydrated,
   getCachedOpenManualMatches,
@@ -24,12 +35,12 @@ import { teamLogo } from "@/lib/team-logos";
 
 const ESPN_SOCCER_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer";
 
-/** Fréquence maximale de rafraîchissement des matchs réels en direct ou proches du coup d'envoi. */
-const LIVE_FEED_SYNC_MS = 15_000;
+/** Fréquence maximale de rafraîchissement des matchs réels en direct ou proches du coup d'envoi (10 s). */
+const LIVE_FEED_SYNC_MS = 10_000;
 /** Fréquence de vérification de fond lorsqu'il n'y a que des matchs réels à venir lointains. */
 const IDLE_FEED_SYNC_MS = 180_000;
-/** Fréquence maximale d'interrogation du résumé détaillé (`boxscore` stats) par match live. */
-const SUMMARY_FETCH_INTERVAL_MS = 25_000;
+/** Fréquence maximale d'interrogation du résumé détaillé (`boxscore` stats + `pickcenter` + `winprobability`) par match live (15 s). */
+const SUMMARY_FETCH_INTERVAL_MS = 15_000;
 /**
  * Fenêtre courte de confirmation anti-VAR (25 s) appliquée UNIQUEMENT lorsqu'un match réel
  * était activement suivi en direct jusqu'au coup de sifflet final.
@@ -78,7 +89,10 @@ export interface ParsedFeedMatch {
     oddsHome: number;
     oddsDraw: number;
     oddsAway: number;
+    source: "bookmaker" | "elo_form";
+    expectedTotalGoals: number;
   };
+  liveFeedProbs: RealLiveFeedProbs | null;
 }
 
 export interface DiscoveredOfficialFixture {
@@ -394,23 +408,299 @@ function oddsTokenToImpliedProb(raw: unknown): number | null {
   return null;
 }
 
-function extractMoneylineSideProb(sideNode: unknown): number | null {
+function extractSideSubNodeToken(subNode: unknown): unknown {
+  const r = asRec(subNode);
+  if (!r) return subNode;
+  return r.odds ?? r.moneyLine ?? r.value ?? null;
+}
+
+function extractPreMatchMoneylineSideProb(sideNode: unknown): number | null {
   const rec = asRec(sideNode);
-  if (!rec) return null;
+  if (!rec) return oddsTokenToImpliedProb(sideNode);
   // Privilégie la cote pré-match (`close` puis `open`) sur la cote live (`current`)
-  // afin que l'import d'un match en direct conserve de vraies cotes de base 90 min.
-  const closeOdds = asRec(rec.close)?.odds;
-  const openOdds = asRec(rec.open)?.odds;
-  const currentOdds = asRec(rec.current)?.odds;
+  // afin que la base 90 min d'un match reste ancrée sur les cotes pré-match.
   return (
-    oddsTokenToImpliedProb(closeOdds) ??
-    oddsTokenToImpliedProb(openOdds) ??
-    oddsTokenToImpliedProb(rec.moneyLine) ??
-    oddsTokenToImpliedProb(currentOdds)
+    oddsTokenToImpliedProb(extractSideSubNodeToken(rec.close)) ??
+    oddsTokenToImpliedProb(extractSideSubNodeToken(rec.open)) ??
+    oddsTokenToImpliedProb(rec.moneyLine ?? rec.odds ?? rec.value)
   );
 }
 
-function parseRecordStrength(comp: JsonRec): number {
+function extractLiveCurrentSideProb(sideNode: unknown): {
+  currentProb: number | null;
+  preProb: number | null;
+} {
+  const rec = asRec(sideNode);
+  if (!rec) return { currentProb: null, preProb: null };
+  const currentProb = oddsTokenToImpliedProb(extractSideSubNodeToken(rec.current));
+  const preProb =
+    oddsTokenToImpliedProb(extractSideSubNodeToken(rec.close)) ??
+    oddsTokenToImpliedProb(extractSideSubNodeToken(rec.open)) ??
+    oddsTokenToImpliedProb(rec.moneyLine ?? rec.odds ?? rec.value);
+  return { currentProb, preProb };
+}
+
+function poissonOverProb(lambdaTotal: number, line: number): number {
+  const kMax = Math.floor(line);
+  let cdf = 0;
+  let term = Math.exp(-lambdaTotal);
+  cdf += term;
+  for (let k = 1; k <= kMax; k++) {
+    term *= lambdaTotal / k;
+    cdf += term;
+  }
+  return clamp(1 - cdf, 0.01, 0.99);
+}
+
+function solveExpectedGoalsFromOverLine(line: number, fairOverProb: number): number {
+  let lo = 1.2;
+  let hi = 4.6;
+  const target = clamp(fairOverProb, 0.12, 0.88);
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) * 0.5;
+    if (poissonOverProb(mid, line) < target) lo = mid;
+    else hi = mid;
+  }
+  return round2((lo + hi) * 0.5);
+}
+
+/**
+ * Ratings Elo réels (échelle ClubElo européenne/mondiale 1400..2030) indexés par `normalizeClubKey`.
+ * Utilisés en combinaison avec le standing de la compétition et le bilan de la saison lorsque
+ * le flux ESPN ne publie pas encore les cotes bookmaker US.
+ */
+const REAL_CLUB_ELO: Record<string, number> = {
+  // Élite européenne & Ligue des Champions
+  "real madrid": 1995,
+  "manchester city": 1985,
+  "bayern munchen": 1970,
+  liverpool: 1965,
+  arsenal: 1960,
+  barcelona: 1955,
+  "paris saint germain": 1945,
+  internazionale: 1945,
+  "bayer leverkusen": 1915,
+  "atletico madrid": 1900,
+  chelsea: 1885,
+  "borussia dortmund": 1880,
+  juventus: 1870,
+  napoli: 1875,
+  milan: 1865,
+  atalanta: 1875,
+  "aston villa": 1855,
+  "newcastle united": 1855,
+  "tottenham hotspur": 1845,
+  "manchester united": 1825,
+  "rb leipzig": 1845,
+  "sporting cp": 1850,
+  benfica: 1845,
+  porto: 1830,
+  "psv eindhoven": 1820,
+  feyenoord: 1795,
+  ajax: 1780,
+
+  // Premier League & Championship
+  "brighton hove albion": 1805,
+  bournemouth: 1785,
+  fulham: 1785,
+  brentford: 1775,
+  "nottingham forest": 1780,
+  "west ham united": 1770,
+  "crystal palace": 1770,
+  everton: 1745,
+  "wolverhampton wanderers": 1735,
+  "leicester city": 1705,
+  "leeds united": 1725,
+  burnley: 1705,
+  sunderland: 1690,
+  "ipswich town": 1685,
+  southampton: 1685,
+  "sheffield united": 1680,
+
+  // LaLiga
+  "athletic bilbao": 1835,
+  villarreal: 1825,
+  "real sociedad": 1810,
+  "real betis": 1800,
+  girona: 1775,
+  sevilla: 1760,
+  "celta vigo": 1755,
+  osasuna: 1750,
+  "ca osasuna": 1750,
+  mallorca: 1745,
+  "rcd majorque": 1745,
+  "rayo vallecano": 1745,
+  valencia: 1735,
+  getafe: 1735,
+  alaves: 1715,
+  espanyol: 1705,
+  "las palmas": 1695,
+  leganes: 1690,
+  "real valladolid": 1675,
+
+  // Serie A
+  roma: 1825,
+  lazio: 1825,
+  fiorentina: 1810,
+  bologna: 1805,
+  torino: 1755,
+  udinese: 1735,
+  genoa: 1725,
+  como: 1725,
+  parma: 1705,
+  empoli: 1700,
+  cagliari: 1700,
+  verona: 1695,
+  "hellas verona": 1695,
+  lecce: 1685,
+  monza: 1680,
+  venezia: 1670,
+
+  // Bundesliga
+  stuttgart: 1825,
+  "vfb stuttgart": 1825,
+  "eintracht frankfurt": 1815,
+  freiburg: 1785,
+  "sc freiburg": 1785,
+  wolfsburg: 1755,
+  "borussia monchengladbach": 1750,
+  mainz: 1755,
+  "mainz 05": 1755,
+  werder: 1745,
+  "werder bremen": 1745,
+  hoffenheim: 1735,
+  augsburg: 1730,
+  "union berlin": 1730,
+  heidenheim: 1700,
+  "st pauli": 1690,
+  bochum: 1675,
+
+  // Ligue 1 & Ligue 2
+  monaco: 1835,
+  "as monaco": 1835,
+  "olympique marseille": 1830,
+  lille: 1825,
+  losc: 1825,
+  "olympique lyonnais": 1805,
+  nice: 1790,
+  "ogc nice": 1790,
+  lens: 1785,
+  "rc lens": 1785,
+  rennes: 1770,
+  "stade rennais": 1770,
+  brest: 1765,
+  "stade brestois": 1765,
+  strasbourg: 1745,
+  toulouse: 1745,
+  reims: 1730,
+  "stade de reims": 1730,
+  nantes: 1715,
+  auxerre: 1705,
+  angers: 1680,
+  "saint etienne": 1685,
+  "le havre": 1680,
+  montpellier: 1680,
+  lorient: 1685,
+  metz: 1675,
+  "paris fc": 1690,
+
+  // Autres grands clubs européens & mondiaux
+  galatasaray: 1795,
+  fenerbahce: 1790,
+  besiktas: 1740,
+  trabzonspor: 1720,
+  "club brugge": 1785,
+  "union sg": 1765,
+  anderlecht: 1730,
+  celtic: 1775,
+  rangers: 1740,
+  "red bull salzburg": 1745,
+  "sturm graz": 1735,
+  "shakhtar donetsk": 1745,
+  olympiacos: 1755,
+  paok: 1735,
+  panathinaikos: 1725,
+  "sparta prague": 1745,
+  "slavia prague": 1765,
+  "dinamo zagreb": 1730,
+  "young boys": 1710,
+  braga: 1765,
+  "sc braga": 1765,
+  "al hilal": 1810,
+  "al nassr": 1775,
+  "al ittihad": 1765,
+  flamengo: 1785,
+  palmeiras: 1785,
+  "river plate": 1760,
+  "boca juniors": 1735,
+  "inter miami": 1725,
+
+  // Sélections nationales majeures
+  spain: 2010,
+  espagne: 2010,
+  france: 1995,
+  argentina: 2005,
+  argentine: 2005,
+  england: 1965,
+  angleterre: 1965,
+  germany: 1945,
+  allemagne: 1945,
+  portugal: 1945,
+  brazil: 1940,
+  bresil: 1940,
+  netherlands: 1925,
+  "pays bas": 1925,
+  italy: 1915,
+  italie: 1915,
+  colombia: 1900,
+  belgium: 1885,
+  belgique: 1885,
+  morocco: 1875,
+  maroc: 1875,
+  senegal: 1845,
+  nigeria: 1820,
+  "ivory coast": 1825,
+  "cote divoire": 1825,
+  algeria: 1810,
+  egypt: 1805,
+  cameroon: 1790,
+  benin: 1650,
+};
+
+function leagueBaselineEloAndGoals(externalLeague: string): {
+  baseElo: number;
+  avgGoals: number;
+} {
+  const slug = (externalLeague || "").toLowerCase();
+  if (slug === "uefa.champions") return { baseElo: 1845, avgGoals: 2.94 };
+  if (slug === "eng.1") return { baseElo: 1775, avgGoals: 2.88 };
+  if (slug === "esp.1") return { baseElo: 1745, avgGoals: 2.56 };
+  if (slug === "ita.1") return { baseElo: 1745, avgGoals: 2.62 };
+  if (slug === "ger.1") return { baseElo: 1745, avgGoals: 3.04 };
+  if (slug === "fra.1") return { baseElo: 1725, avgGoals: 2.70 };
+  if (slug === "uefa.europa") return { baseElo: 1755, avgGoals: 2.82 };
+  if (slug === "uefa.europa.conf") return { baseElo: 1690, avgGoals: 2.76 };
+  if (slug === "por.1" || slug === "ned.1") return { baseElo: 1665, avgGoals: 2.86 };
+  if (slug === "tur.1" || slug === "bel.1") return { baseElo: 1650, avgGoals: 2.78 };
+  if (slug.endsWith(".2")) return { baseElo: 1595, avgGoals: 2.52 };
+  return { baseElo: 1680, avgGoals: 2.68 };
+}
+
+function resolveClubElo(teamNames: string[], fallbackLeagueElo: number): number {
+  for (const raw of teamNames) {
+    if (!raw) continue;
+    const key = normalizeClubKey(raw);
+    if (REAL_CLUB_ELO[key] != null) return REAL_CLUB_ELO[key];
+    for (const [knownKey, elo] of Object.entries(REAL_CLUB_ELO)) {
+      if (knownKey.length >= 5 && key.length >= 5 && (key.includes(knownKey) || knownKey.includes(key))) {
+        return elo;
+      }
+    }
+  }
+  return fallbackLeagueElo;
+}
+
+function parseSeasonRecordAdjustmentElo(comp: JsonRec): number {
   const records = asArr(comp.records ?? comp.record);
   for (const r of records) {
     const rec = asRec(r);
@@ -421,60 +711,268 @@ function parseRecordStrength(comp: JsonRec): number {
       const d = Number(m[2]);
       const l = Number(m[3]);
       const gp = w + d + l;
-      if (gp >= 2) {
-        return (w * 3 + d) / (gp * 3); // points par match normalisés 0..1
+      if (gp >= 1) {
+        const ppgNorm = (w * 3 + d) / (gp * 3); // 0..1 (moyenne ligue ≈ 0,46)
+        const shrinkage = gp / (gp + 10); // évite tout sur-ajustement en début de saison
+        return clamp((ppgNorm - 0.46) * 210 * shrinkage, -88, 88);
       }
     }
   }
-  return 0.48;
+  return 0;
 }
 
-function computeSuggested1x2Odds(comp: JsonRec, homeComp: JsonRec, awayComp: JsonRec): {
+function computeSuggested1x2Odds(
+  comp: JsonRec,
+  homeComp: JsonRec,
+  awayComp: JsonRec,
+  externalLeague: string,
+  homeNames: string[],
+  awayNames: string[]
+): {
   oddsHome: number;
   oddsDraw: number;
   oddsAway: number;
+  source: "bookmaker" | "elo_form";
+  expectedTotalGoals: number;
 } {
-  const firstOdds = asRec(asArr(comp.odds)[0]);
-  if (firstOdds) {
-    const mlNode = asRec(firstOdds.moneyline);
+  const { baseElo, avgGoals } = leagueBaselineEloAndGoals(externalLeague);
+
+  for (const rawOddsItem of asArr(comp.odds)) {
+    const oddsRec = asRec(rawOddsItem);
+    if (!oddsRec) continue;
+    const mlNode = asRec(oddsRec.moneyline);
     const pH =
-      extractMoneylineSideProb(mlNode?.home) ??
-      extractMoneylineSideProb(firstOdds.homeTeamOdds);
+      extractPreMatchMoneylineSideProb(mlNode?.home) ??
+      extractPreMatchMoneylineSideProb(oddsRec.homeTeamOdds);
     const pA =
-      extractMoneylineSideProb(mlNode?.away) ??
-      extractMoneylineSideProb(firstOdds.awayTeamOdds);
+      extractPreMatchMoneylineSideProb(mlNode?.away) ??
+      extractPreMatchMoneylineSideProb(oddsRec.awayTeamOdds);
     const pD =
-      extractMoneylineSideProb(mlNode?.draw) ??
-      extractMoneylineSideProb(firstOdds.drawOdds) ??
-      oddsTokenToImpliedProb(firstOdds.drawOdds);
+      extractPreMatchMoneylineSideProb(mlNode?.draw) ??
+      extractPreMatchMoneylineSideProb(oddsRec.drawOdds) ??
+      oddsTokenToImpliedProb(oddsRec.drawOdds);
 
     if (pH != null && pA != null) {
-      const rawD = pD ?? clamp(0.26 - Math.abs(pH - pA) * 0.14, 0.16, 0.31);
+      const rawD = pD ?? clamp(0.265 - Math.abs(pH - pA) * 0.16, 0.14, 0.31);
       const sum = pH + rawD + pA || 1;
-      const overround = 1.06;
+      const overround = 1.058;
+
+      let expectedTotalGoals = avgGoals;
+      const ouLine = asNum(oddsRec.overUnder);
+      if (ouLine != null && ouLine >= 1.5 && ouLine <= 4.5) {
+        const totNode = asRec(oddsRec.total);
+        const pOver =
+          extractPreMatchMoneylineSideProb(totNode?.over) ??
+          oddsTokenToImpliedProb(oddsRec.overOdds);
+        const pUnder =
+          extractPreMatchMoneylineSideProb(totNode?.under) ??
+          oddsTokenToImpliedProb(oddsRec.underOdds);
+        if (pOver != null && pUnder != null && pOver + pUnder > 0.5) {
+          expectedTotalGoals = solveExpectedGoalsFromOverLine(
+            ouLine,
+            pOver / (pOver + pUnder)
+          );
+        } else {
+          expectedTotalGoals = clamp(ouLine + 0.18, 1.85, 3.85);
+        }
+      }
+
       return {
-        oddsHome: round2(clamp(1 / ((pH / sum) * overround), 1.08, 18)),
-        oddsDraw: round2(clamp(1 / ((rawD / sum) * overround), 2.4, 12)),
-        oddsAway: round2(clamp(1 / ((pA / sum) * overround), 1.08, 18)),
+        oddsHome: round2(clamp(1 / ((pH / sum) * overround), 1.06, 22)),
+        oddsDraw: round2(clamp(1 / ((rawD / sum) * overround), 2.35, 14)),
+        oddsAway: round2(clamp(1 / ((pA / sum) * overround), 1.06, 22)),
+        source: "bookmaker",
+        expectedTotalGoals,
       };
     }
   }
 
-  // Repli intelligent sur le bilan officiel W-D-L de la saison + léger avantage terrain
-  const strH = parseRecordStrength(homeComp);
-  const strA = parseRecordStrength(awayComp);
-  const diff = clamp(strH - strA + 0.06, -0.55, 0.55);
-  const pDraw = clamp(0.27 - Math.abs(diff) * 0.16, 0.17, 0.3);
-  const rem = 1 - pDraw;
-  const shareH = 1 / (1 + Math.exp(-3.1 * diff));
-  const pHome = rem * shareH;
-  const pAway = rem * (1 - shareH);
-  const overround = 1.06;
+  // Modèle structurel Club Elo + niveau de compétition + forme saison pondérée (remplace le simple V-N-D)
+  const eloH = resolveClubElo(homeNames, baseElo) + parseSeasonRecordAdjustmentElo(homeComp);
+  const eloA = resolveClubElo(awayNames, baseElo) + parseSeasonRecordAdjustmentElo(awayComp);
+  const homeAdv = comp.neutralSite === true ? 0 : 62;
+  const eloDiff = clamp(eloH + homeAdv - eloA, -460, 460);
+
+  const winExpH = 1 / (1 + Math.pow(10, -eloDiff / 315));
+  const pDraw = clamp(
+    0.235 * Math.exp(-Math.pow(eloDiff / 380, 2)) + 0.062,
+    0.125,
+    0.298
+  );
+  const decisive = 1 - pDraw;
+  const pHome = clamp(decisive * winExpH, 0.035, 0.86);
+  const pAway = clamp(decisive * (1 - winExpH), 0.035, 0.86);
+  const sum = pHome + pDraw + pAway || 1;
+  const overround = 1.058;
+
+  // Un grand écart Elo augmente légèrement l'espérance de buts totale
+  const mismatchBoost = Math.min(0.42, (Math.abs(eloDiff) / 400) * 0.34);
+  const expectedTotalGoals = round2(clamp(avgGoals + mismatchBoost, 2.15, 3.55));
 
   return {
-    oddsHome: round2(clamp(1 / (pHome * overround), 1.18, 12)),
-    oddsDraw: round2(clamp(1 / (pDraw * overround), 2.75, 7.5)),
-    oddsAway: round2(clamp(1 / (pAway * overround), 1.18, 12)),
+    oddsHome: round2(clamp(1 / ((pHome / sum) * overround), 1.09, 21)),
+    oddsDraw: round2(clamp(1 / ((pDraw / sum) * overround), 2.75, 9.5)),
+    oddsAway: round2(clamp(1 / ((pAway / sum) * overround), 1.09, 21)),
+    source: "elo_form",
+    expectedTotalGoals,
+  };
+}
+
+function normalizeProbValue(raw: unknown): number | null {
+  const n = asNum(raw);
+  if (n == null || !Number.isFinite(n) || n < 0) return null;
+  if (n > 1.0001 && n <= 100) return n / 100;
+  if (n <= 1.0001) return clamp(n, 0, 1);
+  return null;
+}
+
+function isLiveTripletCoherentWithScore(
+  pH: number,
+  pD: number,
+  pA: number,
+  preOdds: { oddsHome: number; oddsDraw: number; oddsAway: number },
+  homeScore: number,
+  awayScore: number,
+  minuteInt: number
+): boolean {
+  const invSum = 1 / preOdds.oddsHome + 1 / preOdds.oddsDraw + 1 / preOdds.oddsAway || 1;
+  const preH = 1 / preOdds.oddsHome / invSum;
+  const preD = 1 / preOdds.oddsDraw / invSum;
+  const preA = 1 / preOdds.oddsAway / invSum;
+
+  if (homeScore > awayScore && pH < preH - 0.03) return false;
+  if (awayScore > homeScore && pA < preA - 0.03) return false;
+  if (homeScore - awayScore >= 2 && minuteInt >= 55 && pH < 0.72) return false;
+  if (awayScore - homeScore >= 2 && minuteInt >= 55 && pA < 0.72) return false;
+  if (homeScore === awayScore && minuteInt >= 72 && pD < preD - 0.02) return false;
+  return true;
+}
+
+/**
+ * Extrait les cotes live `current` bookmaker et les probabilités live ESPN (`situation`, `winprobability`),
+ * avec garde-fous stricts contre les lignes figées pré-match afin d'alimenter `realMatchScoreModel`.
+ */
+function extractLiveFeedSignals(params: {
+  comp: JsonRec;
+  root?: JsonRec | null;
+  status: ParsedFeedMatch["status"];
+  homeScore: number | null;
+  awayScore: number | null;
+  minute: string | null;
+  clockSeconds: number | null;
+  preOdds: { oddsHome: number; oddsDraw: number; oddsAway: number };
+}): RealLiveFeedProbs | null {
+  if (params.status !== "live") return null;
+  const hScore = params.homeScore ?? 0;
+  const aScore = params.awayScore ?? 0;
+  const minInt =
+    params.minute === "MT"
+      ? 45
+      : params.clockSeconds != null
+        ? clamp(Math.floor(params.clockSeconds / 60) + 1, 1, 90)
+        : parseClockMinuteInt(params.minute ?? "1", null, null);
+
+  let bookLive: { pH: number; pD: number; pA: number } | null = null;
+  for (const rawOddsItem of asArr(params.comp.odds)) {
+    const oddsRec = asRec(rawOddsItem);
+    if (!oddsRec) continue;
+    const mlNode = asRec(oddsRec.moneyline);
+    const hSide = mlNode?.home ? extractLiveCurrentSideProb(mlNode.home) : extractLiveCurrentSideProb(oddsRec.homeTeamOdds);
+    const aSide = mlNode?.away ? extractLiveCurrentSideProb(mlNode.away) : extractLiveCurrentSideProb(oddsRec.awayTeamOdds);
+    const dSide = mlNode?.draw ? extractLiveCurrentSideProb(mlNode.draw) : extractLiveCurrentSideProb(oddsRec.drawOdds);
+
+    if (hSide.currentProb != null && aSide.currentProb != null && dSide.currentProb != null) {
+      const sCur = hSide.currentProb + dSide.currentProb + aSide.currentProb;
+      if (sCur < 0.95 || sCur > 1.25) continue;
+      const pH = hSide.currentProb / sCur;
+      const pD = dSide.currentProb / sCur;
+      const pA = aSide.currentProb / sCur;
+
+      // Vérifie que `current` est bien une ligne live dynamique et non une recopie statique de `open`/`close`
+      let movedVsPre = minInt <= 6 && hScore === 0 && aScore === 0;
+      if (!movedVsPre && hSide.preProb != null && aSide.preProb != null && dSide.preProb != null) {
+        const sPre = hSide.preProb + dSide.preProb + aSide.preProb || 1;
+        const maxDelta = Math.max(
+          Math.abs(pH - hSide.preProb / sPre),
+          Math.abs(pD - dSide.preProb / sPre),
+          Math.abs(pA - aSide.preProb / sPre)
+        );
+        movedVsPre = maxDelta >= 0.032;
+      }
+
+      if (
+        movedVsPre &&
+        isLiveTripletCoherentWithScore(pH, pD, pA, params.preOdds, hScore, aScore, minInt)
+      ) {
+        bookLive = { pH, pD, pA };
+        break;
+      }
+    }
+  }
+
+  let espnLive: { pH: number; pD: number; pA: number } | null = null;
+  const probCandidates: unknown[] = [];
+  const situationProb = asRec(asRec(params.comp.situation)?.lastPlay)?.probability;
+  if (situationProb) probCandidates.push(situationProb);
+  const winProbArr = asArr(params.root?.winprobability);
+  if (winProbArr.length > 0) probCandidates.push(winProbArr[winProbArr.length - 1]);
+  const compProbs = asArr(params.comp.probabilities);
+  if (compProbs.length > 0) probCandidates.push(compProbs[compProbs.length - 1]);
+
+  for (const cand of probCandidates) {
+    const rec = asRec(cand);
+    if (!rec) continue;
+    const rawH = normalizeProbValue(rec.homeWinPercentage ?? rec.homeWinProbability);
+    const rawA = normalizeProbValue(rec.awayWinPercentage ?? rec.awayWinProbability);
+    const rawD = normalizeProbValue(
+      rec.tiePercentage ?? rec.drawPercentage ?? rec.drawProbability
+    );
+    if (rawH != null && rawA != null) {
+      const dVal = rawD ?? clamp(1 - rawH - rawA, 0.01, 0.90);
+      const s = rawH + dVal + rawA;
+      if (s >= 0.90 && s <= 1.10) {
+        const pH = rawH / s;
+        const pD = dVal / s;
+        const pA = rawA / s;
+        if (isLiveTripletCoherentWithScore(pH, pD, pA, params.preOdds, hScore, aScore, minInt)) {
+          espnLive = { pH, pD, pA };
+          break;
+        }
+      }
+    }
+  }
+
+  if (!bookLive && !espnLive) return null;
+
+  const updatedAtSec = params.clockSeconds ?? minInt * 60;
+  if (bookLive && espnLive) {
+    const pHome = bookLive.pH * 0.72 + espnLive.pH * 0.28;
+    const pDraw = bookLive.pD * 0.72 + espnLive.pD * 0.28;
+    const pAway = bookLive.pA * 0.72 + espnLive.pA * 0.28;
+    const s = pHome + pDraw + pAway || 1;
+    return {
+      pHome: round2((pHome / s) * 100) / 100,
+      pDraw: round2((pDraw / s) * 100) / 100,
+      pAway: round2((pAway / s) * 100) / 100,
+      source: "blended",
+      updatedAtSec,
+    };
+  }
+  if (bookLive) {
+    return {
+      pHome: Math.round(bookLive.pH * 1000) / 1000,
+      pDraw: Math.round(bookLive.pD * 1000) / 1000,
+      pAway: Math.round(bookLive.pA * 1000) / 1000,
+      source: "bookmaker_live",
+      updatedAtSec,
+    };
+  }
+  return {
+    pHome: Math.round(espnLive!.pH * 1000) / 1000,
+    pDraw: Math.round(espnLive!.pD * 1000) / 1000,
+    pAway: Math.round(espnLive!.pA * 1000) / 1000,
+    source: "espn_live",
+    updatedAtSec,
   };
 }
 
@@ -946,7 +1444,34 @@ export function parseEspnScoreboardEvent(
       ? normalizeEspnLiveClockSeconds(rawClockSeconds, period, minute)
       : null;
 
-  const realStats =
+  const homeAliases = Array.from(
+    new Set([homeTeam, hNames.full, hNames.short, asStr(homeTeamObj?.abbreviation)].filter(Boolean))
+  );
+  const awayAliases = Array.from(
+    new Set([awayTeam, aNames.full, aNames.short, asStr(awayTeamObj?.abbreviation)].filter(Boolean))
+  );
+
+  const suggestedOdds = computeSuggested1x2Odds(
+    comp,
+    homeComp,
+    awayComp,
+    externalLeague,
+    homeAliases,
+    awayAliases
+  );
+
+  const liveFeedProbs = extractLiveFeedSignals({
+    comp,
+    root: ev,
+    status,
+    homeScore,
+    awayScore,
+    minute,
+    clockSeconds: liveClockSeconds,
+    preOdds: suggestedOdds,
+  });
+
+  const baseRealStats =
     status === "upcoming"
       ? null
       : buildRealStatsFromMaps(
@@ -959,6 +1484,41 @@ export function parseEspnScoreboardEvent(
           status === "live" ? period : null
         );
 
+  const realStats: RealMatchStats | null =
+    baseRealStats != null
+      ? {
+          ...baseRealStats,
+          liveFeedProbs,
+          feedTotalGoalsExpected: suggestedOdds.expectedTotalGoals,
+        }
+      : status === "live" && (liveFeedProbs != null || liveClockSeconds != null)
+        ? {
+            possessionHome: null,
+            possessionAway: null,
+            shotsTotalHome: null,
+            shotsTotalAway: null,
+            shotsOnTargetHome: null,
+            shotsOnTargetAway: null,
+            cornersHome: null,
+            cornersAway: null,
+            foulsHome: null,
+            foulsAway: null,
+            offsidesHome: null,
+            offsidesAway: null,
+            savesHome: null,
+            savesAway: null,
+            yellowCardsHome: null,
+            yellowCardsAway: null,
+            htHomeScore,
+            htAwayScore,
+            clockSeconds: liveClockSeconds,
+            clockPeriod: period,
+            liveFeedProbs,
+            feedTotalGoalsExpected: suggestedOdds.expectedTotalGoals,
+            updatedAt: nowIso,
+          }
+        : null;
+
   const venueObj = asRec(comp.venue);
   const venue = asStr(venueObj?.fullName) || null;
 
@@ -968,12 +1528,8 @@ export function parseEspnScoreboardEvent(
     leagueLabel: leagueLabelFallback ?? officialLeagueLabel(externalLeague),
     homeTeam,
     awayTeam,
-    homeAliases: Array.from(
-      new Set([homeTeam, hNames.full, hNames.short, asStr(homeTeamObj?.abbreviation)].filter(Boolean))
-    ),
-    awayAliases: Array.from(
-      new Set([awayTeam, aNames.full, aNames.short, asStr(awayTeamObj?.abbreviation)].filter(Boolean))
-    ),
+    homeAliases,
+    awayAliases,
     homeLogo: homeLogoUrl || null,
     awayLogo: awayLogoUrl || null,
     startsAt,
@@ -988,12 +1544,13 @@ export function parseEspnScoreboardEvent(
     events,
     realStats,
     venue,
-    suggestedOdds: computeSuggested1x2Odds(comp, homeComp, awayComp),
+    suggestedOdds,
+    liveFeedProbs,
   };
 }
 
 /**
- * Parse défensif du endpoint `summary?event=<id>` d'ESPN Soccer (boxscore complet + keyEvents).
+ * Parse défensif du endpoint `summary?event=<id>` d'ESPN Soccer (boxscore complet + keyEvents + pickcenter + winprobability).
  */
 export function parseEspnSummaryPayload(
   rawSummary: unknown,
@@ -1017,19 +1574,26 @@ export function parseEspnSummaryPayload(
     asStr(headerLeague?.name) || "Football"
   );
 
-  // Fusionne `keyEvents` dans `details` si `headerComp.details` est partiel ou absent
+  // Fusionne `keyEvents` dans `details` et injecte `pickcenter` + `winprobability` pour conserver les cotes live/pré-match
   const combinedDetails = [
     ...asArr(headerComp.details),
     ...asArr(root.keyEvents),
   ];
+  const combinedOdds =
+    asArr(headerComp.odds).length > 0
+      ? asArr(headerComp.odds)
+      : asArr(root.pickcenter);
 
   const syntheticEvent: JsonRec = {
     id: header?.id ?? headerComp.id,
     date: headerComp.date,
+    winprobability: root.winprobability,
+    predictor: root.predictor,
     competitions: [
       {
         ...headerComp,
         details: combinedDetails,
+        odds: combinedOdds,
       },
     ],
   };
@@ -1085,7 +1649,14 @@ export function parseEspnSummaryPayload(
       base.realStats?.clockPeriod ?? null
     );
     if (richStats) {
-      base.realStats = richStats;
+      base.realStats = {
+        ...richStats,
+        liveFeedProbs: base.liveFeedProbs ?? base.realStats?.liveFeedProbs ?? null,
+        feedTotalGoalsExpected:
+          base.suggestedOdds.expectedTotalGoals ??
+          base.realStats?.feedTotalGoalsExpected ??
+          null,
+      };
     }
     const statRedH = asNum(hMap.get("redcards")) ?? 0;
     const statRedA = asNum(aMap.get("redcards")) ?? 0;
@@ -1278,19 +1849,136 @@ export async function setRealMatchSettlementMode(
 
 const lastSummaryFetchByExtId = new Map<string, number>();
 
+function mergeRealStatsForLiveOrFinished(
+  prevStats: RealMatchStats | null | undefined,
+  incomingStats: RealMatchStats | null | undefined,
+  feed: ParsedFeedMatch,
+  nowIso: string
+): RealMatchStats | null {
+  if (!prevStats && !incomingStats && !feed.liveFeedProbs) return null;
+
+  const base: RealMatchStats = {
+    possessionHome: incomingStats?.possessionHome ?? prevStats?.possessionHome ?? null,
+    possessionAway: incomingStats?.possessionAway ?? prevStats?.possessionAway ?? null,
+    shotsTotalHome: incomingStats?.shotsTotalHome ?? prevStats?.shotsTotalHome ?? null,
+    shotsTotalAway: incomingStats?.shotsTotalAway ?? prevStats?.shotsTotalAway ?? null,
+    shotsOnTargetHome:
+      incomingStats?.shotsOnTargetHome ?? prevStats?.shotsOnTargetHome ?? null,
+    shotsOnTargetAway:
+      incomingStats?.shotsOnTargetAway ?? prevStats?.shotsOnTargetAway ?? null,
+    cornersHome: incomingStats?.cornersHome ?? prevStats?.cornersHome ?? null,
+    cornersAway: incomingStats?.cornersAway ?? prevStats?.cornersAway ?? null,
+    foulsHome: incomingStats?.foulsHome ?? prevStats?.foulsHome ?? null,
+    foulsAway: incomingStats?.foulsAway ?? prevStats?.foulsAway ?? null,
+    offsidesHome: incomingStats?.offsidesHome ?? prevStats?.offsidesHome ?? null,
+    offsidesAway: incomingStats?.offsidesAway ?? prevStats?.offsidesAway ?? null,
+    savesHome: incomingStats?.savesHome ?? prevStats?.savesHome ?? null,
+    savesAway: incomingStats?.savesAway ?? prevStats?.savesAway ?? null,
+    yellowCardsHome:
+      incomingStats?.yellowCardsHome ?? prevStats?.yellowCardsHome ?? null,
+    yellowCardsAway:
+      incomingStats?.yellowCardsAway ?? prevStats?.yellowCardsAway ?? null,
+    htHomeScore:
+      feed.htHomeScore ??
+      incomingStats?.htHomeScore ??
+      prevStats?.htHomeScore ??
+      null,
+    htAwayScore:
+      feed.htAwayScore ??
+      incomingStats?.htAwayScore ??
+      prevStats?.htAwayScore ??
+      null,
+    clockSeconds:
+      incomingStats?.clockSeconds ??
+      (feed.status === "live" ? prevStats?.clockSeconds ?? null : null),
+    clockPeriod:
+      incomingStats?.clockPeriod ??
+      (feed.status === "live" ? prevStats?.clockPeriod ?? null : null),
+    liveFeedProbs:
+      feed.status === "live"
+        ? (feed.liveFeedProbs ??
+          incomingStats?.liveFeedProbs ??
+          prevStats?.liveFeedProbs ??
+          null)
+        : null,
+    feedTotalGoalsExpected:
+      feed.suggestedOdds.expectedTotalGoals ??
+      incomingStats?.feedTotalGoalsExpected ??
+      prevStats?.feedTotalGoalsExpected ??
+      null,
+    updatedAt: incomingStats?.updatedAt ?? nowIso,
+  };
+
+  if (feed.status === "finished") {
+    return base;
+  }
+
+  // Fenêtre glissante de snapshots pour mesurer la pression offensive des 10–15 dernières minutes
+  const prevSnaps: RealStatSnapshot[] = Array.isArray(prevStats?.statSnapshots)
+    ? [...prevStats.statSnapshots]
+    : [];
+  const curSec = base.clockSeconds;
+  const hasAnyOffenseMetric =
+    base.shotsOnTargetHome != null ||
+    base.shotsTotalHome != null ||
+    base.cornersHome != null;
+
+  if (curSec != null && curSec >= 0 && hasAnyOffenseMetric) {
+    const candSnap: RealStatSnapshot = {
+      sec: Math.round(curSec),
+      sotH: Math.max(0, base.shotsOnTargetHome ?? 0),
+      sotA: Math.max(0, base.shotsOnTargetAway ?? 0),
+      shH: Math.max(0, base.shotsTotalHome ?? 0),
+      shA: Math.max(0, base.shotsTotalAway ?? 0),
+      corH: Math.max(0, base.cornersHome ?? 0),
+      corA: Math.max(0, base.cornersAway ?? 0),
+    };
+    const last = prevSnaps[prevSnaps.length - 1];
+    if (!last) {
+      prevSnaps.push(candSnap);
+    } else if (candSnap.sec >= last.sec) {
+      const statChanged =
+        candSnap.sotH !== last.sotH ||
+        candSnap.sotA !== last.sotA ||
+        candSnap.shH !== last.shH ||
+        candSnap.shA !== last.shA ||
+        candSnap.corH !== last.corH ||
+        candSnap.corA !== last.corA;
+      if (candSnap.sec - last.sec >= 45 || (statChanged && candSnap.sec - last.sec >= 15)) {
+        prevSnaps.push(candSnap);
+      }
+    }
+  }
+
+  if (prevSnaps.length > 0) {
+    base.statSnapshots = prevSnaps.slice(-14);
+  }
+  return base;
+}
+
 export async function applyFeedUpdateToRealMatch(
   m: MatchRow,
   feed: ParsedFeedMatch,
   settlementMode: RealMatchSettlementMode,
   nowMs = Date.now()
-): Promise<"upcoming" | "live" | "settled" | "pending_confirm" | "postponed" | "ignored"> {
+): Promise<
+  | "upcoming"
+  | "upcoming_unchanged"
+  | "live"
+  | "settled"
+  | "pending_confirm"
+  | "postponed"
+  | "ignored"
+> {
   if (m.source !== "manual") return "ignored"; // Garde-fou absolu : ne touche jamais aux matchs virtuels
 
   const now = new Date(nowMs);
+  const nowIso = now.toISOString();
   const prevHome = m.homeScore ?? 0;
   const prevAway = m.awayScore ?? 0;
   const prevRedH = m.redHome ?? 0;
   const prevRedA = m.redAway ?? 0;
+  const adminLockedOdds = m.regime === "admin_odds_locked";
 
   // Match reporté ou annulé : on suspend immédiatement sans jamais régler à 0-0
   if (feed.status === "postponed") {
@@ -1308,8 +1996,8 @@ export async function applyFeedUpdateToRealMatch(
     return "postponed";
   }
 
-  // Match toujours à venir : met à jour uniquement si une donnée (ID, horaire > 60s, logo) a changé
-  // ou si l'empreinte de synchro date de plus de 30 min (évite 80+ UPDATE inutiles par cycle).
+  // Match toujours à venir : rafraîchit aussi automatiquement les cotes pré-match jusqu'au coup d'envoi
+  // (sauf si l'admin a explicitement figé des cotes manuelles via `admin_odds_locked`).
   if (feed.status === "upcoming") {
     const nextExtId = m.externalId ?? feed.externalId;
     const nextExtLeague = m.externalLeague ?? feed.externalLeague;
@@ -1321,9 +2009,19 @@ export async function applyFeedUpdateToRealMatch(
       m.externalLeague !== nextExtLeague ||
       m.homeLogo !== nextHomeLogo ||
       m.awayLogo !== nextAwayLogo;
+
+    const nextOddsHome = adminLockedOdds ? m.oddsHome : feed.suggestedOdds.oddsHome;
+    const nextOddsDraw = adminLockedOdds ? m.oddsDraw : feed.suggestedOdds.oddsDraw;
+    const nextOddsAway = adminLockedOdds ? m.oddsAway : feed.suggestedOdds.oddsAway;
+    const oddsChanged =
+      !adminLockedOdds &&
+      (Math.abs(m.oddsHome - nextOddsHome) >= 0.03 ||
+        Math.abs((m.oddsDraw ?? 3.2) - (nextOddsDraw ?? 3.2)) >= 0.03 ||
+        Math.abs(m.oddsAway - nextOddsAway) >= 0.03);
+
     const staleStamp = !m.feedSyncedAt || nowMs - m.feedSyncedAt.getTime() >= 30 * 60_000;
 
-    if (kickoffChanged || metaChanged || staleStamp) {
+    if (kickoffChanged || metaChanged || oddsChanged || staleStamp) {
       await db
         .update(matches)
         .set({
@@ -1332,12 +2030,19 @@ export async function applyFeedUpdateToRealMatch(
           startsAt: feed.startsAt,
           homeLogo: nextHomeLogo,
           awayLogo: nextAwayLogo,
+          oddsHome: nextOddsHome,
+          oddsDraw: nextOddsDraw,
+          oddsAway: nextOddsAway,
           feedSyncedAt: now,
-          feedStatusNote: "Relié au flux officiel · En attente du coup d'envoi",
+          feedStatusNote:
+            feed.suggestedOdds.source === "bookmaker"
+              ? "Relié au flux officiel · Cotes bookmaker synchronisées"
+              : "Relié au flux officiel · Cotes Elo + forme synchronisées",
         })
         .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
+      return kickoffChanged || metaChanged || oddsChanged ? "upcoming" : "upcoming_unchanged";
     }
-    return "upcoming";
+    return "upcoming_unchanged";
   }
 
   const nextHome = feed.homeScore ?? prevHome;
@@ -1371,26 +2076,109 @@ export async function applyFeedUpdateToRealMatch(
       nextRedH !== prevRedH ||
       nextRedA !== prevRedA);
 
-  const mergedStats = feed.realStats ?? m.realStats ?? null;
+  const mergedStats = mergeRealStatsForLiveOrFinished(
+    m.realStats,
+    feed.realStats,
+    feed,
+    nowIso
+  );
   const nextHtHome = feed.htHomeScore ?? m.htHomeScore ?? null;
   const nextHtAway = feed.htAwayScore ?? m.htAwayScore ?? null;
 
+  // Si ESPN fournit de vraies cotes pré-match `close`/`open` bookmaker, on ancre la base 90 min dessus
+  const baseOddsHome =
+    !adminLockedOdds && feed.suggestedOdds.source === "bookmaker"
+      ? feed.suggestedOdds.oddsHome
+      : m.oddsHome;
+  const baseOddsDraw =
+    !adminLockedOdds && feed.suggestedOdds.source === "bookmaker"
+      ? feed.suggestedOdds.oddsDraw
+      : m.oddsDraw;
+  const baseOddsAway =
+    !adminLockedOdds && feed.suggestedOdds.source === "bookmaker"
+      ? feed.suggestedOdds.oddsAway
+      : m.oddsAway;
+
   // Match en direct
   if (feed.status === "live") {
+    const nextMinute = feed.minute ?? m.minute ?? "1’";
+    const prevLiveHeadline =
+      m.status === "live"
+        ? computeRealLiveHeadline1x2Odds(m)
+        : {
+            oddsHome: baseOddsHome,
+            oddsDraw: baseOddsDraw,
+            oddsAway: baseOddsAway,
+          };
+    const nextLiveHeadline = computeRealLiveHeadline1x2Odds({
+      ...m,
+      status: "live",
+      minute: nextMinute,
+      homeScore: nextHome,
+      awayScore: nextAway,
+      htHomeScore: nextHtHome,
+      htAwayScore: nextHtAway,
+      redHome: nextRedH,
+      redAway: nextRedA,
+      oddsHome: baseOddsHome,
+      oddsDraw: baseOddsDraw,
+      oddsAway: baseOddsAway,
+      events: mergedEvents,
+      realStats: mergedStats,
+    });
+
+    const nextTickHistory = Array.isArray(m.tickHistory) ? [...m.tickHistory] : [];
+    const minNum = parseClockMinuteInt(nextMinute, null, mergedStats?.clockSeconds ?? null);
+    if (Math.abs(nextLiveHeadline.oddsHome - prevLiveHeadline.oddsHome) >= 0.04) {
+      nextTickHistory.push({
+        minute: minNum,
+        market: "result",
+        selection: "home",
+        from: prevLiveHeadline.oddsHome,
+        to: nextLiveHeadline.oddsHome,
+      });
+    }
+    if (
+      prevLiveHeadline.oddsDraw != null &&
+      nextLiveHeadline.oddsDraw != null &&
+      Math.abs(nextLiveHeadline.oddsDraw - prevLiveHeadline.oddsDraw) >= 0.04
+    ) {
+      nextTickHistory.push({
+        minute: minNum,
+        market: "result",
+        selection: "draw",
+        from: prevLiveHeadline.oddsDraw,
+        to: nextLiveHeadline.oddsDraw,
+      });
+    }
+    if (Math.abs(nextLiveHeadline.oddsAway - prevLiveHeadline.oddsAway) >= 0.04) {
+      nextTickHistory.push({
+        minute: minNum,
+        market: "result",
+        selection: "away",
+        from: prevLiveHeadline.oddsAway,
+        to: nextLiveHeadline.oddsAway,
+      });
+    }
+
     await db
       .update(matches)
       .set({
         externalId: m.externalId ?? feed.externalId,
         externalLeague: m.externalLeague ?? feed.externalLeague,
         status: "live",
-        minute: feed.minute ?? m.minute ?? "1'",
+        minute: nextMinute,
         homeScore: nextHome,
         awayScore: nextAway,
         htHomeScore: nextHtHome,
         htAwayScore: nextHtAway,
         redHome: nextRedH,
         redAway: nextRedA,
+        oddsHome: baseOddsHome,
+        oddsDraw: baseOddsDraw,
+        oddsAway: baseOddsAway,
         events: mergedEvents,
+        tickHistory: nextTickHistory.slice(-14),
         realStats: mergedStats,
         homeLogo: m.homeLogo || feed.homeLogo,
         awayLogo: m.awayLogo || feed.awayLogo,
@@ -1398,7 +2186,7 @@ export async function applyFeedUpdateToRealMatch(
         // Si le match était auto-suspendu lors d'une fausse alerte de fin, on le rouvre
         ...(m.feedFinishedAt ? { feedFinishedAt: null, suspended: false } : {}),
         feedSyncedAt: now,
-        feedStatusNote: `Direct synchronisé (${feed.minute ?? "LIVE"})`,
+        feedStatusNote: `Direct synchronisé (${nextMinute})`,
       })
       .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));
     return "live";
@@ -1732,6 +2520,14 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
             (force || nowMs - lastSum >= SUMMARY_FETCH_INTERVAL_MS)
           ) {
             summaryPriority = 3;
+          } else if (
+            feedMatch?.status === "upcoming" &&
+            feedMatch.suggestedOdds.source !== "bookmaker" &&
+            m.regime !== "admin_odds_locked" &&
+            m.startsAt.getTime() <= nowMs + 6 * 3600_000 &&
+            (force || nowMs - lastSum >= 20 * 60_000)
+          ) {
+            summaryPriority = 2;
           } else if (!feedMatch && m.startsAt.getTime() <= nowMs + 2 * 3600_000) {
             summaryPriority = 2;
           } else if (
@@ -1764,8 +2560,22 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
       await mapWithConcurrency(toEnrich, 6, async (entry) => {
         if (!entry.extId) return;
         lastSummaryFetchByExtId.set(entry.extId, nowMs);
+        const sbBefore = entry.feedMatch;
         const rich = await fetchMatchSummary(entry.extId, entry.extLeague);
         if (rich) {
+          if (
+            sbBefore &&
+            sbBefore.suggestedOdds.source === "bookmaker" &&
+            rich.suggestedOdds.source !== "bookmaker"
+          ) {
+            rich.suggestedOdds = sbBefore.suggestedOdds;
+          }
+          if (sbBefore?.liveFeedProbs && !rich.liveFeedProbs) {
+            rich.liveFeedProbs = sbBefore.liveFeedProbs;
+            if (rich.realStats) {
+              rich.realStats.liveFeedProbs = sbBefore.liveFeedProbs;
+            }
+          }
           entry.feedMatch = rich;
         }
       });
@@ -1782,7 +2592,7 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
       });
 
       for (const { outcome, wasUnlinked } of outcomes) {
-        if (outcome !== "ignored") {
+        if (outcome !== "ignored" && outcome !== "upcoming_unchanged") {
           summary.syncedCount += 1;
           if (wasUnlinked) summary.linkedCount += 1;
           if (outcome === "live") summary.liveCount += 1;

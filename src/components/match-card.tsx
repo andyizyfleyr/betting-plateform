@@ -349,7 +349,11 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
 
   // Si en fin de match une issue 1x2 est déjà fermée dans markets, on reflète exactement les issues ouvertes
   const resGroup = match.markets?.find((g) => g.key === "result");
-  const openKeys = resGroup ? new Set(resGroup.outcomes.map((o) => o.key)) : null;
+  const openKeys = resGroup
+    ? new Set(resGroup.outcomes.map((o) => o.key))
+    : match.status === "live" && Array.isArray(match.markets)
+      ? new Set<string>()
+      : null;
 
   const cells: { key: string; tag: string; odds: number; label: string; closed: boolean }[] = [
     {

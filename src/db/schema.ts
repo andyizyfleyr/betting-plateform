@@ -13,6 +13,24 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+export interface RealStatSnapshot {
+  sec: number;
+  sotH: number;
+  sotA: number;
+  shH: number;
+  shA: number;
+  corH: number;
+  corA: number;
+}
+
+export interface RealLiveFeedProbs {
+  pHome: number;
+  pDraw: number;
+  pAway: number;
+  source: "bookmaker_live" | "espn_live" | "blended";
+  updatedAtSec: number | null;
+}
+
 /** Statistiques officielles d'un match réel récupérées gratuitement depuis le flux sportif public. */
 export interface RealMatchStats {
   possessionHome: number | null;
@@ -35,6 +53,12 @@ export interface RealMatchStats {
   htAwayScore: number | null;
   clockSeconds?: number | null;
   clockPeriod?: number | null;
+  /** Fenêtre glissante de snapshots stats pour mesurer la pression offensive des 10–15 dernières minutes. */
+  statSnapshots?: RealStatSnapshot[];
+  /** Probabilités live 1X2 officielles (cotes `current` bookmaker et/ou modèle live ESPN). */
+  liveFeedProbs?: RealLiveFeedProbs | null;
+  /** Espérance de buts totale issue de la ligne Over/Under bookmaker ou du modèle Elo ligue. */
+  feedTotalGoalsExpected?: number | null;
   updatedAt: string;
 }
 

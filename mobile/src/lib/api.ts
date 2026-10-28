@@ -118,6 +118,23 @@ export interface ClientRealMatchStats {
   htAwayScore: number | null;
   clockSeconds?: number | null;
   clockPeriod?: number | null;
+  statSnapshots?: Array<{
+    sec: number;
+    sotH: number;
+    sotA: number;
+    shH: number;
+    shA: number;
+    corH: number;
+    corA: number;
+  }>;
+  liveFeedProbs?: {
+    pHome: number;
+    pDraw: number;
+    pAway: number;
+    source: "bookmaker_live" | "espn_live" | "blended";
+    updatedAtSec: number | null;
+  } | null;
+  feedTotalGoalsExpected?: number | null;
   updatedAt?: string;
 }
 

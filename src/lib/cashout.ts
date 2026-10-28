@@ -1,4 +1,4 @@
-import { livePricingMinute } from "@/db/fixtures";
+import { livePricingMinute, type RealMatchLiveStatsInput } from "@/db/fixtures";
 import {
   isFirstHalfCompleted,
   isKnownMarket,
@@ -134,10 +134,14 @@ function impliedYes(oddsYes: number, oddsNo: number) {
   return pYes / (pYes + pNo);
 }
 
-export function matchProgress(sport: string, minute: string | null): number {
+export function matchProgress(
+  sport: string,
+  minute: string | null,
+  isReal = false
+): number {
   if (!minute) return 0;
   if (sport === "football") {
-    const m = livePricingMinute(minuteNumber(minute));
+    const m = livePricingMinute(minuteNumber(minute), { isReal });
     return Math.min(m / 90, 0.97);
   }
   return 0;
@@ -177,6 +181,7 @@ export function computeCashOut(params: {
   oddsHome?: number | null;
   oddsDraw?: number | null;
   oddsAway?: number | null;
+  realStats?: RealMatchLiveStatsInput | null;
   markets?: CustomMarketGroup[] | null;
 }): number | null {
   const { stake, odds, selection } = params;
@@ -248,6 +253,7 @@ export function computeCashOut(params: {
             externalId: params.externalId ?? null,
             autoSync: params.autoSync ?? true,
             events: typedEvents,
+            realStats: params.realStats ?? null,
             markets: params.markets ?? null,
           },
           market,
@@ -294,7 +300,7 @@ export function computeCashOut(params: {
 
   // Repli si marché personnalisé admin
   if (market !== "result") return null;
-  const progress = matchProgress(params.sport, params.minute);
+  const progress = matchProgress(params.sport, params.minute, isManual);
   const leader = h > a ? "home" : a > h ? "away" : "draw";
   const aligned = selection === leader;
   const estProb = aligned

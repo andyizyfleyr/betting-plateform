@@ -1356,9 +1356,66 @@ export function isRealMatchKickoffReached(
 }
 
 /**
+ * Calcule les cotes d'affichage 1X2 en direct d'un match réel (`1.01 .. 45.00`) à partir
+ * du modèle live complet, même lorsqu'une issue devient quasi acquise (`prob > 0.985` ou `< 0.006`)
+ * afin que les cartes et en-têtes ne retombent jamais sur les cotes pré-match `0-0`.
+ */
+export function computeRealLiveHeadline1x2Odds(m: RealMatchInput): {
+  oddsHome: number;
+  oddsDraw: number | null;
+  oddsAway: number;
+} {
+  if (m.status !== "live" || (m.sport ?? "football") !== "football") {
+    return {
+      oddsHome: round2(Math.max(1.01, m.oddsHome)),
+      oddsDraw: m.oddsDraw != null ? round2(Math.max(1.01, m.oddsDraw)) : null,
+      oddsAway: round2(Math.max(1.01, m.oddsAway)),
+    };
+  }
+
+  const homeScore = m.homeScore ?? 0;
+  const awayScore = m.awayScore ?? 0;
+  const minute = minuteNumber(m.minute);
+  const model = realMatchScoreModel({
+    oddsHome: m.oddsHome,
+    oddsDraw: m.oddsDraw,
+    oddsAway: m.oddsAway,
+    homeScore,
+    awayScore,
+    minute,
+    minuteLabel: m.minute ?? null,
+    isLive: true,
+    redHome: m.redHome ?? 0,
+    redAway: m.redAway ?? 0,
+    events: m.events ?? null,
+    realStats: m.realStats ?? null,
+  });
+
+  const resDef = MARKET_BY_KEY.get("result")!;
+  const pH = Math.max(0.0005, rawProbOnModel(resDef, "home", model, NEUTRAL_SPLIT_MODEL));
+  const pD =
+    m.oddsDraw != null
+      ? Math.max(0.0005, rawProbOnModel(resDef, "draw", model, NEUTRAL_SPLIT_MODEL))
+      : 0;
+  const pA = Math.max(0.0005, rawProbOnModel(resDef, "away", model, NEUTRAL_SPLIT_MODEL));
+  const sum = pH + pD + pA || 1;
+  const overround = model.margin;
+
+  return {
+    oddsHome: round2(Math.min(45, Math.max(1.01, 1 / ((pH / sum) * overround)))),
+    oddsDraw:
+      m.oddsDraw != null
+        ? round2(Math.min(45, Math.max(1.01, 1 / ((pD / sum) * overround))))
+        : null,
+    oddsAway: round2(Math.min(45, Math.max(1.01, 1 / ((pA / sum) * overround)))),
+  };
+}
+
+/**
  * Construit les marchés d'un match réel (`source === "manual"`) :
- * - `1x2` (`result`) reprend EXACTEMENT les cotes `oddsHome / oddsDraw / oddsAway` de l'admin ;
- * - les 18 marchés secondaires temps réglementaire sont dérivés des cotes de l'admin sans ML virtuel ;
+ * - en avant-match, `1x2` (`result`) reprend les cotes pré-match synchronisées (ou celles de l'admin) ;
+ * - en direct, tous les marchés évoluent minute par minute (et toutes les 30 s dès 75’) selon le score,
+ *   le chrono, les statistiques réelles, la pression des 12 dernières minutes et les probabilités live ESPN ;
  * - tout marché personnalisé saisi par l'admin dans `m.markets` remplace ou enrichit la grille.
  */
 export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): MarketGroup[] {
@@ -1369,6 +1426,7 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
   const homeScore = m.homeScore ?? 0;
   const awayScore = m.awayScore ?? 0;
   const minute = isLive ? minuteNumber(m.minute) : 0;
+  if (isLive && minute >= 88) return [];
 
   const opts: MarketModelOpts = {
     redHome: m.redHome ?? 0,
@@ -1398,6 +1456,7 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
     (homeScore > 0 ||
       awayScore > 0 ||
       minute > 0 ||
+      (m.realStats?.clockSeconds ?? 0) > 0 ||
       (m.redHome ?? 0) > 0 ||
       (m.redAway ?? 0) > 0);
 

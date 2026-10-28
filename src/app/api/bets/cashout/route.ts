@@ -620,6 +620,7 @@ export async function POST(req: NextRequest) {
               oddsHome: effectiveMatch.oddsHome,
               oddsDraw: effectiveMatch.oddsDraw,
               oddsAway: effectiveMatch.oddsAway,
+              realStats: effectiveMatch.realStats ?? null,
               markets: effectiveMatch.markets ?? null,
             });
             if (value == null) {

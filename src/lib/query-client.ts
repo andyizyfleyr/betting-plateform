@@ -90,7 +90,7 @@ export function mergeSingleSlimIntoFullMatch(
   existing: ClientMatch,
   slim: ClientMatch
 ): ClientMatch {
-  if (slim.status === "finished") {
+  if (slim.status === "finished" || slim.marketCount === 0) {
     return {
       ...existing,
       ...slim,
@@ -118,6 +118,10 @@ export function mergeSingleSlimIntoFullMatch(
     if (slimResGroup) {
       nextMarkets = existing.markets.map((group) =>
         group.key === "result" || group.key === "1x2" ? slimResGroup : group
+      );
+    } else if (slim.status === "live" && Array.isArray(slim.markets)) {
+      nextMarkets = existing.markets.filter(
+        (group) => group.key !== "result" && group.key !== "1x2"
       );
     } else if (
       existing.oddsHome !== slim.oddsHome ||
