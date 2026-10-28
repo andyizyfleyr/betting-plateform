@@ -373,7 +373,7 @@ export default function BetslipScreen() {
     return sources.size > 1;
   }, [enrichedLegs]);
 
-  const overBalance = stake > balance;
+  const overBalance = Boolean(user) && stake > balance;
   const belowMin = stake > 0 && stake < 0.5;
   const canSubmit =
     enrichedLegs.length >= 1 &&

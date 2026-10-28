@@ -82,6 +82,7 @@ function PredictionBetSheet({
     openRecharge,
     comboLegs,
     toggleComboLeg,
+    authReady,
     user,
   } = useApp();
   const dragControls = useDragControls();
@@ -140,7 +141,7 @@ function PredictionBetSheet({
   const odds = roundOdds2(serverOverrideOdds ?? liveOdds ?? initialMeta.odds);
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = stake > balance;
+  const overBalance = Boolean(user) && stake > balance;
   const belowMin = stake > 0 && stake < 0.5;
   const payout = stake * odds;
   const profit = payout - stake;
@@ -183,6 +184,12 @@ function PredictionBetSheet({
 
   const confirm = async () => {
     if (phase !== "input" || stake < 0.5 || overBalance || inFlightRef.current) {
+      return;
+    }
+    if (!authReady && !user) return;
+    if (!user) {
+      onClose();
+      router.push("/auth/connexion");
       return;
     }
     inFlightRef.current = true;

@@ -191,7 +191,7 @@ export function AppHeader() {
             </div>
           ) : (
             <Link
-              href="/auth"
+              href="/auth/connexion"
               className="flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[12.5px] font-bold text-white active:opacity-90"
             >
               Connexion
@@ -354,13 +354,13 @@ export function AppHeader() {
           ) : (
             <>
               <Link
-                href="/auth?mode=register"
+                href="/auth/inscription"
                 className="inline-flex h-9 items-center rounded-full bg-white px-4 font-display text-[13px] font-bold text-ink shadow-xs transition-opacity hover:opacity-95"
               >
                 Inscription
               </Link>
               <Link
-                href="/auth"
+                href="/auth/connexion"
                 className="inline-flex h-9 items-center rounded-full border border-white/55 bg-white/10 px-4 font-display text-[13px] font-bold text-white transition-colors hover:bg-white/18"
               >
                 Connexion

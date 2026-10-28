@@ -489,11 +489,9 @@ export function DesktopBetslipSidebar() {
     if (!user) {
       toast({
         kind: "info",
-        title: "Connexion requise",
-        description:
-          "Connectez-vous ou inscrivez-vous pour valider votre coupon.",
+        title: "Connectez-vous pour valider votre coupon",
       });
-      router.push("/auth");
+      router.push("/auth/connexion");
       return;
     }
     if (!canSubmit || inFlightRef.current) return;

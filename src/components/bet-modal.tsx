@@ -87,6 +87,7 @@ function BetModalSheet({
     openRecharge,
     comboLegs,
     toggleComboLeg,
+    authReady,
     user,
   } = useApp();
   const feedMatches = useFeedMatches();
@@ -181,7 +182,7 @@ function BetModalSheet({
 
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number(Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0);
-  const overBalance = stake > balance;
+  const overBalance = Boolean(user) && stake > balance;
   const belowMin = stake > 0 && stake < 0.5;
 
   const derivedFromFeed = sharedFreshMatch
@@ -282,6 +283,12 @@ function BetModalSheet({
 
   const confirm = async () => {
     if (!canSubmit || inFlightRef.current) return;
+    if (!authReady && !user) return;
+    if (!user) {
+      onClose();
+      router.push("/auth/connexion");
+      return;
+    }
     inFlightRef.current = true;
     const sig = `${target.match.id}:${target.market}:${target.selection}:${stake}:${displayOdds}`;
     if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {

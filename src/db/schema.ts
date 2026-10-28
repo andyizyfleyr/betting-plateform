@@ -248,8 +248,8 @@ export const appUser = pgTable(
   "app_user",
   {
     id: serial("id").primaryKey(),
-    name: text("name").notNull().default("Alex Martin"),
-    balance: doublePrecision("balance").notNull().default(250),
+    name: text("name").notNull().default("Joueur"),
+    balance: doublePrecision("balance").notNull().default(0),
     notifications: boolean("notifications").notNull().default(true),
     sound: boolean("sound").notNull().default(false),
     haptics: boolean("haptics").notNull().default(true),
@@ -504,6 +504,22 @@ export const savedCoupons = pgTable("saved_coupons", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
+/**
+ * Codes de réinitialisation de mot de passe à usage unique (hachés SHA-256, TTL 15 min).
+ */
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => appUser.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  codeHash: text("code_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  usedAt: timestamp("used_at", { mode: "date" }),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+});
+
 export type MatchRow = typeof matches.$inferSelect;
 export type BetRow = typeof bets.$inferSelect;
 export type PredictionQuestionRow = typeof predictionQuestions.$inferSelect;
@@ -516,3 +532,4 @@ export type AppUserRow = typeof appUser.$inferSelect;
 export type DepositRow = typeof deposits.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;
 export type AcceleratorRoundRow = typeof acceleratorRounds.$inferSelect;
+export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;

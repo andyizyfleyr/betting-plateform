@@ -271,17 +271,25 @@ export function DesktopSidebar() {
         ) : (
           <div className="rounded-2xl border border-edge bg-elev/60 p-3">
             <p className="font-display text-[12.5px] font-bold text-ink">
-              Rejoignez PULSE
+              Espace joueur Pulse Bet
             </p>
             <p className="mt-0.5 text-[11px] leading-snug text-mist">
-              250,00 € crédités dès l&apos;inscription pour vos paris et prédictions.
+              Accédez à vos paris en direct, votre portefeuille et le Cash Out instantané.
             </p>
-            <Link
-              href="/auth"
-              className="mt-2.5 flex h-9 w-full items-center justify-center rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white transition-opacity hover:opacity-95"
-            >
-              Connexion / Inscription
-            </Link>
+            <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+              <Link
+                href="/auth/connexion"
+                className="flex h-9 items-center justify-center rounded-xl border border-edge bg-white font-display text-[12px] font-bold text-ink transition-colors hover:bg-elev"
+              >
+                Connexion
+              </Link>
+              <Link
+                href="/auth/inscription"
+                className="flex h-9 items-center justify-center rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white transition-opacity hover:opacity-95"
+              >
+                Inscription
+              </Link>
+            </div>
           </div>
         )}
       </div>

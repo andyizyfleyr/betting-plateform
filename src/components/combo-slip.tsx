@@ -172,6 +172,7 @@ export function ComboSheet() {
     openRecharge,
     oddsFormat,
     toast,
+    authReady,
     user,
   } = useApp();
 
@@ -306,7 +307,7 @@ export function ComboSheet() {
 
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = stake > balance;
+  const overBalance = Boolean(user) && stake > balance;
   const belowMin = stake > 0 && stake < 0.5;
   const enoughLegs = comboLegs.length >= MIN_COMBO_LEGS;
 
@@ -325,6 +326,12 @@ export function ComboSheet() {
 
   const submitCombo = async () => {
     if (!canSubmit || inFlightRef.current) return;
+    if (!authReady && !user) return;
+    if (!user) {
+      closeCombo();
+      router.push("/auth/connexion");
+      return;
+    }
     inFlightRef.current = true;
     const legsSig = comboLegs
       .map((l) => `${l.uid}:${l.market}:${l.selection}:${roundOdds2(l.odds)}`)
