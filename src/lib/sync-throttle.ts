@@ -1,14 +1,19 @@
 import { waitUntil } from "@vercel/functions";
 import {
   consumeRecentEngineMilestone,
+  hydrateLiveMatchRow,
   pruneOldFinishedVirtualMatches,
   runLiveEngine,
 } from "@/db/engine";
 import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
 import {
+  ensureMatchStoreHydrated,
+  getCachedAllMatchesForFeed,
   hasLiveActiveMatches,
   invalidateAllActiveCaches,
 } from "@/lib/active-state-cache";
+import { serializeSlimPublicMatch } from "@/lib/match-serializer";
+import { PARTY_LIVE_MATCHES_ROOM, publishPartyRoomEvent } from "@/lib/partykit";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
 import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
 import {
@@ -27,11 +32,12 @@ import { recordVisitorActivity } from "@/lib/visitor-activity";
  * - N'exécute le règlement des paris que sur jalon réel ou balayage de sécurité espacé.
  * - Espace les tâches de maintenance de fond (prédictions, dépôts expirés, purge) à 5–10 min.
  */
-const SYNC_THROTTLE_MS = 2_000;
-const SETTLE_SWEEP_THROTTLE_MS = 15_000;
+const SYNC_THROTTLE_MS = 1_500;
+const SETTLE_SWEEP_THROTTLE_MS = 12_000;
 const HOUSEKEEPING_THROTTLE_MS = 5 * 60_000;
 const PRUNE_THROTTLE_MS = 10 * 60_000;
-const USER_READ_FEED_BUDGET_MS = 2_500;
+const USER_READ_FEED_BUDGET_MS = 2_600;
+const MANUAL_REFRESH_FEED_BUDGET_MS = 3_600;
 const WAKEUP_FEED_BUDGET_MS = 5_500;
 
 let lastFullSyncAt = 0;
@@ -39,6 +45,21 @@ let inFlightFullSync: Promise<void> | null = null;
 let lastSettleSweepAt = 0;
 let lastHousekeepingAt = 0;
 let lastPruneAt = 0;
+
+function broadcastCurrentSlimSnapshot(): void {
+  const nowMs = Date.now();
+  const rows = getCachedAllMatchesForFeed();
+  if (rows.length === 0) return;
+  const slim = rows.map((r) =>
+    serializeSlimPublicMatch(hydrateLiveMatchRow(r, nowMs), nowMs)
+  );
+  publishPartyRoomEvent(PARTY_LIVE_MATCHES_ROOM, {
+    type: "MATCHES_SNAPSHOT",
+    matches: slim,
+    serverTime: new Date(nowMs).toISOString(),
+    ts: nowMs,
+  });
+}
 
 function withTimeoutBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T | "timed_out"> {
   return new Promise((resolve) => {
@@ -57,24 +78,32 @@ function withTimeoutBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T 
 
 export async function syncPlatformStateThrottled(
   force = false,
-  opts?: { fromCron?: boolean }
+  opts?: { fromCron?: boolean; manualRefresh?: boolean }
 ): Promise<void> {
   const now = Date.now();
+  const manualRefresh = Boolean(opts?.manualRefresh);
   if (!opts?.fromCron) {
     recordVisitorActivity(now);
   }
-  if (!force && now - lastFullSyncAt < SYNC_THROTTLE_MS) {
+  if (!force && !manualRefresh && now - lastFullSyncAt < SYNC_THROTTLE_MS) {
     if (inFlightFullSync) await inFlightFullSync;
+    await ensureMatchStoreHydrated(false);
     return;
   }
   if (inFlightFullSync) {
     await inFlightFullSync;
-    return;
+    if (!force && !manualRefresh) return;
   }
 
   inFlightFullSync = (async () => {
     try {
-      const realFeedPromise = syncRealMatchesThrottled(force).catch((err) => {
+      if (force || manualRefresh) {
+        await ensureMatchStoreHydrated(true);
+      }
+
+      const realFeedPromise = syncRealMatchesThrottled(force, {
+        manualRefresh,
+      }).catch((err) => {
         console.error("[syncRealMatchesThrottled] non-fatal error:", err);
         return null;
       });
@@ -88,7 +117,9 @@ export async function syncPlatformStateThrottled(
         const hasOverdue = await hasOverdueRealMatches(now).catch(() => false);
         const readBudgetMs = hasOverdue
           ? WAKEUP_FEED_BUDGET_MS
-          : USER_READ_FEED_BUDGET_MS;
+          : manualRefresh
+            ? MANUAL_REFRESH_FEED_BUDGET_MS
+            : USER_READ_FEED_BUDGET_MS;
         const [, feedStatus] = await Promise.all([
           runLiveEngine(),
           withTimeoutBudget(realFeedPromise, readBudgetMs),
@@ -98,6 +129,8 @@ export async function syncPlatformStateThrottled(
             if (res && (res.settledCount > 0 || res.syncedCount > 0)) {
               await settleFinishedBets().catch(() => undefined);
               invalidateAllActiveCaches(true);
+              await ensureMatchStoreHydrated(true).catch(() => undefined);
+              broadcastCurrentSlimSnapshot();
             }
           });
           try {
@@ -114,14 +147,14 @@ export async function syncPlatformStateThrottled(
       const realChanged =
         Boolean(realFeedResult) &&
         ((realFeedResult?.settledCount ?? 0) > 0 || (realFeedResult?.syncedCount ?? 0) > 0);
-      if (hasLiveActiveMatches()) {
-        // Rafraîchit les snapshots JSON en RAM à chaque cycle live (minutes continues + cotes 30s/1m).
-        invalidatePublicApiCaches(false);
+      if (hasLiveActiveMatches() || manualRefresh || realChanged || hadMilestone) {
+        invalidatePublicApiCaches(realChanged || hadMilestone);
       }
       const settleNow = Date.now();
 
       if (
         force ||
+        manualRefresh ||
         hadMilestone ||
         realChanged ||
         settleNow - lastSettleSweepAt >= SETTLE_SWEEP_THROTTLE_MS
@@ -131,6 +164,10 @@ export async function syncPlatformStateThrottled(
       } else {
         // Vérification 0-SQL en RAM tant que la prochaine question n'est pas échue
         await settleResolvedQuestions();
+      }
+
+      if (realChanged || hadMilestone) {
+        broadcastCurrentSlimSnapshot();
       }
 
       const hkNow = Date.now();
@@ -159,12 +196,18 @@ export async function syncPlatformStateThrottled(
   await inFlightFullSync;
 }
 
-export async function syncLiveMatchesThrottled(force = false): Promise<void> {
-  await syncPlatformStateThrottled(force);
+export async function syncLiveMatchesThrottled(
+  force = false,
+  opts?: { manualRefresh?: boolean }
+): Promise<void> {
+  await syncPlatformStateThrottled(force, opts);
 }
 
-export async function syncAllSettlementsThrottled(force = false): Promise<void> {
-  await syncPlatformStateThrottled(force);
+export async function syncAllSettlementsThrottled(
+  force = false,
+  opts?: { manualRefresh?: boolean }
+): Promise<void> {
+  await syncPlatformStateThrottled(force, opts);
 }
 
 export function resetSyncThrottle(): void {

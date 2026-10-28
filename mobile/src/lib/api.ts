@@ -481,10 +481,15 @@ function normalizeClientBet(raw: ClientBet): ClientBet {
   };
 }
 
+export interface MobileRefreshOpts {
+  forceRefresh?: boolean;
+}
+
 export const api = {
-  mobileBootstrap: () =>
+  mobileBootstrap: (opts?: MobileRefreshOpts) =>
     requestJson<MobileBootstrapResponse>("/api/mobile/bootstrap", {
       ignoreUnauthorizedRedirect: true,
+      forceRefresh: opts?.forceRefresh,
     }),
 
   auth: {
@@ -554,18 +559,22 @@ export const api = {
     },
   },
 
-  matchesSlim: async (): Promise<{ matches: ClientMatch[]; serverTime?: string }> => {
+  matchesSlim: async (
+    opts?: MobileRefreshOpts
+  ): Promise<{ matches: ClientMatch[]; serverTime?: string }> => {
     try {
       const data = await requestJson<{ matches: ClientMatch[]; serverTime?: string }>(
-        "/api/matches/slim"
+        "/api/matches/slim",
+        { forceRefresh: opts?.forceRefresh }
       );
       seedMatchesSnapshot(data.matches);
       return data;
     } catch (err) {
       if (err instanceof ApiHttpError && err.status === 404) {
-        const fallback = await requestJson<{ matches: ClientMatch[]; serverTime?: string }>(
-          "/api/matches"
-        );
+        const fallback = await requestJson<{
+          matches: ClientMatch[];
+          serverTime?: string;
+        }>("/api/matches", { forceRefresh: opts?.forceRefresh });
         seedMatchesSnapshot(fallback.matches);
         return fallback;
       }
@@ -573,19 +582,25 @@ export const api = {
     }
   },
 
-  matches: async (): Promise<{ matches: ClientMatch[]; serverTime?: string }> => {
-    return api.matchesSlim();
+  matches: async (
+    opts?: MobileRefreshOpts
+  ): Promise<{ matches: ClientMatch[]; serverTime?: string }> => {
+    return api.matchesSlim(opts);
   },
 
-  matchById: async (id: number): Promise<{ match: ClientMatch; serverTime?: string }> => {
+  matchById: async (
+    id: number,
+    opts?: MobileRefreshOpts
+  ): Promise<{ match: ClientMatch; serverTime?: string }> => {
     const data = await requestJson<{ match: ClientMatch; serverTime?: string }>(
-      `/api/matches/${encodeURIComponent(String(id))}`
+      `/api/matches/${encodeURIComponent(String(id))}`,
+      { forceRefresh: opts?.forceRefresh }
     );
     seedMatchSnapshot(data.match);
     return data;
   },
 
-  matchHistory: async (matchId?: number) => {
+  matchHistory: async (matchId?: number, opts?: MobileRefreshOpts) => {
     const qs =
       typeof matchId === "number" && Number.isInteger(matchId) && matchId > 0
         ? `?matchId=${matchId}`
@@ -594,7 +609,7 @@ export const api = {
       matches: ClientMatchHistoryItem[];
       focusedMatch: ClientMatchHistoryItem | null;
       serverTime?: string;
-    }>(`/api/matches/history${qs}`);
+    }>(`/api/matches/history${qs}`, { forceRefresh: opts?.forceRefresh });
     if (!qs) {
       seedFinishedMatchesSnapshot(data.matches);
     } else if (data.focusedMatch) {
@@ -603,13 +618,13 @@ export const api = {
     return data;
   },
 
-  pulse: () =>
+  pulse: (opts?: MobileRefreshOpts) =>
     requestJson<{
       balance: number | null;
       pendingCount: number;
       tickets: UserPulseTicket[];
       serverTime?: string;
-    }>("/api/pulse"),
+    }>("/api/pulse", { forceRefresh: opts?.forceRefresh }),
 
   realtime: () =>
     requestJson<{
@@ -622,33 +637,44 @@ export const api = {
     }>("/api/realtime", { bypassEtag: true }),
 
   bets: Object.assign(
-    async (filter: "ongoing" | "finished" | "all" = "all") => {
+    async (
+      filter: "ongoing" | "finished" | "all" = "all",
+      opts?: MobileRefreshOpts
+    ) => {
       const data = await requestJson<{
         bets: ClientBet[];
         balance: number | null;
-      }>(`/api/bets?filter=${filter}`);
+      }>(`/api/bets?filter=${filter}`, { forceRefresh: opts?.forceRefresh });
       const normalized = data.bets.map(normalizeClientBet);
       seedBetsSnapshot(normalized);
       return { bets: normalized, balance: data.balance };
     },
     {
-      list: async (filter: "ongoing" | "finished" | "all" = "all") => {
+      list: async (
+        filter: "ongoing" | "finished" | "all" = "all",
+        opts?: MobileRefreshOpts
+      ) => {
         const data = await requestJson<{
           bets: ClientBet[];
           balance: number | null;
-        }>(`/api/bets?filter=${filter}`);
+        }>(`/api/bets?filter=${filter}`, { forceRefresh: opts?.forceRefresh });
         const normalized = data.bets.map(normalizeClientBet);
         seedBetsSnapshot(normalized);
         return { bets: normalized, balance: data.balance };
       },
-      byId: async (kind: "sport" | "prediction" | "combo", id: number) => {
+      byId: async (
+        kind: "sport" | "prediction" | "combo",
+        id: number,
+        opts?: MobileRefreshOpts
+      ) => {
         const data = await requestJson<{
           bets: ClientBet[];
           balance: number | null;
         }>(
           `/api/bets?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(
             String(id)
-          )}`
+          )}`,
+          { forceRefresh: opts?.forceRefresh }
         );
         const normalized = data.bets.map(normalizeClientBet);
         for (const b of normalized) {
@@ -720,9 +746,10 @@ export const api = {
     }
   ),
 
-  allBets: async () => {
+  allBets: async (opts?: MobileRefreshOpts) => {
     const data = await requestJson<{ bets: ClientBet[]; balance: number | null }>(
-      "/api/bets?filter=all"
+      "/api/bets?filter=all",
+      { forceRefresh: opts?.forceRefresh }
     );
     const normalized = data.bets.map(normalizeClientBet);
     seedBetsSnapshot(normalized);
@@ -804,30 +831,30 @@ export const api = {
       bypassEtag: true,
     }),
 
-  predictionsCatalog: async () => {
+  predictionsCatalog: async (opts?: MobileRefreshOpts) => {
     const res = await requestJson<{
       questions: ClientPrediction[];
       serverTime?: string;
-    }>("/api/predictions/catalog");
+    }>("/api/predictions/catalog", { forceRefresh: opts?.forceRefresh });
     seedPredictionsSnapshot(res.questions);
     return res;
   },
 
-  myPredictionBets: () =>
+  myPredictionBets: (opts?: MobileRefreshOpts) =>
     requestJson<{
       myBets: Record<
         number,
         NonNullable<ClientPrediction["myBet"]> & { questionId: number }
       >;
-    }>("/api/predictions/my-bets"),
+    }>("/api/predictions/my-bets", { forceRefresh: opts?.forceRefresh }),
 
-  predictionsMine: () =>
+  predictionsMine: (opts?: MobileRefreshOpts) =>
     requestJson<{
       myBets: Record<
         number,
         NonNullable<ClientPrediction["myBet"]> & { questionId: number }
       >;
-    }>("/api/predictions/my-bets"),
+    }>("/api/predictions/my-bets", { forceRefresh: opts?.forceRefresh }),
 
   predictions: {
     place: (payload: {
@@ -846,21 +873,21 @@ export const api = {
         method: "POST",
         body: payload,
       }),
-    catalog: async () => {
+    catalog: async (opts?: MobileRefreshOpts) => {
       const res = await requestJson<{
         questions: ClientPrediction[];
         serverTime?: string;
-      }>("/api/predictions/catalog");
+      }>("/api/predictions/catalog", { forceRefresh: opts?.forceRefresh });
       seedPredictionsSnapshot(res.questions);
       return res;
     },
-    mine: () =>
+    mine: (opts?: MobileRefreshOpts) =>
       requestJson<{
         myBets: Record<
           number,
           NonNullable<ClientPrediction["myBet"]> & { questionId: number }
         >;
-      }>("/api/predictions/my-bets"),
+      }>("/api/predictions/my-bets", { forceRefresh: opts?.forceRefresh }),
   },
 
   placePredictionBet: (payload: {
@@ -880,8 +907,10 @@ export const api = {
       body: payload,
     }),
 
-  wallet: async () => {
-    const data = await requestJson<ClientWalletData>("/api/wallet");
+  wallet: async (opts?: MobileRefreshOpts) => {
+    const data = await requestJson<ClientWalletData>("/api/wallet", {
+      forceRefresh: opts?.forceRefresh,
+    });
     setCachedWalletSnapshot(data);
     return data;
   },

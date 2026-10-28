@@ -70,12 +70,12 @@ interface PlatformMemoryState {
 
 const MAX_FINISHED_VIRTUAL_RAM = 12;
 const MAX_FINISHED_MANUAL_RAM = 20;
-const MANUAL_MULTI_INSTANCE_SYNC_MS = 10_000;
-const PENDING_FLAGS_SAFETY_TTL_MS = 25_000;
-const PENDING_BOOK_TTL_MS = 25_000;
-const QUESTION_SCHEDULE_MAX_TTL_MS = 60_000;
-const USER_PULSE_CACHE_TTL_MS = 2_500;
-const USER_BETS_CACHE_TTL_MS = 2_000;
+const MULTI_INSTANCE_RECONCILE_MS = 2_500;
+const PENDING_FLAGS_SAFETY_TTL_MS = 15_000;
+const PENDING_BOOK_TTL_MS = 15_000;
+const QUESTION_SCHEDULE_MAX_TTL_MS = 30_000;
+const USER_PULSE_CACHE_TTL_MS = 1_200;
+const USER_BETS_CACHE_TTL_MS = 1_200;
 
 const globalStore = globalThis as typeof globalThis & {
   __pulseMemoryStateV1?: PlatformMemoryState;
@@ -120,27 +120,61 @@ function sortFinishedDesc(list: MatchRow[], limit: number): MatchRow[] {
     .slice(0, limit);
 }
 
+function parseVirtualMinuteInt(minute: string | null | undefined): number {
+  if (!minute) return 0;
+  const trimmed = minute.trim();
+  if (trimmed === "MT" || trimmed === "HT" || trimmed === "Mi-temps") return 45;
+  const m = /(\d+)/.exec(trimmed);
+  return m ? Number(m[1]) : 0;
+}
+
+function pickMonotonicVirtualOpenRow(
+  dbRow: MatchRow,
+  ramRow: MatchRow | undefined
+): MatchRow {
+  if (!ramRow) return dbRow;
+  if (dbRow.status === "live" && ramRow.status === "upcoming") return dbRow;
+  if (ramRow.status === "live" && dbRow.status === "upcoming") {
+    if (ramRow.startsAt.getTime() === dbRow.startsAt.getTime()) return ramRow;
+    return dbRow;
+  }
+  if (ramRow.status === "live" && dbRow.status === "live") {
+    if (ramRow.startsAt.getTime() !== dbRow.startsAt.getTime()) return dbRow;
+    const ramScore = (ramRow.homeScore ?? 0) + (ramRow.awayScore ?? 0);
+    const dbScore = (dbRow.homeScore ?? 0) + (dbRow.awayScore ?? 0);
+    if (ramScore !== dbScore) return ramScore > dbScore ? ramRow : dbRow;
+    const ramEvs = ramRow.events?.length ?? 0;
+    const dbEvs = dbRow.events?.length ?? 0;
+    if (ramEvs !== dbEvs) return ramEvs > dbEvs ? ramRow : dbRow;
+    const ramMin = parseVirtualMinuteInt(ramRow.minute);
+    const dbMin = parseVirtualMinuteInt(dbRow.minute);
+    return ramMin >= dbMin ? ramRow : dbRow;
+  }
+  return dbRow;
+}
+
 /**
- * Hydrate en UNE SEULE requête SQL `UNION ALL` l'état actif complet des matchs
- * lors d'un démarrage à froid (cold start), puis sert toutes les lectures et
- * tous les ticks virtuels depuis la RAM sans solliciter PostgreSQL.
+ * Hydrate et réconcilie en UNE SEULE requête SQL `UNION ALL` l'état actif complet
+ * des matchs entre toutes les instances Serverless Vercel :
+ * - Réconciliation multi-instance attendue (`await`) toutes les `2,5 s` max (coalescée via
+ *   Singleflight `st.hydratePromise`) et forcée immédiatement sur tout refresh manuel (`force = true`).
+ * - Préservation monotone des matchs virtuels déjà avancés en RAM entre deux jalons SQL.
  */
 export async function ensureMatchStoreHydrated(force = false): Promise<void> {
   const st = getState();
   const now = Date.now();
 
-  if (!force && st.matchesHydratedAt > 0) {
-    // Synchronisation légère multi-instance uniquement pour les matchs réels (toutes les 90 s max)
-    if (now - st.manualRefreshedAt >= MANUAL_MULTI_INSTANCE_SYNC_MS) {
-      st.manualRefreshedAt = now;
-      void refreshManualMatchesInBackground();
-    }
+  if (
+    !force &&
+    st.matchesHydratedAt > 0 &&
+    now - st.matchesHydratedAt < MULTI_INSTANCE_RECONCILE_MS
+  ) {
     return;
   }
 
   if (st.hydratePromise) {
     await st.hydratePromise;
-    return;
+    if (!force) return;
   }
 
   st.hydratePromise = (async () => {
@@ -172,9 +206,14 @@ export async function ensureMatchStoreHydrated(force = false): Promise<void> {
 
       const rows = await unionAll(qActive, qFinManual, qFinVirtual);
 
+      const prevOpenVirtual = st.openVirtual;
+      const prevFinVirtualById = new Map(
+        st.finishedVirtual.map((m) => [m.id, m] as const)
+      );
+
       const nextOpenVirtual = new Map<number, MatchRow>();
       const nextOpenManual = new Map<number, MatchRow>();
-      const nextFinVirtual: MatchRow[] = [];
+      const nextFinVirtualMap = new Map<number, MatchRow>();
       const nextFinManual: MatchRow[] = [];
 
       for (const r of rows) {
@@ -182,14 +221,28 @@ export async function ensureMatchStoreHydrated(force = false): Promise<void> {
           if (r.status === "finished") nextFinManual.push(r);
           else nextOpenManual.set(r.id, r);
         } else {
-          if (r.status === "finished") nextFinVirtual.push(r);
-          else nextOpenVirtual.set(r.id, r);
+          if (r.status === "finished") {
+            nextFinVirtualMap.set(r.id, r);
+          } else {
+            const alreadyFinInRam = prevFinVirtualById.get(r.id);
+            if (alreadyFinInRam) {
+              nextFinVirtualMap.set(r.id, alreadyFinInRam);
+            } else {
+              nextOpenVirtual.set(
+                r.id,
+                pickMonotonicVirtualOpenRow(r, prevOpenVirtual.get(r.id))
+              );
+            }
+          }
         }
       }
 
       st.openVirtual = nextOpenVirtual;
       st.openManual = nextOpenManual;
-      st.finishedVirtual = sortFinishedDesc(nextFinVirtual, MAX_FINISHED_VIRTUAL_RAM);
+      st.finishedVirtual = sortFinishedDesc(
+        [...nextFinVirtualMap.values()],
+        MAX_FINISHED_VIRTUAL_RAM
+      );
       st.finishedManual = sortFinishedDesc(nextFinManual, MAX_FINISHED_MANUAL_RAM);
       st.matchesHydratedAt = Date.now();
       st.manualRefreshedAt = st.matchesHydratedAt;
@@ -199,36 +252,6 @@ export async function ensureMatchStoreHydrated(force = false): Promise<void> {
   })();
 
   await st.hydratePromise;
-}
-
-async function refreshManualMatchesInBackground(): Promise<void> {
-  const st = getState();
-  try {
-    const qOpen = db
-      .select()
-      .from(matches)
-      .where(and(eq(matches.source, "manual"), ne(matches.status, "finished")))
-      .limit(100);
-    const qFin = db
-      .select()
-      .from(matches)
-      .where(and(eq(matches.source, "manual"), eq(matches.status, "finished")))
-      .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
-      .limit(MAX_FINISHED_MANUAL_RAM);
-
-    const rows = await unionAll(qOpen, qFin);
-    const nextOpen = new Map<number, MatchRow>();
-    const nextFin: MatchRow[] = [];
-    for (const r of rows) {
-      if (r.status === "finished") nextFin.push(r);
-      else nextOpen.set(r.id, r);
-    }
-    st.openManual = nextOpen;
-    st.finishedManual = sortFinishedDesc(nextFin, MAX_FINISHED_MANUAL_RAM);
-    invalidatePublicApiCaches();
-  } catch {
-    /* silencieux */
-  }
 }
 
 export function isMatchStoreHydrated(): boolean {

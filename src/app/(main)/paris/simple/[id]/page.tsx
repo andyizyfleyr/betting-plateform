@@ -42,7 +42,9 @@ import { StatusPill, shortMarketBadge } from "@/components/bet-ticket";
 import { CardOverlayLink } from "@/components/card-overlay-link";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import { LiveStatusBadge } from "@/components/match-card";
-import { useApp } from "@/components/providers";
+import { PullToRefresh } from "@/components/pull-to-refresh";
+import { useApp, useFeedMatches } from "@/components/providers";
+import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
 import {
   hasAnyRealStats,
   RealMatchStatsCard,
@@ -144,48 +146,74 @@ export default function SingleBetDetailPage() {
     return () => window.clearTimeout(t);
   }, [serverOverrideCashout]);
 
-  const fetchSingleBet = useCallback(async () => {
-    if (!parsed.valid) return;
-    if (typeof document !== "undefined" && document.hidden) return;
-    if (isOffline) return;
+  const fetchSingleBet = useCallback(
+    async (forceRefresh = false) => {
+      if (!parsed.valid) return;
+      if (typeof document !== "undefined" && document.hidden && !forceRefresh) {
+        return;
+      }
+      if (isOffline && !forceRefresh) return;
 
-    try {
-      let r = await api.betById(parsed.kind, parsed.id);
-      if (!r.bet && !/^(sport|pred)-/i.test(rawParamId)) {
-        r = await api.betById(
-          parsed.kind === "sport" ? "prediction" : "sport",
-          parsed.id
+      try {
+        let r = await api.betById(parsed.kind, parsed.id, { forceRefresh });
+        if (!r.bet && !/^(sport|pred)-/i.test(rawParamId ?? "")) {
+          r = await api.betById(
+            parsed.kind === "sport" ? "prediction" : "sport",
+            parsed.id,
+            { forceRefresh }
+          );
+        }
+        if (typeof r.balance === "number") setBalance(r.balance);
+        const found = r.bet;
+        setFetchedBet(found);
+        setLoadError(null);
+
+        if (found?.kind === "sport" && found.matchId) {
+          try {
+            const mr = await api.matchById(found.matchId, { forceRefresh });
+            if (mr.match) setLinkedMatch(mr.match);
+          } catch {
+            /* match archivé hors cache */
+          }
+        } else if (found?.kind === "prediction" && found.questionId) {
+          try {
+            const pr = await api.predictionsCatalog({ forceRefresh });
+            const q =
+              pr.questions.find((item) => item.id === found.questionId) ?? null;
+            if (q) setLinkedPrediction(q);
+          } catch {
+            /* silencieux */
+          }
+        }
+      } catch (e) {
+        setLoadError(
+          e instanceof Error
+            ? e.message
+            : "Impossible de charger ce pari. Réessayez."
         );
       }
-      if (typeof r.balance === "number") setBalance(r.balance);
-      const found = r.bet;
-      setFetchedBet(found);
-      setLoadError(null);
+    },
+    [parsed, rawParamId, isOffline, setBalance]
+  );
 
-      if (found?.kind === "sport" && found.matchId) {
-        try {
-          const mr = await api.matchById(found.matchId);
-          if (mr.match) setLinkedMatch(mr.match);
-        } catch {
-          /* match archivé hors cache */
-        }
-      } else if (found?.kind === "prediction" && found.questionId) {
-        try {
-          const pr = await api.predictionsCatalog();
-          const q = pr.questions.find((item) => item.id === found.questionId) ?? null;
-          if (q) setLinkedPrediction(q);
-        } catch {
-          /* silencieux */
-        }
-      }
-    } catch (e) {
-      setLoadError(
-        e instanceof Error
-          ? e.message
-          : "Impossible de charger ce pari. Réessayez."
-      );
-    }
-  }, [parsed, rawParamId, isOffline, setBalance]);
+  const feedMatches = useFeedMatches();
+  const ticketMatchId = bet?.matchId ?? null;
+  const liveSlimForTicket = useMemo(
+    () =>
+      ticketMatchId
+        ? (feedMatches?.find((m) => m.id === ticketMatchId) ?? null)
+        : null,
+    [ticketMatchId, feedMatches]
+  );
+  const effectiveLinkedMatch = useMemo(() => {
+    if (!linkedMatch) return liveSlimForTicket;
+    if (!liveSlimForTicket) return linkedMatch;
+    return mergeSingleSlimIntoFullMatch(linkedMatch, liveSlimForTicket);
+  }, [linkedMatch, liveSlimForTicket]);
+
+  const liveMatchSig = liveSlimForTicket
+    ? `${liveSlimForTicket.status}:${liveSlimForTicket.homeScore}:${liveSlimForTicket.awayScore}:${liveSlimForTicket.suspended ? 1 : 0}:${liveSlimForTicket.oddsHome}:${liveSlimForTicket.oddsAway}`
+    : "";
 
   const userId = user?.id ?? null;
   const canQueryBet = parsed.valid && (Boolean(userId) || !authReady);
@@ -194,14 +222,18 @@ export default function SingleBetDetailPage() {
   useEffect(() => {
     if (!canQueryBet) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchSingleBet();
-  }, [canQueryBet, fetchSingleBet, betsVersion, reloadNonce]);
+    void fetchSingleBet(false);
+  }, [canQueryBet, fetchSingleBet, betsVersion, reloadNonce, liveMatchSig]);
 
   useEffect(() => {
     if (!canQueryBet || !shouldPoll) return;
-    const id = setInterval(() => void fetchSingleBet(), pollIntervalMs);
+    const id = setInterval(() => void fetchSingleBet(false), pollIntervalMs);
     return () => clearInterval(id);
   }, [canQueryBet, fetchSingleBet, shouldPoll, pollIntervalMs]);
+
+  const handlePullRefresh = useCallback(async () => {
+    await fetchSingleBet(true);
+  }, [fetchSingleBet]);
 
   const effectiveCashOut =
     bet?.cashOut != null
@@ -307,16 +339,16 @@ export default function SingleBetDetailPage() {
   const cashed = bet?.status === "cashed";
   const voided = bet?.status === "void";
 
-  const matchStatus = linkedMatch?.status ?? bet?.matchStatus ?? "upcoming";
-  const homeScore = linkedMatch?.homeScore ?? bet?.matchHomeScore ?? null;
-  const awayScore = linkedMatch?.awayScore ?? bet?.matchAwayScore ?? null;
+  const matchStatus = effectiveLinkedMatch?.status ?? bet?.matchStatus ?? "upcoming";
+  const homeScore = effectiveLinkedMatch?.homeScore ?? bet?.matchHomeScore ?? null;
+  const awayScore = effectiveLinkedMatch?.awayScore ?? bet?.matchAwayScore ?? null;
   const hasScore = homeScore != null && awayScore != null;
-  const isReal = (linkedMatch?.source ?? bet?.matchSource) === "manual";
+  const isReal = (effectiveLinkedMatch?.source ?? bet?.matchSource) === "manual";
   const realStatsAvailable = Boolean(
-    isReal && hasAnyRealStats(linkedMatch?.realStats)
+    isReal && hasAnyRealStats(effectiveLinkedMatch?.realStats)
   );
   const canToggleTracker = Boolean(
-    linkedMatch && ((!isReal && matchStatus === "live") || realStatsAvailable)
+    effectiveLinkedMatch && ((!isReal && matchStatus === "live") || realStatsAvailable)
   );
 
   if (!authReady && !user && bet === undefined) {
@@ -328,6 +360,7 @@ export default function SingleBetDetailPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh}>
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
       <div className="flex items-center justify-between gap-2">
@@ -892,5 +925,6 @@ export default function SingleBetDetailPage() {
         onClose={() => setSharing(false)}
       />
     </div>
+    </PullToRefresh>
   );
 }

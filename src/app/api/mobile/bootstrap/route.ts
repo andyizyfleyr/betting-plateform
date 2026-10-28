@@ -6,7 +6,7 @@ import { ensureSeeded } from "@/db/seed";
 import { publicUser } from "@/lib/auth";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { paymentProviders } from "@/lib/payments";
-import { jsonWithEtag } from "@/lib/response-cache";
+import { isManualRefreshRequest, jsonWithEtag } from "@/lib/response-cache";
 import { requireUserId } from "@/lib/session";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { recordVisitorActivity } from "@/lib/visitor-activity";
@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
     if (typeof auth !== "number") return auth;
     const uid = auth;
 
-    await syncLiveMatchesThrottled();
+    const manualRefresh = isManualRefreshRequest(req);
+    await syncLiveMatchesThrottled(false, { manualRefresh });
 
     const [[user], pendingRes, predRows] = await Promise.all([
       db.select().from(appUser).where(eq(appUser.id, uid)).limit(1),

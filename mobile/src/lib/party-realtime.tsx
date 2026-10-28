@@ -9,7 +9,11 @@ import React, {
 } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import Constants from "expo-constants";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import PartySocket from "partysocket";
 import {
   ApiHttpError,
@@ -75,10 +79,31 @@ export function MobilePartyRealtimeBridge({
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next: AppStateStatus) => {
-      setIsForeground(next === "active");
+      const active = next === "active";
+      setIsForeground((prev) => {
+        if (!prev && active) {
+          // Retour au premier plan sur Android : force une lecture fraîche immédiate
+          void api
+            .matchesSlim({ forceRefresh: true })
+            .then((fresh) => {
+              queryClient.setQueryData(mobileQueryKeys.matchesSlim, fresh);
+              onMatchesUpdatedRef.current?.(fresh.matches);
+            })
+            .catch(() => undefined);
+          if (userId) {
+            void queryClient.invalidateQueries({
+              queryKey: mobileQueryKeys.userPulse(userId),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ["bets", userId],
+            });
+          }
+        }
+        return active;
+      });
     });
     return () => sub.remove();
-  }, []);
+  }, [queryClient, userId]);
 
   const realtimeQuery = useQuery({
     queryKey: mobileQueryKeys.realtime(userId),
@@ -160,16 +185,36 @@ export function MobilePartyRealtimeBridge({
           const prevCache = queryClient.getQueryData<MatchesCacheData>(
             mobileQueryKeys.matchesSlim
           );
+          const prevById = new Map(
+            (prevCache?.matches ?? []).map((m: ClientMatch) => [m.id, m])
+          );
           let newlyFinished = false;
-          if (prevCache?.matches) {
-            const prevStatus = new Map(
-              prevCache.matches.map((m: ClientMatch) => [m.id, m.status])
-            );
-            for (const nextM of msg.matches) {
-              const oldS = prevStatus.get(nextM.id);
-              if (oldS && oldS !== "finished" && nextM.status === "finished") {
-                newlyFinished = true;
-              }
+          let liveTicketsImpacted = false;
+          const secondaryMarketDeltaIds: number[] = [];
+
+          for (const nextM of msg.matches) {
+            const oldM = prevById.get(nextM.id);
+            if (!oldM) continue;
+            if (oldM.status !== "finished" && nextM.status === "finished") {
+              newlyFinished = true;
+              liveTicketsImpacted = true;
+            }
+            const scoreOrCardChanged =
+              oldM.homeScore !== nextM.homeScore ||
+              oldM.awayScore !== nextM.awayScore ||
+              (oldM.redHome ?? 0) !== (nextM.redHome ?? 0) ||
+              (oldM.redAway ?? 0) !== (nextM.redAway ?? 0) ||
+              oldM.status !== nextM.status ||
+              Boolean(oldM.suspended) !== Boolean(nextM.suspended);
+            const oddsShifted =
+              Math.abs((oldM.oddsHome ?? 0) - (nextM.oddsHome ?? 0)) >= 0.01 ||
+              Math.abs((oldM.oddsDraw ?? 0) - (nextM.oddsDraw ?? 0)) >= 0.01 ||
+              Math.abs((oldM.oddsAway ?? 0) - (nextM.oddsAway ?? 0)) >= 0.01;
+            if (scoreOrCardChanged) {
+              liveTicketsImpacted = true;
+            }
+            if (scoreOrCardChanged || oddsShifted) {
+              secondaryMarketDeltaIds.push(nextM.id);
             }
           }
 
@@ -205,6 +250,20 @@ export function MobilePartyRealtimeBridge({
                 };
               }
             );
+          }
+
+          for (const mid of secondaryMarketDeltaIds) {
+            void queryClient.invalidateQueries({
+              queryKey: mobileQueryKeys.matchDetail(mid),
+              refetchType: "active",
+            });
+          }
+
+          if (liveTicketsImpacted && userId) {
+            void queryClient.invalidateQueries({
+              queryKey: ["bets", userId],
+              refetchType: "active",
+            });
           }
 
           if (newlyFinished) {
@@ -368,9 +427,9 @@ export function useMobileMatchesSlimQuery(options?: {
   initialMatches?: ClientMatch[] | null;
 }) {
   const { wsConnected } = useMobileRealtimeStatus();
-  const baseMs = options?.baseIntervalMs ?? 3_500;
+  const baseMs = options?.baseIntervalMs ?? 3_000;
   const fallbackMs = Math.round(baseMs * (options?.dataSaver ? 2.2 : 1));
-  const wsSafetyMs = Math.round(15_000 * (options?.dataSaver ? 2 : 1));
+  const wsSafetyMs = Math.round(6_000 * (options?.dataSaver ? 2 : 1));
 
   return useQuery({
     queryKey: mobileQueryKeys.matchesSlim,
@@ -389,6 +448,70 @@ export function useMobileMatchesSlimQuery(options?: {
   });
 }
 
+export async function forceRefreshMobileMatchesFeed(
+  queryClient: QueryClient
+): Promise<{ matches: ClientMatch[]; serverTime?: string }> {
+  const fresh = await api.matchesSlim({ forceRefresh: true });
+  type MatchesCacheData = { matches: ClientMatch[]; serverTime?: string };
+  const prev = queryClient.getQueryData<MatchesCacheData>(
+    mobileQueryKeys.matchesSlim
+  );
+  const merged = mergeSlimIntoMobileMatches(prev?.matches, fresh.matches);
+  const payload = { matches: merged, serverTime: fresh.serverTime };
+  queryClient.setQueryData(mobileQueryKeys.matchesSlim, payload);
+  return payload;
+}
+
+export async function forceRefreshMobileMatchDetail(
+  queryClient: QueryClient,
+  matchId: number
+): Promise<{ match: ClientMatch; serverTime?: string }> {
+  const fresh = await api.matchById(matchId, { forceRefresh: true });
+  queryClient.setQueryData(mobileQueryKeys.matchDetail(matchId), fresh);
+  type MatchesCacheData = { matches: ClientMatch[]; serverTime?: string };
+  queryClient.setQueryData<MatchesCacheData>(
+    mobileQueryKeys.matchesSlim,
+    (prev: MatchesCacheData | undefined) => {
+      if (!prev) return prev;
+      return {
+        matches: prev.matches.map((m: ClientMatch) =>
+          m.id === fresh.match.id ? fresh.match : m
+        ),
+        serverTime: fresh.serverTime ?? prev.serverTime,
+      };
+    }
+  );
+  return fresh;
+}
+
+export async function forceRefreshMobileMatchHistory(
+  queryClient: QueryClient,
+  matchId?: number
+): Promise<{
+  matches: ClientMatchHistoryItem[];
+  focusedMatch: ClientMatchHistoryItem | null;
+  serverTime?: string;
+}> {
+  const fresh = await api.matchHistory(matchId, { forceRefresh: true });
+  if (typeof matchId === "number" && matchId > 0) {
+    queryClient.setQueryData(
+      mobileQueryKeys.matchHistoryFocused(matchId),
+      fresh
+    );
+  } else {
+    queryClient.setQueryData(mobileQueryKeys.matchHistory, fresh);
+  }
+  return fresh;
+}
+
+export async function forceRefreshMobilePredictionsCatalog(
+  queryClient: QueryClient
+): Promise<{ questions: ClientPrediction[]; serverTime?: string }> {
+  const fresh = await api.predictionsCatalog({ forceRefresh: true });
+  queryClient.setQueryData(mobileQueryKeys.predictionsCatalog, fresh);
+  return fresh;
+}
+
 export function useMobileMatchDetailQuery(
   matchId: number,
   options?: {
@@ -398,7 +521,7 @@ export function useMobileMatchDetailQuery(
     isFinished?: boolean;
   }
 ) {
-  const detailMs = Math.round(3_500 * (options?.dataSaver ? 2.2 : 1));
+  const detailMs = Math.round(3_000 * (options?.dataSaver ? 2.2 : 1));
   const initialIsSlim =
     Boolean(options?.initialMatch) &&
     options?.initialMatch?.status !== "finished" &&

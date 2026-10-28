@@ -123,9 +123,25 @@ function normalizePathname(p: string): string {
   return p.replace(/\/+$/, "") || "/";
 }
 
+function canonicalizeSearch(search: string): string {
+  if (!search || search === "?") return "";
+  const sp = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  sp.sort();
+  const str = sp.toString();
+  return str ? `?${str}` : "";
+}
+
+function areEquivalentRoutes(a: string, b: string): boolean {
+  if (a === b) return true;
+  if ((a === "/" && b === "/matchs") || (a === "/matchs" && b === "/")) {
+    return true;
+  }
+  return false;
+}
+
 function getCurrentBrowserRoute(): string {
   if (typeof window === "undefined") return "/";
-  return `${normalizePathname(window.location.pathname)}${window.location.search || ""}`;
+  return `${normalizePathname(window.location.pathname)}${canonicalizeSearch(window.location.search || "")}`;
 }
 
 function resolveInternalRoute(href: string): string | null {
@@ -151,7 +167,7 @@ function resolveInternalRoute(href: string): string | null {
     ) {
       return null;
     }
-    return `${normPath}${url.search || ""}`;
+    return `${normPath}${canonicalizeSearch(url.search || "")}`;
   } catch {
     return null;
   }
@@ -165,7 +181,7 @@ export function triggerRouteLoader(targetHref: string): void {
   const targetRoute = resolveInternalRoute(targetHref);
   if (!targetRoute) return;
   const current = getCurrentBrowserRoute();
-  if (targetRoute === current) return;
+  if (areEquivalentRoutes(targetRoute, current)) return;
   listeners.forEach((fn) => fn(targetRoute));
 }
 
@@ -182,12 +198,28 @@ function NavigationTransitionInner({
   const pathname = usePathname() || "/";
   const searchParams = useSearchParams();
   const searchStr = searchParams?.toString() ?? "";
-  const currentRoute = `${normalizePathname(pathname)}${searchStr ? `?${searchStr}` : ""}`;
+  const currentRoute = `${normalizePathname(pathname)}${canonicalizeSearch(searchStr ? `?${searchStr}` : "")}`;
 
+  const [prevRoute, setPrevRoute] = useState(currentRoute);
   const [pending, setPending] = useState<{
     fromRoute: string;
     toRoute: string;
   } | null>(null);
+
+  // Dès que l'URL courante change (vers la destination ou une redirection),
+  // nettoie immédiatement `pending` afin qu'aucun retour arrière ultérieur ne fige la page.
+  if (currentRoute !== prevRoute) {
+    setPrevRoute(currentRoute);
+    if (pending !== null) {
+      setPending(null);
+    }
+  } else if (
+    pending !== null &&
+    (!areEquivalentRoutes(pending.fromRoute, currentRoute) ||
+      areEquivalentRoutes(pending.toRoute, currentRoute))
+  ) {
+    setPending(null);
+  }
 
   useEffect(() => {
     const onTrigger: RouteTransitionListener = (targetRoute) => {
@@ -196,13 +228,14 @@ function NavigationTransitionInner({
         return;
       }
       const from = getCurrentBrowserRoute();
-      if (targetRoute === from) return;
+      if (areEquivalentRoutes(targetRoute, from)) return;
       setPending({ fromRoute: from, toRoute: targetRoute });
     };
     listeners.add(onTrigger);
 
     const onDocumentClick = (e: MouseEvent) => {
       if (
+        e.defaultPrevented ||
         e.button !== 0 ||
         e.metaKey ||
         e.ctrlKey ||
@@ -224,7 +257,7 @@ function NavigationTransitionInner({
       const dest = resolveInternalRoute(rawHref);
       if (!dest) return;
       const nowRoute = getCurrentBrowserRoute();
-      if (dest === nowRoute) return;
+      if (areEquivalentRoutes(dest, nowRoute)) return;
 
       setPending({ fromRoute: nowRoute, toRoute: dest });
     };
@@ -244,10 +277,10 @@ function NavigationTransitionInner({
 
   const isNavigating =
     pending !== null &&
-    pending.fromRoute === currentRoute &&
-    pending.toRoute !== currentRoute;
+    areEquivalentRoutes(pending.fromRoute, currentRoute) &&
+    !areEquivalentRoutes(pending.toRoute, currentRoute);
 
-  // Remonte immédiatement en haut de l'écran et sécurise la navigation sur 3G instable
+  // Remonte immédiatement en haut de l'écran et libère toujours l'affichage sous 3,2 s max
   useEffect(() => {
     if (!isNavigating || !pending) return;
     if (typeof window !== "undefined") {
@@ -257,27 +290,17 @@ function NavigationTransitionInner({
     const originHref = pending.fromRoute;
 
     const retryTimer = window.setTimeout(() => {
-      if (getCurrentBrowserRoute() === originHref) {
+      if (areEquivalentRoutes(getCurrentBrowserRoute(), originHref)) {
         router.push(targetHref);
       }
-    }, 2_200);
-
-    const hardFallbackTimer = window.setTimeout(() => {
-      if (
-        getCurrentBrowserRoute() === originHref &&
-        (typeof navigator === "undefined" || navigator.onLine !== false)
-      ) {
-        window.location.assign(targetHref);
-      }
-    }, 4_500);
+    }, 1_800);
 
     const clearTimer = window.setTimeout(() => {
       setPending(null);
-    }, 6_500);
+    }, 3_200);
 
     return () => {
       window.clearTimeout(retryTimer);
-      window.clearTimeout(hardFallbackTimer);
       window.clearTimeout(clearTimer);
     };
   }, [isNavigating, pending, router]);

@@ -28,6 +28,7 @@ import {
   upsertCachedMatches,
 } from "@/lib/active-state-cache";
 import { isKnownMarket, marketSettle, minuteNumber } from "@/lib/markets";
+import { buildServerClockAnchor } from "@/lib/live-clock";
 import { ensureMlLoaded, recordMatchesFinishedBatchMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
 import { teamLogo } from "@/lib/team-logos";
@@ -2305,10 +2306,143 @@ export async function forceMatchFinalScore(
  * et `GET /api/coupons` voient toujours la minute exacte (`>= 85'` verrouillé),
  * le score exact et les cotes live exactes même entre deux jalons PostgreSQL.
  */
+const MAX_REAL_LIVE_PROJECTION_SEC = 75;
+
+function toEpochMs(v: Date | string | null | undefined): number {
+  if (!v) return 0;
+  if (v instanceof Date) {
+    const t = v.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
+  const t = Date.parse(String(v));
+  return Number.isFinite(t) ? t : 0;
+}
+
+function pickFresherManualRow(a: MatchRow, b: MatchRow | null): MatchRow {
+  if (!b) return a;
+  if (a.status === "finished" && b.status !== "finished") return a;
+  if (b.status === "finished" && a.status !== "finished") return b;
+  const aSync = Math.max(
+    toEpochMs(a.feedSyncedAt),
+    toEpochMs(a.realStats?.updatedAt)
+  );
+  const bSync = Math.max(
+    toEpochMs(b.feedSyncedAt),
+    toEpochMs(b.realStats?.updatedAt)
+  );
+  if (aSync !== bSync) return aSync >= bSync ? a : b;
+  const aGoals = (a.homeScore ?? 0) + (a.awayScore ?? 0);
+  const bGoals = (b.homeScore ?? 0) + (b.awayScore ?? 0);
+  if (aGoals !== bGoals) return aGoals >= bGoals ? a : b;
+  const aEvs = a.events?.length ?? 0;
+  const bEvs = b.events?.length ?? 0;
+  return aEvs >= bEvs ? a : b;
+}
+
+function projectLiveRealMatchRow(base: MatchRow, nowMs: number): MatchRow {
+  if (base.source !== "manual" || base.status !== "live" || base.suspended) {
+    return base;
+  }
+  const anchor = buildServerClockAnchor(base, nowMs);
+  if (
+    !anchor ||
+    anchor.mode !== "real" ||
+    anchor.phase === "HT" ||
+    anchor.phase === "PAUSED" ||
+    anchor.anchorSeconds == null ||
+    anchor.syncedAtMs == null
+  ) {
+    return base;
+  }
+
+  const driftSec = Math.max(
+    0,
+    Math.min(
+      MAX_REAL_LIVE_PROJECTION_SEC,
+      Math.floor((nowMs - anchor.syncedAtMs) / 1_000)
+    )
+  );
+  if (driftSec <= 0 && base.realStats?.clockSeconds != null) {
+    return base;
+  }
+
+  const is2H =
+    anchor.phase === "2H" ||
+    anchor.phase === "2H_STOPPAGE" ||
+    anchor.anchorSeconds >= 2700;
+  const rawProjSec = anchor.anchorSeconds + driftSec;
+  const projSec = !is2H
+    ? Math.min(2820, Math.max(0, rawProjSec))
+    : Math.min(5880, Math.max(2700, rawProjSec));
+
+  let projMinute = base.minute;
+  if (!is2H) {
+    projMinute =
+      projSec < 2700
+        ? `${Math.min(45, Math.max(1, Math.floor(projSec / 60) + 1))}’`
+        : `45+${Math.max(1, Math.floor((projSec - 2700) / 60) + 1)}’`;
+  } else {
+    projMinute =
+      projSec < 5400
+        ? `${Math.min(90, Math.max(46, Math.floor(projSec / 60) + 1))}’`
+        : `90+${Math.max(1, Math.floor((projSec - 5400) / 60) + 1)}’`;
+  }
+
+  const prevStats = base.realStats;
+  return {
+    ...base,
+    minute: projMinute,
+    realStats: {
+      possessionHome: prevStats?.possessionHome ?? null,
+      possessionAway: prevStats?.possessionAway ?? null,
+      shotsTotalHome: prevStats?.shotsTotalHome ?? null,
+      shotsTotalAway: prevStats?.shotsTotalAway ?? null,
+      shotsOnTargetHome: prevStats?.shotsOnTargetHome ?? null,
+      shotsOnTargetAway: prevStats?.shotsOnTargetAway ?? null,
+      cornersHome: prevStats?.cornersHome ?? null,
+      cornersAway: prevStats?.cornersAway ?? null,
+      foulsHome: prevStats?.foulsHome ?? null,
+      foulsAway: prevStats?.foulsAway ?? null,
+      offsidesHome: prevStats?.offsidesHome ?? null,
+      offsidesAway: prevStats?.offsidesAway ?? null,
+      savesHome: prevStats?.savesHome ?? null,
+      savesAway: prevStats?.savesAway ?? null,
+      yellowCardsHome: prevStats?.yellowCardsHome ?? null,
+      yellowCardsAway: prevStats?.yellowCardsAway ?? null,
+      htHomeScore: prevStats?.htHomeScore ?? base.htHomeScore ?? null,
+      htAwayScore: prevStats?.htAwayScore ?? base.htAwayScore ?? null,
+      statSnapshots: prevStats?.statSnapshots,
+      liveFeedProbs: prevStats?.liveFeedProbs ?? null,
+      feedTotalGoalsExpected: prevStats?.feedTotalGoalsExpected ?? null,
+      clockSeconds: projSec,
+      clockPeriod: is2H ? 2 : 1,
+      updatedAt: new Date(nowMs).toISOString(),
+    },
+  };
+}
+
 export function hydrateLiveMatchRow(match: MatchRow, nowMs = Date.now()): MatchRow {
   const cached = getCachedMatchById(match.id);
-  const base = cached ?? match;
-  if (base.source === "manual" || base.status !== "live") {
+  if (match.source === "manual" || cached?.source === "manual") {
+    const fresher = pickFresherManualRow(match, cached);
+    return projectLiveRealMatchRow(fresher, nowMs);
+  }
+
+  if (match.status === "finished") return match;
+  if (cached?.status === "finished") return cached;
+
+  const base =
+    cached &&
+    cached.status === "live" &&
+    (match.status !== "live" ||
+      ((cached.homeScore ?? 0) + (cached.awayScore ?? 0) >
+        (match.homeScore ?? 0) + (match.awayScore ?? 0)) ||
+      (cached.events?.length ?? 0) > (match.events?.length ?? 0) ||
+      minuteNumber(cached.minute) >= minuteNumber(match.minute))
+      ? cached
+      : match;
+
+  if (base.status !== "live") {
     return base;
   }
   const stepped = stepLiveMatchInMemory(
@@ -2336,7 +2470,11 @@ export async function checkpointVirtualMatchesForBet(
   const finished: MatchRow[] = [];
 
   for (const raw of rowsFromDb) {
-    if (raw.source === "manual" || raw.status !== "live") {
+    if (raw.source === "manual") {
+      out.set(raw.id, projectLiveRealMatchRow(raw, nowMs));
+      continue;
+    }
+    if (raw.status !== "live") {
       out.set(raw.id, raw);
       continue;
     }

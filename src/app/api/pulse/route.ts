@@ -9,7 +9,7 @@ import {
   type UserPulseTicketItem,
 } from "@/lib/active-state-cache";
 import { formatServerErrorResponse } from "@/lib/db-error";
-import { jsonWithEtag } from "@/lib/response-cache";
+import { isManualRefreshRequest, jsonWithEtag } from "@/lib/response-cache";
 import { requireUserId } from "@/lib/session";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/pulse — Pulsation globale ultra-légère (~150 octets au lieu de ~60 Ko) :
- * - Sert depuis le cache mémoire joueur (12 s, invalidé instantanément dès qu'un pari est
+ * - Sert depuis le cache mémoire joueur (invalidé instantanément dès qu'un pari est
  *   placé, vendu ou réglé).
  * - Lorsqu'une lecture SQL a lieu, exécute UNE SEULE requête compacte sans aucun `JOIN` JSONB
  *   ni historique ancien : renvoie uniquement `balance`, les tickets `pending` et les tickets
@@ -30,11 +30,14 @@ export async function GET(req: NextRequest) {
     if (typeof auth !== "number") return auth;
     const uid = auth;
 
-    await syncLiveMatchesThrottled();
+    const manualRefresh = isManualRefreshRequest(req);
+    await syncLiveMatchesThrottled(false, { manualRefresh });
 
-    const cached = getCachedUserPulse(uid);
-    if (cached) {
-      return jsonWithEtag(req, null, cached);
+    if (!manualRefresh) {
+      const cached = getCachedUserPulse(uid);
+      if (cached) {
+        return jsonWithEtag(req, null, cached);
+      }
     }
 
     const res = await db.execute(sql`

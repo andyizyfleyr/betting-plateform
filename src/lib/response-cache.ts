@@ -43,10 +43,10 @@ export interface EdgeCachePolicy {
   tags?: readonly string[];
 }
 
-const MATCHES_CACHE_TTL_MS = 1_800;
-const HISTORY_CACHE_TTL_MS = 3_500;
-const PREDICTIONS_CATALOG_TTL_MS = 5_000;
-const TAG_PURGE_COOLDOWN_MS = 2_000;
+const MATCHES_CACHE_TTL_MS = 1_000;
+const HISTORY_CACHE_TTL_MS = 2_000;
+const PREDICTIONS_CATALOG_TTL_MS = 2_500;
+const TAG_PURGE_COOLDOWN_MS = 1_500;
 
 interface GlobalResponseCacheStore {
   matchesPayload: CachedJsonPayload | null;
@@ -301,6 +301,34 @@ export function rejectUnexpectedQueryParams(message = "Paramètres d'URL non aut
 }
 
 /**
+ * Détecte un rafraîchissement manuel explicite du joueur (`?refresh=1` ou `x-pulse-refresh: 1`).
+ */
+export function isManualRefreshRequest(req: Request): boolean {
+  if (req.headers.get("x-pulse-refresh") === "1") return true;
+  try {
+    const url = new URL(req.url);
+    return url.searchParams.get("refresh") === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Vérifie que seuls les paramètres d'URL explicitement autorisés (plus `refresh=1`) sont présents.
+ */
+export function hasUnexpectedSearchParams(
+  searchParams: URLSearchParams,
+  allowedKeys: readonly string[] = []
+): boolean {
+  const allowed = new Set<string>(allowedKeys);
+  for (const [key, value] of searchParams.entries()) {
+    if (key === "refresh" && value === "1") continue;
+    if (!allowed.has(key)) return true;
+  }
+  return false;
+}
+
+/**
  * Réponse JSON strictement PRIVÉE (authentifiée par joueur).
  */
 export function jsonWithEtag(
@@ -310,11 +338,14 @@ export function jsonWithEtag(
 ): NextResponse {
   const json = precomputed ? precomputed.json : JSON.stringify(data);
   const etag = precomputed ? precomputed.etag : computeWeakEtag(json);
-  const ifNoneMatch = req.headers.get("if-none-match");
+  const manualRefresh = isManualRefreshRequest(req);
+  const ifNoneMatch = manualRefresh ? null : req.headers.get("if-none-match");
 
   const privateHeaders: Record<string, string> = {
     ETag: etag,
-    "Cache-Control": "private, max-age=0, must-revalidate",
+    "Cache-Control": manualRefresh
+      ? "private, no-store, max-age=0"
+      : "private, max-age=0, must-revalidate",
     "CDN-Cache-Control": "private, no-store",
     "Vercel-CDN-Cache-Control": "private, no-store",
     Vary: "Cookie, Authorization, Accept-Encoding",
@@ -338,7 +369,8 @@ export function jsonWithEtag(
 }
 
 /**
- * Réponse JSON PUBLIQUE mutualisée par région sur le CDN Edge Vercel.
+ * Réponse JSON PUBLIQUE mutualisée par région sur le CDN Edge Vercel
+ * (ou strictement `no-store` lors d'un rafraîchissement manuel `?refresh=1`).
  */
 export function publicJsonWithEdgeCache(
   req: Request,
@@ -348,7 +380,22 @@ export function publicJsonWithEdgeCache(
 ): NextResponse {
   const json = precomputed ? precomputed.json : JSON.stringify(data);
   const etag = precomputed ? precomputed.etag : computeWeakEtag(json);
-  const ifNoneMatch = req.headers.get("if-none-match");
+  const manualRefresh = isManualRefreshRequest(req);
+  const ifNoneMatch = manualRefresh ? null : req.headers.get("if-none-match");
+
+  if (manualRefresh) {
+    return new NextResponse(json, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        ETag: etag,
+        "Cache-Control": "private, no-store, max-age=0",
+        "CDN-Cache-Control": "private, no-store",
+        "Vercel-CDN-Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
 
   const maxAge = Math.max(0, Math.floor(policy.maxAge ?? 0));
   const sMaxAge = Math.max(1, Math.floor(policy.sMaxAge));

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hydrateLiveMatchRow } from "@/db/engine";
 import { ensureSeeded } from "@/db/seed";
 import {
   ensureMatchStoreHydrated,
@@ -36,7 +37,9 @@ export async function POST(req: NextRequest) {
 
     const now = Date.now();
     const rows = getCachedAllMatchesForFeed();
-    const slimMatches = rows.map((r) => serializeSlimPublicMatch(r, now));
+    const slimMatches = rows.map((r) =>
+      serializeSlimPublicMatch(hydrateLiveMatchRow(r, now), now)
+    );
     const serverTime = new Date(now).toISOString();
 
     setMatchesSlimPayloadCache({

@@ -34,7 +34,11 @@ import {
   PulseFlashLoader,
   triggerRouteLoader,
 } from "@/components/pulse-flash-loader";
-import { useMatchesFeedQuery } from "@/lib/party-realtime";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  forceRefreshMatchesFeed,
+  useMatchesFeedQuery,
+} from "@/lib/party-realtime";
 import {
   deduplicateLeagueNames,
   isClearFavoriteMatch,
@@ -60,6 +64,7 @@ function parseStatusParam(raw: string | null): MatchStatusFilter {
 
 function AllMatchesContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const { user, setFeedMatches } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
@@ -101,14 +106,12 @@ function AllMatchesContent() {
 
   const handlePullRefresh = useCallback(async () => {
     try {
-      const res = await matchesQuery.refetch();
-      if (res.data?.matches) {
-        setFeedMatches(res.data.matches);
-      }
+      const res = await forceRefreshMatchesFeed(queryClient);
+      setFeedMatches(res.matches);
     } catch {
       /* conserve l'affichage actuel sur réseau mobile instable */
     }
-  }, [matchesQuery, setFeedMatches]);
+  }, [queryClient, setFeedMatches]);
 
   const realMatchesAll = useMemo(
     () => (matches ?? []).filter((m) => m.source === "manual"),
@@ -434,7 +437,7 @@ function AllMatchesContent() {
             <button
               type="button"
               onClick={() => {
-                void matchesQuery.refetch();
+                void handlePullRefresh();
               }}
               className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
             >

@@ -111,6 +111,9 @@ export function MarketSheet() {
   const [category, setCategory] = useState<SheetCategory>("all");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
+  const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
+    null
+  );
   const [showTracker, setShowTracker] = useState(false);
 
   const sharedFromFeed = useMemo(
@@ -141,14 +144,15 @@ export function MarketSheet() {
     return sharedFromFeed ?? marketMatch;
   }, [detailQuery.data?.match, marketMatch, sharedFromFeed]);
 
-  const hasAnyOpen = Object.keys(openMap).length > 0;
+  const groups = useMemo(() => sanitizeMatchMarkets(match?.markets), [match]);
+
   if (match && match.id !== prevMatchId) {
     setPrevMatchId(match.id);
+    setFullMarketsOpenedId(groups.length > 1 ? match.id : null);
     setCategory("all");
     setShowTracker(
       typeof window !== "undefined" && window.innerWidth >= 1024
     );
-    const groups = match.markets ?? [];
     const initialOpen: Record<string, boolean> = {};
     // Ouvre par défaut Résultat + Total de buts (ou les 2 premiers marchés disponibles)
     for (const key of ["result", "total_ou"]) {
@@ -158,8 +162,8 @@ export function MarketSheet() {
       for (const g of groups.slice(0, 2)) initialOpen[g.key] = true;
     }
     setOpenMap(initialOpen);
-  } else if (match && !hasAnyOpen && (match.markets?.length ?? 0) > 1) {
-    const groups = match.markets ?? [];
+  } else if (match && groups.length > 1 && fullMarketsOpenedId !== match.id) {
+    setFullMarketsOpenedId(match.id);
     const initialOpen: Record<string, boolean> = {};
     for (const key of ["result", "total_ou"]) {
       if (groups.some((g) => g.key === key)) initialOpen[key] = true;
@@ -167,9 +171,10 @@ export function MarketSheet() {
     if (Object.keys(initialOpen).length === 0) {
       for (const g of groups.slice(0, 2)) initialOpen[g.key] = true;
     }
-    setOpenMap(initialOpen);
+    setOpenMap((prev) => ({ ...initialOpen, ...prev }));
   } else if (!match && prevMatchId !== null) {
     setPrevMatchId(null);
+    setFullMarketsOpenedId(null);
     setOpenMap({});
   }
 
@@ -179,8 +184,6 @@ export function MarketSheet() {
       document.body.style.overflow = target ? "hidden" : "";
     };
   }, [match, target]);
-
-  const groups = useMemo(() => sanitizeMatchMarkets(match?.markets), [match]);
 
   const filteredGroups = useMemo(() => {
     if (category === "all") return groups;

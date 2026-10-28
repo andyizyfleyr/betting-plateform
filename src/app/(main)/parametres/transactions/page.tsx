@@ -13,6 +13,7 @@ import {
 import { api, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/client-entity-cache";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import {
   PulseFlashLoader,
   triggerRouteLoader,
@@ -38,26 +39,29 @@ export default function TransactionsPage() {
   const cancelSlotRef = useRef<Map<number, string>>(new Map());
   const cancelInFlightRef = useRef(false);
 
-  const load = useCallback(async () => {
-    if (!user && authReady) return;
-    try {
-      const w = await api.wallet();
-      setWallet(w);
-      if (typeof w.balance === "number") setBalance(w.balance);
-    } catch {
-      /* silencieux */
-    }
-  }, [authReady, setBalance, user]);
+  const load = useCallback(
+    async (forceRefresh = false) => {
+      if (!user && authReady) return;
+      try {
+        const w = await api.wallet({ forceRefresh });
+        setWallet(w);
+        if (typeof w.balance === "number") setBalance(w.balance);
+      } catch {
+        /* silencieux */
+      }
+    },
+    [authReady, setBalance, user]
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
+    void load(false);
     const id = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
-      void load();
-    }, 8_000);
+      void load(false);
+    }, 6_000);
     const onVisible = () => {
-      if (!document.hidden) void load();
+      if (!document.hidden) void load(true);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -65,6 +69,10 @@ export default function TransactionsPage() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [load, betsVersion, user?.balance]);
+
+  const handlePullRefresh = useCallback(async () => {
+    await load(true);
+  }, [load]);
 
   const cancelWithdrawal = async (withdrawalId: number) => {
     if (cancellingId != null || cancelInFlightRef.current) return;
@@ -142,6 +150,7 @@ export default function TransactionsPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh}>
     <div className="mx-auto w-full max-w-2xl px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
       <div className="flex items-center gap-2">
@@ -286,5 +295,6 @@ export default function TransactionsPage() {
         )}
       </div>
     </div>
+    </PullToRefresh>
   );
 }

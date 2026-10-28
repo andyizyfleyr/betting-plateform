@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
   experimental: {
     optimisticRouting: true,
     staleTimes: {
-      dynamic: 300,
-      static: 300,
+      dynamic: 0,
+      static: 60,
     },
   },
   async headers() {

@@ -14,6 +14,8 @@ import { ensureMlLoaded } from "@/lib/ml-engine";
 import { isRealFeedSyncInFlight } from "@/lib/real-sports-feed";
 import {
   EDGE_CACHE_TAGS,
+  hasUnexpectedSearchParams,
+  isManualRefreshRequest,
   publicJsonWithEdgeCache,
   rejectUnexpectedQueryParams,
   runSingleflight,
@@ -24,8 +26,8 @@ export const dynamic = "force-dynamic";
 
 const SINGLE_MATCH_ACTIVE_POLICY = {
   maxAge: 0,
-  sMaxAge: 2,
-  staleWhileRevalidate: 2,
+  sMaxAge: 1,
+  staleWhileRevalidate: 1,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 
@@ -46,9 +48,10 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (req.nextUrl.searchParams.size > 0) {
+    if (hasUnexpectedSearchParams(req.nextUrl.searchParams)) {
       return rejectUnexpectedQueryParams();
     }
+    const manualRefresh = isManualRefreshRequest(req);
 
     const { id: rawId } = await ctx.params;
     if (!/^[1-9]\d{0,9}$/.test(rawId)) {
@@ -59,33 +62,37 @@ export async function GET(
       return NextResponse.json({ error: "Identifiant de match hors plage" }, { status: 400 });
     }
 
-    const result = await runSingleflight(`api:match:${matchId}`, async () => {
-      await ensureSeeded();
-      await ensureMlLoaded();
-      await syncLiveMatchesThrottled();
-      await ensureMatchStoreHydrated();
+    const result = await runSingleflight(
+      manualRefresh ? `api:match:${matchId}:refresh` : `api:match:${matchId}`,
+      async () => {
+        await ensureSeeded();
+        await ensureMlLoaded();
+        await syncLiveMatchesThrottled(false, { manualRefresh });
+        await ensureMatchStoreHydrated(manualRefresh);
 
-      const now = Date.now();
-      let row = getCachedMatchById(matchId);
-      if (row) {
-        row = hydrateLiveMatchRow(row, now);
-      } else {
-        const [dbRow] = await db
-          .select()
-          .from(matches)
-          .where(eq(matches.id, matchId))
-          .limit(1);
-        row = dbRow ? hydrateLiveMatchRow(dbRow, now) : null;
+        const now = Date.now();
+        let row = getCachedMatchById(matchId);
+        if (row && !manualRefresh) {
+          row = hydrateLiveMatchRow(row, now);
+        } else {
+          const [dbRow] = await db
+            .select()
+            .from(matches)
+            .where(eq(matches.id, matchId))
+            .limit(1);
+          const candidate = dbRow ?? row;
+          row = candidate ? hydrateLiveMatchRow(candidate, now) : null;
+        }
+
+        if (!row) return null;
+
+        return {
+          match: serializePublicMatch(row, now),
+          serverTime: new Date(now).toISOString(),
+          catchingUp: isRealFeedSyncInFlight(),
+        };
       }
-
-      if (!row) return null;
-
-      return {
-        match: serializePublicMatch(row, now),
-        serverTime: new Date(now).toISOString(),
-        catchingUp: isRealFeedSyncInFlight(),
-      };
-    });
+    );
 
     if (!result) {
       return NextResponse.json({ error: "Match introuvable" }, { status: 404 });

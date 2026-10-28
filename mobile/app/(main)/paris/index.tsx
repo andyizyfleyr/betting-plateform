@@ -25,7 +25,7 @@ import {
   InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { useApp } from "@/context/app-context";
 import { api, type UnifiedBet } from "@/lib/api";
@@ -73,6 +73,7 @@ function matchesSearch(b: UnifiedBet, qNorm: string): boolean {
 
 export default function ParisScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { authReady, sessionRestoring, user, betsVersion, setBalance, dataSaverMode } =
     useApp();
 
@@ -135,12 +136,18 @@ export default function ParisScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const r = await betsQuery.refetch();
-      if (r.data?.balance != null) setBalance(r.data.balance);
+      const fresh = await api.bets.list("all", { forceRefresh: true });
+      queryClient.setQueryData(
+        [...mobileQueryKeys.userBets(user?.id, "all"), betsVersion],
+        fresh
+      );
+      if (fresh.balance != null) setBalance(fresh.balance);
+    } catch {
+      /* conserve l'affichage en cours */
     } finally {
       setRefreshing(false);
     }
-  }, [betsQuery, setBalance]);
+  }, [betsVersion, queryClient, setBalance, user?.id]);
 
   const qNorm = query.trim().toLowerCase();
 
@@ -529,7 +536,7 @@ export default function ParisScreen() {
             <Text style={styles.errorSub}>{loadError}</Text>
             <Pressable
               onPress={() => {
-                void betsQuery.refetch();
+                void onRefresh();
               }}
               style={styles.retryBtn}
             >

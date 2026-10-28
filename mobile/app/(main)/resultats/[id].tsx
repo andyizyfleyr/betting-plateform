@@ -52,39 +52,42 @@ export default function ResultDetailScreen() {
     );
   }
 
-  const fetchResult = useCallback(async () => {
-    if (invalidId) return;
-    try {
-      const base = await api.matchHistory();
-      const inBase = base.matches.find((m) => m.id === matchId) ?? null;
-      if (inBase) {
-        setItem(inBase);
+  const fetchResult = useCallback(
+    async (forceRefresh = false) => {
+      if (invalidId) return;
+      try {
+        const base = await api.matchHistory(undefined, { forceRefresh });
+        const inBase = base.matches.find((m) => m.id === matchId) ?? null;
+        if (inBase) {
+          setItem(inBase);
+          setLoadError(null);
+          return;
+        }
+        const focused = await api.matchHistory(matchId, { forceRefresh });
+        setItem(focused.focusedMatch ?? null);
         setLoadError(null);
-        return;
+      } catch (e) {
+        setItem((prev) => (prev === undefined ? null : prev));
+        setLoadError(
+          e instanceof Error
+            ? e.message
+            : "Impossible de charger ce résultat."
+        );
       }
-      const focused = await api.matchHistory(matchId);
-      setItem(focused.focusedMatch ?? null);
-      setLoadError(null);
-    } catch (e) {
-      setItem((prev) => (prev === undefined ? null : prev));
-      setLoadError(
-        e instanceof Error
-          ? e.message
-          : "Impossible de charger ce résultat."
-      );
-    }
-  }, [invalidId, matchId]);
+    },
+    [invalidId, matchId]
+  );
 
   useEffect(() => {
-    void fetchResult();
+    void fetchResult(false);
     if (item?.status === "finished") return;
-    const id = setInterval(() => void fetchResult(), 5_000);
+    const id = setInterval(() => void fetchResult(false), 5_000);
     return () => clearInterval(id);
   }, [fetchResult, item?.status]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchResult();
+    await fetchResult(true);
     setRefreshing(false);
   }, [fetchResult]);
 

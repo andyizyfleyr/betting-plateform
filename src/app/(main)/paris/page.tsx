@@ -13,7 +13,7 @@ import {
 } from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
 import { pulseQueryKeys } from "@/lib/query-client";
 import { getAllCachedBets } from "@/lib/client-entity-cache";
@@ -23,9 +23,9 @@ import { cn, eur } from "@/lib/format";
 type Tab = "ongoing" | "finished";
 type OutcomeFilter = "all" | "won" | "lost" | "cashed" | "void";
 
-const POLL_LIVE_MS = 3_500;
-const POLL_PENDING_MS = 6_000;
-const POLL_IDLE_MS = 18_000;
+const POLL_LIVE_MS = 2_500;
+const POLL_PENDING_MS = 5_000;
+const POLL_IDLE_MS = 15_000;
 
 function dayLabel(iso: string) {
   const d = new Date(iso);
@@ -46,6 +46,7 @@ function settledOrPlacedIso(b: ClientBet): string {
 }
 
 export default function ParisPage() {
+  const queryClient = useQueryClient();
   const { betsVersion, user, setBalance } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const livePollMs = getAdaptiveIntervalMs(POLL_LIVE_MS, isConstrained);
@@ -113,14 +114,19 @@ export default function ParisPage() {
         ? "Impossible de charger vos paris pour le moment."
         : null;
 
+  const currentUserId = user?.id;
   const handlePullRefresh = useCallback(async () => {
     try {
-      const r = await refetchAllBets();
-      if (typeof r.data?.balance === "number") setBalance(r.data.balance);
+      const fresh = await api.allBets({ forceRefresh: true });
+      queryClient.setQueryData(
+        [...pulseQueryKeys.userBets(currentUserId, "all"), betsVersion],
+        fresh
+      );
+      if (typeof fresh.balance === "number") setBalance(fresh.balance);
     } catch {
       /* conserve la liste affichée si la 3G coupe brièvement */
     }
-  }, [refetchAllBets, setBalance]);
+  }, [betsVersion, currentUserId, queryClient, setBalance]);
 
   const allBets = useMemo(() => bets ?? [], [bets]);
 

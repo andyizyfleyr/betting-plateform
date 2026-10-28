@@ -317,10 +317,10 @@ function ProvidersRealtimeQueries({
 }) {
   const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const bgMatchesIntervalMs = getAdaptiveIntervalMs(4_000, isConstrained);
-  const bgWsFullSyncMs = getAdaptiveIntervalMs(12_000, isConstrained);
-  const bgBetsActiveMs = getAdaptiveIntervalMs(5_000, isConstrained);
-  const bgBetsIdleMs = getAdaptiveIntervalMs(15_000, isConstrained);
+  const bgMatchesIntervalMs = getAdaptiveIntervalMs(3_500, isConstrained);
+  const bgWsFullSyncMs = getAdaptiveIntervalMs(5_000, isConstrained);
+  const bgBetsActiveMs = getAdaptiveIntervalMs(4_000, isConstrained);
+  const bgBetsIdleMs = getAdaptiveIntervalMs(12_000, isConstrained);
 
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 1024
@@ -569,9 +569,15 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     pathname === "/matchs" ||
     pathname === "/matchs/tous" ||
     pathname === "/matchs/virtuels";
+  const isBetslipRoute =
+    pathname === "/betslip" || pathname.startsWith("/betslip/");
   const isParisRoute = pathname === "/paris" || pathname.startsWith("/paris/");
   const needsBackgroundMatchFeed =
-    comboLegs.length > 0 || comboOpen || marketMatch !== null || target !== null;
+    isBetslipRoute ||
+    comboLegs.length > 0 ||
+    comboOpen ||
+    marketMatch !== null ||
+    target !== null;
   const hasPending = pendingCount > 0;
 
   useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
@@ -701,12 +707,16 @@ function ProvidersInner({ children }: { children: ReactNode }) {
             }
           }
         }
-        if (liveOdds == null && leg.market === "result") {
-          if (leg.selection === "V1" && m.oddsHome > 1) {
+        if (liveOdds == null && (leg.market === "result" || leg.market === "1x2")) {
+          if ((leg.selection === "home" || leg.selection === "V1") && m.oddsHome > 1) {
             liveOdds = Math.round(m.oddsHome * 100) / 100;
-          } else if (leg.selection === "X" && m.oddsDraw != null && m.oddsDraw > 1) {
+          } else if (
+            (leg.selection === "draw" || leg.selection === "X") &&
+            m.oddsDraw != null &&
+            m.oddsDraw > 1
+          ) {
             liveOdds = Math.round(m.oddsDraw * 100) / 100;
-          } else if (leg.selection === "V2" && m.oddsAway > 1) {
+          } else if ((leg.selection === "away" || leg.selection === "V2") && m.oddsAway > 1) {
             liveOdds = Math.round(m.oddsAway * 100) / 100;
           }
         }

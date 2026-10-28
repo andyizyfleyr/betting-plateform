@@ -28,9 +28,12 @@ import { LiveMatchClock } from "@/components/live-match-clock";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/context/app-context";
-import { useMobileMatchHistoryQuery } from "@/lib/party-realtime";
+import {
+  forceRefreshMobileMatchHistory,
+  useMobileMatchHistoryQuery,
+} from "@/lib/party-realtime";
 import { mobileQueryKeys } from "@/lib/query-client";
 import { api, type ClientMatchHistoryItem } from "@/lib/api";
 import {
@@ -223,6 +226,7 @@ function MatchHistoryCard({
 
 export default function ResultatsScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const matchParam = searchParams.get("match");
   const universeParam = searchParams.get("universe");
@@ -280,14 +284,25 @@ export default function ResultatsScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await historyQuery.refetch();
+      await forceRefreshMobileMatchHistory(queryClient).catch(() =>
+        historyQuery.refetch()
+      );
       if (validRequestedId && !focusedInBase) {
-        await focusedFallbackQuery.refetch();
+        await forceRefreshMobileMatchHistory(
+          queryClient,
+          validRequestedId
+        ).catch(() => focusedFallbackQuery.refetch());
       }
     } finally {
       setRefreshing(false);
     }
-  }, [focusedFallbackQuery, focusedInBase, historyQuery, validRequestedId]);
+  }, [
+    focusedFallbackQuery,
+    focusedInBase,
+    historyQuery,
+    queryClient,
+    validRequestedId,
+  ]);
 
   const sortedHistory = useMemo(() => {
     if (!history) return [];

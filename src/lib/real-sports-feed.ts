@@ -35,12 +35,14 @@ import { teamLogo } from "@/lib/team-logos";
 
 const ESPN_SOCCER_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer";
 
-/** Fréquence maximale de rafraîchissement des matchs réels en direct ou proches du coup d'envoi (10 s). */
-const LIVE_FEED_SYNC_MS = 10_000;
+/** Fréquence maximale de rafraîchissement des matchs réels en direct ou proches du coup d'envoi (8 s). */
+const LIVE_FEED_SYNC_MS = 8_000;
+/** Intervalle minimal anti-rafale lors d'un rafraîchissement manuel joueur (`?refresh=1`). */
+const USER_MANUAL_REFRESH_SYNC_MS = 3_000;
 /** Fréquence de vérification de fond lorsqu'il n'y a que des matchs réels à venir lointains. */
 const IDLE_FEED_SYNC_MS = 180_000;
-/** Fréquence maximale d'interrogation du résumé détaillé (`boxscore` stats + `pickcenter` + `winprobability`) par match live (15 s). */
-const SUMMARY_FETCH_INTERVAL_MS = 15_000;
+/** Fréquence maximale d'interrogation du résumé détaillé (`boxscore` stats + `pickcenter` + `winprobability`) par match live (10 s). */
+const SUMMARY_FETCH_INTERVAL_MS = 10_000;
 /**
  * Fenêtre courte de confirmation anti-VAR (25 s) appliquée UNIQUEMENT lorsqu'un match réel
  * était activement suivi en direct jusqu'au coup de sifflet final.
@@ -1865,13 +1867,8 @@ async function fetchLeagueScoreboardForDays(
 
   const merged = new Map<string, ParsedFeedMatch>();
 
-  if (uniqueDays.length === 1) {
-    const single = await fetchLeagueSingleScoreboard(leagueSlug, uniqueDays[0], 5_500);
-    mergeParsedFeedMap(merged, single.items);
-    return [...merged.values()];
-  }
-
-  // Appel initial sans `dates` pour récupérer à la fois la journée courante et `calendar`
+  // Appel initial sans `dates` : garantit 100 % des rencontres actuellement `live`
+  // même autour de minuit UTC (le paramètre `?dates=` d'ESPN utilise le fuseau US Eastern).
   const base = await fetchLeagueSingleScoreboard(leagueSlug, undefined, 5_500);
   mergeParsedFeedMap(merged, base.items);
 
@@ -2464,13 +2461,17 @@ const EMPTY_SYNC_SUMMARY: RealSyncSummary = {
   pendingConfirmCount: 0,
 };
 
-export async function syncRealMatchesThrottled(force = false): Promise<RealSyncSummary> {
+export async function syncRealMatchesThrottled(
+  force = false,
+  opts?: { manualRefresh?: boolean }
+): Promise<RealSyncSummary> {
   if (inFlightRealSync) {
     return inFlightRealSync;
   }
 
+  const manualRefresh = Boolean(opts?.manualRefresh);
   const nowMs = Date.now();
-  await ensureMatchStoreHydrated();
+  await ensureMatchStoreHydrated(force || manualRefresh);
   const precheckManual = getCachedOpenManualMatches().filter((m) => m.autoSync);
   const ftConfirmationDueNow = precheckManual.some(
     (m) =>
@@ -2478,17 +2479,21 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
       nowMs - m.feedFinishedAt.getTime() >= REAL_FT_CONFIRM_DELAY_MS
   );
 
-  if (!force && !ftConfirmationDueNow && nowMs - lastRealSyncAt < LIVE_FEED_SYNC_MS) {
+  const minSyncGapMs = manualRefresh
+    ? USER_MANUAL_REFRESH_SYNC_MS
+    : LIVE_FEED_SYNC_MS;
+
+  if (!force && !ftConfirmationDueNow && nowMs - lastRealSyncAt < minSyncGapMs) {
     return EMPTY_SYNC_SUMMARY;
   }
 
   inFlightRealSync = (async (): Promise<RealSyncSummary> => {
     try {
-      await ensureMatchStoreHydrated();
+      await ensureMatchStoreHydrated(force || manualRefresh);
       const cachedManual = getCachedOpenManualMatches().filter((m) => m.autoSync);
 
       // Fast-path en RAM (0 requête SQL vers Neon) lorsqu'il n'y a aucun match réel autoSync
-      if (!force && cachedManual.length === 0) {
+      if (!force && !manualRefresh && cachedManual.length === 0) {
         lastRealSyncAt = Date.now();
         return { ...EMPTY_SYNC_SUMMARY };
       }
@@ -2502,7 +2507,12 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
       );
 
       // Fast-path en RAM (0 requête SQL vers Neon) s'il n'y a que des matchs réels lointains
-      if (!force && !cachedHasUrgent && nowMs - lastRealSyncAt < IDLE_FEED_SYNC_MS) {
+      if (
+        !force &&
+        !manualRefresh &&
+        !cachedHasUrgent &&
+        nowMs - lastRealSyncAt < IDLE_FEED_SYNC_MS
+      ) {
         return { ...EMPTY_SYNC_SUMMARY, activeCount: cachedManual.length };
       }
 
@@ -2530,13 +2540,17 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
           m.startsAt.getTime() <= nowMs + 20 * 60_000
       );
 
-      if (!force && !hasUrgent && nowMs - lastRealSyncAt < IDLE_FEED_SYNC_MS) {
+      if (
+        !force &&
+        !manualRefresh &&
+        !hasUrgent &&
+        nowMs - lastRealSyncAt < IDLE_FEED_SYNC_MS
+      ) {
         return { ...EMPTY_SYNC_SUMMARY, activeCount: openManual.length };
       }
 
       // Cible uniquement les matchs actifs, déjà débutés, imminents (< 3h), non reliés
-      // ou non rafraîchis depuis >= 30 min : évite de requêter 14 jours de calendriers
-      // sur 100+ matchs à venir à chaque cycle de 15 s sur Vercel Serverless.
+      // ou non rafraîchis depuis >= 30 min (ou lors d'un refresh manuel sur les matchs du jour).
       const candidatesToSync = openManual.filter(
         (m) =>
           force ||
@@ -2544,7 +2558,7 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
           m.feedFinishedAt != null ||
           !m.externalId ||
           !m.feedSyncedAt ||
-          m.startsAt.getTime() <= nowMs + 3 * 3600_000 ||
+          m.startsAt.getTime() <= nowMs + (manualRefresh ? 12 : 3) * 3600_000 ||
           nowMs - m.feedSyncedAt.getTime() >= 30 * 60_000
       );
 
@@ -2555,9 +2569,10 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
 
       const settlementMode = await getRealMatchSettlementMode();
 
-      // Regroupe uniquement les dates UTC exactes nécessaires par compétition (zéro requête inutile)
+      // Regroupe les dates UTC ET US-Eastern (UTC-6h, calendrier interne `?dates=` d'ESPN)
       const daysBySlug = new Map<string, Set<string>>();
       const todayYmd = formatYmd(new Date(nowMs));
+      const todayUsEasternYmd = formatYmd(new Date(nowMs - 6 * 3600_000));
 
       for (const m of candidatesToSync) {
         const slug = m.externalLeague || resolveEspnSlugForLeague(m.league);
@@ -2568,7 +2583,9 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
           daysBySlug.set(slug, bucket);
         }
         bucket.add(todayYmd);
+        bucket.add(todayUsEasternYmd);
         bucket.add(formatYmd(m.startsAt));
+        bucket.add(formatYmd(new Date(m.startsAt.getTime() - 6 * 3600_000)));
         if (!m.externalId) {
           bucket.add(formatYmd(new Date(m.startsAt.getTime() - 24 * 3600_000)));
           bucket.add(formatYmd(new Date(m.startsAt.getTime() + 24 * 3600_000)));
@@ -2755,7 +2772,8 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
       }
 
       if (summary.syncedCount > 0) {
-        invalidateAllActiveCaches();
+        invalidateAllActiveCaches(true);
+        await ensureMatchStoreHydrated(true);
       }
       lastRealSyncAt = Date.now();
       return summary;
