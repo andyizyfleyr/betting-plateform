@@ -710,12 +710,12 @@ function rawProbOnModel(
   return prob;
 }
 
-/** Extrait la minute numérique depuis un libellé (« 37' » → 37, « MT » → 45, « 90+2' » → 90). */
+/** Extrait la minute numérique depuis un libellé (« 37’ » → 37, « MT » → 45, « 90+2’ » → 90). */
 export function minuteNumber(minute: string | null | undefined): number {
   if (!minute) return 0;
   const trimmed = minute.trim().toUpperCase();
   if (trimmed === "MT" || trimmed === "HT" || trimmed.includes("MI-TEMPS")) return 45;
-  const plus = /^(\d+)\s*'?\s*\+\s*\d+/.exec(trimmed);
+  const plus = /^(\d+)\s*['’]?\s*\+\s*\d+/.exec(trimmed);
   if (plus) return Math.max(0, Math.min(90, parseInt(plus[1], 10)));
   const m = /^\d+/.exec(trimmed);
   const n = m ? parseInt(m[0], 10) : 0;
@@ -724,8 +724,8 @@ export function minuteNumber(minute: string | null | undefined): number {
 
 /**
  * Indique si la 1ère mi-temps est officiellement terminée (sifflet de la pause ou 2e période en cours).
- * Distingue strictement le temps additionnel de 1ère période (`45+2'` → `false`) de la pause (`MT`)
- * et de la 2e période (`46'`..`90+4'` → `true`).
+ * Distingue strictement le temps additionnel de 1ère période (`45+2’` → `false`) de la pause (`MT`)
+ * et de la 2e période (`46’`..`90+4’` → `true`).
  */
 export function isFirstHalfCompleted(
   minute: string | null | undefined,
@@ -744,7 +744,7 @@ export function isFirstHalfCompleted(
   ) {
     return true;
   }
-  const plus = /^(\d+)\s*'?\s*\+\s*\d+/.exec(trimmed);
+  const plus = /^(\d+)\s*['’]?\s*\+\s*\d+/.exec(trimmed);
   if (plus) {
     return parseInt(plus[1], 10) >= 46;
   }

@@ -1,5 +1,5 @@
 /**
- * Moteur universel de chronomètre live sportif (type grandes plateformes : MM:SS / 45+M:SS / MT).
+ * Moteur universel de minute live sportive (format minute uniquement : 88’, 45+2’, MT).
  *
  * Sans dépendance React ni Node serveur : peut être importé à la fois par les routes API /
  * sérialiseurs (`match-serializer`, `/api/bets`, `real-sports-feed`) et par les composants
@@ -15,11 +15,11 @@ export type LiveClockPhase =
   | "PAUSED";
 
 export interface LiveClockAnchor {
-  /** "virtual" (~2m40s accéléré déterministe) | "real" (temps réel 1s = 1s) */
+  /** "virtual" (5 min accéléré déterministe) | "real" (temps réel 1s = 1s) */
   mode: "virtual" | "real";
   /** Coup d'envoi ISO */
   startsAt: string;
-  /** Durée réelle (ms) d'une minute de match (1520..1840 ms en virtuel, 60000 ms en réel) */
+  /** Durée réelle (ms) d'une minute de match (3120..3200 ms en virtuel ≈ 5 min, 60000 ms en réel) */
   stepMs: number;
   /** Secondes cumulées exactes du match réel au moment `syncedAtMs` */
   anchorSeconds?: number | null;
@@ -44,20 +44,20 @@ export interface LiveClockSource {
 }
 
 export interface LiveClockSnapshot {
-  /** Affichage chronomètre continu : "23:41", "45+1:18", "MT", "67:09", "90+2:04" */
+  /** Affichage minute seule sans secondes : "23’", "45+2’", "MT", "88’", "90+2’" */
   display: string;
   /** Variante badge : "Mi-temps" lorsque `isHalfTime`, sinon identique à `display` */
   badgeLabel: string;
   isHalfTime: boolean;
   isPaused: boolean;
-  /** Progression continue 0..100 pour la frise 0'→90' */
+  /** Progression continue 0..100 pour la frise 0’→90’ */
   progressPct: number;
   /** Minute entière courante (1..90) */
   gameMinute: number;
 }
 
-const VIRTUAL_STEP_MIN_MS = 1_520;
-const VIRTUAL_STEP_MAX_MS = 1_840;
+const VIRTUAL_STEP_MIN_MS = 3_120;
+const VIRTUAL_STEP_MAX_MS = 3_200;
 
 function hashDjb2(s: string): number {
   let h = 5381;
@@ -67,16 +67,39 @@ function hashDjb2(s: string): number {
   return h >>> 0;
 }
 
-/** Strictement identique à `stepMsForMatch(matchId, "virtual")` dans `src/db/engine.ts`. */
+/** Strictement identique à `stepMsForMatch(matchId, "virtual")` dans `src/db/engine.ts` (95 pas ≈ 5 min). */
 export function stepMsForVirtualMatch(matchId: number): number {
   const h = hashDjb2(`virt-tempo|${matchId}`);
   const span = VIRTUAL_STEP_MAX_MS - VIRTUAL_STEP_MIN_MS;
   return VIRTUAL_STEP_MIN_MS + (h % (span + 1));
 }
 
-function pad2(n: number): string {
-  const v = Math.max(0, Math.floor(n));
-  return v < 10 ? `0${v}` : String(v);
+/**
+ * Normalise tout libellé de temps de match en affichant uniquement la minute (`88’`, `45+2’`, `MT`)
+ * et jamais les secondes (`88:34` -> `88’`).
+ */
+export function formatMinuteOnlyLabel(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return "LIVE";
+  if (isHalfTimeLabel(trimmed)) return "MT";
+  if (isStaticStatusLabel(trimmed)) return trimmed;
+
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?::\d{1,2})?\s*['’]?$/.exec(
+    trimmed
+  );
+  if (stopMatch) {
+    const base = Number(stopMatch[1]);
+    const added = Math.max(1, Number(stopMatch[2]));
+    return `${base}+${added}’`;
+  }
+
+  const regMatch = /^(\d{1,3})(?::\d{1,2})?\s*['’]?$/.exec(trimmed);
+  if (regMatch) {
+    const min = Math.max(1, Number(regMatch[1]));
+    return `${min}’`;
+  }
+
+  return trimmed.replace(/'/g, "’");
 }
 
 function isHalfTimeLabel(raw: string): boolean {
@@ -114,7 +137,7 @@ export function parseMatchMinuteLabel(
   const trimmed = minute.trim();
   if (!trimmed || isStaticStatusLabel(trimmed)) return null;
 
-  const stopMatch = /^(\d{1,3})\+(\d{1,2})'?$/.exec(trimmed);
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})\s*['’]?$/.exec(trimmed);
   if (stopMatch) {
     const baseMin = Number(stopMatch[1]);
     const addedMin = Math.max(1, Number(stopMatch[2]));
@@ -136,7 +159,7 @@ export function parseMatchMinuteLabel(
     };
   }
 
-  const regMatch = /^(\d{1,3})(?::(\d{1,2}))?'?$/.exec(trimmed);
+  const regMatch = /^(\d{1,3})(?::(\d{1,2}))?\s*['’]?$/.exec(trimmed);
   if (regMatch) {
     const minInt = Math.max(1, Number(regMatch[1]));
     const secInt = regMatch[2] != null ? Math.min(59, Number(regMatch[2])) : null;
@@ -467,7 +490,7 @@ function computeVirtualLiveSnapshot(
 ): LiveClockSnapshot {
   const startsAtMs = startsAtIso ? Date.parse(startsAtIso) : NaN;
   if (!Number.isFinite(startsAtMs)) {
-    const label = fallbackMinute?.trim() || "LIVE";
+    const label = formatMinuteOnlyLabel(fallbackMinute);
     const ht = isHalfTimeLabel(label);
     return {
       display: ht ? "MT" : label,
@@ -486,28 +509,25 @@ function computeVirtualLiveSnapshot(
   const elapsedMs = Math.max(0, nowMs - startsAtMs);
   const exactStep = elapsedMs / stepMs;
 
-  // 1re mi-temps : 00:00 → 44:59 (pas 0..45)
+  // 1re mi-temps : 1’ → 45’ (pas 0..45)
   if (exactStep < 45) {
     const totalSimSec = Math.min(2699, Math.max(0, Math.floor(exactStep * 60)));
-    const mm = Math.floor(totalSimSec / 60);
-    const ss = totalSimSec % 60;
-    const display = `${pad2(mm)}:${pad2(ss)}`;
+    const gameMinute = Math.min(45, Math.max(1, Math.floor(exactStep) + 1));
+    const display = `${gameMinute}’`;
     return {
       display,
       badgeLabel: display,
       isHalfTime: false,
       isPaused: false,
       progressPct: Math.min(50, Math.max(1.5, (totalSimSec / 5400) * 100)),
-      gameMinute: Math.min(45, mm + 1),
+      gameMinute,
     };
   }
 
-  // Temps additionnel 1re MT : 45+0:00 → 45+2:00 (pas 45..46)
+  // Temps additionnel 1re MT : 45+1’ → 45+2’ (pas 45..46)
   if (exactStep < 46) {
-    const stopSec = Math.min(120, Math.max(0, Math.floor((exactStep - 45) * 120)));
-    const stopM = Math.floor(stopSec / 60);
-    const stopS = stopSec % 60;
-    const display = `45+${stopM}:${pad2(stopS)}`;
+    const stopM = Math.max(1, Math.min(2, Math.floor((exactStep - 45) * 2) + 1));
+    const display = `45+${stopM}’`;
     return {
       display,
       badgeLabel: display,
@@ -530,31 +550,28 @@ function computeVirtualLiveSnapshot(
     };
   }
 
-  // 2e mi-temps : 45:00 → 89:59 (pas 48..93)
+  // 2e mi-temps : 46’ → 90’ (pas 48..93)
   if (exactStep < 93) {
     const secIn2H = Math.min(2699, Math.max(0, Math.floor((exactStep - 48) * 60)));
     const totalSimSec = 2700 + secIn2H;
-    const mm = Math.floor(totalSimSec / 60);
-    const ss = totalSimSec % 60;
-    const display = `${pad2(mm)}:${pad2(ss)}`;
+    const gameMinute = Math.min(90, Math.max(46, Math.floor(exactStep - 48) + 46));
+    const display = `${gameMinute}’`;
     return {
       display,
       badgeLabel: display,
       isHalfTime: false,
       isPaused: false,
       progressPct: Math.min(99.5, Math.max(50, (totalSimSec / 5400) * 100)),
-      gameMinute: Math.min(90, mm + 1),
+      gameMinute,
     };
   }
 
-  // Temps additionnel 2e MT : 90+0:00 → 90+3:00 (plafonné avant "Terminé" tant que le serveur est "live")
-  const stopSec = Math.min(
-    180,
-    Math.max(0, Math.floor(((exactStep - 93) / 2) * 180))
+  // Temps additionnel 2e MT : 90+1’ → 90+3’ (plafonné avant "Terminé" tant que le serveur est "live")
+  const stopM = Math.max(
+    1,
+    Math.min(3, Math.floor(((exactStep - 93) / 2) * 3) + 1)
   );
-  const stopM = Math.floor(stopSec / 60);
-  const stopS = stopSec % 60;
-  const display = `90+${stopM}:${pad2(stopS)}`;
+  const display = `90+${stopM}’`;
   return {
     display,
     badgeLabel: display,
@@ -586,7 +603,7 @@ function computeRealLiveSnapshot(
   }
 
   if (anchor?.phase === "PAUSED" || isStaticStatusLabel(rawMin)) {
-    const label = rawMin || "LIVE";
+    const label = formatMinuteOnlyLabel(rawMin);
     return {
       display: label,
       badgeLabel: label,
@@ -615,9 +632,10 @@ function computeRealLiveSnapshot(
   } else if (parsed) {
     serverTargetSec = parsed.expectedFloorSeconds;
   } else {
+    const label = formatMinuteOnlyLabel(rawMin);
     return {
-      display: rawMin || "LIVE",
-      badgeLabel: rawMin || "LIVE",
+      display: label,
+      badgeLabel: label,
       isHalfTime: false,
       isPaused: true,
       progressPct: 2,
@@ -661,9 +679,11 @@ function computeRealLiveSnapshot(
   if (half === 1) {
     if (currentSec >= 2700 || forceFirstHalfStoppage) {
       const stopSec = Math.max(0, currentSec - 2700);
-      const stopM = Math.floor(stopSec / 60);
-      const stopS = stopSec % 60;
-      const display = `45+${stopM}:${pad2(stopS)}`;
+      const stopM = Math.max(
+        anchor?.stoppageAdded ?? 1,
+        Math.floor(stopSec / 60) + 1
+      );
+      const display = `45+${stopM}’`;
       return {
         display,
         badgeLabel: display,
@@ -673,25 +693,26 @@ function computeRealLiveSnapshot(
         gameMinute: 45,
       };
     }
-    const mm = Math.floor(currentSec / 60);
-    const ss = currentSec % 60;
-    const display = `${pad2(mm)}:${pad2(ss)}`;
+    const gameMinute = Math.min(45, Math.max(1, Math.floor(currentSec / 60) + 1));
+    const display = `${gameMinute}’`;
     return {
       display,
       badgeLabel: display,
       isHalfTime: false,
       isPaused: false,
       progressPct: Math.min(50, Math.max(1.5, (currentSec / 5400) * 100)),
-      gameMinute: Math.min(45, mm + 1),
+      gameMinute,
     };
   }
 
   const sec2H = Math.max(2700, currentSec);
   if (sec2H >= 5400 || forceSecondHalfStoppage) {
     const stopSec = Math.max(0, sec2H - 5400);
-    const stopM = Math.floor(stopSec / 60);
-    const stopS = stopSec % 60;
-    const display = `90+${stopM}:${pad2(stopS)}`;
+    const stopM = Math.max(
+      anchor?.stoppageAdded ?? 1,
+      Math.floor(stopSec / 60) + 1
+    );
+    const display = `90+${stopM}’`;
     return {
       display,
       badgeLabel: display,
@@ -702,16 +723,15 @@ function computeRealLiveSnapshot(
     };
   }
 
-  const mm = Math.floor(sec2H / 60);
-  const ss = sec2H % 60;
-  const display = `${pad2(mm)}:${pad2(ss)}`;
+  const gameMinute = Math.min(90, Math.max(46, Math.floor(sec2H / 60) + 1));
+  const display = `${gameMinute}’`;
   return {
     display,
     badgeLabel: display,
     isHalfTime: false,
     isPaused: false,
     progressPct: Math.min(99.5, Math.max(50, (sec2H / 5400) * 100)),
-    gameMinute: Math.min(90, mm + 1),
+    gameMinute,
   };
 }
 
@@ -731,7 +751,7 @@ export function computeLiveClockSnapshot(
   const minute = input?.minute ?? fallbackMinute ?? reg?.minute ?? null;
 
   if (status !== "live") {
-    const label = minute?.trim() || "Terminé";
+    const label = minute?.trim() ? formatMinuteOnlyLabel(minute) : "Terminé";
     return {
       display: label,
       badgeLabel: label,
@@ -827,7 +847,7 @@ function syncSchedulerTimers() {
     if (!fastTimer) {
       fastTimer = setInterval(() => {
         notifySet(fastListeners);
-      }, 100);
+      }, 500);
     }
   } else if (fastTimer) {
     clearInterval(fastTimer);
@@ -838,7 +858,7 @@ function syncSchedulerTimers() {
     if (!realTimer) {
       realTimer = setInterval(() => {
         notifySet(realListeners);
-      }, 250);
+      }, 1_000);
     }
   } else if (realTimer) {
     clearInterval(realTimer);

@@ -637,13 +637,15 @@ export function skellamCDF(k: number, lambda1: number, lambda2: number): number 
 
 /**
  * Paliers tactiques calmes d'actualisation temporelle des cotes :
- * - Sur un match virtuel (~2 min 40 s = 90'), 12 minutes simulées ≈ 21 secondes réelles :
+ * - Sur un match virtuel (5 min = 90’), 8 minutes simulées ≈ 25 secondes réelles :
  *   tant qu'aucun événement (but, carton rouge, mi-temps) ne survient, les cotes restent
  *   stables entre deux paliers au lieu de clignoter toutes les 3 secondes sans raison.
  * - Dès qu'un but ou carton survient à la minute `lastIncidentMin`, le modèle s'ancre
  *   immédiatement sur la minute exacte de l'incident puis reste stable jusqu'au palier suivant.
  */
-const VIRTUAL_PRICING_CHECKPOINTS = [0, 12, 24, 36, 45, 57, 68, 77, 84, 89, 90] as const;
+const VIRTUAL_PRICING_CHECKPOINTS = [
+  0, 8, 16, 24, 32, 40, 45, 53, 61, 68, 75, 81, 85, 89, 90,
+] as const;
 const REAL_PRICING_CHECKPOINTS = [
   0, 6, 12, 18, 24, 30, 36, 42, 45, 51, 57, 63, 69, 75, 79, 83, 86, 88, 90,
 ] as const;

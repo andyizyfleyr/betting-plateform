@@ -40,15 +40,15 @@ const INTER_MATCH_GAP_MS = 3_000;
 
 /**
  * Rythme des matchs :
- * - Matchs virtuels automatiques (`source = "virtual"`) : durée totale entre 2m24s et 2m55s
- *   (95 pas d'horloge × [1 520 ms .. 1 840 ms], moyenne ~2 min 40 s), avec 4 matchs virtuels
- *   en direct simultanément sur 4 canaux décalés (multiplex fluide continu 24h/24).
+ * - Matchs virtuels automatiques (`source = "virtual"`) : durée totale de 5 minutes
+ *   (95 pas d'horloge × [3 120 ms .. 3 200 ms] ≈ 4m56s .. 5m04s, moyenne exacte 5 min 00 s),
+ *   avec 4 matchs virtuels en direct simultanément sur 4 canaux décalés (multiplex fluide continu 24h/24).
  * - Matchs manuels créés par l'admin (`source = "manual"`) : rythme réel confortable (40 s / min)
  *   pour laisser le pilotage complet à l'administrateur.
  */
 export const MANUAL_MINUTE_REAL_MS = 40_000;
-export const VIRTUAL_STEP_MIN_MS = 1_520; // ~2 min 24 s au total
-export const VIRTUAL_STEP_MAX_MS = 1_840; // ~2 min 55 s au total
+export const VIRTUAL_STEP_MIN_MS = 3_120; // ~4 min 56 s au total
+export const VIRTUAL_STEP_MAX_MS = 3_200; // ~5 min 04 s au total (moyenne 5 min 00 s)
 const TOTAL_CLOCK_STEPS = 95;
 
 /** Nombre de matchs virtuels diffusés en direct simultanément (décalés sur 4 canaux parallèles). */
@@ -198,15 +198,15 @@ export function computeClockState(startsAtMs: number, now: number, stepMs: numbe
   const elapsedMs = Math.max(0, now - startsAtMs);
   const step = Math.floor(elapsedMs / stepMs) + 1;
 
-  if (step <= 45) return { minuteLabel: `${step}'`, gameMinute: step, phase: "1H" };
-  if (step === 46) return { minuteLabel: "45+2'", gameMinute: 45, phase: "1H_STOPPAGE" };
+  if (step <= 45) return { minuteLabel: `${step}’`, gameMinute: step, phase: "1H" };
+  if (step === 46) return { minuteLabel: "45+2’", gameMinute: 45, phase: "1H_STOPPAGE" };
   if (step === 47 || step === 48) return { minuteLabel: "MT", gameMinute: 45, phase: "HT" };
   if (step <= 93) {
     const gm = step - 3;
-    return { minuteLabel: `${gm}'`, gameMinute: gm, phase: "2H" };
+    return { minuteLabel: `${gm}’`, gameMinute: gm, phase: "2H" };
   }
-  if (step === 94) return { minuteLabel: "90+2'", gameMinute: 90, phase: "2H_STOPPAGE" };
-  if (step === TOTAL_CLOCK_STEPS) return { minuteLabel: "90+3'", gameMinute: 90, phase: "2H_STOPPAGE" };
+  if (step === 94) return { minuteLabel: "90+2’", gameMinute: 90, phase: "2H_STOPPAGE" };
+  if (step === TOTAL_CLOCK_STEPS) return { minuteLabel: "90+3’", gameMinute: 90, phase: "2H_STOPPAGE" };
   return { minuteLabel: "Terminé", gameMinute: 90, phase: "FT" };
 }
 
@@ -839,7 +839,7 @@ async function syncUpcomingQueue(
   const laneCursors: number[] = Array.from({ length: CONCURRENT_LIVE_VIRTUAL }, (_, idx) =>
     idx < activeLives.length
       ? expectedMatchEndMs(activeLives[idx], now) + INTER_MATCH_GAP_MS
-      : now + INTER_MATCH_GAP_MS + idx * 38_000
+      : now + INTER_MATCH_GAP_MS + idx * 75_000
   );
 
   interface QueuedMatchPatch {
@@ -1016,7 +1016,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
     }
   }
 
-  const waveSlot = Math.floor(now / 150_000);
+  const waveSlot = Math.floor(now / 300_000);
   const waveOffset = hmacUint32(`wave-offset|${waveSlot}`) % FIXTURE_POOL.length;
   const stepStride = 7; // premier avec 36 (PGCD(7, 36) = 1) → parcourt tout le pool sans cycle court
   const needed = TARGET_ACTIVE_VIRTUAL - activeVirtual.length;
@@ -1036,7 +1036,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
 
   const laneTails: number[] = Array.from(
     { length: CONCURRENT_LIVE_VIRTUAL },
-    (_, laneIdx) => (activeVirtual.length > 0 ? tailEndMs + INTER_MATCH_GAP_MS : now + laneIdx * 38_000)
+    (_, laneIdx) => (activeVirtual.length > 0 ? tailEndMs + INTER_MATCH_GAP_MS : now + laneIdx * 75_000)
   );
   const rows: Array<typeof matches.$inferInsert> = [];
 
@@ -1161,9 +1161,9 @@ async function bridgeIdleGapAndStartLives(
     busy.add(r.awayTeam);
   }
 
-  const slot = Math.floor(now / 150_000);
+  const slot = Math.floor(now / 300_000);
   const offset = hmacUint32(`bridge-offset|${slot}`) % FIXTURE_POOL.length;
-  const needPast = now - latestEnd > 6 * 60_000 ? 2 : 0;
+  const needPast = now - latestEnd > 10 * 60_000 ? 2 : 0;
   const totalPick = needPast + targetCount;
   const picked: FixtureTemplate[] = [];
   let bridgeNetHome = 0;
@@ -1181,7 +1181,7 @@ async function bridgeIdleGapAndStartLives(
   }
   if (picked.length === 0) return [];
 
-  const avgDur = 160_000;
+  const avgDur = 300_000;
   const neutralPressure: MatchBookPressure = { tickets: [], houseTightness: 1 };
   const pastCount = picked.length > targetCount ? needPast : 0;
   const pastFx = picked.slice(0, pastCount);
@@ -1248,7 +1248,7 @@ async function bridgeIdleGapAndStartLives(
       homeScore: 0,
       awayScore: 0,
       status: "live",
-      minute: "1'",
+      minute: "1’",
       startsAt: new Date(approxLiveStart),
       oddsHome: preOdds.oddsHome,
       oddsDraw: preOdds.oddsDraw,
@@ -1332,8 +1332,8 @@ function stepLiveMatchInMemory(
   forceWrite = false
 ): { changed: boolean; finished: boolean; row: MatchRow } {
   const stepMs = stepMsForMatch(m.id, m.source);
-  const clock = computeClockState(m.startsAt.getTime(), now, stepMs);
-  const isOver = clock.phase === "FT";
+  let effectiveStartsAt = m.startsAt;
+  let clock = computeClockState(effectiveStartsAt.getTime(), now, stepMs);
 
   let home = m.homeScore ?? 0;
   let away = m.awayScore ?? 0;
@@ -1360,6 +1360,14 @@ function stepLiveMatchInMemory(
     prevSimMin = minuteNumber(m.minute);
   }
 
+  // Transition fluide sans retour d'horloge lorsqu'un match virtuel déjà en cours
+  // passe à la cadence de 5 minutes : on réancre `startsAt` sur `prevSimMin`.
+  if (m.source === "virtual" && prevSimMin > clock.gameMinute + 1) {
+    effectiveStartsAt = backdateStartsAtForMinute(prevSimMin, now, "virtual", m.id);
+    clock = computeClockState(effectiveStartsAt.getTime(), now, stepMs);
+  }
+
+  const isOver = clock.phase === "FT";
   const targetSimMin = clock.gameMinute;
   let justScoredNow = false;
 
@@ -1504,9 +1512,11 @@ function stepLiveMatchInMemory(
   const nextMinute = isOver ? "Terminé" : clock.minuteLabel;
   const nextStatus = isOver ? "finished" : "live";
 
+  const startsAtChanged = effectiveStartsAt.getTime() !== m.startsAt.getTime();
   const changed =
     forceWrite ||
     isOver ||
+    startsAtChanged ||
     m.status !== nextStatus ||
     m.minute !== nextMinute ||
     m.homeScore !== home ||
@@ -1524,9 +1534,10 @@ function stepLiveMatchInMemory(
 
   if (!changed) return { changed: false, finished: isOver, row: m };
 
-  const naturalEndMs = m.startsAt.getTime() + matchDurationMs(m.id, m.source);
+  const naturalEndMs = effectiveStartsAt.getTime() + matchDurationMs(m.id, m.source);
   const nextRow: MatchRow = {
     ...m,
+    startsAt: effectiveStartsAt,
     homeScore: home,
     awayScore: away,
     redHome,

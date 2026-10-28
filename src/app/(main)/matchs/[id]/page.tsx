@@ -592,7 +592,7 @@ export default function MatchDetailPage() {
                     >
                       <div className="flex min-w-0 items-center gap-1.5">
                         <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[10px] font-bold tabular-nums text-ink">
-                          {ev.minute}&apos;
+                          {ev.minute}’
                         </span>
                         <span className="text-[11px]">
                           {ev.type === "goal"
