@@ -499,12 +499,19 @@ export const api = {
         bypassEtag: true,
       }),
     login: async (
-      emailOrPayload: { email: string; password: string } | string,
-      maybePassword?: string
+      emailOrPayload:
+        | { email: string; password: string; rememberMe?: boolean }
+        | string,
+      maybePassword?: string,
+      maybeRememberMe?: boolean
     ) => {
       const payload =
         typeof emailOrPayload === "string"
-          ? { email: emailOrPayload, password: maybePassword ?? "" }
+          ? {
+              email: emailOrPayload,
+              password: maybePassword ?? "",
+              rememberMe: maybeRememberMe ?? true,
+            }
           : emailOrPayload;
       const res = await requestJson<{ user: ClientUser; token?: string }>(
         "/api/auth/login",
@@ -521,10 +528,16 @@ export const api = {
     },
     register: async (
       nameOrPayload:
-        | { name: string; email: string; password: string }
+        | {
+            name: string;
+            email: string;
+            password: string;
+            acceptedTerms?: boolean;
+          }
         | string,
       maybeEmail?: string,
-      maybePassword?: string
+      maybePassword?: string,
+      maybeAcceptedTerms?: boolean
     ) => {
       const payload =
         typeof nameOrPayload === "string"
@@ -532,10 +545,46 @@ export const api = {
               name: nameOrPayload,
               email: maybeEmail ?? "",
               password: maybePassword ?? "",
+              acceptedTerms: maybeAcceptedTerms ?? true,
             }
-          : nameOrPayload;
+          : {
+              ...nameOrPayload,
+              acceptedTerms: nameOrPayload.acceptedTerms ?? true,
+            };
       const res = await requestJson<{ user: ClientUser; token?: string }>(
         "/api/auth/register",
+        {
+          method: "POST",
+          body: payload,
+          ignoreUnauthorizedRedirect: true,
+        }
+      );
+      if (res.token) {
+        await persistAuthToken(res.token);
+      }
+      return res;
+    },
+    forgotPassword: async (emailOrPayload: { email: string } | string) => {
+      const payload =
+        typeof emailOrPayload === "string"
+          ? { email: emailOrPayload }
+          : emailOrPayload;
+      return requestJson<{ ok: boolean; expiresInMinutes: number }>(
+        "/api/auth/forgot-password",
+        {
+          method: "POST",
+          body: payload,
+          ignoreUnauthorizedRedirect: true,
+        }
+      );
+    },
+    resetPassword: async (payload: {
+      email: string;
+      code: string;
+      password: string;
+    }) => {
+      const res = await requestJson<{ user: ClientUser; token?: string }>(
+        "/api/auth/reset-password",
         {
           method: "POST",
           body: payload,

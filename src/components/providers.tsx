@@ -207,9 +207,6 @@ function ensureClientAuthHydrated(): void {
   clientAuthHydrated = true;
   const uidCookie = readUidHintFromDocumentCookie();
   const cachedUser = readStoredWebUser();
-  const isAuthPath =
-    window.location.pathname === "/auth" ||
-    window.location.pathname.startsWith("/auth/");
 
   if (uidCookie) {
     if (cachedUser && String(cachedUser.id) === uidCookie) {
@@ -218,13 +215,12 @@ function ensureClientAuthHydrated(): void {
       // Session authentifiée confirmée par cookie, en attente du profil `/api/settings`
       clientAuthSnapshot = { user: null, authReady: false };
     }
-  } else if (isAuthPath) {
-    clientAuthSnapshot = { user: null, authReady: true };
-  } else if (cachedUser) {
-    // Route protégée `(main)` déjà validée par `proxy.ts` : restaure immédiatement le profil en cache
-    clientAuthSnapshot = { user: cachedUser, authReady: true };
   } else {
-    clientAuthSnapshot = { user: null, authReady: false };
+    // Aucun cookie de session : visiteur non connecté confirmé par `proxy.ts`
+    if (cachedUser) {
+      writeStoredWebUser(null);
+    }
+    clientAuthSnapshot = { user: null, authReady: true };
   }
 }
 
@@ -521,6 +517,10 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const syncSettings = async (attempt = 0) => {
+      if (!readUidHintFromDocumentCookie() && !userRef.current) {
+        if (active) setWebAuthUser(null, true);
+        return;
+      }
       try {
         const r = await api.settings();
         if (!active) return;
@@ -548,15 +548,22 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       clientAuthSnapshot = { user: updated, authReady: true };
       notifyAuthStore();
     };
+    const onAuthExpired = () => {
+      if (active) setWebAuthUser(null, true);
+    };
     const onOnline = () => {
-      if (!userRef.current) void syncSettings(0);
+      if (!userRef.current && readUidHintFromDocumentCookie()) {
+        void syncSettings(0);
+      }
     };
     window.addEventListener("storage", onStorage);
+    window.addEventListener("pulsebet:auth-expired", onAuthExpired);
     window.addEventListener("online", onOnline);
     return () => {
       active = false;
       if (retryTimer) clearTimeout(retryTimer);
       window.removeEventListener("storage", onStorage);
+      window.removeEventListener("pulsebet:auth-expired", onAuthExpired);
       window.removeEventListener("online", onOnline);
     };
   }, [authReady, isAuthRoute]);

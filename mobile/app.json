@@ -3,7 +3,7 @@
     "name": "Pulse Bet",
     "slug": "pulsebets-android",
     "owner": "andyizyfleur",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "platforms": [
       "android"
     ],
@@ -34,7 +34,7 @@
     },
     "android": {
       "package": "app.pulsebets.android",
-      "versionCode": 4,
+      "versionCode": 5,
       "jsEngine": "hermes",
       "backgroundColor": "#090D16",
       "adaptiveIcon": {

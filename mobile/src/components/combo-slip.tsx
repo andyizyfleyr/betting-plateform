@@ -303,7 +303,7 @@ export function ComboSheet() {
   const parsed = Number(stakeText.replace(",", "."));
   const stake =
     Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = stake > balance;
+  const overBalance = Boolean(user) && stake > balance;
   const enoughLegs = orderedLegs.length >= MIN_COMBO_LEGS;
 
   const quote = computeComboQuote(

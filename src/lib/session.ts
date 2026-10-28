@@ -5,9 +5,11 @@ import { appUser } from "@/db/schema";
 import {
   AUTH_COOKIE,
   AUTH_UID_COOKIE,
+  DEFAULT_SESSION_TTL_SECONDS,
   extractAuthToken,
   MOBILE_ANDROID_CLIENT,
   MOBILE_CLIENT_HEADER,
+  REMEMBER_SESSION_TTL_SECONDS,
   signJwt,
   verifyJwt,
   type JwtPayload,
@@ -23,7 +25,6 @@ export {
 };
 export type { JwtPayload };
 
-const TTL_SECONDS = 7 * 24 * 3600; // 7 jours
 const SESSION_TV_CACHE_TTL_MS = 20_000;
 const SESSION_TV_CACHE_MAX = 2_000;
 
@@ -71,20 +72,33 @@ export interface SessionPayload extends JwtPayload {
   tv?: number; // tokenVersion persisté en base
 }
 
-export async function signSession(payload: SessionPayload): Promise<string> {
+export async function signSession(
+  payload: SessionPayload,
+  opts?: { rememberMe?: boolean }
+): Promise<string> {
   if (typeof payload.sub === "number" && typeof payload.tv === "number") {
     primeUserSessionCache(payload.sub, payload.tv);
   }
-  return signJwt(payload);
+  const ttl = opts?.rememberMe
+    ? REMEMBER_SESSION_TTL_SECONDS
+    : DEFAULT_SESSION_TTL_SECONDS;
+  return signJwt(payload, ttl);
 }
 
-export async function setAuthCookie(res: NextResponse, token: string) {
-  res.cookies.set(AUTH_COOKIE, token, { ...cookieOpts, maxAge: TTL_SECONDS });
+export async function setAuthCookie(
+  res: NextResponse,
+  token: string,
+  opts?: { rememberMe?: boolean }
+) {
+  const maxAge = opts?.rememberMe
+    ? REMEMBER_SESSION_TTL_SECONDS
+    : DEFAULT_SESSION_TTL_SECONDS;
+  res.cookies.set(AUTH_COOKIE, token, { ...cookieOpts, maxAge });
   const decoded = await verifyJwt(token);
   if (decoded?.sub) {
     res.cookies.set(AUTH_UID_COOKIE, String(decoded.sub), {
       ...uidHintCookieOpts,
-      maxAge: TTL_SECONDS,
+      maxAge,
     });
   }
 }

@@ -31,7 +31,8 @@ export function extractAuthToken(req: RequestWithCookiesAndHeaders): string | nu
 
 const SECRET = process.env.JWT_SECRET ?? "pulse-demo-secret-change-in-production";
 
-const TTL_SECONDS = 7 * 24 * 3600; // 7 jours
+export const DEFAULT_SESSION_TTL_SECONDS = 7 * 24 * 3600; // 7 jours
+export const REMEMBER_SESSION_TTL_SECONDS = 30 * 24 * 3600; // 30 jours
 
 export interface JwtPayload {
   sub: number;
@@ -64,12 +65,15 @@ async function hmacKey() {
   );
 }
 
-export async function signJwt(payload: JwtPayload): Promise<string> {
+export async function signJwt(
+  payload: JwtPayload,
+  ttlSeconds = DEFAULT_SESSION_TTL_SECONDS
+): Promise<string> {
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const now = Math.floor(Date.now() / 1000);
   const jti = payload.jti ?? crypto.randomUUID();
   const body = b64url(
-    JSON.stringify({ ...payload, jti, iat: now, exp: now + TTL_SECONDS })
+    JSON.stringify({ ...payload, jti, iat: now, exp: now + ttlSeconds })
   );
   const data = `${header}.${body}`;
   const key = await hmacKey();

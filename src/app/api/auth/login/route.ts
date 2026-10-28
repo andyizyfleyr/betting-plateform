@@ -3,7 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
-import { publicUser, verifyPassword } from "@/lib/auth";
+import {
+  AUTH_EMAIL_RE,
+  publicUser,
+  runDummyPasswordCheck,
+  verifyPassword,
+} from "@/lib/auth";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
@@ -26,7 +31,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { email?: string; password?: string };
+  let body: { email?: string; password?: string; rememberMe?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -35,10 +40,17 @@ export async function POST(req: NextRequest) {
 
   const email = (body.email ?? "").toString().trim().toLowerCase();
   const password = (body.password ?? "").toString();
+  const rememberMe = body.rememberMe !== false;
 
   if (!email || !password) {
     return NextResponse.json(
-      { error: "E-mail et mot de passe requis" },
+      { error: "Veuillez renseigner votre e-mail et votre mot de passe." },
+      { status: 400 }
+    );
+  }
+  if (!AUTH_EMAIL_RE.test(email)) {
+    return NextResponse.json(
+      { error: "Format d'adresse e-mail invalide." },
       { status: 400 }
     );
   }
@@ -52,24 +64,35 @@ export async function POST(req: NextRequest) {
       .where(eq(appUser.email, email))
       .limit(1);
 
-    if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
+    if (!user || !user.passwordHash) {
+      runDummyPasswordCheck(password);
       return NextResponse.json(
-        { error: "E-mail ou mot de passe incorrect" },
+        { error: "Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe." },
         { status: 401 }
       );
     }
 
-    const token = await signSession({
-      sub: user.id,
-      role: user.role ?? "user",
-      tv: user.tokenVersion ?? 0,
-    });
+    if (!verifyPassword(password, user.passwordHash)) {
+      return NextResponse.json(
+        { error: "Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe." },
+        { status: 401 }
+      );
+    }
+
+    const token = await signSession(
+      {
+        sub: user.id,
+        role: user.role ?? "user",
+        tv: user.tokenVersion ?? 0,
+      },
+      { rememberMe }
+    );
     const isAndroidMobile =
       req.headers.get(MOBILE_CLIENT_HEADER)?.toLowerCase() === MOBILE_ANDROID_CLIENT;
     const res = NextResponse.json(
       isAndroidMobile ? { user: publicUser(user), token } : { user: publicUser(user) }
     );
-    await setAuthCookie(res, token);
+    await setAuthCookie(res, token, { rememberMe });
     return res;
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/auth/login");

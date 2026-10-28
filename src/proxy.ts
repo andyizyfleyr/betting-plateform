@@ -4,6 +4,22 @@ import { AUTH_UID_COOKIE, extractAuthToken, verifyJwt } from "@/lib/jwt";
 const STATIC_RE = /\.(?:svg|png|jpg|jpeg|gif|webp|mp3|wav|ogg|woff2?|ttf|otf|hbc|apk|ico|txt|json|css|js)$/i;
 const SESSION_TTL_SECONDS = 7 * 24 * 3600;
 
+function isPublicVisitorPage(pathname: string): boolean {
+  return (
+    pathname === "/" ||
+    pathname === "/matchs" ||
+    pathname.startsWith("/matchs/") ||
+    pathname === "/predictions" ||
+    pathname.startsWith("/predictions/") ||
+    pathname === "/resultats" ||
+    pathname.startsWith("/resultats/") ||
+    pathname === "/betslip" ||
+    pathname.startsWith("/betslip/") ||
+    pathname === "/jeux" ||
+    pathname.startsWith("/jeux/")
+  );
+}
+
 function syncUidHintCookie(
   req: NextRequest,
   res: NextResponse,
@@ -81,6 +97,7 @@ export async function proxy(req: NextRequest) {
 
     const unauthedAllowedApi =
       pathname === "/api/health" ||
+      pathname === "/api/coupons" ||
       pathname === "/api/realtime" ||
       pathname.startsWith("/api/realtime/") ||
       pathname.startsWith("/api/auth") ||
@@ -105,7 +122,7 @@ export async function proxy(req: NextRequest) {
   const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");
   if (isAdminPage) {
     if (!authed) {
-      const url = new URL("/auth", req.url);
+      const url = new URL("/auth/connexion", req.url);
       url.searchParams.set("from", pathname);
       return syncUidHintCookie(req, NextResponse.redirect(url), null);
     }
@@ -132,14 +149,8 @@ export async function proxy(req: NextRequest) {
     return syncUidHintCookie(req, NextResponse.next(), null);
   }
 
-  if (!authed) {
-    const url = new URL("/auth", req.url);
-    url.searchParams.set("from", pathname);
-    return syncUidHintCookie(req, NextResponse.redirect(url), null);
-  }
-
   // L'administrateur n'accède jamais à l'espace utilisateurs : il reste exclusivement sur son dashboard.
-  if (isAdmin) {
+  if (authed && isAdmin) {
     return syncUidHintCookie(
       req,
       NextResponse.redirect(new URL("/admin", req.url)),
@@ -147,14 +158,20 @@ export async function proxy(req: NextRequest) {
     );
   }
 
+  // Consultation publique libre des matchs, prédictions, résultats, betslip et catalogue mini-jeux.
+  if (!authed) {
+    if (isPublicVisitorPage(pathname)) {
+      return syncUidHintCookie(req, NextResponse.next(), null);
+    }
+    const url = new URL("/auth/connexion", req.url);
+    url.searchParams.set("from", pathname);
+    return syncUidHintCookie(req, NextResponse.redirect(url), null);
+  }
+
   return syncUidHintCookie(req, NextResponse.next(), authedUid);
 }
 
 export const config = {
-  // Exclut uniquement les 3 routes publiques de lecture avec délimitation stricte de chemin
-  // (`api/matches$`, `api/matches/history$`, `api/predictions/catalog$`) afin que le CDN Edge
-  // Vercel serve directement le cache partagé sans exécuter le middleware ni lire les cookies,
-  // tout en protégeant 100 % des autres routes (`/api/predictions/my-bets`, `/api/bets`, `/api/admin`, etc.).
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|expo-sdk52/|api/expo$|api/matches$|api/matches/slim$|api/matches/[1-9][0-9]*$|api/matches/history$|api/predictions/catalog$).*)",
   ],

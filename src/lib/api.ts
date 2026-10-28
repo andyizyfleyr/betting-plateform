@@ -494,18 +494,39 @@ async function executeRequest<T>(
       !window.location.pathname.startsWith("/auth") &&
       !redirectingToAuth
     ) {
-      redirectingToAuth = true;
+      const p = window.location.pathname;
+      const isProtectedPage =
+        p === "/paris" ||
+        p.startsWith("/paris/") ||
+        p === "/parametres" ||
+        p.startsWith("/parametres/") ||
+        p === "/admin" ||
+        p.startsWith("/admin/") ||
+        p === "/tap" ||
+        p.startsWith("/tap/") ||
+        p === "/accelerator" ||
+        p.startsWith("/accelerator/");
+      const hadSessionHint =
+        Boolean(window.localStorage.getItem("pulsebet_cached_user_v1")) ||
+        document.cookie.includes("__pulse_uid=");
+
       clientEtagCache.clear();
       try {
         window.localStorage.removeItem("pulsebet_cached_user_v1");
       } catch {
         /* ignore */
       }
-      void fetch("/api/auth/logout", { method: "POST" })
-        .catch(() => undefined)
-        .finally(() => {
-          window.location.replace("/auth");
-        });
+      window.dispatchEvent(new Event("pulsebet:auth-expired"));
+
+      if (hadSessionHint) {
+        void fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+      }
+
+      if (isProtectedPage) {
+        redirectingToAuth = true;
+        const dest = `/auth/connexion?from=${encodeURIComponent(p)}`;
+        window.location.replace(dest);
+      }
     }
     const fallbackMsg =
       res.status === 504
@@ -902,14 +923,42 @@ export const api = {
       ),
   },
   auth: {
-    login: (payload: { email: string; password: string }) =>
+    login: (payload: {
+      email: string;
+      password: string;
+      rememberMe?: boolean;
+    }) =>
       request<{ user: ClientUser }>("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
-    register: (payload: { name: string; email: string; password: string }) =>
+    register: (payload: {
+      name: string;
+      email: string;
+      password: string;
+      acceptedTerms: boolean;
+    }) =>
       request<{ user: ClientUser }>("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    forgotPassword: (payload: { email: string }) =>
+      request<{ ok: boolean; expiresInMinutes: number }>(
+        "/api/auth/forgot-password",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      ),
+    resetPassword: (payload: {
+      email: string;
+      code: string;
+      password: string;
+    }) =>
+      request<{ user: ClientUser }>("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

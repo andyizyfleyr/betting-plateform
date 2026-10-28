@@ -59,7 +59,7 @@ function ActiveScreenSwitch() {
     );
   }
 
-  if (pathname === "/auth") {
+  if (pathname === "/auth" || pathname.startsWith("/auth/")) {
     return (
       <View style={styles.authRoot}>
         <StatusBar style="dark" backgroundColor={COLORS.deep} />

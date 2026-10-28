@@ -100,6 +100,7 @@ export default function BetslipPage() {
     openRecharge,
     oddsFormat,
     toast,
+    authReady,
     user,
     setFeedMatches,
   } = useApp();
@@ -349,7 +350,7 @@ export default function BetslipPage() {
 
   const parsed = Number(stakeText.replace(",", "."));
   const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = stake > balance;
+  const overBalance = Boolean(user) && stake > balance;
   const belowMin = stake > 0 && stake < 0.5;
   const isCombo = enrichedLegs.length >= 2;
   const hasClosedLeg = enrichedLegs.some((l) => l.closed);
@@ -381,6 +382,15 @@ export default function BetslipPage() {
 
   const submitSlip = async () => {
     if (!canSubmit || inFlightRef.current) return;
+    if (!authReady && !user) return;
+    if (!user) {
+      toast({
+        kind: "info",
+        title: "Connectez-vous pour valider votre coupon",
+      });
+      router.push("/auth/connexion?from=/betslip");
+      return;
+    }
     inFlightRef.current = true;
     const legsSig = enrichedLegs
       .map((l) => `${l.uid}:${l.market}:${l.selection}:${l.liveOdds}`)

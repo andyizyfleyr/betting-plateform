@@ -132,7 +132,7 @@ export function AppHeader() {
             </View>
           ) : (
             <Pressable
-              onPress={() => router.push("/auth")}
+              onPress={() => router.push("/auth/connexion")}
               style={({ pressed }) => [
                 styles.loginBtn,
                 pressed && { opacity: 0.9 },
