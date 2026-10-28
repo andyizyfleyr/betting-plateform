@@ -19,6 +19,7 @@ import {
   Lock,
   LogOut,
   Plus,
+  RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
   Vibrate,
@@ -33,6 +34,10 @@ import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
 import { eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 import { createIdempotencyKey } from "@/lib/http";
+import {
+  getOtaRuntimeDiagnostics,
+  manualCheckAndApplyOtaUpdate,
+} from "@/lib/ota-updates";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
@@ -55,8 +60,10 @@ export default function ParametresScreen() {
   );
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [checkingOta, setCheckingOta] = useState(false);
   const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
   const [refreshing, setRefreshing] = useState(false);
+  const otaDiag = useMemo(() => getOtaRuntimeDiagnostics(), []);
 
   const cancelSlotRef = useRef<Map<number, string>>(new Map());
   const cancelInFlightRef = useRef(false);
@@ -149,6 +156,41 @@ export default function ParametresScreen() {
     applyUser(null);
     router.replace("/auth");
     setLoggingOut(false);
+  };
+
+  const handleManualOtaCheck = async () => {
+    if (checkingOta) return;
+    setCheckingOta(true);
+    try {
+      const res = await manualCheckAndApplyOtaUpdate();
+      if (res.status === "up_to_date") {
+        toast({
+          kind: "success",
+          title: "Application à jour",
+          description: `Version ${otaDiag.appVersion} active`,
+        });
+      } else if (res.status === "expo_go") {
+        toast({
+          kind: "info",
+          title: "Client Expo Go détecté",
+          description: "Les mises à jour OTA sont servies automatiquement par /api/expo.",
+        });
+      } else if (res.status === "disabled") {
+        toast({
+          kind: "info",
+          title: `Version ${otaDiag.appVersion}`,
+          description: "Les mises à jour OTA s'activent dans le build APK Release.",
+        });
+      } else if (res.status === "error") {
+        toast({
+          kind: "error",
+          title: "Vérification OTA indisponible",
+          description: res.message,
+        });
+      }
+    } finally {
+      setCheckingOta(false);
+    }
   };
 
   if ((!authReady || sessionRestoring) && !user) {
@@ -513,6 +555,47 @@ export default function ParametresScreen() {
               last
             />
           </View>
+
+          <Pressable
+            disabled={checkingOta}
+            onPress={() => void handleManualOtaCheck()}
+            style={({ pressed }) => [
+              styles.navRowCard,
+              checkingOta && { opacity: 0.65 },
+              pressed && { backgroundColor: COLORS.elev },
+            ]}
+          >
+            <View style={styles.grayIconBox}>
+              {checkingOta ? (
+                <ActivityIndicator size="small" color={COLORS.ink} />
+              ) : (
+                <RefreshCw size={15} color={COLORS.ink} strokeWidth={2.1} />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.navRowTitle}>
+                Mises à jour OTA automatiques
+              </Text>
+              <Text numberOfLines={1} style={styles.navRowSub}>
+                {`v${otaDiag.appVersion} · ${
+                  otaDiag.shortUpdateId
+                    ? `OTA #${otaDiag.shortUpdateId}`
+                    : otaDiag.isSupported
+                      ? "Active au lancement"
+                      : "Serveur OTA configuré"
+                }`}
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontSize: 10.5,
+                fontWeight: "500",
+                color: COLORS.betclicRed,
+              }}
+            >
+              {checkingOta ? "Analyse…" : "Vérifier"}
+            </Text>
+          </Pressable>
 
           <Pressable
             disabled={loggingOut}

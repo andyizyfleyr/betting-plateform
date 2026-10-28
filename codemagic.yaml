@@ -17,6 +17,8 @@ workflows:
       vars:
         NODE_ENV: "production"
         EXPO_PUBLIC_API_URL: "https://be-plateform.vercel.app"
+        EXPO_PUBLIC_UPDATES_URL: "https://be-plateform.vercel.app/api/expo"
+        EXPO_PUBLIC_UPDATES_CHANNEL: "production"
         EXPO_PUBLIC_PARTYKIT_HOST: "pulse-bet.matiasanauld.workers.dev"
         EXPO_NO_TELEMETRY: "1"
         CI: "1"

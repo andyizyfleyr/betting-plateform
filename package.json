@@ -8,6 +8,7 @@
     "party:dev": "wrangler dev -c wrangler.jsonc --port 1999",
     "party:deploy": "wrangler deploy -c wrangler.jsonc --autoconfig=false",
     "party:setup": "node scripts/setup-partykit.mjs",
+    "ota:export": "npm --prefix mobile run export:sdk52",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc -p party/tsconfig.json --noEmit",
     "test:concurrency": "node scripts/test-concurrency.mjs"
