@@ -49,6 +49,7 @@ import {
 import { TeamAvatar } from "@/components/team-avatar";
 import { TouchStakePad } from "@/components/touch-stake-pad";
 import { useApp } from "@/components/providers";
+import { triggerRouteLoader } from "@/components/pulse-flash-loader";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
 function LegLiveOddsBadge({
@@ -489,6 +490,7 @@ export default function BetslipPage() {
               type="button"
               onClick={() => {
                 setReceipt(null);
+                triggerRouteLoader("/matchs");
                 router.push("/matchs");
               }}
               className="h-11 rounded-xl bg-elev font-display text-[13px] font-bold text-ink active:scale-[0.98]"
@@ -499,6 +501,7 @@ export default function BetslipPage() {
               type="button"
               onClick={() => {
                 setReceipt(null);
+                triggerRouteLoader("/paris");
                 router.push("/paris");
               }}
               className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[13px] font-bold text-white active:scale-[0.98]"

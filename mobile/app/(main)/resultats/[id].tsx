@@ -19,6 +19,7 @@ import {
   RealMatchStatsCard,
 } from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
 import { api, type ClientMatchHistoryItem } from "@/lib/api";
@@ -175,9 +176,7 @@ export default function ResultDetailScreen() {
 
       <View style={{ marginTop: 10 }}>
         {item === undefined ? (
-          <View style={styles.loaderBox}>
-            <ActivityIndicator size="small" color={COLORS.betclicRed} />
-          </View>
+          <PulseFlashLoader compact />
         ) : item === null ? (
           <View style={styles.notFoundCard}>
             <AlertTriangle

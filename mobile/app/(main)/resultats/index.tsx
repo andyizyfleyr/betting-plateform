@@ -25,6 +25,7 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { LiveMatchClock } from "@/components/live-match-clock";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useQuery } from "@tanstack/react-query";
@@ -707,9 +708,7 @@ export default function ResultatsScreen() {
 
       {/* 5 : Liste groupée par journée */}
       {history === null ? (
-        <View style={styles.loaderBox}>
-          <ActivityIndicator size="small" color={COLORS.betclicRed} />
-        </View>
+        <PulseFlashLoader compact />
       ) : groupedByDay.length === 0 && !focusedMatch ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyCircle}>

@@ -22,6 +22,7 @@ import {
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/client-entity-cache";
 import { useApp } from "@/components/providers";
+import { triggerRouteLoader } from "@/components/pulse-flash-loader";
 import { AnimatedNumber } from "@/components/animated-number";
 import { Toggle } from "@/components/toggle";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
@@ -397,7 +398,10 @@ export default function ParametresPage() {
           {user?.role === "admin" && (
             <button
               type="button"
-              onClick={() => router.push("/admin")}
+              onClick={() => {
+                triggerRouteLoader("/admin");
+                router.push("/admin");
+              }}
               className="glass-card flex w-full items-center gap-3 rounded-2xl p-3.5 text-left transition-colors active:bg-elev"
             >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">

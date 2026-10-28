@@ -30,6 +30,7 @@ import {
   TicketTeamRow,
 } from "@/components/bet-ticket";
 import { CardOverlayLink } from "@/components/card-overlay-link";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import {
   InfiniteScrollSentinel,
   useInfiniteBatch,
@@ -342,6 +343,10 @@ export default function ComboDetailPage() {
     return parts.join(" · ");
   }, [bet, liveCount, lostCount, totalLegs, voidCount, wonCount]);
 
+  if (bet === undefined && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
       <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
@@ -414,11 +419,7 @@ export default function ComboDetailPage() {
 
         {/* États : chargement, erreur, introuvable ou contenu détaillé */}
         {bet === undefined ? (
-          <div className="mt-4 space-y-3">
-            <div className="shimmer h-[142px] rounded-2xl" />
-            <div className="shimmer h-[132px] rounded-2xl" />
-            <div className="shimmer h-[132px] rounded-2xl" />
-          </div>
+          <PulseFlashLoader compact />
         ) : loadError && !bet ? (
           <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
             <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">

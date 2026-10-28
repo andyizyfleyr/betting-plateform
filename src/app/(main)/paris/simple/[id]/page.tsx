@@ -27,6 +27,10 @@ import {
   getCachedClientMatch,
   getCachedPrediction,
 } from "@/lib/client-entity-cache";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import {
@@ -76,8 +80,9 @@ function parseSimpleBetSlug(raw: string | undefined): {
 
 export default function SingleBetDetailPage() {
   const params = useParams<{ id: string }>();
+  const rawParamId = String(params?.id ?? "");
   const router = useRouter();
-  const parsed = useMemo(() => parseSimpleBetSlug(params?.id), [params?.id]);
+  const parsed = useMemo(() => parseSimpleBetSlug(rawParamId), [rawParamId]);
   const { betsVersion, oddsFormat, setBalance, bumpBets, toast, user } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
@@ -139,7 +144,7 @@ export default function SingleBetDetailPage() {
 
     try {
       let r = await api.betById(parsed.kind, parsed.id);
-      if (!r.bet && !/^(sport|pred)-/i.test(String(params?.id ?? ""))) {
+      if (!r.bet && !/^(sport|pred)-/i.test(rawParamId)) {
         r = await api.betById(
           parsed.kind === "sport" ? "prediction" : "sport",
           parsed.id
@@ -173,27 +178,22 @@ export default function SingleBetDetailPage() {
           : "Impossible de charger ce pari. Réessayez."
       );
     }
-  }, [parsed.valid, parsed.kind, parsed.id, params?.id, isOffline, setBalance]);
+  }, [parsed, rawParamId, isOffline, setBalance]);
 
-  const isPending = bet?.status === "pending";
+  const userId = user?.id ?? null;
+  const shouldPoll = bet === undefined || bet?.status === "pending";
 
   useEffect(() => {
-    if (!user || !parsed.valid) return;
+    if (!userId || !parsed.valid) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSingleBet();
-    if (!isPending && bet !== undefined) return;
+  }, [userId, parsed.valid, fetchSingleBet, betsVersion, reloadNonce]);
+
+  useEffect(() => {
+    if (!userId || !parsed.valid || !shouldPoll) return;
     const id = setInterval(() => void fetchSingleBet(), pollIntervalMs);
     return () => clearInterval(id);
-  }, [
-    user,
-    parsed.valid,
-    fetchSingleBet,
-    betsVersion,
-    reloadNonce,
-    isPending,
-    bet,
-    pollIntervalMs,
-  ]);
+  }, [userId, parsed.valid, fetchSingleBet, shouldPoll, pollIntervalMs]);
 
   const effectiveCashOut =
     bet?.cashOut != null
@@ -307,6 +307,10 @@ export default function SingleBetDetailPage() {
     linkedMatch && ((!isReal && matchStatus === "live") || realStatsAvailable)
   );
 
+  if (bet === undefined && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
@@ -318,6 +322,7 @@ export default function SingleBetDetailPage() {
               if (typeof window !== "undefined" && window.history.length > 1) {
                 router.back();
               } else {
+                triggerRouteLoader("/paris");
                 router.push("/paris");
               }
             }}
@@ -392,10 +397,7 @@ export default function SingleBetDetailPage() {
             </button>
           </div>
         ) : bet === undefined ? (
-          <div className="space-y-2.5">
-            <div className="skeleton h-[112px] rounded-xl" />
-            <div className="skeleton h-[126px] rounded-xl" />
-          </div>
+          <PulseFlashLoader compact />
         ) : bet === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
             <p className="font-display text-[14.5px] font-bold text-ink">

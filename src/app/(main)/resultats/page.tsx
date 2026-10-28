@@ -16,6 +16,7 @@ import {
 import { api, type ClientMatchHistoryItem } from "@/lib/api";
 import { rememberMatchHistory } from "@/lib/client-entity-cache";
 import { CardOverlayLink } from "@/components/card-overlay-link";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
   InfiniteScrollSentinel,
@@ -414,6 +415,10 @@ function ResultatsContent() {
     }
   };
 
+  if (history === null) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 pt-3.5 pb-6 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-2">
@@ -692,15 +697,7 @@ function ResultatsContent() {
 
 export default function ResultatsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto w-full max-w-[1440px] px-4 pt-4 space-y-3 lg:px-0 lg:py-0">
-          <div className="shimmer h-10 rounded-xl" />
-          <div className="shimmer h-[112px] rounded-2xl" />
-          <div className="shimmer h-[112px] rounded-2xl" />
-        </div>
-      }
-    >
+    <Suspense fallback={<PulseFlashLoader />}>
       <ResultatsContent />
     </Suspense>
   );

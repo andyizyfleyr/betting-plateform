@@ -17,6 +17,10 @@ import { api, type ClientPrediction } from "@/lib/api";
 import { getCachedPrediction } from "@/lib/client-entity-cache";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { useApp } from "@/components/providers";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
@@ -129,6 +133,10 @@ export default function PredictionDetailPage() {
     setActiveSelection(optKey);
   };
 
+  if (question === undefined && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
@@ -140,6 +148,7 @@ export default function PredictionDetailPage() {
               if (typeof window !== "undefined" && window.history.length > 1) {
                 router.back();
               } else {
+                triggerRouteLoader("/predictions");
                 router.push("/predictions");
               }
             }}
@@ -182,10 +191,7 @@ export default function PredictionDetailPage() {
 
       <div className="mt-2.5 lg:mt-4">
         {question === undefined ? (
-          <div className="space-y-2.5">
-            <div className="skeleton h-[94px] rounded-xl" />
-            <div className="skeleton h-[150px] rounded-xl" />
-          </div>
+          <PulseFlashLoader compact />
         ) : question === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />

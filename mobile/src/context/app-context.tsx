@@ -294,8 +294,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setBalance = useCallback((b: number) => {
     if (Number.isFinite(b)) {
       const clean = Math.round(b * 100) / 100;
-      setBalanceState(clean);
-      setUser((prev) => (prev ? { ...prev, balance: clean } : prev));
+      setBalanceState((prev) => (Math.abs(prev - clean) < 0.001 ? prev : clean));
+      setUser((prev) => {
+        if (!prev) return prev;
+        if (Math.abs(prev.balance - clean) < 0.001) return prev;
+        return { ...prev, balance: clean };
+      });
     }
   }, []);
 

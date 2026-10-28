@@ -25,6 +25,7 @@ import { OddsLockControls } from "./odds-lock-controls";
 import { TeamAvatar } from "./team-avatar";
 import { TouchStakePad } from "./touch-stake-pad";
 import { useApp } from "./providers";
+import { triggerRouteLoader } from "./pulse-flash-loader";
 import { cn, eur, formatOdds } from "@/lib/format";
 
 export interface ComboSelection {
@@ -280,7 +281,10 @@ export function ComboSheet() {
     setError(null);
     setOddsChanged(null);
     closeCombo();
-    if (goBets) router.push("/paris");
+    if (goBets) {
+      triggerRouteLoader("/paris");
+      router.push("/paris");
+    }
   };
 
   return (

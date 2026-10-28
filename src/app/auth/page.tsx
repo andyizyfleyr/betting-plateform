@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState, type FormEvent } from "reac
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Eye, EyeOff, Loader2, Lock, Mail, User, Zap } from "lucide-react";
 import { PulseLogo } from "@/components/pulse-logo";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/components/providers";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/format";
@@ -12,7 +13,7 @@ type Mode = "login" | "register";
 
 export default function AuthPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PulseFlashLoader className="min-h-dvh" />}>
       <AuthInner />
     </Suspense>
   );
@@ -101,6 +102,10 @@ function AuthInner() {
       setDemoLoading(false);
     }
   };
+
+  if (user) {
+    return <PulseFlashLoader className="min-h-dvh" />;
+  }
 
   return (
     <main className="pt-safe pb-safe flex min-h-dvh w-full flex-1 flex-col justify-between px-5 py-6 lg:items-center lg:justify-center lg:px-10 lg:py-12">

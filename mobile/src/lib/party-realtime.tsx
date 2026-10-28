@@ -362,7 +362,7 @@ export function useMobileMatchesSlimQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialMatches && options.initialMatches.length > 0
-        ? Date.now() - 4_000
+        ? () => Date.now() - 4_000
         : undefined,
     refetchInterval: wsConnected ? 60_000 : fallbackMs,
     refetchIntervalInBackground: false,
@@ -396,7 +396,7 @@ export function useMobileMatchDetailQuery(
     initialDataUpdatedAt: options?.initialMatch
       ? initialIsSlim
         ? 0
-        : Date.now() - 4_000
+        : () => Date.now() - 4_000
       : undefined,
     refetchInterval: options?.isFinished
       ? false
@@ -425,7 +425,7 @@ export function useMobilePredictionsCatalogQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialQuestions && options.initialQuestions.length > 0
-        ? Date.now() - 5_000
+        ? () => Date.now() - 5_000
         : undefined,
     refetchInterval: wsConnected ? 60_000 : fallbackMs,
     refetchIntervalInBackground: false,
@@ -450,7 +450,7 @@ export function useMobileMatchHistoryQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialHistory && options.initialHistory.length > 0
-        ? Date.now() - 5_000
+        ? () => Date.now() - 5_000
         : undefined,
     refetchInterval: wsConnected ? 60_000 : fallbackMs,
     refetchIntervalInBackground: false,

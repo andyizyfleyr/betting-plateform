@@ -18,6 +18,10 @@ import {
   RealMatchStatsCard,
 } from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { TeamAvatar } from "@/components/team-avatar";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
@@ -105,6 +109,10 @@ export default function ResultDetailPage() {
     ];
   }, [item]);
 
+  if (item === undefined && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
@@ -116,6 +124,7 @@ export default function ResultDetailPage() {
               if (typeof window !== "undefined" && window.history.length > 1) {
                 router.back();
               } else {
+                triggerRouteLoader("/resultats");
                 router.push("/resultats");
               }
             }}
@@ -150,10 +159,7 @@ export default function ResultDetailPage() {
 
       <div className="mt-2.5 lg:mt-4">
         {item === undefined ? (
-          <div className="space-y-2.5">
-            <div className="skeleton h-[106px] rounded-xl" />
-            <div className="skeleton h-[110px] rounded-xl" />
-          </div>
+          <PulseFlashLoader compact />
         ) : item === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />

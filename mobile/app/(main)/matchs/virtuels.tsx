@@ -24,6 +24,7 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { MatchCard } from "@/components/match-card";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { api, type ClientMatch } from "@/lib/api";
 import { useMobileMatchesSlimQuery } from "@/lib/party-realtime";
@@ -405,9 +406,7 @@ export default function VirtualMatchesScreen() {
 
       {/* 3 : Contenu */}
       {matches === null ? (
-        <View style={styles.loaderBox}>
-          <ActivityIndicator size="small" color={COLORS.betclicRed} />
-        </View>
+        <PulseFlashLoader compact />
       ) : loadError && matches.length === 0 ? (
         <View style={styles.errorCard}>
           <View style={styles.errorIconCircle}>

@@ -37,6 +37,7 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { TeamAvatar } from "@/components/team-avatar";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
@@ -695,11 +696,7 @@ export default function AdminPage() {
       </div>
 
       {loading || !panel ? (
-        <div className="mt-3 flex flex-col gap-3">
-          <div className="shimmer h-[92px] rounded-2xl" />
-          <div className="shimmer h-[92px] rounded-2xl" />
-          <div className="shimmer h-[180px] rounded-2xl" />
-        </div>
+        <PulseFlashLoader compact />
       ) : (
         <div className="mt-3">
           {tab === "dashboard" && <Dashboard stats={panel.stats} />}

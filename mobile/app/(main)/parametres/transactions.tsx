@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react-native";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import {
   InfiniteScrollLoader,
   useInfiniteBatch,
@@ -194,9 +195,7 @@ export default function TransactionsScreen() {
 
       {/* 2 : Liste */}
       {wallet === null ? (
-        <View style={styles.loaderBox}>
-          <ActivityIndicator size="small" color={COLORS.betclicRed} />
-        </View>
+        <PulseFlashLoader compact />
       ) : visibleTx.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>

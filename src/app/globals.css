@@ -126,3 +126,93 @@ button,
   background-size: 200% 100%;
   animation: shimmer 1.5s linear infinite;
 }
+
+/* ─── Pulse Bet · Centered Animated Flash Icon Loader ─── */
+@keyframes pb-flash-halo {
+  0%,
+  100% {
+    transform: scale(0.86);
+    opacity: 0.22;
+  }
+  50% {
+    transform: scale(1.16);
+    opacity: 0.48;
+  }
+}
+
+@keyframes pb-flash-bolt {
+  0%,
+  100% {
+    transform: scale(0.95);
+  }
+  45% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes pb-flash-charge {
+  0% {
+    transform: translateY(104%);
+    opacity: 0.65;
+  }
+  55% {
+    transform: translateY(0%);
+    opacity: 1;
+  }
+  82% {
+    transform: translateY(0%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-104%);
+    opacity: 0.35;
+  }
+}
+
+@keyframes pb-flash-sheen {
+  0%,
+  18% {
+    transform: translate(-90%, 90%) rotate(-24deg);
+    opacity: 0;
+  }
+  48% {
+    opacity: 0.9;
+  }
+  78%,
+  100% {
+    transform: translate(90%, -90%) rotate(-24deg);
+    opacity: 0;
+  }
+}
+
+@keyframes pb-flash-stroke {
+  0% {
+    stroke-dashoffset: 260;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.pb-flash-halo-anim {
+  animation: pb-flash-halo 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.pb-flash-bolt-anim {
+  transform-origin: center;
+  animation: pb-flash-bolt 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.pb-flash-charge-anim {
+  animation: pb-flash-charge 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.pb-flash-sheen-anim {
+  animation: pb-flash-sheen 1.15s ease-in-out infinite;
+}
+
+.pb-flash-stroke-anim {
+  stroke-dasharray: 76 184;
+  animation: pb-flash-stroke 1.15s linear infinite;
+}
+

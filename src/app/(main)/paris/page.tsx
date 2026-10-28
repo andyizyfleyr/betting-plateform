@@ -12,7 +12,8 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
+import { useQuery } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
 import { useRealtimeStatus } from "@/lib/party-realtime";
 import { pulseQueryKeys } from "@/lib/query-client";
@@ -24,8 +25,6 @@ type Tab = "ongoing" | "finished";
 type OutcomeFilter = "all" | "won" | "lost" | "cashed" | "void";
 
 const POLL_INTERVAL = 5_000;
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1_000;
 
 function dayLabel(iso: string) {
   const d = new Date(iso);
@@ -46,7 +45,6 @@ function settledOrPlacedIso(b: ClientBet): string {
 }
 
 export default function ParisPage() {
-  const queryClient = useQueryClient();
   const { wsConnected, userWsConnected } = useRealtimeStatus();
   const { betsVersion, user, setBalance } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
@@ -64,15 +62,38 @@ export default function ParisPage() {
     return cached.length > 0 ? { bets: cached, balance: null } : undefined;
   }, []);
 
-  // 1) Liste complète des paris gérée par TanStack Query + invalidation instantanée PartyKit (`user-<id>`)
+  // Liste complète des paris gérée par TanStack Query + invalidation instantanée PartyKit (`user-<id>`)
   const allBetsQuery = useQuery({
     queryKey: [...pulseQueryKeys.userBets(user?.id, "all"), betsVersion],
     queryFn: () => api.allBets(),
     enabled: !isOffline,
     initialData: initialCachedBets,
-    initialDataUpdatedAt: initialCachedBets ? Date.now() - 4_000 : undefined,
+    initialDataUpdatedAt: initialCachedBets ? () => Date.now() - 4_000 : undefined,
     staleTime: 2_500,
+    refetchInterval: (q) => {
+      if (isOffline) return false;
+      const currentBets = q.state.data?.bets;
+      const anyPending = Boolean(
+        currentBets?.some((b) => b.status === "pending")
+      );
+      if (!anyPending) return false;
+      const livePending = Boolean(
+        currentBets?.some(
+          (b) =>
+            b.status === "pending" &&
+            (b.matchStatus === "live" ||
+              b.legs?.some((l) => l.matchStatus === "live"))
+        )
+      );
+      if (wsConnected && userWsConnected) {
+        return livePending ? 15_000 : false;
+      }
+      return livePending ? pollIntervalMs : Math.max(pollIntervalMs * 2, 12_000);
+    },
+    refetchIntervalInBackground: false,
   });
+
+  const refetchAllBets = allBetsQuery.refetch;
 
   useEffect(() => {
     if (typeof allBetsQuery.data?.balance === "number") {
@@ -94,12 +115,12 @@ export default function ParisPage() {
 
   const handlePullRefresh = useCallback(async () => {
     try {
-      const r = await allBetsQuery.refetch();
+      const r = await refetchAllBets();
       if (typeof r.data?.balance === "number") setBalance(r.data.balance);
     } catch {
       /* conserve la liste affichée si la 3G coupe brièvement */
     }
-  }, [allBetsQuery, setBalance]);
+  }, [refetchAllBets, setBalance]);
 
   const allBets = useMemo(() => bets ?? [], [bets]);
 
@@ -109,51 +130,6 @@ export default function ParisPage() {
     () => allBets.some((b) => b.status === "pending"),
     [allBets]
   );
-
-  // 2) Suivi Cash Out temps réel (`?filter=ongoing`) :
-  //    - Si PartyKit WebSocket est actif : cadencé souplement à 15 s uniquement s'il y a >= 1 pari en cours
-  //      (les règlements `won`/`lost`/`void` arrivent déjà instantanément sur `user-<id>` !).
-  //    - Sinon : repli TanStack Query sur `pollIntervalMs`.
-  const ongoingQuery = useQuery({
-    queryKey: pulseQueryKeys.userBets(user?.id, "ongoing"),
-    queryFn: () => api.bets("ongoing"),
-    enabled: hasAnyOngoing && !isOffline,
-    refetchInterval:
-      wsConnected && userWsConnected ? 15_000 : pollIntervalMs,
-    refetchIntervalInBackground: false,
-  });
-
-  useEffect(() => {
-    const ongoingRes = ongoingQuery.data;
-    if (!ongoingRes) return;
-    if (typeof ongoingRes.balance === "number") {
-      setBalance(ongoingRes.balance);
-    }
-
-    let ticketJustSettled = false;
-    queryClient.setQueryData<{ bets: ClientBet[]; balance: number | null }>(
-      [...pulseQueryKeys.userBets(user?.id, "all"), betsVersion],
-      (prev) => {
-        if (!prev) return ongoingRes;
-        const prevOngoingCount = prev.bets.filter((b) => b.status === "pending").length;
-        if (ongoingRes.bets.length < prevOngoingCount) {
-          ticketJustSettled = true;
-          return prev;
-        }
-        const finishedPart = prev.bets.filter((b) => b.status !== "pending");
-        return {
-          balance: ongoingRes.balance ?? prev.balance,
-          bets: [...ongoingRes.bets, ...finishedPart].sort(
-            (a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime()
-          ),
-        };
-      }
-    );
-
-    if (ticketJustSettled || ongoingRes.bets.length === 0) {
-      void allBetsQuery.refetch();
-    }
-  }, [allBetsQuery, betsVersion, ongoingQuery.data, queryClient, setBalance, user?.id]);
   const hasAnyFinished = useMemo(
     () => allBets.some((b) => b.status !== "pending"),
     [allBets]
@@ -295,6 +271,10 @@ export default function ParisPage() {
       window.setTimeout(() => searchInputRef.current?.focus(), 30);
     }
   };
+
+  if (bets === null && !loadError) {
+    return <PulseFlashLoader />;
+  }
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
@@ -511,11 +491,7 @@ export default function ParisPage() {
 
       {/* Liste des tickets */}
       {bets === null ? (
-        <div className="grid grid-cols-1 gap-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="shimmer h-[168px] rounded-2xl" />
-          ))}
-        </div>
+        <PulseFlashLoader compact />
       ) : loadError && (bets?.length ?? 0) === 0 ? (
         <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">

@@ -14,6 +14,10 @@ import { api, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/client-entity-cache";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
+import {
   InfiniteScrollSentinel,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
@@ -116,6 +120,10 @@ export default function TransactionsPage() {
     );
   }
 
+  if (user && wallet === null) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <div className="mx-auto w-full max-w-2xl px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
@@ -126,6 +134,7 @@ export default function TransactionsPage() {
             if (typeof window !== "undefined" && window.history.length > 1) {
               router.back();
             } else {
+              triggerRouteLoader("/parametres");
               router.push("/parametres");
             }
           }}

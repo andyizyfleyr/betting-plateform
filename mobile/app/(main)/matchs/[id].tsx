@@ -18,6 +18,7 @@ import {
 } from "lucide-react-native";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import { LiveStatusBadge } from "@/components/match-card";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useMobileMatchDetailQuery } from "@/lib/party-realtime";
 import {
   AccordionItem,
@@ -229,9 +230,7 @@ export default function MatchDetailScreen() {
 
       <View style={{ marginTop: 10 }}>
         {match === undefined ? (
-          <View style={styles.loaderBox}>
-            <ActivityIndicator size="small" color={COLORS.betclicRed} />
-          </View>
+          <PulseFlashLoader compact />
         ) : match === null ? (
           <View style={styles.notFoundCard}>
             <AlertTriangle

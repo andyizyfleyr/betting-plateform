@@ -28,6 +28,7 @@ import {
   TicketTeamRow,
 } from "@/components/bet-ticket";
 import { LiveMatchClock } from "@/components/live-match-clock";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
 import { SportIcon } from "@/components/sport-icon";
@@ -87,8 +88,10 @@ export default function ComboDetailScreen() {
     setCashoutError(null);
   }
 
+  const userId = user?.id ?? null;
+
   const fetchCombo = useCallback(async () => {
-    if (!user || invalidId) return;
+    if (!userId || invalidId) return;
     try {
       const r = await api.bets.byId("combo", comboId);
       if (r.balance != null) setBalance(r.balance);
@@ -96,7 +99,7 @@ export default function ComboDetailScreen() {
     } catch {
       /* garde l'état courant */
     }
-  }, [user, invalidId, comboId, setBalance]);
+  }, [userId, invalidId, comboId, setBalance]);
 
   const hasLiveLeg = useMemo(
     () =>
@@ -107,16 +110,21 @@ export default function ComboDetailScreen() {
       ),
     [bet]
   );
+  const shouldPoll = bet === undefined || bet?.status === "pending";
 
   useEffect(() => {
-    if (!user || invalidId) return;
+    if (!userId || invalidId) return;
     void fetchCombo();
+  }, [userId, invalidId, fetchCombo]);
+
+  useEffect(() => {
+    if (!userId || invalidId || !shouldPoll) return;
     const id = setInterval(
       () => void fetchCombo(),
       hasLiveLeg ? POLL_LIVE_MS : POLL_IDLE_MS
     );
     return () => clearInterval(id);
-  }, [user, invalidId, fetchCombo, hasLiveLeg]);
+  }, [userId, invalidId, fetchCombo, shouldPoll, hasLiveLeg]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -321,9 +329,7 @@ export default function ComboDetailScreen() {
 
         <View style={{ marginTop: 14 }}>
           {bet === undefined ? (
-            <View style={styles.loaderBox}>
-              <ActivityIndicator size="small" color={COLORS.betclicRed} />
-            </View>
+            <PulseFlashLoader compact />
           ) : bet === null ? (
             <View style={styles.notFoundCard}>
               <AlertTriangle

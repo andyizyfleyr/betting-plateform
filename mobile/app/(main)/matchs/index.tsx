@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { ChevronRight, Search, Trophy, X } from "lucide-react-native";
 import { MatchCard } from "@/components/match-card";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import {
   MobileHeroCarousel,
   type HeroPromoAction,
@@ -327,9 +328,7 @@ export default function MatchsHomeScreen() {
       </View>
 
       {feedMatches === null ? (
-        <View style={styles.loaderBox}>
-          <ActivityIndicator size="small" color={COLORS.betclicRed} />
-        </View>
+        <PulseFlashLoader compact />
       ) : !mobileRows.hasAny ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyCircle}>

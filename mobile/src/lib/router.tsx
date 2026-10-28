@@ -58,6 +58,7 @@ function parseHref(href: string): RouteEntry {
 
 interface RouterContextValue {
   current: RouteEntry;
+  isNavigating: boolean;
   push: (href: string) => void;
   replace: (href: string) => void;
   back: (fallbackHref?: string) => void;
@@ -72,19 +73,35 @@ export function RouterProvider({
   initialHref?: string;
   children: React.ReactNode;
 }) {
-  const [stack, setStack] = useState<RouteEntry[]>(() => [
-    parseHref(initialHref),
-  ]);
+  const [routerState, setRouterState] = useState<{
+    stack: RouteEntry[];
+    isNavigating: boolean;
+  }>(() => ({
+    stack: [parseHref(initialHref)],
+    isNavigating: false,
+  }));
+
+  const { stack, isNavigating } = routerState;
 
   const current = stack[stack.length - 1] ?? {
     pathname: "/matchs",
     params: {},
   };
 
+  useEffect(() => {
+    if (!isNavigating) return;
+    const t = setTimeout(() => {
+      setRouterState((prev) =>
+        prev.isNavigating ? { ...prev, isNavigating: false } : prev
+      );
+    }, 180);
+    return () => clearTimeout(t);
+  }, [isNavigating, current.pathname, current.params]);
+
   const push = useCallback((href: string) => {
     const next = parseHref(href);
-    setStack((prev) => {
-      const top = prev[prev.length - 1];
+    setRouterState((prev) => {
+      const top = prev.stack[prev.stack.length - 1];
       if (
         top &&
         top.pathname === next.pathname &&
@@ -92,28 +109,47 @@ export function RouterProvider({
       ) {
         return prev;
       }
-      return [...prev.slice(-24), next];
+      const showLoader =
+        !next.pathname.startsWith("/tap") &&
+        !next.pathname.startsWith("/accelerator");
+      return {
+        stack: [...prev.stack.slice(-24), next],
+        isNavigating: showLoader,
+      };
     });
   }, []);
 
   const replace = useCallback((href: string) => {
     const next = parseHref(href);
-    setStack((prev) => {
-      if (prev.length === 0) return [next];
-      return [...prev.slice(0, -1), next];
+    setRouterState((prev) => {
+      const top = prev.stack[prev.stack.length - 1];
+      if (
+        top &&
+        top.pathname === next.pathname &&
+        JSON.stringify(top.params) === JSON.stringify(next.params)
+      ) {
+        return prev;
+      }
+      const showLoader =
+        !next.pathname.startsWith("/tap") &&
+        !next.pathname.startsWith("/accelerator");
+      return {
+        stack: prev.stack.length === 0 ? [next] : [...prev.stack.slice(0, -1), next],
+        isNavigating: showLoader,
+      };
     });
   }, []);
 
   const back = useCallback((fallbackHref?: string) => {
-    setStack((prev) => {
-      if (prev.length <= 1) {
+    setRouterState((prev) => {
+      if (prev.stack.length <= 1) {
         const fb = fallbackHref || "/matchs";
-        if (prev[0]?.pathname !== fb) {
-          return [parseHref(fb)];
+        if (prev.stack[0]?.pathname !== fb) {
+          return { stack: [parseHref(fb)], isNavigating: true };
         }
         return prev;
       }
-      return prev.slice(0, -1);
+      return { stack: prev.stack.slice(0, -1), isNavigating: false };
     });
   }, []);
 
@@ -121,11 +157,17 @@ export function RouterProvider({
   useEffect(() => {
     const onHardwareBack = () => {
       if (stack.length > 1) {
-        setStack((prev) => prev.slice(0, -1));
+        setRouterState((prev) => ({
+          stack: prev.stack.slice(0, -1),
+          isNavigating: false,
+        }));
         return true;
       }
       if (current.pathname !== "/matchs" && current.pathname !== "/admin") {
-        setStack([{ pathname: "/matchs", params: {} }]);
+        setRouterState({
+          stack: [{ pathname: "/matchs", params: {} }],
+          isNavigating: true,
+        });
         return true;
       }
       return false;
@@ -139,13 +181,18 @@ export function RouterProvider({
   }, [current.pathname, stack.length]);
 
   const value = useMemo<RouterContextValue>(
-    () => ({ current, push, replace, back }),
-    [back, current, push, replace]
+    () => ({ current, isNavigating, push, replace, back }),
+    [back, current, isNavigating, push, replace]
   );
 
   return (
     <RouterContext.Provider value={value}>{children}</RouterContext.Provider>
   );
+}
+
+export function useRouterNavigating(): boolean {
+  const ctx = useContext(RouterContext);
+  return ctx?.isNavigating ?? false;
 }
 
 export function useRouter() {

@@ -22,6 +22,7 @@ import {
   useOddsTrend,
 } from "@/components/odds-trend-corner";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp, type ComboSelection } from "@/context/app-context";
 import { api, type ClientPrediction } from "@/lib/api";
 import { getCachedClientPrediction } from "@/lib/entity-cache";
@@ -267,9 +268,7 @@ export default function PredictionDetailScreen() {
 
         <View style={{ marginTop: 10 }}>
           {mergedQuestion === undefined ? (
-            <View style={styles.loaderBox}>
-              <ActivityIndicator size="small" color={COLORS.betclicRed} />
-            </View>
+            <PulseFlashLoader compact />
           ) : mergedQuestion === null ? (
             <View style={styles.notFoundCard}>
               <AlertTriangle
