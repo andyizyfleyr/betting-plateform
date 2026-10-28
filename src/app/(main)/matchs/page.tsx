@@ -873,10 +873,10 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
         {trailingHref && trailingLabel && (
           <Link
             href={trailingHref}
-            className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-full bg-betclic-red/10 pl-2.5 pr-1.5 font-display text-[10.5px] font-medium text-betclic-red transition-transform active:scale-95"
+            className="inline-flex h-[22px] shrink-0 items-center gap-0.5 rounded-full bg-betclic-red/10 pl-2 pr-1 font-display text-[10px] font-medium text-betclic-red transition-transform active:scale-95"
           >
             <span>{trailingLabel}</span>
-            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
+            <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
           </Link>
         )}
       </div>

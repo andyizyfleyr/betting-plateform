@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import * as WebBrowser from "expo-web-browser";
-import { ChevronLeft, Lock, RotateCw, X } from "lucide-react-native";
+import { Check, ChevronLeft, ExternalLink, Lock, RotateCw, X } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api, generateIdempotencyKey } from "@/lib/api";
 import {
@@ -38,7 +38,7 @@ function resolveWebViewComponent(): React.ComponentType<any> | null {
   if (!hasNativeWebView()) return null;
   if (CachedWebViewComp) return CachedWebViewComp;
   try {
-    // Chargement paresseux uniquement lorsque `RNCWebView` est présent dans le binaire natif
+    // Chargement paresseux uniquement lorsque `RNCWebView` / `RNCWebViewModule` est présent
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require("react-native-webview");
     CachedWebViewComp = mod?.WebView ?? mod?.default ?? null;
@@ -57,6 +57,7 @@ export function InAppBrowserSheet() {
   const [canGoBack, setCanGoBack] = useState(false);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0.12);
+  const [creditedInSheet, setCreditedInSheet] = useState(false);
 
   const webViewRef = useRef<WebViewInstance | null>(null);
   const handledReturnIdRef = useRef<string | null>(null);
@@ -71,6 +72,7 @@ export function InAppBrowserSheet() {
       setCanGoBack(false);
       setLoading(Boolean(next));
       setProgress(0.12);
+      setCreditedInSheet(false);
     });
   }, []);
 
@@ -93,7 +95,7 @@ export function InAppBrowserSheet() {
 
   const confirmStripeDeposit = useCallback(
     async (ref: string, silentIfPending = false) => {
-      if (!ref) return;
+      if (!ref) return false;
       if (!silentIfPending) {
         toast({ kind: "info", title: "Confirmation du paiement…" });
       }
@@ -103,7 +105,7 @@ export function InAppBrowserSheet() {
           if (st.credited) {
             await refreshWalletAndUser();
             toast({ kind: "success", title: "Solde rechargé" });
-            return;
+            return true;
           }
         } catch {
           /* nouvelle tentative */
@@ -120,6 +122,7 @@ export function InAppBrowserSheet() {
           description: "Votre solde sera mis à jour automatiquement.",
         });
       }
+      return false;
     },
     [refreshWalletAndUser, toast]
   );
@@ -168,6 +171,46 @@ export function InAppBrowserSheet() {
     [capturePayPalDeposit, confirmStripeDeposit, toast]
   );
 
+  // Surveillance active en arrière-plan pendant que le BottomSheet Stripe est ouvert :
+  // dès que la session Stripe passe à `paid`, le solde est crédité et le BottomSheet affiche
+  // la confirmation sur place sans attendre de redirection externe.
+  useEffect(() => {
+    if (
+      !request ||
+      request.provider !== "stripe" ||
+      !request.providerRef ||
+      creditedInSheet
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const reqId = request.id;
+    const ref = request.providerRef;
+
+    const timer = setInterval(() => {
+      if (cancelled || handledReturnIdRef.current === reqId) return;
+      api.payments
+        .status(ref)
+        .then(async (st) => {
+          if (cancelled || handledReturnIdRef.current === reqId) return;
+          if (st.credited) {
+            handledReturnIdRef.current = reqId;
+            setCreditedInSheet(true);
+            await refreshWalletAndUser();
+            toast({ kind: "success", title: "Solde rechargé" });
+          }
+        })
+        .catch(() => {
+          /* ignore */
+        });
+    }, 3_500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [creditedInSheet, refreshWalletAndUser, request, toast]);
+
   const handleManualClose = useCallback(() => {
     const closingReq = request;
     closeInAppUrl();
@@ -182,14 +225,8 @@ export function InAppBrowserSheet() {
     }
   }, [confirmStripeDeposit, request]);
 
-  // Repli intégré (même tâche Android, sans quitter l'app) si `RNCWebView` est absent d'un ancien APK pré-OTA
-  useEffect(() => {
-    if (!request || WebViewComp) return;
-    if (fallbackRunningIdRef.current === request.id) return;
-    fallbackRunningIdRef.current = request.id;
-    const activeReq = request;
-
-    void (async () => {
+  const openCustomTabOverlay = useCallback(
+    async (activeReq: InAppBrowserRequest) => {
       try {
         const returnUrl = `${API_BASE_URL}/parametres`;
         const res = await WebBrowser.openAuthSessionAsync(
@@ -204,7 +241,6 @@ export function InAppBrowserSheet() {
             enableBarCollapsing: false,
           }
         );
-        closeInAppUrl();
         if (res.type === "success" && "url" in res && res.url) {
           const parsed = parsePaymentReturnUrl(res.url);
           if (parsed) {
@@ -213,7 +249,11 @@ export function InAppBrowserSheet() {
           }
         }
         if (activeReq.provider === "stripe" && activeReq.providerRef) {
-          void confirmStripeDeposit(activeReq.providerRef, true);
+          const ok = await confirmStripeDeposit(activeReq.providerRef, true);
+          if (ok) {
+            handledReturnIdRef.current = activeReq.id;
+            setCreditedInSheet(true);
+          }
         }
       } catch {
         try {
@@ -230,20 +270,27 @@ export function InAppBrowserSheet() {
             kind: "error",
             title: "Impossible d'ouvrir la page sécurisée",
           });
-        } finally {
-          closeInAppUrl();
-          if (activeReq.provider === "stripe" && activeReq.providerRef) {
-            void confirmStripeDeposit(activeReq.providerRef, true);
-          }
         }
       }
-    })();
-  }, [WebViewComp, confirmStripeDeposit, handlePaymentReturn, request, toast]);
+    },
+    [confirmStripeDeposit, handlePaymentReturn, toast]
+  );
 
-  if (!request || !WebViewComp) return null;
+  // Sur un ancien binaire pré-v1.2.5 dépourvu de `RNCWebView`, le BottomSheet reste affiché
+  // directement par-dessus `Déposer des fonds` et pilote l'onglet sécurisé dans la même tâche.
+  useEffect(() => {
+    if (!request || WebViewComp) return;
+    if (fallbackRunningIdRef.current === request.id) return;
+    fallbackRunningIdRef.current = request.id;
+    void openCustomTabOverlay(request);
+  }, [WebViewComp, openCustomTabOverlay, request]);
+
+  if (!request) return null;
 
   const screenHeight = Dimensions.get("window").height;
-  const sheetHeight = Math.round(screenHeight * 0.88);
+  const sheetHeight = WebViewComp
+    ? Math.round(screenHeight * 0.88)
+    : Math.min(390, Math.round(screenHeight * 0.56));
   const hostLabel = extractHostnameLabel(currentUrl || request.url);
   const headerTitle = request.title || hostLabel;
 
@@ -270,9 +317,10 @@ export function InAppBrowserSheet() {
     <Modal
       visible
       transparent
+      statusBarTranslucent
       animationType="slide"
       onRequestClose={() => {
-        if (canGoBack && webViewRef.current) {
+        if (WebViewComp && canGoBack && webViewRef.current) {
           webViewRef.current.goBack();
           return;
         }
@@ -282,28 +330,36 @@ export function InAppBrowserSheet() {
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={handleManualClose} />
 
-        <View style={[styles.sheet, { height: sheetHeight }]}>
+        <View
+          style={[
+            styles.sheet,
+            creditedInSheet ? styles.sheetCompact : { height: sheetHeight },
+          ]}
+        >
           <View style={styles.grabberRow}>
             <View style={styles.grabber} />
           </View>
 
           <View style={styles.toolbar}>
             <View style={styles.toolbarSide}>
-              <Pressable
-                disabled={!canGoBack}
-                onPress={() => webViewRef.current?.goBack()}
-                style={[
-                  styles.iconBtn,
-                  !canGoBack && { opacity: 0.32 },
-                ]}
-              >
-                <ChevronLeft size={17} color={COLORS.ink} strokeWidth={2.2} />
-              </Pressable>
+              {WebViewComp && !creditedInSheet ? (
+                <Pressable
+                  disabled={!canGoBack}
+                  onPress={() => webViewRef.current?.goBack()}
+                  style={[
+                    styles.iconBtn,
+                    !canGoBack && { opacity: 0.32 },
+                  ]}
+                >
+                  <ChevronLeft size={17} color={COLORS.ink} strokeWidth={2.2} />
+                </Pressable>
+              ) : null}
             </View>
 
             <View style={styles.titleCol}>
               <Text numberOfLines={1} style={styles.sheetTitle}>
                 {headerTitle}
+                {request.amountLabel ? ` · ${request.amountLabel}` : ""}
               </Text>
               <View style={styles.hostRow}>
                 <Lock size={10} color={COLORS.win} strokeWidth={2.4} />
@@ -314,19 +370,21 @@ export function InAppBrowserSheet() {
             </View>
 
             <View style={[styles.toolbarSide, styles.toolbarRight]}>
-              <Pressable
-                onPress={() => webViewRef.current?.reload()}
-                style={styles.iconBtn}
-              >
-                <RotateCw size={14} color={COLORS.mist} strokeWidth={2.2} />
-              </Pressable>
+              {WebViewComp && !creditedInSheet ? (
+                <Pressable
+                  onPress={() => webViewRef.current?.reload()}
+                  style={styles.iconBtn}
+                >
+                  <RotateCw size={14} color={COLORS.mist} strokeWidth={2.2} />
+                </Pressable>
+              ) : null}
               <Pressable onPress={handleManualClose} style={styles.closeBtn}>
                 <X size={16} color={COLORS.ink} strokeWidth={2.3} />
               </Pressable>
             </View>
           </View>
 
-          {loading ? (
+          {WebViewComp && !creditedInSheet && loading ? (
             <View style={styles.progressTrack}>
               <View
                 style={[
@@ -341,46 +399,110 @@ export function InAppBrowserSheet() {
             <View style={styles.toolbarDivider} />
           )}
 
-          <View style={styles.webWrap}>
-            <WebViewComp
-              ref={webViewRef}
-              source={{ uri: request.url }}
-              javaScriptEnabled
-              domStorageEnabled
-              sharedCookiesEnabled
-              thirdPartyCookiesEnabled
-              setSupportMultipleWindows={false}
-              startInLoadingState
-              renderLoading={() => (
-                <View style={styles.initialLoader}>
-                  <ActivityIndicator size="small" color={COLORS.betclicRed} />
-                </View>
-              )}
-              onLoadStart={() => setLoading(true)}
-              onLoadEnd={() => setLoading(false)}
-              onLoadProgress={(e: { nativeEvent?: { progress?: number } }) => {
-                const p = e?.nativeEvent?.progress ?? 0;
-                setProgress(p);
-                if (p >= 0.99) setLoading(false);
-              }}
-              onShouldStartLoadWithRequest={(reqEvt: { url?: string }) =>
-                interceptNavigationUrl(reqEvt?.url)
-              }
-              onNavigationStateChange={(navState: {
-                url?: string;
-                canGoBack?: boolean;
-                loading?: boolean;
-              }) => {
-                if (typeof navState?.canGoBack === "boolean") {
-                  setCanGoBack(navState.canGoBack);
+          {creditedInSheet ? (
+            <View style={styles.fallbackBody}>
+              <View style={styles.doneCircle}>
+                <Check size={22} color={COLORS.win} strokeWidth={2.7} />
+              </View>
+              <Text style={styles.doneTitle}>Solde rechargé</Text>
+              <Text style={styles.doneSub}>
+                Votre dépôt{request.amountLabel ? ` de ${request.amountLabel}` : ""}{" "}
+                a été crédité immédiatement sur votre compte.
+              </Text>
+              <Pressable
+                onPress={handleManualClose}
+                style={styles.primarySheetBtn}
+              >
+                <Text style={styles.primarySheetBtnText}>Continuer</Text>
+              </Pressable>
+            </View>
+          ) : WebViewComp ? (
+            <View style={styles.webWrap}>
+              <WebViewComp
+                ref={webViewRef}
+                source={{ uri: request.url }}
+                javaScriptEnabled
+                domStorageEnabled
+                sharedCookiesEnabled
+                thirdPartyCookiesEnabled
+                setSupportMultipleWindows={false}
+                startInLoadingState
+                renderLoading={() => (
+                  <View style={styles.initialLoader}>
+                    <ActivityIndicator size="small" color={COLORS.betclicRed} />
+                  </View>
+                )}
+                onLoadStart={() => setLoading(true)}
+                onLoadEnd={() => setLoading(false)}
+                onLoadProgress={(e: { nativeEvent?: { progress?: number } }) => {
+                  const p = e?.nativeEvent?.progress ?? 0;
+                  setProgress(p);
+                  if (p >= 0.99) setLoading(false);
+                }}
+                onShouldStartLoadWithRequest={(reqEvt: { url?: string }) =>
+                  interceptNavigationUrl(reqEvt?.url)
                 }
-                if (navState?.url) {
-                  setCurrentUrl(navState.url);
-                  interceptNavigationUrl(navState.url);
-                }
-              }}
-            />
-          </View>
+                onNavigationStateChange={(navState: {
+                  url?: string;
+                  canGoBack?: boolean;
+                  loading?: boolean;
+                }) => {
+                  if (typeof navState?.canGoBack === "boolean") {
+                    setCanGoBack(navState.canGoBack);
+                  }
+                  if (navState?.url) {
+                    setCurrentUrl(navState.url);
+                    interceptNavigationUrl(navState.url);
+                  }
+                }}
+              />
+            </View>
+          ) : (
+            <View style={styles.fallbackBody}>
+              <View style={styles.waitingBadge}>
+                <ActivityIndicator size="small" color={COLORS.betclicRed} />
+                <Text style={styles.waitingBadgeText}>
+                  Validation sécurisée en cours…
+                </Text>
+              </View>
+              <Text style={styles.doneSub}>
+                Finalisez le paiement dans la fenêtre sécurisée{" "}
+                {request.provider === "paypal" ? "PayPal" : "Stripe"}. Votre solde
+                est vérifié et crédité automatiquement ici sans quitter Déposer des
+                fonds.
+              </Text>
+              <View style={styles.fallbackBtns}>
+                <Pressable
+                  onPress={() => void openCustomTabOverlay(request)}
+                  style={styles.primarySheetBtn}
+                >
+                  <ExternalLink size={14} color="#ffffff" strokeWidth={2.2} />
+                  <Text style={styles.primarySheetBtnText}>
+                    Ouvrir la fenêtre de paiement
+                  </Text>
+                </Pressable>
+                {request.provider === "stripe" && request.providerRef ? (
+                  <Pressable
+                    onPress={() =>
+                      void confirmStripeDeposit(request.providerRef!, false).then(
+                        (ok) => {
+                          if (ok) {
+                            handledReturnIdRef.current = request.id;
+                            setCreditedInSheet(true);
+                          }
+                        }
+                      )
+                    }
+                    style={styles.secondarySheetBtn}
+                  >
+                    <Text style={styles.secondarySheetBtnText}>
+                      J&apos;ai validé mon paiement
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -398,6 +520,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     overflow: "hidden",
+  },
+  sheetCompact: {
+    paddingBottom: 22,
   },
   grabberRow: {
     paddingTop: 8,
@@ -488,5 +613,82 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
+  },
+  fallbackBody: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 22,
+    alignItems: "center",
+  },
+  waitingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(225, 0, 20, 0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  waitingBadgeText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: COLORS.betclicRed,
+  },
+  doneCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(21, 128, 61, 0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneTitle: {
+    marginTop: 10,
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  doneSub: {
+    marginTop: 8,
+    fontSize: 11,
+    lineHeight: 17,
+    color: COLORS.mist,
+    textAlign: "center",
+  },
+  fallbackBtns: {
+    marginTop: 16,
+    width: "100%",
+    gap: 8,
+  },
+  primarySheetBtn: {
+    marginTop: 14,
+    height: 40,
+    width: "100%",
+    borderRadius: 12,
+    backgroundColor: COLORS.betclicRed,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+  },
+  primarySheetBtnText: {
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: "#ffffff",
+  },
+  secondarySheetBtn: {
+    height: 38,
+    width: "100%",
+    borderRadius: 12,
+    backgroundColor: COLORS.elev,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  secondarySheetBtnText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: COLORS.ink,
   },
 });

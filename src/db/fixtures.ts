@@ -5,7 +5,7 @@ import {
 import { sanitizeMatchEvents } from "@/lib/match-events";
 
 export const VIRTUAL_LEAGUE = "Ligue des Champions · Europe";
-export const ROUND_MS = 300_000;
+export const ROUND_MS = 600_000;
 
 /** Buts moyens attendus à forces égales (football européen moderne : avantage terrain mesuré ~8 %). */
 const BASE_HOME = 1.38;

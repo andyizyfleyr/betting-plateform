@@ -154,7 +154,7 @@ function OddsCell({
         {tag}
       </Text>
       {suspended ? (
-        <Lock size={14} color={COLORS.dim} strokeWidth={2.3} />
+        <Lock size={12} color={COLORS.dim} strokeWidth={2.3} />
       ) : (
         <Text
           style={[
@@ -484,11 +484,12 @@ export const MatchCard = memo(MatchCardInner);
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
     justifyContent: "space-between",
     shadowColor: "#111827",
     shadowOpacity: 0.03,
@@ -497,7 +498,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   cardActiveMinHeight: {
-    minHeight: 194,
+    minHeight: 156,
   },
   headerRow: {
     flexDirection: "row",
@@ -611,19 +612,19 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   teamsBlock: {
-    marginTop: 14,
-    gap: 10,
+    marginTop: 9,
+    gap: 6,
   },
   teamRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   teamName: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "500",
-    lineHeight: 19,
+    lineHeight: 16,
   },
   redCardsRow: {
     flexDirection: "row",
@@ -637,10 +638,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   scoreBox: {
-    minWidth: 24,
+    minWidth: 22,
     borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -651,27 +652,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   scoreText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
   oddsWrap: {
     marginTop: "auto",
-    paddingTop: 14,
+    paddingTop: 9,
   },
   oddsGrid: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   oddsCellWrap: {
     flex: 1,
   },
   oddsBtn: {
-    height: 44,
-    borderRadius: 12,
+    height: 35,
+    borderRadius: 10,
     borderWidth: 1,
-    paddingHorizontal: 11,
+    paddingHorizontal: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -691,11 +692,11 @@ const styles = StyleSheet.create({
     borderColor: COLORS.ink,
   },
   oddsTag: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "500",
   },
   oddsVal: {
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },

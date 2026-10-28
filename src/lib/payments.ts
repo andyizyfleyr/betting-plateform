@@ -28,6 +28,13 @@ export interface ProviderInfo {
   live: boolean;
 }
 
+export interface PublicPaymentClientConfig {
+  providers: ProviderInfo[];
+  paypalClientId: string | null;
+  paypalMode: "live" | "sandbox";
+  stripePublishableKey: string | null;
+}
+
 /** Prestataires configurés via les variables d'environnement (live/sandbox). */
 export function paymentProviders(): ProviderInfo[] {
   const stripeKey = process.env.STRIPE_SECRET_KEY ?? "";
@@ -45,6 +52,21 @@ export function paymentProviders(): ProviderInfo[] {
       live: PAYPAL_MODE === "live",
     },
   ];
+}
+
+export function publicPaymentClientConfig(): PublicPaymentClientConfig {
+  const pk = (
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ??
+    process.env.STRIPE_PUBLISHABLE_KEY ??
+    ""
+  ).trim();
+  const ppClientId = (process.env.PAYPAL_CLIENT_ID ?? "").trim();
+  return {
+    providers: paymentProviders(),
+    paypalClientId: ppClientId || null,
+    paypalMode: PAYPAL_MODE,
+    stripePublishableKey: pk.startsWith("pk_") ? pk : null,
+  };
 }
 
 export function findProvider(id: PaymentProviderId): ProviderInfo | undefined {
@@ -73,6 +95,7 @@ function stripeHeaders(idempotencyKey?: string): HeadersInit {
 export interface StripeCheckout {
   id: string;
   url: string | null;
+  clientSecret?: string | null;
 }
 
 export interface VerifiedStripeWebhookEvent {
@@ -100,13 +123,19 @@ async function postStripeCheckoutSession(params: {
   unitAmount: number;
   successUrl: string;
   cancelUrl: string;
+  embedded?: boolean;
   idempotencyKey?: string;
 }): Promise<Response> {
   const form = new URLSearchParams();
   form.append("mode", "payment");
   form.append("client_reference_id", String(params.userId));
-  form.append("success_url", params.successUrl);
-  form.append("cancel_url", params.cancelUrl);
+  if (params.embedded) {
+    form.append("ui_mode", "embedded");
+    form.append("return_url", params.successUrl);
+  } else {
+    form.append("success_url", params.successUrl);
+    form.append("cancel_url", params.cancelUrl);
+  }
   form.append("line_items[0][quantity]", "1");
   form.append(
     "line_items[0][price_data][product_data][name]",
@@ -125,7 +154,7 @@ async function postStripeCheckoutSession(params: {
 }
 
 /**
- * Crée une session Stripe Checkout hébergée :
+ * Crée une session Stripe Checkout hébergée ou intégrée (`ui_mode = "embedded"`) :
  * - Tente d'abord la devise officielle du joueur (ex. `5 000 XOF` -> `unit_amount = 5000`, `currency = "xof"`)
  *   afin d'afficher le montant local exact sur la page Stripe ;
  * - Replie automatiquement sur `EUR` (`unit_amount` en centimes) si le compte marchand Stripe
@@ -138,6 +167,7 @@ export async function createStripeCheckout(opts: {
   userCurrency?: CurrencyCode;
   successUrl: string;
   cancelUrl: string;
+  embedded?: boolean;
   idempotencyKey?: string;
 }): Promise<StripeCheckout> {
   const targetCurrency = getCurrencyConfig(opts.userCurrency ?? opts.currency).code;
@@ -157,11 +187,20 @@ export async function createStripeCheckout(opts: {
       unitAmount: nativeUnitAmount,
       successUrl: opts.successUrl,
       cancelUrl: opts.cancelUrl,
+      embedded: opts.embedded,
       idempotencyKey: opts.idempotencyKey,
     });
     if (nativeRes.ok) {
-      const body = (await nativeRes.json()) as { id: string; url: string | null };
-      return { id: body.id, url: body.url };
+      const body = (await nativeRes.json()) as {
+        id: string;
+        url?: string | null;
+        client_secret?: string | null;
+      };
+      return {
+        id: body.id,
+        url: body.url ?? null,
+        clientSecret: body.client_secret ?? null,
+      };
     }
     if (nativeRes.status >= 500) {
       throw new Error(`Stripe ${nativeRes.status}`);
@@ -179,11 +218,20 @@ export async function createStripeCheckout(opts: {
     unitAmount: eurCents,
     successUrl: opts.successUrl,
     cancelUrl: opts.cancelUrl,
+    embedded: opts.embedded,
     idempotencyKey: fallbackKey,
   });
   if (!res.ok) throw new Error(`Stripe ${res.status}`);
-  const body = (await res.json()) as { id: string; url: string | null };
-  return { id: body.id, url: body.url };
+  const body = (await res.json()) as {
+    id: string;
+    url?: string | null;
+    client_secret?: string | null;
+  };
+  return {
+    id: body.id,
+    url: body.url ?? null,
+    clientSecret: body.client_secret ?? null,
+  };
 }
 
 /**

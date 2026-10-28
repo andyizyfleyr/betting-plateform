@@ -46,8 +46,8 @@ export interface LiveClockSnapshot {
   gameMinute: number;
 }
 
-const VIRTUAL_STEP_MIN_MS = 3_120;
-const VIRTUAL_STEP_MAX_MS = 3_200;
+const VIRTUAL_STEP_MIN_MS = 6_240;
+const VIRTUAL_STEP_MAX_MS = 6_400;
 
 function hashDjb2(s: string): number {
   let h = 5381;

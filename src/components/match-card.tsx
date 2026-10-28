@@ -93,8 +93,8 @@ function MatchCardInner({
   return (
     <article
       className={cn(
-        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-3 transition-colors hover:bg-elev/20 active:bg-elev/45 lg:p-3",
-        !isFinished && "max-lg:min-h-[194px]",
+        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-[14px] px-2.75 py-2.5 transition-colors hover:bg-elev/20 active:bg-elev/45 lg:rounded-2xl lg:p-3",
+        !isFinished && "max-lg:min-h-[156px]",
         className
       )}
     >
@@ -187,7 +187,7 @@ function MatchCardInner({
       </div>
 
       {/* Équipes & scores aérés */}
-      <div className="pointer-events-none relative z-[1] mt-3.5 flex flex-col gap-2.5 lg:mt-2.5 lg:gap-1.5">
+      <div className="pointer-events-none relative z-[1] mt-2.5 flex flex-col gap-1.5 lg:mt-2.5 lg:gap-1.5">
         <TeamRow
           name={match.homeTeam}
           logo={match.homeLogo}
@@ -230,7 +230,7 @@ function MatchCardInner({
 
       {/* Cotes 1x2 (V1 / X / V2) + accès aux marchés sur desktop */}
       {!isFinished && (
-        <div className="pointer-events-none relative z-[1] mt-auto pt-3.5 lg:pt-3">
+        <div className="pointer-events-none relative z-[1] mt-auto pt-2.5 lg:pt-3">
           <ResultOdds match={match} />
           {marketCount > 1 && (
             <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[10px] lg:flex">
@@ -502,7 +502,7 @@ function OddsCell({
       style={style}
       aria-disabled={suspended}
       className={cn(
-        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-colors lg:h-10.5",
+        "relative flex h-9 items-center justify-between rounded-[10px] border px-2.5 transition-colors lg:h-10.5 lg:rounded-xl lg:px-3",
         selected
           ? "border-betclic-red bg-betclic-red text-white shadow-xs"
           : inCombo
@@ -515,18 +515,18 @@ function OddsCell({
       {!suspended && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
-          "font-display text-[10px] font-medium",
+          "font-display text-[9.5px] font-medium lg:text-[10px]",
           active ? "text-white/85" : "text-dim"
         )}
       >
         {tag}
       </span>
       {suspended ? (
-        <Lock className="h-3.5 w-3.5 text-dim" strokeWidth={2.3} />
+        <Lock className="h-3 w-3 text-dim lg:h-3.5 lg:w-3.5" strokeWidth={2.3} />
       ) : (
         <span
           className={cn(
-            "font-display text-[11.5px] font-medium tabular-nums transition-colors duration-200 lg:text-[11.5px]",
+            "font-display text-[11px] font-medium tabular-nums transition-colors duration-200 lg:text-[11.5px]",
             oddsTrendTextClass(trend, active)
           )}
         >

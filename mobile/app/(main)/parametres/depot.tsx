@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +20,7 @@ import {
   Lock,
   Smartphone,
   Wallet,
+  X,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
@@ -26,7 +30,6 @@ import {
   formatPresetChip,
   localToEur,
 } from "@/lib/countries";
-import { eur } from "@/lib/format";
 import { openInAppUrl } from "@/lib/external-url";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
@@ -60,8 +63,10 @@ export default function DepositScreen() {
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
   const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
-  const [doneManual, setDoneManual] = useState(false);
+  const [manualSheetOpen, setManualSheetOpen] = useState(false);
+  const [manualSheetDone, setManualSheetDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sheetError, setSheetError] = useState<string | null>(null);
 
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
@@ -118,6 +123,7 @@ export default function DepositScreen() {
         : Math.round(parsed * 100) / 100
       : 0;
   const amount = localToEur(localAmount, currency);
+  const localFormatted = validLocalLabel(localAmount, currency);
   const isManual = method === "mobile_money" || method === "sepa";
   const effectiveMinLocal = isManual
     ? currencyConfig.minDepositLocal
@@ -136,18 +142,22 @@ export default function DepositScreen() {
       ? providers.find((p) => p.id === method)
       : undefined;
 
-  const canSubmit =
-    !loading &&
-    validAmount &&
-    (isManual
-      ? reference.trim().length >= 4
-      : Boolean(onlineProvider?.enabled));
+  const canOpenCheckout =
+    !loading && validAmount && (isManual || Boolean(onlineProvider?.enabled));
 
-  const submit = async () => {
-    if (!canSubmit || inFlightRef.current) return;
+  const openCheckoutSheet = async () => {
+    if (!canOpenCheckout || inFlightRef.current) return;
+    setError(null);
+
+    if (isManual) {
+      setSheetError(null);
+      setManualSheetDone(false);
+      setManualSheetOpen(true);
+      return;
+    }
+
     inFlightRef.current = true;
-    const cleanRef = reference.trim();
-    const sig = `${method}:${isManual ? cleanRef : "online"}:${amount}`;
+    const sig = `${method}:online:${amount}`;
     if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
       idempotencySlotRef.current = {
         key: createIdempotencyKey("dep"),
@@ -157,29 +167,16 @@ export default function DepositScreen() {
     const idempotencyKey = idempotencySlotRef.current.key;
 
     setLoading(true);
-    setError(null);
     try {
-      if (method === "mobile_money" || method === "sepa") {
-        await api.payments.manual({
-          method,
-          reference: cleanRef,
-          amount,
-          idempotencyKey,
-        });
-        idempotencySlotRef.current = null;
-        triggerHaptic("success", hapticsEnabled);
-        bumpBets();
-        setDoneManual(true);
-        inFlightRef.current = false;
-        setLoading(false);
-        return;
-      }
-      const r = await api.payments.create(method, amount, idempotencyKey);
+      const r = await api.payments.create(method, amount, idempotencyKey, {
+        returnPath: "/parametres/depot",
+      });
       idempotencySlotRef.current = null;
       openInAppUrl(r.url, {
-        title: method === "paypal" ? "Paiement PayPal" : "Paiement sécurisé",
+        title: method === "paypal" ? "Paiement PayPal" : "Paiement par carte",
         provider: method,
         providerRef: r.providerRef,
+        amountLabel: localFormatted,
       });
       inFlightRef.current = false;
       setLoading(false);
@@ -198,248 +195,411 @@ export default function DepositScreen() {
     }
   };
 
+  const submitManualInSheet = async () => {
+    if (loading || inFlightRef.current || !validAmount) return;
+    const cleanRef = reference.trim();
+    if (cleanRef.length < 4) {
+      setSheetError("Saisissez la référence ou le numéro (4 caractères min.).");
+      return;
+    }
+
+    inFlightRef.current = true;
+    const manualMethod = method === "sepa" ? "sepa" : "mobile_money";
+    const sig = `${manualMethod}:${cleanRef}:${amount}`;
+    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+      idempotencySlotRef.current = {
+        key: createIdempotencyKey("dep"),
+        sig,
+      };
+    }
+    const idempotencyKey = idempotencySlotRef.current.key;
+
+    setLoading(true);
+    setSheetError(null);
+    try {
+      await api.payments.manual({
+        method: manualMethod,
+        reference: cleanRef,
+        amount,
+        idempotencyKey,
+      });
+      idempotencySlotRef.current = null;
+      triggerHaptic("success", hapticsEnabled);
+      bumpBets();
+      setManualSheetDone(true);
+      setReference("");
+    } catch (e) {
+      if (e instanceof ApiHttpError && e.status >= 400 && e.status < 500) {
+        idempotencySlotRef.current = null;
+      }
+      setSheetError(e instanceof Error ? e.message : "Dépôt indisponible");
+      toast({
+        kind: "error",
+        title: "Dépôt impossible",
+        description: "Vérifiez les informations saisies",
+      });
+    } finally {
+      inFlightRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const closeManualSheet = () => {
+    if (loading) return;
+    setManualSheetOpen(false);
+    setManualSheetDone(false);
+    setSheetError(null);
+  };
+
   const stripeInfo = providers.find((p) => p.id === "stripe");
   const paypalInfo = providers.find((p) => p.id === "paypal");
 
   return (
-    <ScrollView
-      style={styles.page}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      {/* En-tête compact en ligne identique à src/app/(main)/parametres/depot/page.tsx */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
+    <>
+      <ScrollView
+        style={styles.page}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* En-tête compact en ligne identique à src/app/(main)/parametres/depot/page.tsx */}
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <Pressable
+              onPress={() => router.back("/parametres")}
+              style={({ pressed }) => [
+                styles.roundBackBtn,
+                pressed && { transform: [{ scale: 0.95 }] },
+              ]}
+            >
+              <ArrowLeft size={14} color={COLORS.ink} strokeWidth={2.3} />
+            </Pressable>
+            <Text numberOfLines={1} style={styles.headerTitle}>
+              Déposer des fonds
+            </Text>
+          </View>
+
           <Pressable
-            onPress={() => router.back("/parametres")}
-            style={({ pressed }) => [
-              styles.roundBackBtn,
-              pressed && { transform: [{ scale: 0.95 }] },
-            ]}
+            onPress={() => router.push("/parametres/transactions")}
+            style={styles.historyPill}
           >
-            <ArrowLeft size={14} color={COLORS.ink} strokeWidth={2.3} />
+            <History size={12} color={COLORS.ink} strokeWidth={2.2} />
+            <Text style={styles.historyPillText}>Historique</Text>
           </Pressable>
-          <Text numberOfLines={1} style={styles.headerTitle}>
-            Déposer des fonds
-          </Text>
         </View>
 
-        <Pressable
-          onPress={() => router.push("/parametres/transactions")}
-          style={styles.historyPill}
-        >
-          <History size={12} color={COLORS.ink} strokeWidth={2.2} />
-          <Text style={styles.historyPillText}>Historique</Text>
-        </Pressable>
-      </View>
-
-      <View style={{ marginTop: 10 }}>
-        {doneManual ? (
-          <View style={[styles.card, { alignItems: "center" }]}>
-            <View style={styles.doneCircle}>
-              <Check size={20} color={COLORS.win} strokeWidth={2.6} />
-            </View>
-            <Text style={styles.doneTitle}>Demande enregistrée</Text>
-            <Text style={styles.doneSub}>
-              Votre dépôt de{" "}
-              <Text style={{ fontWeight: "500", color: COLORS.ink }}>
-                {eur(amount)}
-              </Text>{" "}
-              ({method === "mobile_money" ? "Mobile Money" : "Virement SEPA"})
-              sera crédité dès validation.
+        <View style={{ marginTop: 10, gap: 10 }}>
+          {/* Montant compact */}
+          <View style={styles.card}>
+            <Text style={styles.fieldCaps}>
+              MONTANT À CRÉDITER (
+              {formatLocalAmount(effectiveMinLocal, currency)} –{" "}
+              {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
             </Text>
-            <View style={styles.doneBtns}>
-              <Pressable
-                onPress={() => router.push("/parametres/transactions")}
-                style={styles.grayBtn}
-              >
-                <Text style={styles.grayBtnText}>Transactions</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push("/matchs")}
-                style={styles.redBtn}
-              >
-                <Text style={styles.redBtnText}>Matchs</Text>
-              </Pressable>
+            <View style={styles.amountInputWrap}>
+              <TextInput
+                value={amountText}
+                onChangeText={setAmountText}
+                keyboardType={
+                  currencyConfig.decimals === 0 ? "number-pad" : "decimal-pad"
+                }
+                placeholder={String(currencyConfig.defaultDepositLocal)}
+                placeholderTextColor={COLORS.dim}
+                style={styles.amountInput}
+              />
+              <Text style={styles.euroSymbol}>{currencyConfig.symbol}</Text>
             </View>
-          </View>
-        ) : (
-          <View style={{ gap: 10 }}>
-            {/* Montant compact */}
-            <View style={styles.card}>
-              <Text style={styles.fieldCaps}>
-                MONTANT À CRÉDITER (
-                {formatLocalAmount(effectiveMinLocal, currency)} –{" "}
-                {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
-              </Text>
-              <View style={styles.amountInputWrap}>
-                <TextInput
-                  value={amountText}
-                  onChangeText={setAmountText}
-                  keyboardType={
-                    currencyConfig.decimals === 0 ? "number-pad" : "decimal-pad"
-                  }
-                  placeholder={String(currencyConfig.defaultDepositLocal)}
-                  placeholderTextColor={COLORS.dim}
-                  style={styles.amountInput}
-                />
-                <Text style={styles.euroSymbol}>{currencyConfig.symbol}</Text>
-              </View>
 
-              <View style={styles.quickGrid}>
-                {currencyConfig.depositPresetsLocal.map((q) => {
-                  const active = localAmount === q;
-                  return (
-                    <Pressable
-                      key={q}
-                      onPress={() => setAmountText(String(q))}
+            <View style={styles.quickGrid}>
+              {currencyConfig.depositPresetsLocal.map((q) => {
+                const active = localAmount === q;
+                return (
+                  <Pressable
+                    key={q}
+                    onPress={() => setAmountText(String(q))}
+                    style={[
+                      styles.quickChip,
+                      active && styles.quickChipActive,
+                    ]}
+                  >
+                    <Text
+                      numberOfLines={1}
                       style={[
-                        styles.quickChip,
-                        active && styles.quickChipActive,
+                        styles.quickChipText,
+                        active && { color: "#ffffff" },
                       ]}
                     >
+                      {formatPresetChip(q, currency)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Moyens de paiement compacts */}
+          <View style={styles.card}>
+            <Text style={styles.fieldCaps}>MOYEN DE PAIEMENT</Text>
+
+            <View style={styles.methodsGrid}>
+              {[
+                {
+                  id: "mobile_money" as const,
+                  label: "Mobile Money",
+                  sub: countryConfig.mobileMoneyHint || "Transfert mobile",
+                  Icon: Smartphone,
+                  available: true,
+                },
+                {
+                  id: "sepa" as const,
+                  label: "Virement bancaire",
+                  sub: "IBAN / Réf. bancaire",
+                  Icon: Building2,
+                  available: true,
+                },
+                {
+                  id: "stripe" as const,
+                  label: "Carte bancaire",
+                  sub: stripeInfo?.enabled ? "Visa · MC" : "Bientôt actif",
+                  Icon: CreditCard,
+                  available: Boolean(stripeInfo?.enabled),
+                },
+                {
+                  id: "paypal" as const,
+                  label: "PayPal",
+                  sub: paypalInfo?.enabled ? "Express" : "Bientôt actif",
+                  Icon: Wallet,
+                  available: Boolean(paypalInfo?.enabled),
+                },
+              ].map((m) => {
+                const selected = method === m.id;
+                return (
+                  <Pressable
+                    key={m.id}
+                    disabled={!m.available}
+                    onPress={() => {
+                      setMethod(m.id);
+                      setError(null);
+                    }}
+                    style={[
+                      styles.methodCell,
+                      selected && styles.methodCellSelected,
+                      !m.available && { opacity: 0.5 },
+                    ]}
+                  >
+                    <m.Icon
+                      size={16}
+                      color={selected ? COLORS.betclicRed : COLORS.mist}
+                      strokeWidth={2.2}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={1} style={styles.methodLabel}>
+                        {m.label}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.methodSub}>
+                        {m.sub}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              disabled={!canOpenCheckout}
+              onPress={() => void openCheckoutSheet()}
+              style={[
+                styles.submitBtn,
+                canOpenCheckout ? styles.submitBtnReady : styles.submitBtnDisabled,
+              ]}
+            >
+              {loading && !manualSheetOpen ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Lock
+                    size={14}
+                    color={canOpenCheckout ? "#ffffff" : COLORS.dim}
+                    strokeWidth={2.3}
+                  />
+                  <Text
+                    style={[
+                      styles.submitBtnText,
+                      !canOpenCheckout && { color: COLORS.dim },
+                    ]}
+                  >
+                    Créditer {validAmount ? localFormatted : ""}
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* BottomSheet intégré sur la page Déposer des fonds pour Mobile Money & Virement */}
+      <Modal
+        visible={manualSheetOpen}
+        transparent
+        statusBarTranslucent
+        animationType="slide"
+        onRequestClose={closeManualSheet}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.sheetBackdrop}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={closeManualSheet}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetGrabber} />
+
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={styles.sheetTitle}>
+                  {method === "mobile_money"
+                    ? "Dépôt Mobile Money"
+                    : "Dépôt par virement bancaire"}
+                </Text>
+                <Text numberOfLines={1} style={styles.sheetSub}>
+                  Montant à créditer : {localFormatted}
+                </Text>
+              </View>
+              <Pressable onPress={closeManualSheet} style={styles.sheetCloseBtn}>
+                <X size={16} color={COLORS.ink} strokeWidth={2.3} />
+              </Pressable>
+            </View>
+
+            {manualSheetDone ? (
+              <View style={styles.doneWrap}>
+                <View style={styles.doneCircle}>
+                  <Check size={20} color={COLORS.win} strokeWidth={2.6} />
+                </View>
+                <Text style={styles.doneTitle}>Demande enregistrée</Text>
+                <Text style={styles.doneSub}>
+                  Votre dépôt de{" "}
+                  <Text style={{ fontWeight: "500", color: COLORS.ink }}>
+                    {localFormatted}
+                  </Text>{" "}
+                  (
+                  {method === "mobile_money"
+                    ? "Mobile Money"
+                    : "Virement bancaire"}
+                  ) sera crédité sur votre solde dès validation.
+                </Text>
+                <View style={styles.doneBtns}>
+                  <Pressable
+                    onPress={() => {
+                      closeManualSheet();
+                      router.push("/parametres/transactions");
+                    }}
+                    style={styles.grayBtn}
+                  >
+                    <Text style={styles.grayBtnText}>Historique</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={closeManualSheet}
+                    style={styles.redBtn}
+                  >
+                    <Text style={styles.redBtnText}>Fermer</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : (
+              <View style={{ marginTop: 12 }}>
+                <View style={styles.sheetHintBox}>
+                  <Text style={styles.sheetHintText}>
+                    {method === "mobile_money"
+                      ? `Opérateurs pris en charge (${countryConfig.name}) : ${
+                          countryConfig.mobileMoneyHint || "Mobile Money"
+                        }. Indiquez le numéro émetteur ou l'identifiant TXN du transfert.`
+                      : "Effectuez votre virement puis renseignez ci-dessous la référence bancaire ou l'intitulé de l'opération."}
+                  </Text>
+                </View>
+
+                <Text style={[styles.fieldCaps, { marginTop: 12 }]}>
+                  {method === "mobile_money"
+                    ? "NUMÉRO OU RÉF. MOBILE MONEY"
+                    : "RÉFÉRENCE VIREMENT BANCAIRE"}
+                </Text>
+                <TextInput
+                  value={reference}
+                  onChangeText={(v) => {
+                    setReference(v);
+                    if (sheetError) setSheetError(null);
+                  }}
+                  autoFocus
+                  placeholder={
+                    method === "mobile_money"
+                      ? `Ex. ${
+                          countryConfig.mobileMoneyHint || "Mobile Money"
+                        } / ID TXN`
+                      : "Ex. Réf. virement bancaire"
+                  }
+                  placeholderTextColor={COLORS.dim}
+                  style={styles.refInput}
+                />
+
+                {sheetError ? (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>{sheetError}</Text>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  disabled={loading || reference.trim().length < 4}
+                  onPress={() => void submitManualInSheet()}
+                  style={[
+                    styles.submitBtn,
+                    !loading && reference.trim().length >= 4
+                      ? styles.submitBtnReady
+                      : styles.submitBtnDisabled,
+                  ]}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Lock
+                        size={14}
+                        color={
+                          reference.trim().length >= 4 ? "#ffffff" : COLORS.dim
+                        }
+                        strokeWidth={2.3}
+                      />
                       <Text
-                        numberOfLines={1}
                         style={[
-                          styles.quickChipText,
-                          active && { color: "#ffffff" },
+                          styles.submitBtnText,
+                          reference.trim().length < 4 && { color: COLORS.dim },
                         ]}
                       >
-                        {formatPresetChip(q, currency)}
+                        Confirmer {localFormatted}
                       </Text>
-                    </Pressable>
-                  );
-                })}
+                    </>
+                  )}
+                </Pressable>
               </View>
-            </View>
-
-            {/* Moyens de paiement compacts */}
-            <View style={styles.card}>
-              <Text style={styles.fieldCaps}>MOYEN DE PAIEMENT</Text>
-
-              <View style={styles.methodsGrid}>
-                {[
-                  {
-                    id: "mobile_money" as const,
-                    label: "Mobile Money",
-                    sub: countryConfig.mobileMoneyHint || "Transfert mobile",
-                    Icon: Smartphone,
-                    available: true,
-                  },
-                  {
-                    id: "sepa" as const,
-                    label: "Virement bancaire",
-                    sub: "IBAN / Réf. bancaire",
-                    Icon: Building2,
-                    available: true,
-                  },
-                  {
-                    id: "stripe" as const,
-                    label: "Carte bancaire",
-                    sub: stripeInfo?.enabled ? "Visa · MC" : "Bientôt actif",
-                    Icon: CreditCard,
-                    available: Boolean(stripeInfo?.enabled),
-                  },
-                  {
-                    id: "paypal" as const,
-                    label: "PayPal",
-                    sub: paypalInfo?.enabled ? "Express" : "Bientôt actif",
-                    Icon: Wallet,
-                    available: Boolean(paypalInfo?.enabled),
-                  },
-                ].map((m) => {
-                  const selected = method === m.id;
-                  return (
-                    <Pressable
-                      key={m.id}
-                      disabled={!m.available}
-                      onPress={() => setMethod(m.id)}
-                      style={[
-                        styles.methodCell,
-                        selected && styles.methodCellSelected,
-                        !m.available && { opacity: 0.5 },
-                      ]}
-                    >
-                      <m.Icon
-                        size={16}
-                        color={selected ? COLORS.betclicRed : COLORS.mist}
-                        strokeWidth={2.2}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text numberOfLines={1} style={styles.methodLabel}>
-                          {m.label}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.methodSub}>
-                          {m.sub}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {isManual ? (
-                <View style={{ marginTop: 10 }}>
-                  <Text style={styles.fieldCaps}>
-                    {method === "mobile_money"
-                      ? "NUMÉRO OU RÉF. MOBILE MONEY"
-                      : "RÉFÉRENCE VIREMENT BANCAIRE"}
-                  </Text>
-                  <TextInput
-                    value={reference}
-                    onChangeText={setReference}
-                    placeholder={
-                      method === "mobile_money"
-                        ? `Ex. ${countryConfig.mobileMoneyHint || "Mobile Money"} / ID TXN`
-                        : "Ex. Réf. virement bancaire"
-                    }
-                    placeholderTextColor={COLORS.dim}
-                    style={styles.refInput}
-                  />
-                </View>
-              ) : null}
-
-              {error ? (
-                <View style={styles.errorBox}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
-
-              <Pressable
-                disabled={!canSubmit}
-                onPress={() => void submit()}
-                style={[
-                  styles.submitBtn,
-                  canSubmit ? styles.submitBtnReady : styles.submitBtnDisabled,
-                ]}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <>
-                    <Lock
-                      size={14}
-                      color={canSubmit ? "#ffffff" : COLORS.dim}
-                      strokeWidth={2.3}
-                    />
-                    <Text
-                      style={[
-                        styles.submitBtnText,
-                        !canSubmit && { color: COLORS.dim },
-                      ]}
-                    >
-                      Créditer {validAmount ? eur(amount) : ""}
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
+            )}
           </View>
-        )}
-      </View>
-    </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+    </>
   );
+}
+
+function validLocalLabel(
+  localAmount: number,
+  currency: Parameters<typeof formatLocalAmount>[1]
+): string {
+  return localAmount > 0 ? formatLocalAmount(localAmount, currency) : "";
 }
 
 const styles = StyleSheet.create({
@@ -591,14 +751,14 @@ const styles = StyleSheet.create({
     color: COLORS.dim,
   },
   refInput: {
-    marginTop: 4,
-    height: 38,
-    borderRadius: 8,
+    marginTop: 6,
+    height: 40,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "rgba(241,243,245,0.65)",
     paddingHorizontal: 12,
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: "500",
     color: COLORS.ink,
   },
@@ -634,6 +794,67 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#ffffff",
   },
+  sheetBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(9, 13, 22, 0.54)",
+  },
+  sheetCard: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+  },
+  sheetGrabber: {
+    alignSelf: "center",
+    width: 38,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#d1d5db",
+    marginBottom: 10,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  sheetTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.ink,
+  },
+  sheetSub: {
+    marginTop: 2,
+    fontSize: 10.5,
+    fontWeight: "500",
+    color: COLORS.mist,
+  },
+  sheetCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.elev,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetHintBox: {
+    borderRadius: 10,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
+  sheetHintText: {
+    fontSize: 10.5,
+    lineHeight: 16,
+    color: COLORS.mist,
+  },
+  doneWrap: {
+    marginTop: 14,
+    alignItems: "center",
+  },
   doneCircle: {
     width: 44,
     height: 44,
@@ -661,10 +882,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   grayBtn: {
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: COLORS.elev,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
   },
   grayBtnText: {
     fontSize: 10.5,
@@ -672,10 +893,10 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
   },
   redBtn: {
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: COLORS.betclicRed,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
   },
   redBtnText: {
     fontSize: 10.5,

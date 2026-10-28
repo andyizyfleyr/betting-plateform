@@ -892,12 +892,28 @@ export const api = {
     }),
   payments: {
     providers: () =>
-      request<{ providers: PaymentProvider[] }>("/api/payments"),
-    create: (provider: "stripe" | "paypal", amount: number, idempotencyKey: string) =>
-      request<{ url: string; providerRef?: string; deduplicated?: boolean }>(`/api/payments/${provider}`, {
+      request<{
+        providers: PaymentProvider[];
+        paypalClientId?: string | null;
+        paypalMode?: "live" | "sandbox";
+        stripePublishableKey?: string | null;
+      }>("/api/payments"),
+    create: (
+      provider: "stripe" | "paypal",
+      amount: number,
+      idempotencyKey: string,
+      options?: { uiMode?: "embedded" | "hosted"; returnPath?: string }
+    ) =>
+      request<{
+        url: string | null;
+        providerRef?: string;
+        clientSecret?: string;
+        chargeCurrency?: string;
+        deduplicated?: boolean;
+      }>(`/api/payments/${provider}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, idempotencyKey }),
+        body: JSON.stringify({ amount, idempotencyKey, ...options }),
       }),
     manual: (payload: {
       method: "mobile_money" | "sepa";

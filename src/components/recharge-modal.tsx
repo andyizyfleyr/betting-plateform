@@ -9,6 +9,10 @@ import {
   formatPresetChip,
   localToEur,
 } from "@/lib/countries";
+import {
+  DepositCheckoutSheet,
+  type DepositCheckoutSheetSession,
+} from "@/components/deposit-checkout-sheet";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
@@ -30,6 +34,13 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
     useApp();
   const dragControls = useDragControls();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
+  const [paypalClientId, setPaypalClientId] = useState<string | null>(null);
+  const [stripePublishableKey, setStripePublishableKey] = useState<
+    string | null
+  >(null);
+  const [checkoutSession, setCheckoutSession] =
+    useState<DepositCheckoutSheetSession | null>(null);
+  const popupWindowRef = useRef<Window | null>(null);
   const [prevCur, setPrevCur] = useState(currency);
   const [amountText, setAmountText] = useState(() =>
     String(currencyConfig.defaultDepositLocal)
@@ -53,6 +64,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
       .then((r) => {
         if (!active) return;
         setProviders(r.providers);
+        setPaypalClientId(r.paypalClientId ?? null);
+        setStripePublishableKey(r.stripePublishableKey ?? null);
         const autoOnline = r.providers.find((p) => p.enabled);
         if (autoOnline) setMethod(autoOnline.id);
       })
@@ -127,10 +140,66 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
         setLoading(false);
         return;
       }
-      const r = await api.payments.create(method, amount, idempotencyKey);
+      const useEmbeddedStripe =
+        method === "stripe" && Boolean(stripePublishableKey);
+      let preOpenedPopup: Window | null = null;
+      if (
+        method === "stripe" &&
+        !useEmbeddedStripe &&
+        typeof window !== "undefined" &&
+        !/PulseBetAndroid/i.test(window.navigator.userAgent)
+      ) {
+        const w = 460;
+        const h = 680;
+        const left = Math.max(0, Math.round((window.screen.width - w) / 2));
+        const top = Math.max(0, Math.round((window.screen.height - h) / 2));
+        preOpenedPopup = window.open(
+          "about:blank",
+          "pulse_deposit_checkout",
+          `popup=yes,width=${w},height=${h},left=${left},top=${top}`
+        );
+        popupWindowRef.current = preOpenedPopup;
+      }
+
+      const r = await api.payments.create(method, amount, idempotencyKey, {
+        uiMode: useEmbeddedStripe ? "embedded" : "hosted",
+        returnPath: "/parametres/depot",
+      });
       idempotencySlotRef.current = null;
-      window.location.assign(r.url);
+      const localFormatted = formatLocalAmount(localAmount, currency);
+      if (method === "paypal") {
+        setCheckoutSession({
+          kind: "paypal",
+          amountLabel: localFormatted,
+          providerRef: r.providerRef || "",
+          checkoutUrl: r.url,
+          paypalClientId,
+          chargeCurrency: r.chargeCurrency || "EUR",
+        });
+      } else {
+        if (preOpenedPopup && !preOpenedPopup.closed && r.url) {
+          preOpenedPopup.location.assign(r.url);
+        }
+        setCheckoutSession({
+          kind: "stripe",
+          amountLabel: localFormatted,
+          providerRef: r.providerRef || "",
+          checkoutUrl: r.url,
+          clientSecret: r.clientSecret ?? null,
+          stripePublishableKey,
+        });
+      }
+      inFlightRef.current = false;
+      setLoading(false);
     } catch (e) {
+      if (popupWindowRef.current && !popupWindowRef.current.closed) {
+        try {
+          popupWindowRef.current.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      popupWindowRef.current = null;
       if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
         idempotencySlotRef.current = null;
       }
@@ -140,6 +209,19 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
       toast({ kind: "error", title: "Dépôt impossible", description: "Vérifiez les informations" });
     }
   };
+
+  if (checkoutSession) {
+    return (
+      <DepositCheckoutSheet
+        session={checkoutSession}
+        onClose={() => {
+          setCheckoutSession(null);
+          onClose();
+        }}
+        popupWindowRef={popupWindowRef}
+      />
+    );
+  }
 
   const stripeInfo = providers.find((p) => p.id === "stripe");
   const paypalInfo = providers.find((p) => p.id === "paypal");
