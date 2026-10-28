@@ -25,7 +25,6 @@ import {
 } from "lucide-react-native";
 import {
   resolveLegTeams,
-  shortMarketBadge,
   StatusPill,
   TicketTeamRow,
 } from "@/components/bet-ticket";
@@ -551,7 +550,6 @@ function ComboLegCard({
       leg.homeScore != null &&
       leg.awayScore != null
   );
-  const legMarketTag = shortMarketBadge(leg.market);
 
   const legHref =
     leg.kind === "sport" && leg.matchId
@@ -692,11 +690,6 @@ function ComboLegCard({
           <Text numberOfLines={1} style={styles.pickLabel}>
             Choix : {leg.selectionLabel}
           </Text>
-          {legMarketTag ? (
-            <View style={styles.marketBadge}>
-              <Text style={styles.marketBadgeText}>{legMarketTag}</Text>
-            </View>
-          ) : null}
         </View>
         <View style={styles.pickOddsBadge}>
           <Text style={styles.pickOddsText}>
@@ -1061,19 +1054,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: COLORS.ink,
-  },
-  marketBadge: {
-    borderRadius: 6,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  marketBadgeText: {
-    fontSize: 9.5,
-    fontWeight: "500",
-    color: COLORS.mist,
   },
   pickOddsBadge: {
     borderRadius: 8,
