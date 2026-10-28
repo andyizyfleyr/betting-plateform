@@ -25,7 +25,6 @@ import {
 } from "@/lib/api";
 import {
   resolveLegTeams,
-  shortMarketBadge,
   StatusPill,
   TicketTeamRow,
 } from "@/components/bet-ticket";
@@ -689,7 +688,6 @@ export default function ComboDetailPage() {
                   const legAwayWon =
                     legFinished &&
                     (leg.matchAwayScore ?? 0) > (leg.matchHomeScore ?? 0);
-                  const marketTag = shortMarketBadge(leg.market);
                   const legHref =
                     leg.kind === "sport" && leg.matchId
                       ? leg.matchStatus === "finished"
@@ -810,11 +808,6 @@ export default function ComboDetailPage() {
 
                         <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-elev px-3 py-2">
                           <div className="flex min-w-0 items-center gap-1.5">
-                            {marketTag && (
-                              <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase text-mist ring-1 ring-edge/80">
-                                {marketTag}
-                              </span>
-                            )}
                             <span
                               className={cn(
                                 "truncate text-[11px] font-medium",
