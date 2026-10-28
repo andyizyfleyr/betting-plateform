@@ -37,6 +37,12 @@ import {
   nextComboBoostTier,
   sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
+import {
+  formatLocalAmount,
+  formatPresetChip,
+  localToEur,
+  maxSpendableLocalFromEur,
+} from "@/lib/countries";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur, formatOdds } from "@/lib/format";
 import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
@@ -46,8 +52,6 @@ import {
   roundOdds2,
   type OddsChangedDetails,
 } from "@/lib/odds-lock";
-
-const QUICK_STAKES = [5, 10, 25, 50];
 
 function DesktopLegLiveOddsBadge({
   odds,
@@ -266,10 +270,20 @@ export function DesktopBetslipSidebar() {
     applyComboOddsUpdates,
     toast,
     bumpBets,
+    currency,
+    currencyConfig,
   } = useApp();
   const feedMatches = useFeedMatches();
 
-  const [stake, setStake] = useState(10);
+  const [prevCur, setPrevCur] = useState(currency);
+  const [localStake, setLocalStake] = useState(
+    () => currencyConfig.defaultStakeLocal
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setLocalStake(currencyConfig.defaultStakeLocal);
+  }
+  const stake = localToEur(localStake, currency, balance);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
@@ -470,7 +484,11 @@ export function DesktopBetslipSidebar() {
       .map((l) => l.matchSource)
   );
   const hasMixedMatchSources = sportSourcesInSlip.size > 1;
-  const insufficient = user !== null && stake > balance;
+  const insufficient = user !== null && stake > balance + 1e-5;
+  const maxLocalAllowed = isCombo
+    ? currencyConfig.maxComboStakeLocal
+    : currencyConfig.maxInputLocal;
+  const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
 
   const canSubmit =
     enrichedLegs.length >= 1 &&
@@ -478,8 +496,8 @@ export function DesktopBetslipSidebar() {
     !hasClosedLeg &&
     !hasSuspendedLeg &&
     !hasMixedMatchSources &&
-    stake >= 0.5 &&
-    stake <= 10_000 &&
+    localStake >= currencyConfig.minStakeLocal &&
+    localStake <= maxLocalAllowed &&
     !insufficient &&
     !loading;
 
@@ -759,7 +777,7 @@ export function DesktopBetslipSidebar() {
                   Gains possibles
                 </span>
                 <span className="font-display text-[12.5px] font-medium tabular-nums text-ink">
-                  0,00 €
+                  {eur(0)}
                 </span>
               </div>
 
@@ -962,50 +980,57 @@ export function DesktopBetslipSidebar() {
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    inputMode="decimal"
-                    min={0.5}
-                    max={10000}
-                    step={0.5}
-                    value={Number.isNaN(stake) ? "" : stake}
+                    inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
+                    min={currencyConfig.minStakeLocal}
+                    max={maxLocalAllowed}
+                    step={currencyConfig.decimals === 0 ? 50 : 0.5}
+                    value={Number.isNaN(localStake) ? "" : localStake}
                     onChange={(e) => {
                       setError(null);
                       const v = parseFloat(e.target.value);
-                      setStake(Number.isNaN(v) ? 0 : v);
+                      setLocalStake(Number.isNaN(v) ? 0 : v);
                     }}
                     className="w-24 bg-transparent text-right font-display text-[12.5px] font-medium tabular-nums text-ink outline-none"
                   />
-                  <span className="font-display text-[11px] font-medium text-dim">
-                    €
+                  <span className="font-display text-[10.5px] font-medium text-dim">
+                    {currencyConfig.symbol}
                   </span>
                 </div>
               </div>
 
               {/* Mises rapides */}
               <div className="mt-2 grid grid-cols-5 gap-1.5">
-                {QUICK_STAKES.map((q) => (
+                {currencyConfig.stakePresets.map((q) => (
                   <button
                     key={q}
                     type="button"
                     onClick={() => {
                       setError(null);
-                      setStake(q);
+                      setLocalStake(q);
                     }}
                     className={cn(
-                      "h-7 rounded-lg font-display text-[10.5px] font-medium transition-colors",
-                      stake === q
+                      "h-7 rounded-lg px-0.5 font-display text-[9.5px] font-medium transition-colors",
+                      localStake === q
                         ? "bg-ink text-white"
                         : "bg-elev text-ink hover:bg-edge/70"
                     )}
                   >
-                    {q} €
+                    <span className="block truncate">{formatPresetChip(q, currency)}</span>
                   </button>
                 ))}
                 <button
                   type="button"
                   onClick={() => {
                     setError(null);
-                    setStake(
-                      Math.max(0.5, Math.min(10_000, Math.floor(balance || 50)))
+                    const spendable = maxSpendableLocalFromEur(balance, currency);
+                    setLocalStake(
+                      Math.max(
+                        currencyConfig.minStakeLocal,
+                        Math.min(
+                          maxLocalAllowed,
+                          spendable > 0 ? spendable : currencyConfig.defaultStakeLocal
+                        )
+                      )
                     );
                   }}
                   className="h-7 rounded-lg bg-elev font-display text-[10px] font-medium uppercase text-mist transition-colors hover:bg-edge/70 hover:text-ink"
@@ -1013,6 +1038,11 @@ export function DesktopBetslipSidebar() {
                   Max
                 </button>
               </div>
+              {belowMin && !insufficient && (
+                <p className="mt-1.5 text-[10px] font-medium text-betclic-red">
+                  Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
+                </p>
+              )}
 
               {/* Récapitulatif Cote & Gains */}
               <div className="mt-3 space-y-1 border-t border-edge pt-2.5">

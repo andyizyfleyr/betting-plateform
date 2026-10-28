@@ -29,14 +29,19 @@ import {
 } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  formatPresetChip,
+  localToEur,
+  maxSpendableLocalFromEur,
+  type CurrencyCode,
+} from "@/lib/countries";
+import { eur } from "@/lib/format";
 import { useRouter } from "@/lib/router";
 import { triggerHaptic } from "@/theme/tokens";
 
-const SYM = "$";
-const DEC = 2;
-const MIN_BET = 1;
-const MAX_BET = 50;
-const QUICK_BETS = [1, 5, 10, 25];
+const MAX_BET_EUR = 50;
 const PING_PERIOD_MS = 500;
 const MIN_HOLD_MS = 350;
 
@@ -60,14 +65,6 @@ const RISK_SECTORS = [
 const MAJORS = [1.01, 1.5, 2];
 const EPS = 1e-6;
 const approxEq = (a: number, b: number) => Math.abs(a - b) < EPS;
-
-function fmt(n: number): string {
-  const safe = Number.isFinite(n) ? n : 0;
-  const fixed = safe.toFixed(DEC).replace(".", ",");
-  const [intPart, decPart] = fixed.split(",");
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${grouped},${decPart} ${SYM}`;
-}
 
 function vToTheta(v: number): number {
   const t = (Math.max(V_MIN, Math.min(V_MAX, v)) - V_MIN) / (V_MAX - V_MIN);
@@ -109,12 +106,34 @@ function endsFor(c: "major" | "minor" | "micro") {
 
 export default function AcceleratorScreen() {
   const router = useRouter();
-  const { user, setBalance, hapticsEnabled } = useApp();
+  const { user, setBalance, hapticsEnabled, currency, currencyConfig } =
+    useApp();
+  const minBetLocal = currencyConfig.minStakeLocal;
+  const maxBetLocal = Math.max(
+    minBetLocal,
+    maxSpendableLocalFromEur(MAX_BET_EUR, currency)
+  );
+  const quickBetsLocal = currencyConfig.stakePresets.map((q) =>
+    Math.min(maxBetLocal, q)
+  );
+  const fmt = useCallback(
+    (eurAmount: number) => eur(eurAmount, currency),
+    [currency]
+  );
 
   const [bal, setBal] = useState<number>(() => user?.balance ?? 0);
   const [balanceHidden, setBalanceHidden] = useState(false);
   const [balFlash, setBalFlash] = useState(false);
-  const [stake, setStake] = useState("1.00");
+  const [prevCur, setPrevCur] = useState<CurrencyCode>(currency);
+  const [stake, setStake] = useState(() =>
+    formatLocalInputString(currencyConfig.stakePresets[0], currency, ".")
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStake(
+      formatLocalInputString(currencyConfig.stakePresets[0], currency, ".")
+    );
+  }
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"start" | "hold">("start");
   const [displayMult, setDisplayMult] = useState(V_MIN);
@@ -276,7 +295,7 @@ export default function AcceleratorScreen() {
       setMode("start");
       roundIdRef.current = null;
     },
-    [cleanupGameLoop, hapticsEnabled, syncBalFlash, triggerCrashAnimation]
+    [cleanupGameLoop, fmt, hapticsEnabled, syncBalFlash, triggerCrashAnimation]
   );
 
   const pingTap = useCallback(async () => {
@@ -418,11 +437,16 @@ export default function AcceleratorScreen() {
     setCrashedBorder(false);
     setDisplayMult(V_MIN);
     try {
-      const bet = parseFloat(stake.replace(",", "."));
-      if (Number.isNaN(bet) || bet <= 0) {
+      const localBet = parseFloat(stake.replace(",", "."));
+      if (Number.isNaN(localBet) || localBet <= 0) {
         setError("Mise invalide");
         return;
       }
+      if (localBet < minBetLocal) {
+        setError(`Mise minimale : ${formatLocalAmount(minBetLocal, currency)}`);
+        return;
+      }
+      const bet = localToEur(localBet, currency, bal);
       const j = (await api.accelerator.post({
         action: "start_game",
         bet,
@@ -442,7 +466,6 @@ export default function AcceleratorScreen() {
         setDisplayMult(m0);
 
         const betNorm = Number(j.bet_amount_display ?? bet);
-        setStake(betNorm.toFixed(DEC));
         setBaseBet(betNorm);
         setMode("hold");
       } else {
@@ -453,7 +476,7 @@ export default function AcceleratorScreen() {
     } finally {
       isStartingRef.current = false;
     }
-  }, [router, stake, syncBalFlash, user]);
+  }, [bal, currency, minBetLocal, router, stake, syncBalFlash, user]);
 
   useEffect(() => {
     endRef.current = handleEnd;
@@ -468,23 +491,25 @@ export default function AcceleratorScreen() {
         if (d.status === "success" && typeof d.balance === "number") {
           setBal(d.balance);
           setBalance(d.balance);
-          setStake(Math.max(MIN_BET, Math.min(MIN_BET, d.balance)).toFixed(DEC));
         }
       })
       .catch(() => {});
   }, [setBalance]);
 
+  const formatLocalStake = (val: number) =>
+    currencyConfig.decimals === 0 ? String(Math.round(val)) : val.toFixed(2);
+
   const setQuickStake = (val: number) => {
-    const clamped = Math.max(MIN_BET, Math.min(MAX_BET, val));
-    setStake(clamped.toFixed(DEC));
+    const clamped = Math.max(minBetLocal, Math.min(maxBetLocal, val));
+    setStake(formatLocalStake(clamped));
     setError("");
   };
 
   const onStakeBlur = () => {
     let val = parseFloat(stake.replace(",", "."));
-    if (Number.isNaN(val) || val < MIN_BET) val = MIN_BET;
-    if (val > MAX_BET) val = MAX_BET;
-    setStake(val.toFixed(DEC));
+    if (Number.isNaN(val) || val < minBetLocal) val = minBetLocal;
+    if (val > maxBetLocal) val = maxBetLocal;
+    setStake(formatLocalStake(val));
   };
 
   const needleDeg = -(vToTheta(displayMult) * 180) / Math.PI;
@@ -659,7 +684,7 @@ export default function AcceleratorScreen() {
         <Text style={styles.hintText}>
           {isHold
             ? "Maintenez le bouton enfoncé puis relâchez pour encaisser"
-            : "Choisissez votre mise (1 $ à 50 $) puis lancez la manche"}
+            : `Choisissez votre mise (${formatLocalAmount(minBetLocal, currency)} à ${formatLocalAmount(maxBetLocal, currency)}) puis lancez la manche`}
         </Text>
       </View>
 
@@ -671,31 +696,41 @@ export default function AcceleratorScreen() {
             onChangeText={(t) => setStake(t.replace(/[^0-9.,]/g, ""))}
             onBlur={onStakeBlur}
             editable={!isHold}
-            keyboardType="decimal-pad"
+            keyboardType={
+              currencyConfig.decimals === 0 ? "number-pad" : "decimal-pad"
+            }
             placeholder="Mise"
             placeholderTextColor="#64748b"
             style={styles.stakeIn}
           />
-          <Text style={styles.currencyBadge}>{SYM}</Text>
+          <Text style={styles.currencyBadge}>{currencyConfig.symbol}</Text>
         </View>
 
         <View style={styles.quickGrid}>
-          {QUICK_BETS.map((q) => (
+          {quickBetsLocal.map((q, idx) => (
             <Pressable
-              key={q}
+              key={`${q}-${idx}`}
               disabled={isHold}
               onPress={() => setQuickStake(q)}
               style={[styles.quickBtn, isHold && { opacity: 0.45 }]}
             >
-              <Text style={styles.quickBtnText}>
-                {q} {SYM}
+              <Text numberOfLines={1} style={styles.quickBtnText}>
+                {formatPresetChip(q, currency)}
               </Text>
             </Pressable>
           ))}
           <Pressable
             disabled={isHold}
             onPress={() =>
-              setQuickStake(Math.min(MAX_BET, Math.max(MIN_BET, bal)))
+              setQuickStake(
+                Math.min(
+                  maxBetLocal,
+                  Math.max(
+                    minBetLocal,
+                    maxSpendableLocalFromEur(bal, currency)
+                  )
+                )
+              )
             }
             style={[
               styles.quickBtn,

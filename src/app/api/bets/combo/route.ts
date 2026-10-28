@@ -53,13 +53,19 @@ import {
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
+import {
+  formatEurAsCurrency,
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { requireUserId } from "@/lib/session";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
-const MIN_STAKE = 0.5;
 const MAX_COMBO_STAKE = 200;
 const BET_COOLDOWN_MS = 700;
 const LIVE_VALIDATION_MS = 300;
@@ -122,9 +128,18 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (!Number.isFinite(stake) || stake < MIN_STAKE) {
+  const [currencyUser] = await db
+    .select({ currency: appUser.currency })
+    .from(appUser)
+    .where(eq(appUser.id, uid))
+    .limit(1);
+  const userCurrency = getCurrencyConfig(currencyUser?.currency);
+  const minStakeEur = localToEur(userCurrency.minStakeLocal, userCurrency.code);
+  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-4) {
     return NextResponse.json(
-      { error: `Mise minimale : ${MIN_STAKE} €` },
+      {
+        error: `Mise minimale : ${formatLocalAmount(userCurrency.minStakeLocal, userCurrency.code)}`,
+      },
       { status: 400 }
     );
   }
@@ -175,7 +190,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const roundedInputStake = Math.round(stake * 100) / 100;
+  const roundedInputStake = roundEurPivot(stake);
   const requestHash = computeIdempotencyHash({
     legs: rawLegs.map((l) => ({
       kind: l.kind,
@@ -237,7 +252,7 @@ export async function POST(req: NextRequest) {
       });
     if (
       !sameLegs ||
-      Math.round(alreadyPlaced.stake * 100) !== Math.round(roundedInputStake * 100)
+      Math.abs(alreadyPlaced.stake - roundedInputStake) > 1e-4
     ) {
       return idempotencyConflictResponse();
     }
@@ -276,9 +291,11 @@ export async function POST(req: NextRequest) {
   const mlRiskMap = await predictBatchUserMlRisk([uid]);
   const mlCeiling = mlRiskMap.get(uid)?.maxStake ?? 500;
   const maxAllowed = Math.min(MAX_COMBO_STAKE, maxStakeFor(profile), mlCeiling);
-  if (stake > maxAllowed) {
+  if (stake > maxAllowed + 1e-4) {
     return NextResponse.json(
-      { error: `Mise maximale autorisée sur ce combiné : ${maxAllowed} €` },
+      {
+        error: `Mise maximale autorisée sur ce combiné : ${formatEurAsCurrency(maxAllowed, userCurrency.code)}`,
+      },
       { status: 400 }
     );
   }
@@ -367,7 +384,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const roundedStake = Math.round(stake * 100) / 100;
+  const roundedStake = roundEurPivot(stake);
 
   type ComboTxOutcome =
     | {
@@ -816,7 +833,7 @@ export async function POST(req: NextRequest) {
     const [updatedUser] = await tx
       .update(appUser)
       .set({
-        balance: sql`ROUND((${appUser.balance} - ${roundedStake})::numeric, 2)::float8`,
+        balance: sql`ROUND((${appUser.balance} - ${roundedStake})::numeric, 6)::float8`,
       })
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });

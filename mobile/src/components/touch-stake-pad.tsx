@@ -1,9 +1,13 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Delete } from "lucide-react-native";
+import { useApp } from "@/context/app-context";
+import {
+  formatLocalInputString,
+  formatPresetChip,
+  maxSpendableLocalFromEur,
+} from "@/lib/countries";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
-
-const QUICK_AMOUNTS = [5, 10, 25, 50] as const;
 
 export function TouchStakePad({
   value: valueProp,
@@ -11,8 +15,9 @@ export function TouchStakePad({
   onChange: onChangeProp,
   onChangeStakeText,
   balance,
+  maxCap,
   isLoggedIn = true,
-  label = "Mise (€)",
+  label,
   defaultExpanded = false,
   defaultExpandedOnMobile,
   compact = false,
@@ -23,6 +28,7 @@ export function TouchStakePad({
   onChange?: (next: string) => void;
   onChangeStakeText?: (next: string) => void;
   balance: number;
+  maxCap?: number;
   isLoggedIn?: boolean;
   label?: string;
   hasError?: boolean;
@@ -32,6 +38,9 @@ export function TouchStakePad({
   compact?: boolean;
   dark?: boolean;
 }) {
+  const { currency, currencyConfig } = useApp();
+  const resolvedLabel = label ?? `Mise (${currencyConfig.symbol})`;
+  const resolvedMaxCap = maxCap ?? currencyConfig.maxInputLocal;
   const value = valueProp ?? stakeText ?? "";
   const onChange = onChangeProp ?? onChangeStakeText ?? (() => {});
   const [padOpen, setPadOpen] = useState(
@@ -39,7 +48,10 @@ export function TouchStakePad({
   );
 
   const numericValue = parseFloat((value || "0").replace(",", ".")) || 0;
-  const maxBalance = Math.max(0, Math.floor(balance * 100) / 100);
+  const maxBalance = Math.min(
+    resolvedMaxCap,
+    maxSpendableLocalFromEur(balance, currency)
+  );
 
   const appendKey = (key: string) => {
     triggerHaptic("light");
@@ -49,14 +61,21 @@ export function TouchStakePad({
       return;
     }
     if (key === ",") {
-      if (clean.includes(".")) return;
+      if (currencyConfig.decimals === 0 || clean.includes(".")) return;
       onChange((value || "0") + ",");
       return;
     }
-    const nextRaw = value === "0" ? key : value + key;
+    const nextRaw =
+      value === "0" || value === ""
+        ? key === "00" || key === "000"
+          ? "0"
+          : key
+        : value + key;
     const parts = nextRaw.replace(",", ".").split(".");
-    if (parts[0].length > 5) return;
-    if (parts[1] && parts[1].length > 2) return;
+    if (parts[0].length > currencyConfig.maxInputDigits) return;
+    if (parts[1] && parts[1].length > currencyConfig.decimals) return;
+    const nextNum = parseFloat(nextRaw.replace(",", "."));
+    if (Number.isFinite(nextNum) && nextNum > resolvedMaxCap) return;
     onChange(nextRaw);
   };
 
@@ -64,17 +83,23 @@ export function TouchStakePad({
     <View style={styles.wrap}>
       <View style={styles.topRow}>
         <Text style={[styles.label, dark && { color: "rgba(255,255,255,0.72)" }]}>
-          {label}
+          {resolvedLabel}
         </Text>
         <View style={styles.chipsRow}>
-          {QUICK_AMOUNTS.map((amt) => {
+          {currencyConfig.stakePresets.map((amt) => {
             const active = Math.abs(numericValue - amt) < 0.005;
             return (
               <Pressable
                 key={amt}
                 onPress={() => {
                   triggerHaptic("light");
-                  onChange(String(amt));
+                  onChange(
+                    formatLocalInputString(
+                      Math.min(resolvedMaxCap, amt),
+                      currency,
+                      ","
+                    )
+                  );
                 }}
                 style={[
                   styles.chip,
@@ -83,13 +108,14 @@ export function TouchStakePad({
                 ]}
               >
                 <Text
+                  numberOfLines={1}
                   style={[
                     styles.chipText,
                     dark && { color: "#ffffff" },
                     active && styles.chipTextActive,
                   ]}
                 >
-                  {amt} €
+                  {formatPresetChip(amt, currency)}
                 </Text>
               </Pressable>
             );
@@ -98,11 +124,7 @@ export function TouchStakePad({
             <Pressable
               onPress={() => {
                 triggerHaptic("light");
-                onChange(
-                  Number.isInteger(maxBalance)
-                    ? String(maxBalance)
-                    : maxBalance.toFixed(2).replace(".", ",")
-                );
+                onChange(formatLocalInputString(maxBalance, currency, ","));
               }}
               style={[
                 styles.chip,
@@ -153,7 +175,7 @@ export function TouchStakePad({
               dark && { color: "rgba(255,255,255,0.65)" },
             ]}
           >
-            €
+            {currencyConfig.symbol}
           </Text>
           <Text style={styles.toggleHint}>
             {padOpen ? "Masquer" : "Modifier"}
@@ -166,7 +188,12 @@ export function TouchStakePad({
           {[
             ["1", "2", "3", "BACK"],
             ["4", "5", "6", "00"],
-            ["7", "8", "9", ","],
+            [
+              "7",
+              "8",
+              "9",
+              currencyConfig.decimals === 0 ? "000" : ",",
+            ],
             ["C", "0", "OK"],
           ].map((row, rIdx) => (
             <View key={rIdx} style={styles.padRow}>

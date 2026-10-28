@@ -41,6 +41,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
     }
 
+    if (body.countryCode !== undefined || body.currency !== undefined) {
+      return NextResponse.json(
+        {
+          error:
+            "Le pays et la devise officielle du compte sont fixés définitivement lors de l'inscription.",
+        },
+        { status: 403 }
+      );
+    }
+
     const patch: Partial<typeof appUser.$inferInsert> = {};
     if (typeof body.notifications === "boolean") patch.notifications = body.notifications;
     if (typeof body.sound === "boolean") patch.sound = body.sound;

@@ -26,7 +26,21 @@ import {
   sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
-import { cn, eur } from "@/lib/format";
+import {
+  DEFAULT_COUNTRY_CODE,
+  detectCountryFromDevice,
+  getCountryConfig,
+  getCurrencyConfig,
+  getOfficialCurrencyForCountry,
+  isValidCountryCode,
+  normalizeCountryCode,
+  normalizeCurrencyCode,
+  roundEurPivot,
+  type CountryConfig,
+  type CurrencyCode,
+  type CurrencyConfig,
+} from "@/lib/countries";
+import { cn, eur, setActiveDisplayCurrency } from "@/lib/format";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import {
   readStoredOddsPolicy,
@@ -80,6 +94,11 @@ interface AppContextValue {
   authReady: boolean;
   user: ClientUser | null;
   balance: number;
+  countryCode: string;
+  currency: CurrencyCode;
+  countryConfig: CountryConfig;
+  currencyConfig: CurrencyConfig;
+  setGuestCountryCode: (code: string) => void;
   oddsFormat: "decimal" | "fractional";
   setBalance: (n: number) => void;
   applyUser: (u: ClientUser | null) => void;
@@ -140,6 +159,7 @@ export function useFeedMatches(): ClientMatch[] | null {
 
 let toastId = 0;
 const COMBO_STORAGE_KEY = "pulsebet_combo_v1";
+const GUEST_COUNTRY_STORAGE_KEY = "pulse_guest_country_v1";
 
 interface WebAuthSnapshot {
   user: ClientUser | null;
@@ -263,7 +283,7 @@ function setWebAuthUser(nextUser: ClientUser | null, markReady = true): void {
 function updateWebAuthBalance(cleanBalance: number): void {
   ensureClientAuthHydrated();
   const cur = clientAuthSnapshot.user;
-  if (!cur || Math.abs(cur.balance - cleanBalance) < 0.001) return;
+  if (!cur || Math.abs(cur.balance - cleanBalance) < 1e-6) return;
   const updated: ClientUser = { ...cur, balance: cleanBalance };
   writeStoredWebUser(updated);
   clientAuthSnapshot = {
@@ -453,8 +473,58 @@ function ProvidersInner({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [adminTab, setAdminTab] = useState<AdminTabKey>("dashboard");
   const [adminPendingFinance, setAdminPendingFinance] = useState(0);
+  const [guestCountryCode, setGuestCountryCodeState] =
+    useState<string>(DEFAULT_COUNTRY_CODE);
+  const [clientHydrated, setClientHydrated] = useState(false);
+  const guestCountryManualRef = useRef(false);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const userRef = useRef<ClientUser | null>(null);
+
+  const setGuestCountryCode = useCallback((raw: string) => {
+    const clean = normalizeCountryCode(raw);
+    guestCountryManualRef.current = true;
+    setGuestCountryCodeState(clean);
+    try {
+      window.localStorage.setItem(GUEST_COUNTRY_STORAGE_KEY, clean);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const countryCode = useMemo(() => {
+    if (!clientHydrated) return DEFAULT_COUNTRY_CODE;
+    if (user) return normalizeCountryCode(user.countryCode);
+    return normalizeCountryCode(guestCountryCode);
+  }, [clientHydrated, user, guestCountryCode]);
+
+  const currency = useMemo<CurrencyCode>(() => {
+    if (!clientHydrated) return "EUR";
+    if (user) {
+      return normalizeCurrencyCode(
+        user.currency,
+        getOfficialCurrencyForCountry(countryCode)
+      );
+    }
+    return getOfficialCurrencyForCountry(countryCode);
+  }, [clientHydrated, user, countryCode]);
+
+  const countryConfig = useMemo(
+    () => getCountryConfig(countryCode),
+    [countryCode]
+  );
+  const currencyConfig = useMemo(
+    () => getCurrencyConfig(currency),
+    [currency]
+  );
+
+  const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
+  if (typeof window !== "undefined" && clientHydrated) {
+    setActiveDisplayCurrency(isAdminPath ? "EUR" : currency);
+  }
+
+  useEffect(() => {
+    setActiveDisplayCurrency(isAdminPath ? "EUR" : currency);
+  }, [isAdminPath, currency]);
 
   useEffect(() => {
     userRef.current = user;
@@ -476,6 +546,32 @@ function ProvidersInner({ children }: { children: ReactNode }) {
         /* silencieux */
       }
       setOddsPolicyState(readStoredOddsPolicy());
+      setClientHydrated(true);
+      let storedGuest: string | null = null;
+      try {
+        storedGuest = window.localStorage.getItem(GUEST_COUNTRY_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      if (storedGuest && isValidCountryCode(storedGuest)) {
+        guestCountryManualRef.current = true;
+        setGuestCountryCodeState(storedGuest.trim().toUpperCase());
+      } else {
+        setGuestCountryCodeState(detectCountryFromDevice());
+        void api.auth
+          .geo()
+          .then((g) => {
+            if (
+              !guestCountryManualRef.current &&
+              g.detected &&
+              g.countryCode &&
+              isValidCountryCode(g.countryCode)
+            ) {
+              setGuestCountryCodeState(g.countryCode);
+            }
+          })
+          .catch(() => {});
+      }
     }, 0);
     return () => clearTimeout(t);
   }, []);
@@ -753,7 +849,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
 
   const setBalance = useCallback((n: number) => {
     if (!Number.isFinite(n)) return;
-    const clean = Math.round(n * 100) / 100;
+    const clean = roundEurPivot(n);
     updateWebAuthBalance(clean);
   }, []);
 
@@ -823,6 +919,11 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       authReady,
       user,
       balance: user?.balance ?? 0,
+      countryCode,
+      currency,
+      countryConfig,
+      currencyConfig,
+      setGuestCountryCode,
       oddsFormat: user?.oddsFormat ?? "decimal",
       setBalance,
       applyUser,
@@ -868,6 +969,11 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     [
       authReady,
       user,
+      countryCode,
+      currency,
+      countryConfig,
+      currencyConfig,
+      setGuestCountryCode,
       setBalance,
       applyUser,
       target,

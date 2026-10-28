@@ -17,12 +17,15 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   Eye,
   EyeOff,
+  Globe,
   KeyRound,
   Lock,
   Mail,
   RefreshCw,
+  Search,
   ShieldCheck,
   User,
 } from "lucide-react-native";
@@ -30,6 +33,11 @@ import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { PulseLogo } from "@/components/pulse-logo";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, type ClientUser } from "@/lib/api";
+import {
+  COUNTRIES,
+  getCountryConfig,
+  getCurrencyConfig,
+} from "@/lib/countries";
 import { usePathname, useRouter, useSearchParams } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 
@@ -136,7 +144,14 @@ export default function AuthScreen() {
   const pathname = usePathname();
   const router = useRouter();
   const params = useSearchParams();
-  const { user, applyUser, toast, hapticsEnabled } = useApp();
+  const {
+    user,
+    applyUser,
+    toast,
+    hapticsEnabled,
+    countryCode,
+    setGuestCountryCode,
+  } = useApp();
 
   const resolvedView: AuthView = useMemo(() => {
     if (pathname === "/auth/inscription") return "register";
@@ -164,6 +179,32 @@ export default function AuthScreen() {
   const [rememberMe, setRememberMe] = useState(true);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+
+  const selectedCountryCfg = useMemo(
+    () => getCountryConfig(countryCode),
+    [countryCode]
+  );
+  const selectedCurrencyCfg = useMemo(
+    () => getCurrencyConfig(selectedCountryCfg.currency),
+    [selectedCountryCfg.currency]
+  );
+  const filteredCountries = useMemo(() => {
+    const q = countrySearch.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter((c) => {
+      const cur = getCurrencyConfig(c.currency);
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.code.toLowerCase().includes(q) ||
+        c.currency.toLowerCase().includes(q) ||
+        cur.symbol.toLowerCase().includes(q) ||
+        cur.name.toLowerCase().includes(q) ||
+        c.region.toLowerCase().includes(q)
+      );
+    });
+  }, [countrySearch]);
 
   const [forgotStep, setForgotStep] = useState<"request" | "verify">("request");
   const [otpCode, setOtpCode] = useState("");
@@ -314,6 +355,7 @@ export default function AuthScreen() {
         name: cleanName,
         email: cleanEmail,
         password,
+        countryCode: selectedCountryCfg.code,
         acceptedTerms: true,
       });
       completeAuth(r.user, "register");
@@ -718,6 +760,168 @@ export default function AuthScreen() {
                         onSubmitEditing={() => emailRef.current?.focus()}
                         style={styles.input}
                       />
+                    </View>
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <View style={styles.countryLabelRow}>
+                      <Text style={styles.label}>
+                        Pays de résidence & devise officielle
+                      </Text>
+                      <View style={styles.countryLockInline}>
+                        <Lock size={10} color={COLORS.dim} strokeWidth={2.2} />
+                        <Text style={styles.countryLockText}>
+                          Fixé à l&apos;inscription
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      onPress={() => {
+                        triggerHaptic("light", hapticsEnabled);
+                        setCountryPickerOpen((o) => !o);
+                      }}
+                      style={[
+                        styles.countryTrigger,
+                        countryPickerOpen && styles.inputBoxFocused,
+                      ]}
+                    >
+                      <View style={styles.countryTriggerLeft}>
+                        <Text style={styles.countryFlag}>
+                          {selectedCountryCfg.flag}
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text numberOfLines={1} style={styles.countryName}>
+                            {selectedCountryCfg.name}
+                          </Text>
+                          <Text numberOfLines={1} style={styles.countrySub}>
+                            {selectedCurrencyCfg.name}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.countryTriggerRight}>
+                        <View style={styles.currencyBadgePill}>
+                          <Text style={styles.currencyBadgePillText}>
+                            {selectedCurrencyCfg.code} · {selectedCurrencyCfg.symbol}
+                          </Text>
+                        </View>
+                        <ChevronDown
+                          size={15}
+                          color={COLORS.dim}
+                          strokeWidth={2.1}
+                        />
+                      </View>
+                    </Pressable>
+
+                    {countryPickerOpen ? (
+                      <View style={styles.countryDropdown}>
+                        <View style={styles.countrySearchBox}>
+                          <Search
+                            size={14}
+                            color={COLORS.dim}
+                            strokeWidth={2.1}
+                          />
+                          <TextInput
+                            value={countrySearch}
+                            onChangeText={setCountrySearch}
+                            placeholder="Pays ou devise (ex. Bénin, XOF, Canada…)"
+                            placeholderTextColor={COLORS.dim}
+                            autoCorrect={false}
+                            style={styles.countrySearchInput}
+                          />
+                        </View>
+                        <ScrollView
+                          nestedScrollEnabled
+                          keyboardShouldPersistTaps="handled"
+                          style={styles.countryScroll}
+                        >
+                          {filteredCountries.length === 0 ? (
+                            <Text style={styles.countryEmpty}>
+                              Aucun pays trouvé.
+                            </Text>
+                          ) : (
+                            filteredCountries.map((c) => {
+                              const cur = getCurrencyConfig(c.currency);
+                              const active = c.code === selectedCountryCfg.code;
+                              return (
+                                <Pressable
+                                  key={c.code}
+                                  onPress={() => {
+                                    triggerHaptic("light", hapticsEnabled);
+                                    setGuestCountryCode(c.code);
+                                    setCountryPickerOpen(false);
+                                    setCountrySearch("");
+                                    if (error) setError(null);
+                                  }}
+                                  style={[
+                                    styles.countryItem,
+                                    active && styles.countryItemActive,
+                                  ]}
+                                >
+                                  <View style={styles.countryTriggerLeft}>
+                                    <Text style={styles.countryItemFlag}>
+                                      {c.flag}
+                                    </Text>
+                                    <View style={{ flex: 1 }}>
+                                      <Text
+                                        numberOfLines={1}
+                                        style={styles.countryItemName}
+                                      >
+                                        {c.name}
+                                      </Text>
+                                      <Text
+                                        numberOfLines={1}
+                                        style={styles.countrySub}
+                                      >
+                                        {c.region} · {cur.name}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                  <View style={styles.countryTriggerRight}>
+                                    <View
+                                      style={[
+                                        styles.countryCurChip,
+                                        active && styles.countryCurChipActive,
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.countryCurChipText,
+                                          active && { color: "#ffffff" },
+                                        ]}
+                                      >
+                                        {cur.code} ({cur.symbol})
+                                      </Text>
+                                    </View>
+                                    {active ? (
+                                      <Check
+                                        size={14}
+                                        color={COLORS.betclicRed}
+                                        strokeWidth={2.5}
+                                      />
+                                    ) : null}
+                                  </View>
+                                </Pressable>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.countryHintRow}>
+                      <Globe
+                        size={11}
+                        color={COLORS.betclicRed}
+                        strokeWidth={2.1}
+                      />
+                      <Text style={styles.countryHintText}>
+                        Solde, mises et retraits affichés en{" "}
+                        <Text style={{ color: COLORS.ink }}>
+                          {selectedCurrencyCfg.name} ({selectedCurrencyCfg.symbol})
+                        </Text>
+                        .
+                      </Text>
                     </View>
                   </View>
 
@@ -1812,5 +2016,147 @@ const styles = StyleSheet.create({
   footerBold: {
     fontWeight: "500",
     color: COLORS.mist,
+  },
+  countryLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  countryLockInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  countryLockText: {
+    fontSize: 9.5,
+    color: COLORS.dim,
+  },
+  countryTrigger: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "rgba(241,243,247,0.55)",
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  countryTriggerLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  countryTriggerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  countryFlag: {
+    fontSize: 17,
+  },
+  countryName: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: COLORS.ink,
+  },
+  countrySub: {
+    fontSize: 9.5,
+    color: COLORS.dim,
+    marginTop: 1,
+  },
+  currencyBadgePill: {
+    borderRadius: 8,
+    backgroundColor: "rgba(225,0,20,0.10)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  currencyBadgePillText: {
+    fontSize: 9.5,
+    fontWeight: "500",
+    color: COLORS.betclicRed,
+  },
+  countryDropdown: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
+    marginTop: 4,
+  },
+  countrySearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    height: 38,
+    backgroundColor: "rgba(241,243,247,0.55)",
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.edge,
+  },
+  countrySearchInput: {
+    flex: 1,
+    fontSize: 11.5,
+    color: COLORS.ink,
+    paddingVertical: 0,
+  },
+  countryScroll: {
+    maxHeight: 210,
+  },
+  countryEmpty: {
+    paddingVertical: 14,
+    textAlign: "center",
+    fontSize: 11,
+    color: COLORS.dim,
+  },
+  countryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.edge,
+  },
+  countryItemActive: {
+    backgroundColor: "rgba(225,0,20,0.06)",
+  },
+  countryItemFlag: {
+    fontSize: 15,
+  },
+  countryItemName: {
+    fontSize: 11.5,
+    fontWeight: "500",
+    color: COLORS.ink,
+  },
+  countryCurChip: {
+    borderRadius: 6,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  countryCurChipActive: {
+    backgroundColor: COLORS.betclicRed,
+  },
+  countryCurChipText: {
+    fontSize: 9.5,
+    fontWeight: "500",
+    color: COLORS.mist,
+  },
+  countryHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 2,
+  },
+  countryHintText: {
+    flex: 1,
+    fontSize: 10,
+    color: COLORS.dim,
   },
 });

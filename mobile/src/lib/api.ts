@@ -344,6 +344,8 @@ export interface ClientUser {
   haptics: boolean;
   oddsFormat: "decimal" | "fractional";
   language?: string;
+  countryCode?: string;
+  currency?: string;
   liveSim?: boolean;
   bonusLocked?: number;
   email?: string | null;
@@ -526,12 +528,22 @@ export const api = {
       }
       return res;
     },
+    geo: () =>
+      requestJson<{
+        detected: boolean;
+        countryCode: string | null;
+        currency: string | null;
+      }>("/api/geo", {
+        ignoreUnauthorizedRedirect: true,
+        bypassEtag: true,
+      }),
     register: async (
       nameOrPayload:
         | {
             name: string;
             email: string;
             password: string;
+            countryCode: string;
             acceptedTerms?: boolean;
           }
         | string,

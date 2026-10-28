@@ -20,11 +20,11 @@ export const ACCEL_CONFIG = {
   M_MIN: 1.01,
   M_MAX: 2.0,
   ANIM_TO_TEN_SECONDS: 34.0,
-  BET_MIN_USD: 1.0,
+  BET_MIN_USD: 0.14,
   BET_MAX_USD: 50.0,
   TTL_MS: 60000,
   COOLDOWN_MS: 0,
-  CURRENCY_SYMBOL: "$",
+  CURRENCY_SYMBOL: "€",
   DECIMALS: 2,
   /** Fenêtre anti-triche resserrée pour honorer la latence réseau sans offrir d'arbitrage gratuit. */
   CASHOUT_LATENCY_WINDOW: 0.18,
@@ -33,6 +33,7 @@ export const ACCEL_CONFIG = {
 } as const;
 
 export const r2 = (v: number) => Math.round(v * 100) / 100;
+const roundPivot = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
 
 export function gBaseRate(): number {
   return (ACCEL_CONFIG.M_MAX - ACCEL_CONFIG.M_MIN) / ACCEL_CONFIG.ANIM_TO_TEN_SECONDS;
@@ -83,7 +84,7 @@ async function getUserBalance(uid: number): Promise<number> {
 export { getUserBalance };
 
 async function setUserBalance(uid: number, balance: number) {
-  await db.update(appUser).set({ balance: r2(balance) }).where(eq(appUser.id, uid));
+  await db.update(appUser).set({ balance: roundPivot(balance) }).where(eq(appUser.id, uid));
 }
 
 async function getLatestRound(uid: number) {
@@ -137,7 +138,7 @@ export async function startRound(
   uid: number,
   betInput: number
 ): Promise<StartResult | { status: "error"; message: string }> {
-  const betUsd = Math.min(ACCEL_CONFIG.BET_MAX_USD, Math.max(ACCEL_CONFIG.BET_MIN_USD, betInput));
+  const betUsd = roundPivot(Math.min(ACCEL_CONFIG.BET_MAX_USD, Math.max(ACCEL_CONFIG.BET_MIN_USD, betInput)));
 
   const balance = await getUserBalance(uid);
   if (betUsd > balance) return { status: "error", message: "Solde insuffisant" };
@@ -180,7 +181,7 @@ export async function startRound(
     .insert(acceleratorRounds)
     .values({
       userId: uid,
-      betAmount: r2(betUsd),
+      betAmount: roundPivot(betUsd),
       gBase,
       mMax: ACCEL_CONFIG.M_MAX,
       startedAt: new Date(),
@@ -202,7 +203,7 @@ export async function startRound(
   return {
     status: "success",
     roundId: row.id,
-    newBalance: r2(balance - betUsd),
+    newBalance: roundPivot(balance - betUsd),
     multiplier: ACCEL_CONFIG.M_MIN,
     gBase,
     mMax: ACCEL_CONFIG.M_MAX,
@@ -318,7 +319,7 @@ export async function cashoutRound(
   const mMax = Number(row.mMax);
   const jackpot = eff >= mMax - 1e-9;
   const mult = jackpot ? mMax : eff;
-  const win = r2(Number(row.betAmount) * mult);
+  const win = roundPivot(Number(row.betAmount) * mult);
 
   const flipped = await db
     .update(acceleratorRounds)

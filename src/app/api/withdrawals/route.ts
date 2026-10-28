@@ -4,6 +4,13 @@ import { db } from "@/db";
 import { appUser, withdrawals } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import { invalidateUserCaches } from "@/lib/active-state-cache";
+import {
+  formatEurAsCurrency,
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import {
   computeIdempotencyHash,
@@ -17,14 +24,9 @@ import { computeWithdrawalEligibility } from "@/lib/wager";
 
 export const dynamic = "force-dynamic";
 
-const MIN_WITHDRAWAL = 10;
 const MAX_WITHDRAWAL = 5_000;
 const MAX_PENDING_WITHDRAWALS = 3;
 const ALLOWED_METHODS = new Set(["iban", "paypal", "card", "mobile_money"]);
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
 
     const method = String(body.method ?? "").trim().toLowerCase();
     const destination = String(body.destination ?? "").trim();
-    const amount = round2(Number(body.amount));
+    const amount = roundEurPivot(Number(body.amount));
     const idempotencyKey = extractIdempotencyKey(
       body.idempotencyKey,
       req.headers.get("idempotency-key")
@@ -94,10 +96,26 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (!Number.isFinite(amount) || amount < MIN_WITHDRAWAL || amount > MAX_WITHDRAWAL) {
+
+    const [currencyUser] = await db
+      .select({ currency: appUser.currency })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .limit(1);
+    const userCurrency = getCurrencyConfig(currencyUser?.currency);
+    const minWdEur = localToEur(userCurrency.minWithdrawalLocal, userCurrency.code);
+    const maxWdEur = Math.max(
+      MAX_WITHDRAWAL,
+      localToEur(userCurrency.maxWithdrawalLocal, userCurrency.code)
+    );
+    if (
+      !Number.isFinite(amount) ||
+      amount < minWdEur - 1e-4 ||
+      amount > maxWdEur + 1e-4
+    ) {
       return NextResponse.json(
         {
-          error: `Montant de retrait compris entre ${MIN_WITHDRAWAL} € et ${MAX_WITHDRAWAL} €`,
+          error: `Montant de retrait compris entre ${formatLocalAmount(userCurrency.minWithdrawalLocal, userCurrency.code)} et ${formatLocalAmount(userCurrency.maxWithdrawalLocal, userCurrency.code)}`,
         },
         { status: 400 }
       );
@@ -129,16 +147,16 @@ export async function POST(req: NextRequest) {
 
     // Vérification anti-abus sur le bonus d'inscription (exigence de mise 1× à cote ≥ 1,30)
     const eligibility = await computeWithdrawalEligibility(uid);
-    if (amount > eligibility.balance) {
+    if (amount > eligibility.balance + 1e-5) {
       return NextResponse.json(
         { error: "Solde disponible insuffisant" },
         { status: 400 }
       );
     }
-    if (amount > eligibility.withdrawable) {
+    if (amount > eligibility.withdrawable + 1e-5) {
       return NextResponse.json(
         {
-          error: `Bonus d'inscription soumis à mise 1× (cote ≥ 1,30). Il vous reste ${eligibility.bonusRemaining.toFixed(2)} € à miser. Solde retirable immédiatement : ${eligibility.withdrawable.toFixed(2)} €`,
+          error: `Bonus d'inscription soumis à mise 1× (cote ≥ 1,30). Il vous reste ${formatEurAsCurrency(eligibility.bonusRemaining, userCurrency.code)} à miser. Solde retirable immédiatement : ${formatEurAsCurrency(eligibility.withdrawable, userCurrency.code)}`,
         },
         { status: 400 }
       );
@@ -234,7 +252,7 @@ export async function POST(req: NextRequest) {
       const [debited] = await tx
         .update(appUser)
         .set({
-          balance: sql`ROUND((${appUser.balance} - ${amount})::numeric, 2)::float8`,
+          balance: sql`ROUND((${appUser.balance} - ${amount})::numeric, 6)::float8`,
         })
         .where(and(eq(appUser.id, uid), sql`${appUser.balance} >= ${amount}`))
         .returning({ balance: appUser.balance });
@@ -403,7 +421,7 @@ export async function PATCH(req: NextRequest) {
       const [user] = await tx
         .update(appUser)
         .set({
-          balance: sql`ROUND((${appUser.balance} + ${round2(updated.amount)})::numeric, 2)::float8`,
+          balance: sql`ROUND((${appUser.balance} + ${roundEurPivot(updated.amount)})::numeric, 6)::float8`,
         })
         .where(eq(appUser.id, uid))
         .returning({ balance: appUser.balance });

@@ -35,7 +35,13 @@ import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
 import {
+  formatEurAsCurrency,
+  getCountryConfig,
+  getCurrencyConfig,
+} from "@/lib/countries";
+import {
   eur,
+  eurPivot,
   formatKickoff,
   formatOdds,
   formatPlacedAt,
@@ -113,6 +119,8 @@ interface AdminUserRow {
   email?: string | null;
   balance: number;
   role: string;
+  countryCode?: string;
+  currency?: string;
 }
 
 interface AdminBetRow {
@@ -134,6 +142,9 @@ interface AdminDepositRow {
   id: number;
   userId?: number;
   userName?: string;
+  userCountryCode?: string;
+  userCurrency?: string;
+  currency?: string;
   provider: string;
   providerRef?: string;
   amount: number;
@@ -145,6 +156,8 @@ interface AdminWithdrawalRow {
   id: number;
   userId?: number;
   userName?: string;
+  userCountryCode?: string;
+  userCurrency?: string;
   method: string;
   destination: string;
   amount: number;
@@ -1149,6 +1162,8 @@ export default function AdminScreen() {
         <View style={styles.stack}>
           {panel.users.map((u) => {
             const draft = balanceDrafts[u.id] ?? String(u.balance);
+            const uCountry = getCountryConfig(u.countryCode);
+            const uCur = getCurrencyConfig(u.currency ?? uCountry.currency).code;
             return (
               <View key={u.id} style={styles.card}>
                 <View style={styles.rowBetween}>
@@ -1163,11 +1178,18 @@ export default function AdminScreen() {
                         {u.name}
                       </Text>
                       <Text numberOfLines={1} style={styles.cardSub}>
-                        {u.email ?? "—"} · {u.role}
+                        {uCountry.flag} {uCountry.code} · {uCur} · {u.email ?? "—"} · {u.role}
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.userBalText}>{eur(u.balance)}</Text>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={styles.userBalText}>{eurPivot(u.balance)}</Text>
+                    {uCur !== "EUR" ? (
+                      <Text style={styles.cardSub}>
+                        ≈ {formatEurAsCurrency(u.balance, uCur)}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
 
                 <View style={[styles.forecastControlsRow, { marginTop: 10 }]}>
@@ -1180,17 +1202,19 @@ export default function AdminScreen() {
                     style={[styles.textField, { flex: 1, height: 36 }]}
                   />
                   <Pressable
-                    onPress={() =>
+                    onPress={() => {
+                      const nextAmt = Number(draft.replace(",", "."));
                       void act(
                         {
                           action: "setBalance",
                           userId: u.id,
-                          balance: Number(draft.replace(",", ".")),
+                          amount: nextAmt,
+                          balance: nextAmt,
                         },
                         `bal-${u.id}`,
                         `Solde de ${u.name} mis à jour`
-                      )
-                    }
+                      );
+                    }}
                     style={styles.smallDarkBtn}
                   >
                     <Text style={styles.smallDarkBtnText}>Définir</Text>
@@ -1245,11 +1269,18 @@ export default function AdminScreen() {
               <Text style={styles.cardSub}>Aucun retrait enregistré.</Text>
             </View>
           ) : (
-            (panel.withdrawals ?? []).map((w) => (
+            (panel.withdrawals ?? []).map((w) => {
+              const wCountry = getCountryConfig(w.userCountryCode);
+              const wCur = getCurrencyConfig(w.userCurrency ?? wCountry.currency).code;
+              const localLabel =
+                wCur !== "EUR"
+                  ? `${formatEurAsCurrency(w.amount, wCur)} (${eurPivot(w.amount)})`
+                  : eurPivot(w.amount);
+              return (
               <View key={`w-${w.id}`} style={styles.card}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.cardTitle}>
-                    {w.userName ?? `Joueur #${w.userId}`} · {eur(w.amount)}
+                    {wCountry.flag} {w.userName ?? `Joueur #${w.userId}`} · {localLabel}
                   </Text>
                   <Text style={styles.leagueMeta}>
                     {w.status.toUpperCase()}
@@ -1295,7 +1326,8 @@ export default function AdminScreen() {
                   </View>
                 ) : null}
               </View>
-            ))
+              );
+            })
           )}
 
           {/* Dépôts */}
@@ -1305,11 +1337,20 @@ export default function AdminScreen() {
               <Text style={styles.cardSub}>Aucun dépôt enregistré.</Text>
             </View>
           ) : (
-            panel.deposits.map((d) => (
+            panel.deposits.map((d) => {
+              const dCountry = getCountryConfig(d.userCountryCode);
+              const dCur = getCurrencyConfig(
+                d.userCurrency ?? d.currency ?? dCountry.currency
+              ).code;
+              const localLabel =
+                dCur !== "EUR"
+                  ? `${formatEurAsCurrency(d.amount, dCur)} (${eurPivot(d.amount)})`
+                  : eurPivot(d.amount);
+              return (
               <View key={`d-${d.id}`} style={styles.card}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.cardTitle}>
-                    {d.userName ?? `Joueur #${d.userId}`} · {eur(d.amount)}
+                    {dCountry.flag} {d.userName ?? `Joueur #${d.userId}`} · {localLabel}
                   </Text>
                   <Text style={styles.leagueMeta}>
                     {d.status.toUpperCase()}
@@ -1319,7 +1360,7 @@ export default function AdminScreen() {
                   {d.provider} · {d.providerRef ?? "—"} ·{" "}
                   {formatPlacedAt(d.createdAt)}
                 </Text>
-                {d.status === "pending" ? (
+                {d.status === "pending" || d.status === "pending_review" ? (
                   <View style={[styles.resolveWrap, { marginTop: 8 }]}>
                     <Pressable
                       onPress={() =>
@@ -1350,7 +1391,8 @@ export default function AdminScreen() {
                   </View>
                 ) : null}
               </View>
-            ))
+              );
+            })
           )}
         </View>
       )}

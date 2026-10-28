@@ -474,7 +474,7 @@ export function ShareTicketModal({ bet, onClose }: Props) {
                   <Eye className="h-4 w-4 text-ink" strokeWidth={2.1} />
                 )}
                 <span className="text-[11px] font-medium text-ink">
-                  Masquer ma mise et mes montants (€)
+                  Masquer ma mise et mes montants
                 </span>
               </div>
               <span

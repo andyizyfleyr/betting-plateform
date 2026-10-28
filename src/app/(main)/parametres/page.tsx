@@ -7,8 +7,10 @@ import {
   ArrowUpRight,
   Bell,
   ChevronRight,
+  Globe,
   History,
   Loader2,
+  Lock,
   LogOut,
   Plus,
   ShieldCheck,
@@ -33,7 +35,16 @@ import { useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 export default function ParametresPage() {
-  const { authReady, user, applyUser, setBalance, toast, betsVersion } = useApp();
+  const {
+    authReady,
+    user,
+    applyUser,
+    setBalance,
+    toast,
+    betsVersion,
+    countryConfig,
+    currencyConfig,
+  } = useApp();
   const { manualDataSaver, autoConstrained, setManualDataSaver } = useNetworkQuality();
   const router = useRouter();
   const [wallet, setWallet] = useState<ClientWalletData | null>(() => getCachedWallet());
@@ -438,6 +449,27 @@ export default function ParametresPage() {
         {/* Colonne droite : Préférences & Déconnexion */}
         <div className={cn("space-y-3", mobileTab !== "settings" && "hidden lg:block")}>
           <div className="glass-card overflow-hidden rounded-2xl">
+            {/* Pays & devise officielle verrouillés à l'inscription */}
+            <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <IconBox>
+                  <Globe className="h-4 w-4" strokeWidth={2.1} />
+                </IconBox>
+                <div className="min-w-0">
+                  <p className="font-display text-[11.5px] font-medium text-ink">
+                    Pays & devise du compte
+                  </p>
+                  <p className="truncate text-[10px] text-dim">
+                    {countryConfig.flag} {countryConfig.name} · {currencyConfig.name}
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[10px] font-medium text-ink">
+                <Lock className="h-3 w-3 text-dim" strokeWidth={2.2} />
+                {currencyConfig.code} ({currencyConfig.symbol})
+              </span>
+            </div>
+
             {/* Format des cotes */}
             <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
               <div className="flex min-w-0 items-center gap-3">

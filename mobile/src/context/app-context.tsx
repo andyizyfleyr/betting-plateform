@@ -22,6 +22,21 @@ import {
 } from "@/lib/api";
 import { MAX_COMBO_LEGS } from "@/lib/combo-math";
 import {
+  detectCountryFromDevice,
+  getCountryConfig,
+  getCurrencyConfig,
+  getOfficialCurrencyForCountry,
+  isValidCountryCode,
+  normalizeCountryCode,
+  normalizeCurrencyCode,
+  roundEurPivot,
+  type CountryConfig,
+  type CurrencyCode,
+  type CurrencyConfig,
+} from "@/lib/countries";
+import { eur, setActiveDisplayCurrency } from "@/lib/format";
+import { usePathname } from "@/lib/router";
+import {
   clearPrivateEntityCaches,
   getCachedMatchesList,
   getCachedPredictionsList,
@@ -100,6 +115,11 @@ interface AppContextValue {
   sessionRestoring: boolean;
   user: ClientUser | null;
   balance: number;
+  countryCode: string;
+  currency: CurrencyCode;
+  countryConfig: CountryConfig;
+  currencyConfig: CurrencyConfig;
+  setGuestCountryCode: (code: string) => void;
   setBalance: (b: number) => void;
   applyUser: (u: ClientUser | null) => void;
   pendingCount: number;
@@ -158,6 +178,7 @@ const COMBO_STORAGE_KEY = "pulse_android_combo_v2";
 const POLICY_STORAGE_KEY = "pulse_odds_change_policy_v1";
 const DATASAVER_STORAGE_KEY = "pulse_android_datasaver_v1";
 const USER_STORAGE_KEY = "pulse_cached_user_v1";
+const GUEST_COUNTRY_STORAGE_KEY = "pulse_guest_country_v1";
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -228,7 +249,7 @@ function MobileBackgroundQueries({
       if (tk.status === "won" && (user.notifications ?? true)) {
         toast({
           kind: "win",
-          title: `Pari gagné ! +${tk.potentialWin.toFixed(2).replace(".", ",")} €`,
+          title: `Pari gagné ! +${eur(tk.potentialWin)}`,
           description: `${tk.title} · ${tk.selectionLabel}`,
         });
       } else if (tk.status === "void" && (user.notifications ?? true)) {
@@ -245,11 +266,16 @@ function MobileBackgroundQueries({
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const [authReady, setAuthReady] = useState(false);
   const [sessionRestoring, setSessionRestoring] = useState(false);
   const [user, setUser] = useState<ClientUser | null>(null);
   const [balance, setBalanceState] = useState<number>(0);
+  const [guestCountryCode, setGuestCountryCodeState] = useState<string>(() =>
+    detectCountryFromDevice()
+  );
+  const guestCountryManualRef = useRef(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [betsVersion, setBetsVersion] = useState<number>(0);
   const [feedMatches, setFeedMatchesState] = useState<ClientMatch[] | null>(() =>
@@ -280,6 +306,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const soundEnabled = user?.sound ?? true;
   const oddsFormat = user?.oddsFormat ?? "decimal";
 
+  const setGuestCountryCode = useCallback((raw: string) => {
+    const clean = normalizeCountryCode(raw);
+    guestCountryManualRef.current = true;
+    setGuestCountryCodeState(clean);
+    void AsyncStorage.setItem(GUEST_COUNTRY_STORAGE_KEY, clean).catch(() => {});
+  }, []);
+
+  const countryCode = useMemo(
+    () =>
+      user
+        ? normalizeCountryCode(user.countryCode)
+        : normalizeCountryCode(guestCountryCode),
+    [user, guestCountryCode]
+  );
+
+  const currency = useMemo<CurrencyCode>(
+    () =>
+      user
+        ? normalizeCurrencyCode(
+            user.currency,
+            getOfficialCurrencyForCountry(countryCode)
+          )
+        : getOfficialCurrencyForCountry(countryCode),
+    [user, countryCode]
+  );
+
+  const countryConfig = useMemo(
+    () => getCountryConfig(countryCode),
+    [countryCode]
+  );
+  const currencyConfig = useMemo(
+    () => getCurrencyConfig(currency),
+    [currency]
+  );
+
+  const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
+  setActiveDisplayCurrency(isAdminPath ? "EUR" : currency);
+  useEffect(() => {
+    setActiveDisplayCurrency(isAdminPath ? "EUR" : currency);
+  }, [isAdminPath, currency]);
+
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
@@ -302,11 +369,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setBalance = useCallback((b: number) => {
     if (Number.isFinite(b)) {
-      const clean = Math.round(b * 100) / 100;
-      setBalanceState((prev) => (Math.abs(prev - clean) < 0.001 ? prev : clean));
+      const clean = roundEurPivot(b);
+      setBalanceState((prev) => (Math.abs(prev - clean) < 1e-6 ? prev : clean));
       setUser((prev) => {
         if (!prev) return prev;
-        if (Math.abs(prev.balance - clean) < 0.001) return prev;
+        if (Math.abs(prev.balance - clean) < 1e-6) return prev;
         const updated = { ...prev, balance: clean };
         void AsyncStorage.setItem(
           USER_STORAGE_KEY,
@@ -328,7 +395,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUser(u);
     if (u) {
       setSessionRestoring(false);
-      setBalanceState(Math.round(u.balance * 100) / 100);
+      setBalanceState(roundEurPivot(u.balance));
       void AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(u)).catch(
         () => {}
       );
@@ -430,12 +497,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         withStorageTimeout(
           (async () => {
             try {
-              const [rawCombo, rawPolicy, rawSaver, rawUser] = await Promise.all([
-                AsyncStorage.getItem(COMBO_STORAGE_KEY),
-                AsyncStorage.getItem(POLICY_STORAGE_KEY),
-                AsyncStorage.getItem(DATASAVER_STORAGE_KEY),
-                AsyncStorage.getItem(USER_STORAGE_KEY),
-              ]);
+              const [rawCombo, rawPolicy, rawSaver, rawUser, rawGuestCountry] =
+                await Promise.all([
+                  AsyncStorage.getItem(COMBO_STORAGE_KEY),
+                  AsyncStorage.getItem(POLICY_STORAGE_KEY),
+                  AsyncStorage.getItem(DATASAVER_STORAGE_KEY),
+                  AsyncStorage.getItem(USER_STORAGE_KEY),
+                  AsyncStorage.getItem(GUEST_COUNTRY_STORAGE_KEY),
+                ]);
+              if (
+                mounted &&
+                rawGuestCountry &&
+                isValidCountryCode(rawGuestCountry)
+              ) {
+                guestCountryManualRef.current = true;
+                setGuestCountryCodeState(rawGuestCountry.trim().toUpperCase());
+              } else if (mounted) {
+                void api.auth
+                  .geo()
+                  .then((g) => {
+                    if (
+                      mounted &&
+                      !guestCountryManualRef.current &&
+                      g.detected &&
+                      g.countryCode &&
+                      isValidCountryCode(g.countryCode)
+                    ) {
+                      setGuestCountryCodeState(g.countryCode);
+                    }
+                  })
+                  .catch(() => {});
+              }
               if (rawUser) {
                 const parsedU = JSON.parse(rawUser) as ClientUser;
                 if (
@@ -778,6 +870,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       sessionRestoring,
       user,
       balance,
+      countryCode,
+      currency,
+      countryConfig,
+      currencyConfig,
+      setGuestCountryCode,
       setBalance,
       applyUser,
       pendingCount,
@@ -837,6 +934,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       authReady,
       sessionRestoring,
       balance,
+      countryCode,
+      currency,
+      countryConfig,
+      currencyConfig,
+      setGuestCountryCode,
       betsVersion,
       bumpBets,
       clearCombo,

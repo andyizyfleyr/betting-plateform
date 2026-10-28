@@ -5,32 +5,25 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ArrowLeft, CircleHelp, Eye, EyeOff, Hand, Play } from "lucide-react";
 import { NetworkBadge, OfflineBanner } from "@/components/network-badge";
+import { useApp } from "@/components/providers";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  formatPresetChip,
+  localToEur,
+  maxSpendableLocalFromEur,
+  type CurrencyCode,
+} from "@/lib/countries";
+import { eur } from "@/lib/format";
 import { fetchWithTimeout, postJson } from "@/lib/network-manager";
 import s from "./accelerator-game.module.css";
 
-const SYM = "$";
-const DEC = 2;
-const MIN_BET = 1;
-const MAX_BET = 50;
-const QUICK_BETS = [1, 5, 10, 25];
+const MAX_BET_EUR = 50;
 const PING_PERIOD_MS = 500;
 const MIN_HOLD_MS = 350;
 
 const V_MIN = 1.01;
 const V_MAX = 2.0;
-
-function fmt(n: number): string {
-  return (
-    Number(n)
-      .toLocaleString("fr-FR", {
-        minimumFractionDigits: DEC,
-        maximumFractionDigits: DEC,
-      })
-      .replace(/\u202F/g, " ") +
-    " " +
-    SYM
-  );
-}
 
 // ---------------- Géométrie de la jauge ----------------
 
@@ -99,6 +92,21 @@ function clsFor(v: number): string {
 const emptySubscribe = () => () => {};
 
 export default function AcceleratorPage() {
+  const { currency, currencyConfig, setBalance } = useApp();
+  const minBetLocal = currencyConfig.minStakeLocal;
+  const maxBetLocal = Math.max(
+    minBetLocal,
+    maxSpendableLocalFromEur(MAX_BET_EUR, currency)
+  );
+  const quickBetsLocal = currencyConfig.stakePresets.map((q) =>
+    Math.min(maxBetLocal, q)
+  );
+  const fmt = useCallback(
+    (eurAmount: number) => eur(eurAmount, currency),
+    [currency]
+  );
+  const fmtRef = useRef(fmt);
+
   const mount = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -109,7 +117,16 @@ export default function AcceleratorPage() {
     typeof window !== "undefined" ? localStorage.getItem("acc_balance_hidden") === "true" : false
   );
   const [balFlash, setBalFlash] = useState(false);
-  const [stake, setStake] = useState("1.00");
+  const [stakeByCur, setStakeByCur] = useState<Partial<Record<CurrencyCode, string>>>({});
+  const stake =
+    stakeByCur[currency] ??
+    formatLocalInputString(currencyConfig.stakePresets[0], currency, ".");
+  const setStake = useCallback(
+    (next: string) => {
+      setStakeByCur((prev) => ({ ...prev, [currency]: next }));
+    },
+    [currency]
+  );
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"start" | "hold">("start");
   const [crashShow, setCrashShow] = useState(false);
@@ -264,7 +281,7 @@ export default function AcceleratorPage() {
       if (valRef.current) valRef.current.textContent = v.toFixed(2);
       setNeedleAngle(vToTheta(v));
       if (baseBetRef.current != null && payoutDispRef.current) {
-        payoutDispRef.current.textContent = fmt(baseBetRef.current * v);
+        payoutDispRef.current.textContent = fmtRef.current(baseBetRef.current * v);
       }
     }
 
@@ -377,11 +394,15 @@ export default function AcceleratorPage() {
     []
   );
 
-  const setBalFlashSoon = useCallback((n: number) => {
-    setBal(n);
-    setBalFlash(true);
-    setTimeout(() => setBalFlash(false), 500);
-  }, []);
+  const setBalFlashSoon = useCallback(
+    (n: number) => {
+      setBal(n);
+      setBalance(n);
+      setBalFlash(true);
+      setTimeout(() => setBalFlash(false), 500);
+    },
+    [setBalance]
+  );
 
   const resetPayoutLine = useCallback(() => {
     baseBetRef.current = null;
@@ -439,16 +460,23 @@ export default function AcceleratorPage() {
           show: true,
           win: true,
           title: jackpot ? "JACKPOT !" : "Encaissé !",
-          amount: fmt(win),
+          amount: fmtRef.current(win),
           mult: `×${mult.toFixed(2)}`,
         });
-        if (payoutDispRef.current) payoutDispRef.current.textContent = fmt(win);
+        if (payoutDispRef.current) payoutDispRef.current.textContent = fmtRef.current(win);
       }
       setError("");
       setMode("start");
       roundIdRef.current = null;
     },
-    [cleanupGameLoop, playWinSound, resetPayoutLine, setBalFlashSoon, triggerCrashAnimation]
+    [
+      cleanupGameLoop,
+      playWinSound,
+      resetPayoutLine,
+      setBalFlashSoon,
+      setModal,
+      triggerCrashAnimation,
+    ]
   );
 
   const pingTap = useCallback(async () => {
@@ -572,11 +600,16 @@ export default function AcceleratorPage() {
     gaugeCardRef.current?.classList.remove(s.crashed);
     gaugeApi.current?.updateGauge(V_MIN);
     try {
-      const bet = parseFloat(stake.replace(",", "."));
-      if (Number.isNaN(bet) || bet <= 0) {
+      const localBet = parseFloat(stake.replace(",", "."));
+      if (Number.isNaN(localBet) || localBet <= 0) {
         setError("Mise invalide");
         return;
       }
+      if (localBet < minBetLocal) {
+        setError(`Mise minimale : ${formatLocalAmount(minBetLocal, currency)}`);
+        return;
+      }
+      const bet = localToEur(localBet, currency, bal);
       const j = await post({ action: "start_game", bet }, { timeoutMs: 10000 });
       if (j.status === "success") {
         roundIdRef.current = typeof j.round_id === "number" ? j.round_id : null;
@@ -588,7 +621,6 @@ export default function AcceleratorPage() {
         displayVRef.current = typeof j.multiplier === "number" ? j.multiplier : V_MIN;
 
         const betNorm = Number(j.bet_amount_display ?? bet);
-        setStake(betNorm.toFixed(DEC));
         baseBetRef.current = betNorm;
         if (stakeDispRef.current) stakeDispRef.current.textContent = fmt(betNorm);
         if (payoutDispRef.current)
@@ -604,29 +636,36 @@ export default function AcceleratorPage() {
     } finally {
       isStartingRef.current = false;
     }
-  }, [post, setBalFlashSoon, stake]);
+  }, [bal, currency, fmt, minBetLocal, post, setBalFlashSoon, stake]);
+
+  const formatLocalStake = useCallback(
+    (val: number) =>
+      currencyConfig.decimals === 0 ? String(Math.round(val)) : val.toFixed(2),
+    [currencyConfig.decimals]
+  );
 
   const setQuickStake = (val: number) => {
-    const clamped = Math.max(MIN_BET, Math.min(MAX_BET, val));
-    setStake(clamped.toFixed(DEC));
+    const clamped = Math.max(minBetLocal, Math.min(maxBetLocal, val));
+    setStake(formatLocalStake(clamped));
     setError("");
   };
 
   const onStakeBlur = useCallback(() => {
     let val = parseFloat(stake.replace(",", "."));
-    if (Number.isNaN(val) || val < MIN_BET) val = MIN_BET;
-    if (val > MAX_BET) val = MAX_BET;
-    setStake(val.toFixed(DEC));
-  }, [stake]);
+    if (Number.isNaN(val) || val < minBetLocal) val = minBetLocal;
+    if (val > maxBetLocal) val = maxBetLocal;
+    setStake(formatLocalStake(val));
+  }, [formatLocalStake, maxBetLocal, minBetLocal, setStake, stake]);
 
   const modeRef = useRef(mode);
 
   useEffect(() => {
+    fmtRef.current = fmt;
     endRef.current = handleEnd;
     animateLoopRef.current = animateLoop;
     stopHoldLoopRef.current = stopHoldLoop;
     modeRef.current = mode;
-  }, [animateLoop, handleEnd, mode, stopHoldLoop]);
+  }, [animateLoop, fmt, handleEnd, mode, stopHoldLoop]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -672,7 +711,6 @@ export default function AcceleratorPage() {
       const d = res.data;
       if (res.ok && d && d.status === "success") {
         setBal(Number(d.balance));
-        setStake(Math.max(MIN_BET, Math.min(MIN_BET, Number(d.balance))).toFixed(DEC));
       }
     });
   }, []);
@@ -809,7 +847,7 @@ export default function AcceleratorPage() {
           <p className={s.hint}>
             {isHold
               ? "Maintenez le bouton enfoncé puis relâchez pour encaisser"
-              : "Choisissez votre mise (1 $ à 50 $) puis lancez la manche"}
+              : `Choisissez votre mise (${formatLocalAmount(minBetLocal, currency)} à ${formatLocalAmount(maxBetLocal, currency)}) puis lancez la manche`}
           </p>
         </main>
 
@@ -818,7 +856,7 @@ export default function AcceleratorPage() {
             <div className={s.inputGroup}>
               <input
                 type="text"
-                inputMode="decimal"
+                inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
                 className={s.stakeIn}
                 placeholder="Mise"
                 value={stake}
@@ -827,26 +865,33 @@ export default function AcceleratorPage() {
                 disabled={isHold}
                 aria-label="Montant de la mise"
               />
-              <span className={s.currencyBadge}>{SYM}</span>
+              <span className={s.currencyBadge}>{currencyConfig.symbol}</span>
             </div>
           </div>
 
           <div className={s.quickGrid}>
-            {QUICK_BETS.map((q) => (
+            {quickBetsLocal.map((q, idx) => (
               <button
-                key={q}
+                key={`${q}-${idx}`}
                 type="button"
                 disabled={isHold}
                 onClick={() => setQuickStake(q)}
                 className={s.quickBtn}
               >
-                {q} {SYM}
+                {formatPresetChip(q, currency)}
               </button>
             ))}
             <button
               type="button"
               disabled={isHold}
-              onClick={() => setQuickStake(Math.min(MAX_BET, Math.max(MIN_BET, bal)))}
+              onClick={() =>
+                setQuickStake(
+                  Math.min(
+                    maxBetLocal,
+                    Math.max(minBetLocal, maxSpendableLocalFromEur(bal, currency))
+                  )
+                )
+              }
               className={`${s.quickBtn} ${s.quickMax}`}
             >
               MAX

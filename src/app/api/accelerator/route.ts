@@ -1,5 +1,14 @@
+import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { appUser } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import {
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { requireUserId } from "@/lib/session";
 import { getLatestRound, getUserBalance } from "@/lib/accelerator-engine";
 import {
@@ -30,7 +39,7 @@ async function lastRoundState(uid: number) {
       status: "cashed",
       multiplier: mult,
       new_balance: await getUserBalance(uid),
-      win_amount: round2(Number(last.betAmount) * mult),
+      win_amount: roundEurPivot(Number(last.betAmount) * mult),
       round_id: last.id,
       jackpot: mult >= Number(last.mMax) - 1e-9,
     };
@@ -72,10 +81,19 @@ export async function POST(req: NextRequest) {
   const act = body.action ?? "";
 
   if (act === "start_game") {
-    const bet = Number(body.bet);
-    if (!bet || bet < ACCEL_CONFIG.BET_MIN_USD) {
+    const bet = roundEurPivot(Number(body.bet));
+    const [u] = await db
+      .select({ currency: appUser.currency })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .limit(1);
+    const userCurrency = getCurrencyConfig(u?.currency);
+    const minBetEur = localToEur(userCurrency.minMiniGameLocal, userCurrency.code);
+    if (!bet || bet < minBetEur - 1e-4) {
       return json(
-        { message: `Mise minimale : ${ACCEL_CONFIG.BET_MIN_USD} ${ACCEL_CONFIG.CURRENCY_SYMBOL}` },
+        {
+          message: `Mise minimale : ${formatLocalAmount(userCurrency.minMiniGameLocal, userCurrency.code)}`,
+        },
         400
       );
     }

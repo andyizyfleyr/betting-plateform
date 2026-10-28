@@ -4,12 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { Building2, Check, CreditCard, Loader2, Lock, Smartphone, Wallet, X } from "lucide-react";
 import { ApiRequestError, api, type PaymentProvider } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatPresetChip,
+  localToEur,
+} from "@/lib/countries";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
 import { cn, eur } from "@/lib/format";
-
-const QUICK = [10, 25, 50, 100, 250];
 
 type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
 
@@ -23,10 +26,18 @@ export function RechargeModal({ open, onClose }: Props) {
 }
 
 function RechargeSheet({ onClose }: { onClose: () => void }) {
-  const { toast, balance, user, bumpBets } = useApp();
+  const { toast, balance, user, bumpBets, countryConfig, currency, currencyConfig } =
+    useApp();
   const dragControls = useDragControls();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
-  const [amountText, setAmountText] = useState("25");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [amountText, setAmountText] = useState(() =>
+    String(currencyConfig.defaultDepositLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setAmountText(String(currencyConfig.defaultDepositLocal));
+  }
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
   const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,10 +65,26 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
   }, []);
 
   const parsed = Number(amountText.replace(",", "."));
-  const amount = Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0;
-  const validAmount = amount >= 5 && amount <= 2000;
-
+  const localAmount =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const amount = localToEur(localAmount, currency);
   const isManual = method === "mobile_money" || method === "sepa";
+  const effectiveMinLocal = isManual
+    ? currencyConfig.minDepositLocal
+    : Math.max(
+        currencyConfig.minDepositLocal,
+        currencyConfig.decimals === 0
+          ? Math.ceil(0.5 * currencyConfig.rateFromEur)
+          : Math.ceil(0.5 * currencyConfig.rateFromEur * 100) / 100
+      );
+  const validAmount =
+    localAmount >= effectiveMinLocal &&
+    localAmount <= currencyConfig.maxDepositLocal;
+
   const onlineProvider =
     method === "stripe" || method === "paypal"
       ? providers.find((p) => p.id === method)
@@ -102,7 +129,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
       }
       const r = await api.payments.create(method, amount, idempotencyKey);
       idempotencySlotRef.current = null;
-      window.location.href = r.url;
+      window.location.assign(r.url);
     } catch (e) {
       if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
         idempotencySlotRef.current = null;
@@ -189,7 +216,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
 
             <div className="mt-3.5">
               <label htmlFor="recharge-amount" className="text-[10.5px] font-medium text-mist">
-                Montant du dépôt (5 € à 2 000 €)
+                Montant du dépôt ({formatLocalAmount(effectiveMinLocal, currency)} à{" "}
+                {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
               </label>
               <div
                 className={cn(
@@ -200,29 +228,31 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                 <input
                   id="recharge-amount"
                   type="text"
-                  inputMode="decimal"
+                  inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value.replace(/[^0-9.,]/g, ""))}
                   className="w-full bg-transparent font-display text-[14.5px] font-medium tabular-nums text-ink outline-none"
                   aria-label="Montant à recharger"
                 />
-                <span className="font-display text-[13.5px] font-medium text-dim">€</span>
+                <span className="shrink-0 font-display text-[12px] font-medium text-dim">
+                  {currencyConfig.symbol}
+                </span>
               </div>
 
               <div className="mt-2 grid grid-cols-5 gap-1.5">
-                {QUICK.map((q) => (
+                {currencyConfig.depositPresetsLocal.map((q) => (
                   <button
                     key={q}
                     type="button"
                     onClick={() => setAmountText(String(q))}
                     className={cn(
-                      "h-8 rounded-xl border font-display text-[10.5px] font-medium transition-colors active:scale-95",
-                      amount === q
+                      "h-8 rounded-xl border px-1 font-display text-[9.5px] font-medium transition-colors active:scale-95",
+                      localAmount === q
                         ? "border-ink bg-ink text-white"
                         : "border-edge bg-elev text-ink"
                     )}
                   >
-                    {q} €
+                    <span className="block truncate">{formatPresetChip(q, currency)}</span>
                   </button>
                 ))}
               </div>
@@ -233,7 +263,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
               <div className="mt-1.5 grid grid-cols-2 gap-2">
                 <MethodCard
                   label="Mobile Money"
-                  sub="MTN · Moov · Orange"
+                  sub={countryConfig.mobileMoneyHint || "Transfert mobile instantané"}
                   badge="Actif"
                   Icon={Smartphone}
                   enabled
@@ -244,7 +274,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   }}
                 />
                 <MethodCard
-                  label="Virement SEPA"
+                  label="Virement bancaire"
                   sub="IBAN / Réf. bancaire"
                   badge="Actif"
                   Icon={Building2}
@@ -302,7 +332,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   }}
                   placeholder={
                     method === "mobile_money"
-                      ? "Ex : MTN +229 01 97 00 00 00 · Réf 8492"
+                      ? `Ex : ${countryConfig.mobileMoneyHint || "Mobile Money"} · Réf 8492`
                       : "Ex : Virement Alex Martin · Réf PULSE-25"
                   }
                   className="mt-1.5 h-11 w-full rounded-2xl border border-edge bg-white px-3.5 text-[12px] font-medium text-ink outline-none focus:border-ink"

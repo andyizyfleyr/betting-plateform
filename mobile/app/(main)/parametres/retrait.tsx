@@ -21,27 +21,32 @@ import {
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  formatPresetChip,
+  localToEur,
+  maxSpendableLocalFromEur,
+} from "@/lib/countries";
 import { getCachedWallet } from "@/lib/entity-cache";
 import { eur } from "@/lib/format";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 
-const QUICK_AMOUNTS = [20, 50, 100, 250];
-
 const METHODS = [
   {
     id: "mobile_money" as const,
     label: "Mobile Money",
-    placeholder: "MTN / Moov / Orange · +229 01 …",
+    placeholder: "Opérateur + numéro Mobile Money",
     hint: "Opérateur + numéro Mobile Money",
     Icon: Smartphone,
   },
   {
     id: "iban" as const,
-    label: "Virement SEPA",
+    label: "Virement bancaire",
     placeholder: "FR76 3000 6000 0112 3456 7890 189",
-    hint: "IBAN européen",
+    hint: "IBAN / compte bancaire",
     Icon: Building2,
   },
   {
@@ -71,12 +76,22 @@ export default function WithdrawScreen() {
     user,
     bumpBets,
     hapticsEnabled,
+    countryConfig,
+    currency,
+    currencyConfig,
   } = useApp();
 
   const [method, setMethod] =
     useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
-  const [amountText, setAmountText] = useState("20");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [amountText, setAmountText] = useState(() =>
+    String(currencyConfig.defaultWithdrawalLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setAmountText(String(currencyConfig.defaultWithdrawalLocal));
+  }
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,15 +167,25 @@ export default function WithdrawScreen() {
       : 100;
 
   const currentMethod = METHODS.find((m) => m.id === method) ?? METHODS[0];
+  const methodPlaceholder =
+    currentMethod.id === "mobile_money"
+      ? `${countryConfig.mobileMoneyHint || "Mobile Money"} · numéro de compte`
+      : currentMethod.placeholder;
   const parsed = Number(amountText.replace(",", "."));
-  const amount =
-    Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overWithdrawable = amount > withdrawable;
-  const belowMin = amount > 0 && amount < 10;
+  const localAmount =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const amount = localToEur(localAmount, currency, withdrawable);
+  const overWithdrawable = amount > withdrawable + 1e-5;
+  const belowMin =
+    localAmount > 0 && localAmount < currencyConfig.minWithdrawalLocal;
 
   const canSubmit =
     !loading &&
-    amount >= 10 &&
+    localAmount >= currencyConfig.minWithdrawalLocal &&
     !overWithdrawable &&
     destination.trim().length >= 4;
 
@@ -301,45 +326,72 @@ export default function WithdrawScreen() {
             <View style={[styles.card, { gap: 10 }]}>
               <View>
                 <Text style={styles.fieldCaps}>
-                  MONTANT DU RETRAIT (MIN. 10 €)
+                  MONTANT DU RETRAIT (MIN.{" "}
+                  {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)})
                 </Text>
                 <View style={styles.amountInputWrap}>
                   <TextInput
                     value={amountText}
                     onChangeText={setAmountText}
-                    keyboardType="decimal-pad"
-                    placeholder="20"
+                    keyboardType={
+                      currencyConfig.decimals === 0
+                        ? "number-pad"
+                        : "decimal-pad"
+                    }
+                    placeholder={String(currencyConfig.defaultWithdrawalLocal)}
                     placeholderTextColor={COLORS.dim}
                     style={styles.amountInput}
                   />
-                  <Text style={styles.euroSymbol}>€</Text>
+                  <Text style={styles.euroSymbol}>{currencyConfig.symbol}</Text>
                 </View>
 
                 <View style={styles.quickGrid}>
-                  {QUICK_AMOUNTS.map((q) => (
+                  {currencyConfig.withdrawalPresetsLocal.map((q) => (
                     <Pressable
                       key={q}
                       onPress={() => setAmountText(String(q))}
                       style={[
                         styles.quickChip,
-                        amount === q && styles.quickChipActive,
+                        localAmount === q && styles.quickChipActive,
                       ]}
                     >
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.quickChipText,
-                          amount === q && { color: "#ffffff" },
+                          localAmount === q && { color: "#ffffff" },
                         ]}
                       >
-                        {q} €
+                        {formatPresetChip(q, currency)}
                       </Text>
                     </Pressable>
                   ))}
+                  <Pressable
+                    onPress={() => {
+                      const maxLoc = maxSpendableLocalFromEur(
+                        withdrawable,
+                        currency
+                      );
+                      setAmountText(
+                        maxLoc > 0
+                          ? formatLocalInputString(maxLoc, currency, ".")
+                          : "0"
+                      );
+                    }}
+                    style={styles.quickChip}
+                  >
+                    <Text
+                      style={[styles.quickChipText, { color: COLORS.betclicRed }]}
+                    >
+                      MAX
+                    </Text>
+                  </Pressable>
                 </View>
 
                 {belowMin ? (
                   <Text style={styles.inlineWarn}>
-                    Minimum de retrait : 10,00 €.
+                    Minimum de retrait :{" "}
+                    {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}.
                   </Text>
                 ) : null}
                 {overWithdrawable ? (
@@ -384,7 +436,7 @@ export default function WithdrawScreen() {
                 <TextInput
                   value={destination}
                   onChangeText={setDestination}
-                  placeholder={currentMethod.placeholder}
+                  placeholder={methodPlaceholder}
                   placeholderTextColor={COLORS.dim}
                   style={styles.destInput}
                 />
@@ -419,7 +471,10 @@ export default function WithdrawScreen() {
                         !canSubmit && { color: COLORS.dim },
                       ]}
                     >
-                      Retirer {amount >= 10 ? eur(amount) : ""}
+                      Retirer{" "}
+                      {localAmount >= currencyConfig.minWithdrawalLocal
+                        ? eur(amount)
+                        : ""}
                     </Text>
                   </>
                 )}
