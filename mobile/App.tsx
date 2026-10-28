@@ -17,6 +17,7 @@ import {
 } from "@/lib/query-client";
 import { RouterProvider, usePathname } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
+import { InAppBrowserSheet } from "@/components/in-app-browser-sheet";
 import { ToastHost } from "@/components/toast-host";
 
 import IndexRedirect from "./app/index";
@@ -65,6 +66,7 @@ function ActiveScreenSwitch() {
       <View style={styles.authRoot}>
         <StatusBar style="dark" backgroundColor={COLORS.deep} />
         <AuthScreen />
+        <InAppBrowserSheet />
         <ToastHost />
       </View>
     );

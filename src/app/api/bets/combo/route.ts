@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
     recentRows.map((b) => ({
       odds: b.odds,
       stake: b.stake,
-      payout: b.status === "won" ? Math.round(b.stake * b.odds * 100) / 100 : 0,
+      payout: b.status === "won" ? roundEurPivot(b.stake * b.odds) : 0,
       closingOdds: b.closingOdds ?? null,
     }))
   );
@@ -482,7 +482,7 @@ export async function POST(req: NextRequest) {
         });
       if (
         !sameLegs ||
-        Math.round(concurrentExisting.stake * 100) !== Math.round(roundedStake * 100)
+        Math.abs(concurrentExisting.stake - roundedStake) > 1e-5
       ) {
         return { kind: "idempotency_conflict" };
       }
@@ -885,8 +885,7 @@ export async function POST(req: NextRequest) {
 
   if (!txResult.deduplicated) {
     if (txResult.predQuestionIds.length > 0) {
-      const share =
-        Math.round((roundedStake / Math.max(1, rawLegs.length)) * 100) / 100;
+      const share = roundEurPivot(roundedStake / Math.max(1, rawLegs.length));
       await db
         .update(predictionQuestions)
         .set({ volume: sql`${predictionQuestions.volume} + ${share}` })

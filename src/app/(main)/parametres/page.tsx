@@ -81,7 +81,7 @@ export default function ParametresPage() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [betsVersion, user?.balance, user?.id]);
+  }, [betsVersion, user?.id]);
 
   // Retour de paiement (Stripe/PayPal) via les params d'URL.
   useEffect(() => {
@@ -317,7 +317,8 @@ export default function ParametresPage() {
                   />
                   {wallet &&
                     wallet.summary.withdrawable != null &&
-                    wallet.summary.withdrawable < (user?.balance ?? 0) && (
+                    (wallet.summary.bonusRemaining ?? 0) > 1e-4 &&
+                    wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && (
                       <p className="mt-1 text-[10px] font-medium text-mist">
                         Retirable :{" "}
                         <strong className="font-medium text-win">

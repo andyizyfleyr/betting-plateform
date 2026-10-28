@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { appUser } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
 import {
+  eurToLocal,
   formatLocalAmount,
   getCurrencyConfig,
   localToEur,
@@ -86,10 +87,18 @@ export async function POST(req: NextRequest) {
     }
 
     const paypalChargeEur = Math.max(0.5, Math.round(amount * 100) / 100);
+    const PAYPAL_NATIVE_CURRENCIES = new Set([
+      "EUR",
+      "USD",
+      "CAD",
+      "GBP",
+      "CHF",
+    ]);
 
     const requestHash = computeIdempotencyHash({
       provider: "paypal",
       amount,
+      userCurrency: userCurrency.code,
     });
 
     const claim = await claimExternalIdempotency({
@@ -109,13 +118,37 @@ export async function POST(req: NextRequest) {
 
     let order: { id: string; approveUrl: string | null };
     try {
-      order = await createPayPalOrder({
-        amount: paypalChargeEur.toFixed(2),
-        currency: "EUR",
-        returnUrl: `${origin}/parametres?deposit=paypal`,
-        cancelUrl: `${origin}/parametres?deposit=cancelled`,
-        idempotencyKey: gatewayKey,
-      });
+      if (
+        userCurrency.code !== "EUR" &&
+        PAYPAL_NATIVE_CURRENCIES.has(userCurrency.code)
+      ) {
+        const localAmount = Math.max(0.5, eurToLocal(amount, userCurrency.code));
+        try {
+          order = await createPayPalOrder({
+            amount: localAmount.toFixed(2),
+            currency: userCurrency.code,
+            returnUrl: `${origin}/parametres?deposit=paypal`,
+            cancelUrl: `${origin}/parametres?deposit=cancelled`,
+            idempotencyKey: gatewayKey,
+          });
+        } catch {
+          order = await createPayPalOrder({
+            amount: paypalChargeEur.toFixed(2),
+            currency: "EUR",
+            returnUrl: `${origin}/parametres?deposit=paypal`,
+            cancelUrl: `${origin}/parametres?deposit=cancelled`,
+            idempotencyKey: `${gatewayKey}_eur`.slice(0, 108),
+          });
+        }
+      } else {
+        order = await createPayPalOrder({
+          amount: paypalChargeEur.toFixed(2),
+          currency: "EUR",
+          returnUrl: `${origin}/parametres?deposit=paypal`,
+          cancelUrl: `${origin}/parametres?deposit=cancelled`,
+          idempotencyKey: gatewayKey,
+        });
+      }
     } catch {
       await releaseExternalIdempotencyClaim({
         userId: uid,
@@ -157,11 +190,11 @@ export async function POST(req: NextRequest) {
         idempotencyKey,
         requestHash,
         statusCode: 200,
-        responseBody: { url: order.approveUrl },
+        responseBody: { url: order.approveUrl, providerRef: order.id },
       });
     });
 
-    return NextResponse.json({ url: order.approveUrl });
+    return NextResponse.json({ url: order.approveUrl, providerRef: order.id });
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/payments/paypal");
   }

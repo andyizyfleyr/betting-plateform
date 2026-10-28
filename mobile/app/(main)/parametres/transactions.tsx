@@ -1,6 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
+  InteractionManager,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,8 +29,15 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { useApp } from "@/context/app-context";
-import { api, type ClientWalletData } from "@/lib/api";
-import { getCachedWallet } from "@/lib/entity-cache";
+import {
+  api,
+  type ClientWalletData,
+  type ClientWalletEntry,
+} from "@/lib/api";
+import {
+  getCachedWallet,
+  getCachedWalletUpdatedAt,
+} from "@/lib/entity-cache";
 import { eur, formatPlacedAt } from "@/lib/format";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
@@ -30,10 +45,90 @@ import { COLORS } from "@/theme/tokens";
 
 type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits";
 
+function walletTxSignature(w: ClientWalletData | null): string {
+  if (!w) return "";
+  const first = w.entries[0];
+  return [
+    w.balance.toFixed(6),
+    w.entries.length,
+    first ? `${first.id}:${first.status}:${first.amount.toFixed(6)}` : "",
+  ].join("|");
+}
+
+const TransactionRow = memo(function TransactionRow({
+  item,
+  cancelling,
+  onCancel,
+}: {
+  item: ClientWalletEntry;
+  cancelling: boolean;
+  onCancel: (rawId: number) => void;
+}) {
+  const positive = item.amount >= 0;
+  const canCancel = Boolean(
+    item.type === "withdrawal" && item.canCancel && item.rawId != null
+  );
+
+  return (
+    <View style={styles.txRow}>
+      <View style={styles.txLeft}>
+        <View
+          style={[
+            styles.txIconCircle,
+            positive ? styles.txIconPos : styles.txIconNeg,
+          ]}
+        >
+          {positive ? (
+            <ArrowDownLeft size={14} color={COLORS.win} strokeWidth={2.3} />
+          ) : (
+            <ArrowUpRight size={14} color={COLORS.mist} strokeWidth={2.3} />
+          )}
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={styles.txTitle}>
+            {item.title}
+          </Text>
+          <Text numberOfLines={1} style={styles.txSub}>
+            {item.subtitle} · {formatPlacedAt(item.createdAt)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.txRight}>
+        <Text style={[styles.txAmount, positive && { color: COLORS.win }]}>
+          {positive ? `+${eur(item.amount)}` : `-${eur(Math.abs(item.amount))}`}
+        </Text>
+        {canCancel ? (
+          <Pressable
+            disabled={cancelling}
+            onPress={() => item.rawId != null && onCancel(item.rawId)}
+            style={styles.cancelBtn}
+          >
+            {cancelling ? (
+              <ActivityIndicator size="small" color={COLORS.ink} />
+            ) : (
+              <X size={12} color={COLORS.betclicRed} strokeWidth={2.4} />
+            )}
+            <Text style={styles.cancelBtnText}>Annuler</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+});
+
 export default function TransactionsScreen() {
   const router = useRouter();
   const { authReady, sessionRestoring, user, setBalance, toast, betsVersion } =
     useApp();
+
+  const userId = user?.id ?? null;
+  const userBalance = user?.balance ?? 0;
+  const userBalanceRef = useRef(userBalance);
+  useEffect(() => {
+    userBalanceRef.current = userBalance;
+  }, [userBalance]);
 
   const [wallet, setWallet] = useState<ClientWalletData | null>(() =>
     getCachedWallet()
@@ -47,24 +142,46 @@ export default function TransactionsScreen() {
 
   const load = useCallback(
     async (forceRefresh = false) => {
-      if (!user && !sessionRestoring) return;
+      if (userId == null && !sessionRestoring) return;
       try {
         const w = await api.wallet({ forceRefresh });
-        setWallet(w);
-        if (typeof w.balance === "number") setBalance(w.balance);
+        setWallet((prev) =>
+          walletTxSignature(prev) === walletTxSignature(w) ? prev : w
+        );
+        if (
+          typeof w.balance === "number" &&
+          Math.abs(userBalanceRef.current - w.balance) > 1e-5
+        ) {
+          setBalance(w.balance);
+        }
       } catch {
         /* silencieux */
       }
     },
-    [sessionRestoring, setBalance, user]
+    [sessionRestoring, setBalance, userId]
   );
 
   useEffect(() => {
-    void load(false);
-    if (!user && !sessionRestoring) return;
-    const id = setInterval(() => void load(false), 6_000);
-    return () => clearInterval(id);
-  }, [load, betsVersion, sessionRestoring, user]);
+    if (userId == null && !sessionRestoring) return;
+    const cached = getCachedWallet();
+    const freshEnough =
+      cached !== null && Date.now() - getCachedWalletUpdatedAt() < 4_500;
+
+    let interactionTask: ReturnType<
+      typeof InteractionManager.runAfterInteractions
+    > | null = null;
+    if (!freshEnough) {
+      interactionTask = InteractionManager.runAfterInteractions(() => {
+        void load(false);
+      });
+    }
+
+    const id = setInterval(() => void load(false), 8_000);
+    return () => {
+      interactionTask?.cancel();
+      clearInterval(id);
+    };
+  }, [load, betsVersion, sessionRestoring, userId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -72,36 +189,40 @@ export default function TransactionsScreen() {
     setRefreshing(false);
   }, [load]);
 
-  const cancelWithdrawal = async (withdrawalId: number) => {
-    if (cancellingId != null || cancelInFlightRef.current) return;
-    cancelInFlightRef.current = true;
-    const idemKey =
-      cancelSlotRef.current.get(withdrawalId) ??
-      createIdempotencyKey("wdcancel");
-    cancelSlotRef.current.set(withdrawalId, idemKey);
-    setCancellingId(withdrawalId);
-    try {
-      const res = await api.cancelWithdrawal(withdrawalId, idemKey);
-      cancelSlotRef.current.delete(withdrawalId);
-      setBalance(res.balance);
-      void load();
-      toast({ kind: "success", title: "Retrait annulé et recrédité" });
-    } catch (e) {
-      toast({
-        kind: "error",
-        title: "Annulation impossible",
-        description: e instanceof Error ? e.message : undefined,
-      });
-    } finally {
-      cancelInFlightRef.current = false;
-      setCancellingId(null);
-    }
-  };
+  const cancelWithdrawal = useCallback(
+    async (withdrawalId: number) => {
+      if (cancellingId != null || cancelInFlightRef.current) return;
+      cancelInFlightRef.current = true;
+      const idemKey =
+        cancelSlotRef.current.get(withdrawalId) ??
+        createIdempotencyKey("wdcancel");
+      cancelSlotRef.current.set(withdrawalId, idemKey);
+      setCancellingId(withdrawalId);
+      try {
+        const res = await api.cancelWithdrawal(withdrawalId, idemKey);
+        cancelSlotRef.current.delete(withdrawalId);
+        setBalance(res.balance);
+        void load(true);
+        toast({ kind: "success", title: "Retrait annulé et recrédité" });
+      } catch (e) {
+        toast({
+          kind: "error",
+          title: "Annulation impossible",
+          description: e instanceof Error ? e.message : undefined,
+        });
+      } finally {
+        cancelInFlightRef.current = false;
+        setCancellingId(null);
+      }
+    },
+    [cancellingId, load, setBalance, toast]
+  );
 
   const filteredTx = useMemo(() => {
-    const list = [...(wallet?.entries ?? [])].sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    const src = wallet?.entries;
+    if (!src || src.length === 0) return [];
+    const list = [...src].sort((a, b) =>
+      a.createdAt === b.createdAt ? 0 : a.createdAt < b.createdAt ? 1 : -1
     );
     if (kindFilter === "credits") return list.filter((t) => t.amount > 0);
     if (kindFilter === "debits") return list.filter((t) => t.amount < 0);
@@ -152,6 +273,7 @@ export default function TransactionsScreen() {
       contentContainerStyle={styles.content}
       stickyHeaderIndices={[1]}
       showsVerticalScrollIndicator={false}
+      overScrollMode="never"
       onScroll={onScrollCheck}
       scrollEventThrottle={16}
       refreshControl={
@@ -220,81 +342,14 @@ export default function TransactionsScreen() {
         </View>
       ) : (
         <View style={{ gap: 6 }}>
-          {visibleTx.map((t) => {
-            const positive = t.amount >= 0;
-            const canCancel = Boolean(
-              t.type === "withdrawal" && t.canCancel && t.rawId != null
-            );
-
-            return (
-              <View key={t.id} style={styles.txRow}>
-                <View style={styles.txLeft}>
-                  <View
-                    style={[
-                      styles.txIconCircle,
-                      positive ? styles.txIconPos : styles.txIconNeg,
-                    ]}
-                  >
-                    {positive ? (
-                      <ArrowDownLeft
-                        size={14}
-                        color={COLORS.win}
-                        strokeWidth={2.3}
-                      />
-                    ) : (
-                      <ArrowUpRight
-                        size={14}
-                        color={COLORS.mist}
-                        strokeWidth={2.3}
-                      />
-                    )}
-                  </View>
-
-                  <View style={{ flex: 1 }}>
-                    <Text numberOfLines={1} style={styles.txTitle}>
-                      {t.title}
-                    </Text>
-                    <Text numberOfLines={1} style={styles.txSub}>
-                      {t.subtitle} · {formatPlacedAt(t.createdAt)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.txRight}>
-                  <Text
-                    style={[
-                      styles.txAmount,
-                      positive && { color: COLORS.win },
-                    ]}
-                  >
-                    {positive
-                      ? `+${eur(t.amount)}`
-                      : `-${eur(Math.abs(t.amount))}`}
-                  </Text>
-                  {canCancel ? (
-                    <Pressable
-                      disabled={cancellingId === t.rawId}
-                      onPress={() =>
-                        t.rawId != null && cancelWithdrawal(t.rawId)
-                      }
-                      style={styles.cancelBtn}
-                    >
-                      {cancellingId === t.rawId ? (
-                        <ActivityIndicator size="small" color={COLORS.ink} />
-                      ) : (
-                        <X
-                          size={12}
-                          color={COLORS.betclicRed}
-                          strokeWidth={2.4}
-                        />
-                      )}
-                      <Text style={styles.cancelBtnText}>Annuler</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            );
-          })}
+          {visibleTx.map((t) => (
+            <TransactionRow
+              key={t.id}
+              item={t}
+              cancelling={cancellingId === t.rawId}
+              onCancel={cancelWithdrawal}
+            />
+          ))}
           <InfiniteScrollLoader hasMore={hasMore} />
         </View>
       )}

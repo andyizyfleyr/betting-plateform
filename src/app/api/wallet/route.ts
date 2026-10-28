@@ -12,6 +12,7 @@ import {
   withdrawals,
 } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import { roundEurPivot } from "@/lib/countries";
 import { isKnownMarket, marketLabelFor } from "@/lib/markets";
 import { jsonWithEtag } from "@/lib/response-cache";
 import { requireUserId } from "@/lib/session";
@@ -33,7 +34,7 @@ export interface WalletLedgerEntry {
 }
 
 function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  return roundEurPivot(n);
 }
 
 const METHOD_LABELS: Record<string, string> = {
@@ -345,7 +346,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  entries.sort((a, b) =>
+    a.createdAt === b.createdAt ? 0 : a.createdAt < b.createdAt ? 1 : -1
+  );
 
   const totalDeposited = round2(
     depRows
