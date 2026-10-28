@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { BarChart3, ChevronDown, Lock, Radio, X } from "lucide-react";
-import { api, type ClientMatch, type MarketGroup, type MarketOutcome } from "@/lib/api";
-import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
+import type { ClientMatch, MarketGroup, MarketOutcome } from "@/lib/api";
+import { useMatchDetailQuery } from "@/lib/party-realtime";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
 import type { ComboSelection } from "./combo-slip";
 import {
@@ -19,8 +19,6 @@ import { LiveMatchTracker } from "./live-match-tracker";
 import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { formatGoalSummary, LiveStatusBadge } from "./match-card";
 import { cn, formatOdds } from "@/lib/format";
-
-const POLL_INTERVAL = 4_000;
 
 export type SheetCategory = "all" | "main" | "halftime" | "goals" | "teams" | "scores";
 
@@ -113,7 +111,6 @@ export function MarketSheet() {
   const [category, setCategory] = useState<SheetCategory>("all");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
-  const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
   const [showTracker, setShowTracker] = useState(false);
 
   const sharedFromFeed = useMemo(
@@ -124,55 +121,25 @@ export function MarketSheet() {
     [marketMatch, feedMatches]
   );
 
-  const sharedHasFullData = useMemo(() => {
-    if (!sharedFromFeed) return false;
-    if (sharedFromFeed.status === "finished") return true;
-    const expectedCount = sharedFromFeed.marketCount ?? 0;
-    const actualCount = sharedFromFeed.markets?.length ?? 0;
-    if (expectedCount > 1 && actualCount <= 1) return false;
-    if (actualCount <= 1) return false;
-    if (
-      sharedFromFeed.status === "live" &&
-      sharedFromFeed.source !== "manual" &&
-      !sharedFromFeed.telemetry
-    ) {
-      return false;
-    }
-    return true;
-  }, [sharedFromFeed]);
+  const detailQuery = useMatchDetailQuery(marketMatch?.id ?? 0, {
+    enabled: Boolean(marketMatch),
+    initialMatch:
+      marketMatch &&
+      (marketMatch.status === "finished" ||
+        (marketMatch.markets?.length ?? 0) > 1)
+        ? marketMatch
+        : null,
+    isFinished:
+      marketMatch?.status === "finished" ||
+      sharedFromFeed?.status === "finished",
+  });
 
   const match = useMemo(() => {
     if (!marketMatch) return null;
-    if (sharedHasFullData && sharedFromFeed) return sharedFromFeed;
-    const detailCandidate =
-      liveMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
-    if (sharedFromFeed && detailCandidate) {
-      return mergeSingleSlimIntoFullMatch(detailCandidate, sharedFromFeed);
-    }
-    return detailCandidate;
-  }, [liveMatch, marketMatch, sharedFromFeed, sharedHasFullData]);
-
-  // Lance un polling autonome tant que le flux partagé ne contient pas les 18–19 marchés complets
-  useEffect(() => {
-    if (!marketMatch || sharedHasFullData) return;
-    let active = true;
-    const poll = async () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      try {
-        const r = await api.matchById(marketMatch.id);
-        if (!active) return;
-        if (r.match) setLiveMatch(r.match);
-      } catch {
-        /* silencieux */
-      }
-    };
-    void poll();
-    const id = setInterval(() => void poll(), POLL_INTERVAL);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [marketMatch, sharedHasFullData]);
+    const fetched = detailQuery.data?.match;
+    if (fetched && fetched.id === marketMatch.id) return fetched;
+    return sharedFromFeed ?? marketMatch;
+  }, [detailQuery.data?.match, marketMatch, sharedFromFeed]);
 
   const hasAnyOpen = Object.keys(openMap).length > 0;
   if (match && match.id !== prevMatchId) {

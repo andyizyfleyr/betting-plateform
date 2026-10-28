@@ -10,6 +10,8 @@ import { waitUntil } from "@vercel/functions";
  */
 
 export const PARTY_LIVE_MATCHES_ROOM = "live-matches";
+const DEFAULT_PRODUCTION_PARTYKIT_HOST = "pulse-bet.matiasanauld.workers.dev";
+const DEFAULT_PARTYKIT_DEV_SECRET = "pulse-bet-dev-partykit-secret";
 const USER_TOKEN_TTL_MS = 12 * 3600_000;
 const PUBLISH_COALESCE_MS = 100;
 
@@ -31,20 +33,24 @@ function isLocalPartyHost(host: string): boolean {
 }
 
 export function getPartyKitConfig(): PartyKitConfig {
-  const rawHost = (
+  const explicitHost = (
     process.env.PARTYKIT_HOST ??
     process.env.NEXT_PUBLIC_PARTYKIT_HOST ??
     ""
-  )
-    .trim()
+  ).trim();
+  const fallbackHost =
+    process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL)
+      ? DEFAULT_PRODUCTION_PARTYKIT_HOST
+      : "";
+  const rawHost = (explicitHost || fallbackHost)
     .replace(/^https?:\/\//i, "")
     .replace(/^wss?:\/\//i, "")
     .replace(/\/+$/, "");
 
+  // Doit correspondre exactement au secret du Worker Cloudflare (`party/index.ts`) :
+  // n'utilise jamais JWT_SECRET en repli implicite car Cloudflare ne possède pas JWT_SECRET.
   const secret =
-    process.env.PARTYKIT_SECRET?.trim() ||
-    process.env.JWT_SECRET?.trim() ||
-    "pulse-bet-dev-partykit-secret";
+    process.env.PARTYKIT_SECRET?.trim() || DEFAULT_PARTYKIT_DEV_SECRET;
 
   if (!rawHost) {
     return {
@@ -76,12 +82,26 @@ export function signPartyUserToken(userId: number, nowMs = Date.now()): string {
 
 export function verifyPartyBearerHeader(authHeader: string | null): boolean {
   if (!authHeader) return false;
-  const { secret } = getPartyKitConfig();
-  const expected = `Bearer ${secret}`;
+  const candidates = new Set<string>();
+  const explicitSecret = process.env.PARTYKIT_SECRET?.trim();
+  if (explicitSecret) {
+    candidates.add(`Bearer ${explicitSecret}`);
+  } else {
+    candidates.add(`Bearer ${DEFAULT_PARTYKIT_DEV_SECRET}`);
+  }
+  const jwtSecret = process.env.JWT_SECRET?.trim();
+  if (jwtSecret) {
+    candidates.add(`Bearer ${jwtSecret}`);
+  }
   const a = Buffer.from(authHeader);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  let matched = false;
+  for (const expected of candidates) {
+    const b = Buffer.from(expected);
+    if (a.length === b.length && timingSafeEqual(a, b)) {
+      matched = true;
+    }
+  }
+  return matched;
 }
 
 export type PartyServerEvent =

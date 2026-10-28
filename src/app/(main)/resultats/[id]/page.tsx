@@ -69,7 +69,13 @@ export default function ResultDetailPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchResult();
-  }, [fetchResult]);
+    if (item?.status === "finished") return;
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void fetchResult();
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [fetchResult, item?.status]);
 
   const cleanEvents = useMemo(
     () => (item ? sanitizeMatchEvents(item.events) : []),

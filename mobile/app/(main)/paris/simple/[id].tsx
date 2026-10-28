@@ -35,8 +35,8 @@ import { createIdempotencyKey } from "@/lib/http";
 import { useParams, useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 
-const POLL_LIVE_MS = 4_000;
-const POLL_IDLE_MS = 15_000;
+const POLL_LIVE_MS = 3_500;
+const POLL_IDLE_MS = 6_000;
 
 function parseSimpleParam(
   raw: string

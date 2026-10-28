@@ -70,7 +70,10 @@ export default function ParametresScreen() {
 
   useEffect(() => {
     void loadWallet();
-  }, [loadWallet, betsVersion]);
+    if (!user) return;
+    const id = setInterval(() => void loadWallet(), 8_000);
+    return () => clearInterval(id);
+  }, [loadWallet, betsVersion, user]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

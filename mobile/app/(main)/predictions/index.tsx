@@ -120,8 +120,9 @@ export default function PredictionsScreen() {
     queryKey: [...mobileQueryKeys.myPredictionBets(user?.id), betsVersion],
     queryFn: () => api.predictionsMine(),
     enabled: Boolean(user),
-    staleTime: 5_000,
-    refetchInterval: false,
+    staleTime: 3_000,
+    refetchInterval: user ? (dataSaverMode ? 20_000 : 10_000) : false,
+    refetchIntervalInBackground: false,
   });
 
   const myBetsMap = useMemo(

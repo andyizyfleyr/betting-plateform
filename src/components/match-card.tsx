@@ -257,6 +257,12 @@ function areMatchCardPropsEqual(
   const a = prev.match;
   const b = next.match;
   if (a === b) return true;
+  const aResultCount =
+    a.markets?.find((g) => g.key === "result" || g.key === "1x2")?.outcomes.length ?? -1;
+  const bResultCount =
+    b.markets?.find((g) => g.key === "result" || g.key === "1x2")?.outcomes.length ?? -1;
+  const aLastEv = a.events && a.events.length > 0 ? a.events[a.events.length - 1] : null;
+  const bLastEv = b.events && b.events.length > 0 ? b.events[b.events.length - 1] : null;
   return (
     a.id === b.id &&
     a.status === b.status &&
@@ -275,10 +281,17 @@ function areMatchCardPropsEqual(
     a.awayTeam === b.awayTeam &&
     a.homeLogo === b.homeLogo &&
     a.awayLogo === b.awayLogo &&
+    aResultCount === bResultCount &&
+    a.clockAnchor?.anchorSeconds === b.clockAnchor?.anchorSeconds &&
+    a.clockAnchor?.syncedAtMs === b.clockAnchor?.syncedAtMs &&
+    a.clockAnchor?.phase === b.clockAnchor?.phase &&
     (a.marketCount ?? a.markets?.length ?? 0) ===
       (b.marketCount ?? b.markets?.length ?? 0) &&
     (a.markets?.length ?? 0) === (b.markets?.length ?? 0) &&
     (a.events?.length ?? 0) === (b.events?.length ?? 0) &&
+    aLastEv?.minute === bLastEv?.minute &&
+    aLastEv?.type === bLastEv?.type &&
+    aLastEv?.player === bLastEv?.player &&
     Boolean(a.telemetry) === Boolean(b.telemetry) &&
     a.realStats?.updatedAt === b.realStats?.updatedAt
   );

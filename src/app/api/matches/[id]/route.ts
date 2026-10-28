@@ -23,9 +23,9 @@ import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 export const dynamic = "force-dynamic";
 
 const SINGLE_MATCH_ACTIVE_POLICY = {
-  maxAge: 1,
-  sMaxAge: 4,
-  staleWhileRevalidate: 8,
+  maxAge: 0,
+  sMaxAge: 2,
+  staleWhileRevalidate: 2,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 

@@ -153,7 +153,7 @@ function ProvidersRealtimeQueries({
   loggedIn,
   isAuthRoute,
   isAdminMode,
-  isMatchsRoute,
+  isMatchsFeedRoute,
   isParisRoute,
   needsBackgroundMatchFeed,
   hasPending,
@@ -167,7 +167,7 @@ function ProvidersRealtimeQueries({
   loggedIn: boolean;
   isAuthRoute: boolean;
   isAdminMode: boolean;
-  isMatchsRoute: boolean;
+  isMatchsFeedRoute: boolean;
   isParisRoute: boolean;
   needsBackgroundMatchFeed: boolean;
   hasPending: boolean;
@@ -176,10 +176,24 @@ function ProvidersRealtimeQueries({
   setPendingCount: (n: number) => void;
   toast: (t: Omit<Toast, "id">) => void;
 }) {
-  const { wsConnected, userWsConnected } = useRealtimeStatus();
+  const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const bgMatchesIntervalMs = getAdaptiveIntervalMs(15_000, isConstrained);
-  const bgBetsIntervalMs = getAdaptiveIntervalMs(8_000, isConstrained);
+  const bgMatchesIntervalMs = getAdaptiveIntervalMs(4_000, isConstrained);
+  const bgWsFullSyncMs = getAdaptiveIntervalMs(12_000, isConstrained);
+  const bgBetsActiveMs = getAdaptiveIntervalMs(5_000, isConstrained);
+  const bgBetsIdleMs = getAdaptiveIntervalMs(15_000, isConstrained);
+
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1024
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const prevBetStatuses = useRef<Map<string, string> | null>(null);
   const userRef = useRef<ClientUser | null>(user);
@@ -187,12 +201,10 @@ function ProvidersRealtimeQueries({
     userRef.current = user;
   }, [user]);
 
-  const isDesktop =
-    typeof window !== "undefined" && window.innerWidth >= 1024;
   const shouldSyncBgMatches =
     !isAuthRoute &&
     !isAdminMode &&
-    !isMatchsRoute &&
+    !isMatchsFeedRoute &&
     (isDesktop || needsBackgroundMatchFeed) &&
     !isOffline;
 
@@ -200,7 +212,7 @@ function ProvidersRealtimeQueries({
     queryKey: pulseQueryKeys.matches,
     queryFn: () => api.matches(),
     enabled: shouldSyncBgMatches,
-    refetchInterval: wsConnected ? 60_000 : bgMatchesIntervalMs,
+    refetchInterval: wsConnected ? bgWsFullSyncMs : bgMatchesIntervalMs,
     refetchIntervalInBackground: false,
   });
 
@@ -210,16 +222,20 @@ function ProvidersRealtimeQueries({
     }
   }, [bgMatchesQuery.data, setFeedMatches]);
 
-  // Synchronisation TanStack Query du solde & tickets (`/api/pulse`) :
-  // - 0 polling continu lorsque le salon privé PartyKit `user-<id>` est connecté !
-  // - Bascule automatique sur `bgBetsIntervalMs` uniquement s'il y a >= 1 pari en cours et pas de WebSocket.
+  // Synchronisation automatique du solde & des règlements de paris (`/api/pulse`) :
+  // - Même lorsque le WebSocket privé est connecté ou qu'il y a 0 pari en cours, maintient une
+  //   veille légère (5 s si pari en attente, 15 s au repos) afin que les dépôts/retraits validés
+  //   par l'admin ou les mises multi-appareils s'actualisent sans rechargement manuel.
   const pulseQuery = useQuery({
     queryKey: [...pulseQueryKeys.userPulse(user?.id), betsVersion],
     queryFn: () => api.pulse(),
     enabled: loggedIn && !isOffline,
-    staleTime: 2_000,
-    refetchInterval:
-      userWsConnected || !hasPending || isParisRoute ? false : bgBetsIntervalMs,
+    staleTime: 1_500,
+    refetchInterval: isParisRoute
+      ? bgBetsIdleMs
+      : hasPending
+        ? bgBetsActiveMs
+        : bgBetsIdleMs,
     refetchIntervalInBackground: false,
   });
 
@@ -281,7 +297,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<ClientUser | null>(null);
   const [target, setTarget] = useState<BetTarget | null>(null);
   const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
-  const [feedMatches, setFeedMatches] = useState<ClientMatch[] | null>(null);
+  const [feedMatches, setFeedMatchesState] = useState<ClientMatch[] | null>(null);
   const [sportUniverse, setSportUniverse] = useState<SportUniverse | null>(null);
   const [sportLeagueFilter, setSportLeagueFilter] = useState("all");
   const [sportStatusFilter, setSportStatusFilter] = useState<SportStatusFilter>("all");
@@ -366,7 +382,10 @@ function ProvidersInner({ children }: { children: ReactNode }) {
   const isAdminMode = isAdminRoute || user?.role === "admin";
   const loggedIn = user !== null && !isAuthRoute && !isAdminMode;
 
-  const isMatchsRoute = pathname === "/matchs" || pathname.startsWith("/matchs/");
+  const isMatchsFeedRoute =
+    pathname === "/matchs" ||
+    pathname === "/matchs/tous" ||
+    pathname === "/matchs/virtuels";
   const isParisRoute = pathname === "/paris" || pathname.startsWith("/paris/");
   const needsBackgroundMatchFeed =
     comboLegs.length > 0 || comboOpen || marketMatch !== null || target !== null;
@@ -463,6 +482,69 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     },
     [comboLegs, persistCombo]
   );
+
+  // Met à jour `feedMatches` ET synchronise dans le même lot les cotes live du coupon combiné
+  const setFeedMatches = useCallback((list: ClientMatch[] | null) => {
+    setFeedMatchesState(list);
+    if (!list || list.length === 0) return;
+    setComboLegs((prevLegs) => {
+      if (prevLegs.length === 0) return prevLegs;
+      const byId = new Map(list.map((m) => [m.id, m]));
+      let changed = false;
+      const next = prevLegs.map((leg) => {
+        if (leg.kind !== "sport" || leg.matchId == null) return leg;
+        const m = byId.get(leg.matchId);
+        if (!m || m.status === "finished") return leg;
+        let liveOdds: number | null = null;
+        for (const g of m.markets ?? []) {
+          if (g.key !== leg.market && !(leg.market === "result" && g.key === "1x2")) {
+            continue;
+          }
+          for (const o of g.outcomes ?? []) {
+            if (o.key === leg.selection && Number.isFinite(o.odds) && o.odds > 1) {
+              liveOdds = Math.round(o.odds * 100) / 100;
+              break;
+            }
+          }
+          if (liveOdds == null) {
+            for (const r of g.rows ?? []) {
+              for (const o of r.outcomes) {
+                if (o.key === leg.selection && Number.isFinite(o.odds) && o.odds > 1) {
+                  liveOdds = Math.round(o.odds * 100) / 100;
+                  break;
+                }
+              }
+              if (liveOdds != null) break;
+            }
+          }
+        }
+        if (liveOdds == null && leg.market === "result") {
+          if (leg.selection === "V1" && m.oddsHome > 1) {
+            liveOdds = Math.round(m.oddsHome * 100) / 100;
+          } else if (leg.selection === "X" && m.oddsDraw != null && m.oddsDraw > 1) {
+            liveOdds = Math.round(m.oddsDraw * 100) / 100;
+          } else if (leg.selection === "V2" && m.oddsAway > 1) {
+            liveOdds = Math.round(m.oddsAway * 100) / 100;
+          }
+        }
+        const nextIsLive = m.status === "live";
+        const nextOdds = liveOdds ?? leg.odds;
+        if (Math.abs(nextOdds - leg.odds) >= 0.005 || Boolean(leg.isLive) !== nextIsLive) {
+          changed = true;
+          return { ...leg, odds: nextOdds, isLive: nextIsLive };
+        }
+        return leg;
+      });
+      if (!changed) return prevLegs;
+      const ordered = sortSlipSelectionsChronologically(next);
+      try {
+        sessionStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(ordered));
+      } catch {
+        /* silencieux */
+      }
+      return ordered;
+    });
+  }, []);
 
   const hapticsRef = useRef<boolean | undefined>(user?.haptics);
   useEffect(() => {
@@ -638,7 +720,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
             loggedIn={loggedIn}
             isAuthRoute={isAuthRoute}
             isAdminMode={isAdminMode}
-            isMatchsRoute={isMatchsRoute}
+            isMatchsFeedRoute={isMatchsFeedRoute}
             isParisRoute={isParisRoute}
             needsBackgroundMatchFeed={needsBackgroundMatchFeed}
             hasPending={hasPending}

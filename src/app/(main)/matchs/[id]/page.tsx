@@ -14,9 +14,7 @@ import {
 import { api, type ClientMatch } from "@/lib/api";
 import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
-import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { useMatchDetailQuery } from "@/lib/party-realtime";
-import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import {
   AccordionItem,
@@ -40,8 +38,12 @@ import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { cn } from "@/lib/format";
 
-const LIVE_POLL_MS = 3_500;
-const UPCOMING_POLL_MS = 12_000;
+function detailQueryStatusFinished(
+  a?: ClientMatch | null,
+  b?: ClientMatch | null
+): boolean {
+  return a?.status === "finished" || b?.status === "finished";
+}
 
 function defaultOpenMarkets(match: ClientMatch | null | undefined): Record<string, boolean> {
   const groups = match?.markets ?? [];
@@ -75,7 +77,6 @@ export default function MatchDetailPage() {
     toast,
   } = useApp();
   const feedMatches = useFeedMatches();
-  const { isOffline, isConstrained } = useNetworkQuality();
 
   const sharedFromFeed = useMemo(
     () =>
@@ -106,32 +107,19 @@ export default function MatchDetailPage() {
     [invalidId, matchId]
   );
 
-  const sharedHasFullData = useMemo(() => {
-    if (!sharedFromFeed) return false;
-    if (sharedFromFeed.status === "finished") return true;
-    const expectedCount = sharedFromFeed.marketCount ?? 0;
-    const actualCount = sharedFromFeed.markets?.length ?? 0;
-    if (expectedCount > 1 && actualCount <= 1) return false;
-    if (actualCount <= 1) return false;
-    if (
-      sharedFromFeed.status === "live" &&
-      sharedFromFeed.source !== "manual" &&
-      !sharedFromFeed.telemetry
-    ) {
-      return false;
-    }
-    return true;
-  }, [sharedFromFeed]);
-
+  // Maintient toujours `useMatchDetailQuery` actif sur `/matchs/[id]` jusqu'à la fin du match :
+  // - Reçoit instantanément (< 50 ms) les frames WebSocket PartyKit fusionnées dans `pulseQueryKeys.matchDetail(matchId)`
+  // - Polle `/api/matches/[id]` (~3 Ko) toutes les 3.5 s pour actualiser les 19 marchés, les stats réelles et le terrain 2D.
   const detailQuery = useMatchDetailQuery(matchId, {
-    enabled: !invalidId && !sharedHasFullData,
+    enabled: !invalidId,
     initialMatch:
       cachedInitialMatch &&
       (cachedInitialMatch.status === "finished" ||
         (cachedInitialMatch.markets?.length ?? 0) > 1)
         ? cachedInitialMatch
         : null,
-    isFinished: sharedFromFeed?.status === "finished",
+    isFinished:
+      detailQueryStatusFinished(cachedInitialMatch, sharedFromFeed),
   });
 
   const fetchedMatch = invalidId
@@ -148,12 +136,8 @@ export default function MatchDetailPage() {
 
   const match = useMemo(() => {
     if (invalidId) return null;
-    if (sharedHasFullData && sharedFromFeed) return sharedFromFeed;
-    if (fetchedMatch && sharedFromFeed) {
-      return mergeSingleSlimIntoFullMatch(fetchedMatch, sharedFromFeed);
-    }
     return fetchedMatch ?? sharedFromFeed;
-  }, [fetchedMatch, invalidId, sharedFromFeed, sharedHasFullData]);
+  }, [fetchedMatch, invalidId, sharedFromFeed]);
 
   const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
     () =>

@@ -33,7 +33,6 @@ import { hydrateAuthToken, onUnauthorizedResponse } from "@/lib/http";
 import {
   MobilePartyRealtimeBridge,
   useMobileMatchesSlimQuery,
-  useMobileRealtimeStatus,
 } from "@/lib/party-realtime";
 import { mobileQueryKeys } from "@/lib/query-client";
 import { triggerHaptic } from "@/theme/tokens";
@@ -161,7 +160,7 @@ function MobileBackgroundQueries({
   user,
   pendingCount,
   betsVersion,
-  setFeedMatchesState,
+  setFeedMatches,
   setBalance,
   setPendingCount,
   toast,
@@ -172,36 +171,38 @@ function MobileBackgroundQueries({
   user: ClientUser | null;
   pendingCount: number;
   betsVersion: number;
-  setFeedMatchesState: (list: ClientMatch[]) => void;
+  setFeedMatches: (list: ClientMatch[]) => void;
   setBalance: (b: number) => void;
   setPendingCount: (n: number) => void;
   toast: (t: Omit<ToastItem, "id">) => void;
   seenSettledTicketIds: React.MutableRefObject<Set<string>>;
 }) {
-  const { userWsConnected } = useMobileRealtimeStatus();
-
   const matchesQuery = useMobileMatchesSlimQuery({
     enabled: authReady,
     dataSaver: dataSaverMode,
-    baseIntervalMs: 5_000,
+    baseIntervalMs: 3_500,
   });
 
   useEffect(() => {
     if (matchesQuery.data?.matches) {
-      setFeedMatchesState(matchesQuery.data.matches);
+      setFeedMatches(matchesQuery.data.matches);
     }
-  }, [matchesQuery.data, setFeedMatchesState]);
+  }, [matchesQuery.data, setFeedMatches]);
 
-  const pulseIntervalMs = Math.round(12_000 * (dataSaverMode ? 2.4 : 1));
-  const shouldPollPulse =
-    authReady && Boolean(user) && user?.role !== "admin" && !userWsConnected && pendingCount > 0;
+  const pulseActiveMs = Math.round(5_000 * (dataSaverMode ? 2.2 : 1));
+  const pulseIdleMs = Math.round(15_000 * (dataSaverMode ? 2.2 : 1));
+  const isLoggedInPlayer = authReady && Boolean(user) && user?.role !== "admin";
 
   const pulseQuery = useQuery({
     queryKey: [...mobileQueryKeys.userPulse(user?.id), betsVersion],
     queryFn: () => api.pulse(),
-    enabled: authReady && Boolean(user) && user?.role !== "admin",
-    staleTime: 2_000,
-    refetchInterval: shouldPollPulse ? pulseIntervalMs : false,
+    enabled: isLoggedInPlayer,
+    staleTime: 1_500,
+    refetchInterval: !isLoggedInPlayer
+      ? false
+      : pendingCount > 0
+        ? pulseActiveMs
+        : pulseIdleMs,
     refetchIntervalInBackground: false,
   });
 
@@ -324,6 +325,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setFeedMatches = useCallback((list: ClientMatch[]) => {
     setFeedMatchesState(list);
+    if (!list || list.length === 0) return;
+    setComboLegs((prevLegs) => {
+      if (prevLegs.length === 0) return prevLegs;
+      const byId = new Map(list.map((m) => [m.id, m]));
+      let changed = false;
+      const next = prevLegs.map((leg) => {
+        if (leg.kind !== "sport" || leg.matchId == null) return leg;
+        const m = byId.get(leg.matchId);
+        if (!m || m.status === "finished") return leg;
+        let liveOdds: number | null = null;
+        for (const g of m.markets ?? []) {
+          if (g.key !== leg.market && !(leg.market === "result" && g.key === "1x2")) {
+            continue;
+          }
+          for (const o of g.outcomes ?? []) {
+            if (o.key === leg.selection && Number.isFinite(o.odds) && o.odds > 1) {
+              liveOdds = roundOdds2(o.odds);
+              break;
+            }
+          }
+          if (liveOdds == null) {
+            for (const r of g.rows ?? []) {
+              for (const o of r.outcomes) {
+                if (o.key === leg.selection && Number.isFinite(o.odds) && o.odds > 1) {
+                  liveOdds = roundOdds2(o.odds);
+                  break;
+                }
+              }
+              if (liveOdds != null) break;
+            }
+          }
+        }
+        if (liveOdds == null && leg.market === "result") {
+          if (leg.selection === "V1" && m.oddsHome > 1) {
+            liveOdds = roundOdds2(m.oddsHome);
+          } else if (leg.selection === "X" && m.oddsDraw != null && m.oddsDraw > 1) {
+            liveOdds = roundOdds2(m.oddsDraw);
+          } else if (leg.selection === "V2" && m.oddsAway > 1) {
+            liveOdds = roundOdds2(m.oddsAway);
+          }
+        }
+        const nextIsLive = m.status === "live";
+        const nextOdds = liveOdds ?? leg.odds;
+        if (Math.abs(nextOdds - leg.odds) >= 0.005 || Boolean(leg.isLive) !== nextIsLive) {
+          changed = true;
+          return { ...leg, odds: nextOdds, isLive: nextIsLive };
+        }
+        return leg;
+      });
+      if (!changed) return prevLegs;
+      void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -728,7 +782,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       <MobilePartyRealtimeBridge
         userId={user?.id ?? null}
         enabled={authReady && user?.role !== "admin"}
-        onMatchesUpdated={setFeedMatchesState}
+        onMatchesUpdated={setFeedMatches}
       >
         <MobileBackgroundQueries
           authReady={authReady}
@@ -736,7 +790,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           user={user}
           pendingCount={pendingCount}
           betsVersion={betsVersion}
-          setFeedMatchesState={setFeedMatchesState}
+          setFeedMatches={setFeedMatches}
           setBalance={setBalance}
           setPendingCount={setPendingCount}
           toast={toast}

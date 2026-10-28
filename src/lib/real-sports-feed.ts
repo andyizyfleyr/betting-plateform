@@ -2649,7 +2649,15 @@ export async function syncSingleRealMatchNow(matchId: number): Promise<MatchRow 
   }
 
   if (feedMatch) {
-    await applyFeedUpdateToRealMatch(m, feedMatch, settlementMode, Date.now());
+    const outcome = await applyFeedUpdateToRealMatch(
+      m,
+      feedMatch,
+      settlementMode,
+      Date.now()
+    );
+    if (outcome !== "ignored" && outcome !== "upcoming_unchanged") {
+      invalidateAllActiveCaches();
+    }
   }
 
   const [updated] = await db.select().from(matches).where(eq(matches.id, matchId));

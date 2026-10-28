@@ -23,9 +23,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MATCHES_EDGE_POLICY = {
-  maxAge: 1,
-  sMaxAge: 5,
-  staleWhileRevalidate: 8,
+  maxAge: 0,
+  sMaxAge: 2,
+  staleWhileRevalidate: 2,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 

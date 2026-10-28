@@ -18,9 +18,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const CATALOG_EDGE_POLICY = {
-  maxAge: 2,
-  sMaxAge: 15,
-  staleWhileRevalidate: 45,
+  maxAge: 0,
+  sMaxAge: 4,
+  staleWhileRevalidate: 6,
   tags: [EDGE_CACHE_TAGS.predictionsCatalog],
 } as const;
 

@@ -30,7 +30,7 @@ import { eur, formatOdds, formatPlacedAt } from "@/lib/format";
 import { useParams, useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 
-const POLL_MS = 18_000;
+const POLL_MS = 6_000;
 
 interface DisplayOption {
   key: string;

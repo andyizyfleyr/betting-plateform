@@ -56,7 +56,10 @@ export default function TransactionsScreen() {
 
   useEffect(() => {
     void load();
-  }, [load, betsVersion]);
+    if (!user) return;
+    const id = setInterval(() => void load(), 8_000);
+    return () => clearInterval(id);
+  }, [load, betsVersion, user]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

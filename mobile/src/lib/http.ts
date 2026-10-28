@@ -270,6 +270,7 @@ export async function requestJson<T>(
         fetch(url, {
           method,
           headers,
+          cache: isGet ? "no-store" : undefined,
           body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
         }),
         timeoutPromise,

@@ -51,7 +51,19 @@ export default function TransactionsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load, betsVersion]);
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void load();
+    }, 8_000);
+    const onVisible = () => {
+      if (!document.hidden) void load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load, betsVersion, user?.balance]);
 
   const cancelWithdrawal = async (withdrawalId: number) => {
     if (cancellingId != null || cancelInFlightRef.current) return;

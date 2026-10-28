@@ -47,7 +47,7 @@ import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials } from "@/
 
 type TabKey = "dashboard" | "forecasts" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
 
-const POLL_INTERVAL = 10_000;
+const POLL_INTERVAL = 5_000;
 
 interface AdminUser {
   id: number;

@@ -286,7 +286,7 @@ export default function AdminScreen() {
     void load(false);
   }, [load]);
 
-  useSmartPolling(() => load(true), 10_000, {
+  useSmartPolling(() => load(true), 5_000, {
     enabled: user?.role === "admin",
     dataSaver: dataSaverMode,
     runImmediately: false,

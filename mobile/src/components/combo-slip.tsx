@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -187,6 +187,114 @@ export function ComboSheet() {
     () => sortSlipSelectionsChronologically(comboLegs),
     [comboLegs]
   );
+  const legsRef = useRef(comboLegs);
+  legsRef.current = comboLegs;
+
+  useEffect(() => {
+    if (!comboOpen || comboLegs.length === 0) return;
+    let active = true;
+    const pollLegs = async () => {
+      const currentLegs = legsRef.current;
+      if (currentLegs.length === 0) return;
+      const matchIds = [
+        ...new Set(
+          currentLegs
+            .filter((l) => l.kind === "sport" && l.matchId != null)
+            .map((l) => l.matchId as number)
+        ),
+      ];
+      const hasPreds = currentLegs.some((l) => l.kind === "prediction");
+      try {
+        const [matchResults, predsCatalog] = await Promise.all([
+          Promise.all(
+            matchIds.map((id) => api.matchById(id).catch(() => null))
+          ),
+          hasPreds ? api.predictionsCatalog().catch(() => null) : Promise.resolve(null),
+        ]);
+        if (!active) return;
+        const updates: Parameters<typeof applyComboOddsUpdates>[0] = [];
+        const matchById = new Map(
+          matchResults
+            .filter((r): r is NonNullable<typeof r> => Boolean(r?.match))
+            .map((r) => [r.match.id, r.match])
+        );
+        const predById = new Map(
+          (predsCatalog?.questions ?? []).map((q) => [q.id, q])
+        );
+        for (const leg of legsRef.current) {
+          if (leg.kind === "sport" && leg.matchId != null) {
+            const m = matchById.get(leg.matchId);
+            if (!m || m.status === "finished") continue;
+            const grp = (m.markets ?? []).find(
+              (g) =>
+                g.key === leg.market ||
+                (leg.market === "result" && g.key === "1x2")
+            );
+            let nextOdds =
+              grp?.outcomes.find((o) => o.key === leg.selection)?.odds ?? null;
+            if (nextOdds == null && grp?.rows) {
+              for (const row of grp.rows) {
+                const hit = row.outcomes.find((o) => o.key === leg.selection);
+                if (hit) {
+                  nextOdds = hit.odds;
+                  break;
+                }
+              }
+            }
+            if (
+              nextOdds != null &&
+              Math.abs(roundOdds2(nextOdds) - roundOdds2(leg.odds)) >= 0.005
+            ) {
+              updates.push({
+                kind: "sport",
+                matchId: leg.matchId,
+                market: leg.market,
+                selection: leg.selection,
+                previousOdds: leg.odds,
+                currentOdds: roundOdds2(nextOdds),
+                direction: nextOdds > leg.odds ? "up" : "down",
+              });
+            }
+          } else if (leg.kind === "prediction" && leg.questionId != null) {
+            const q = predById.get(leg.questionId);
+            if (!q || q.status !== "open") continue;
+            const optOdds =
+              leg.selection === "yes"
+                ? q.oddsYes
+                : leg.selection === "no"
+                  ? q.oddsNo
+                  : (q.options?.find((o) => o.key === leg.selection)?.odds ??
+                    null);
+            if (
+              optOdds != null &&
+              Math.abs(roundOdds2(optOdds) - roundOdds2(leg.odds)) >= 0.005
+            ) {
+              updates.push({
+                kind: "prediction",
+                questionId: leg.questionId,
+                market: leg.market,
+                selection: leg.selection,
+                previousOdds: leg.odds,
+                currentOdds: roundOdds2(optOdds),
+                direction: optOdds > leg.odds ? "up" : "down",
+              });
+            }
+          }
+        }
+        if (updates.length > 0) {
+          applyComboOddsUpdates(updates);
+        }
+      } catch {
+        /* silencieux */
+      }
+    };
+    void pollLegs();
+    const timer = setInterval(() => void pollLegs(), 4_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [applyComboOddsUpdates, comboLegs.length, comboOpen]);
 
   if (!comboOpen) return null;
 

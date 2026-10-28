@@ -47,16 +47,27 @@ export default function ParametresPage() {
 
   useEffect(() => {
     let active = true;
-    api
-      .wallet()
-      .then((w) => {
-        if (active) setWallet(w);
-      })
-      .catch(() => undefined);
+    const run = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      api
+        .wallet()
+        .then((w) => {
+          if (active) setWallet(w);
+        })
+        .catch(() => undefined);
+    };
+    run();
+    const id = setInterval(run, 8_000);
+    const onVisible = () => {
+      if (!document.hidden) run();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       active = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [betsVersion]);
+  }, [betsVersion, user?.balance, user?.id]);
 
   // Retour de paiement (Stripe/PayPal) via les params d'URL.
   useEffect(() => {

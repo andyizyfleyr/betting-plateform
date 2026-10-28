@@ -116,8 +116,23 @@ export function MobilePartyRealtimeBridge({
       protocol: partyProtocol,
     });
 
-    const handleOpen = () => setWsConnected(true);
-    const handleClose = () => setWsConnected(false);
+    const WS_SNAPSHOT_LIVENESS_MS = 9_000;
+    let lastSnapshotAt = 0;
+
+    const handleOpen = () => {
+      // N'active `wsConnected` qu'à réception effective d'un frame `MATCHES_SNAPSHOT`
+      // afin de ne jamais couper le polling HTTP si le Worker ne diffuse pas.
+    };
+    const handleClose = () => {
+      lastSnapshotAt = 0;
+      setWsConnected(false);
+    };
+
+    const livenessTimer = setInterval(() => {
+      if (lastSnapshotAt === 0 || Date.now() - lastSnapshotAt > WS_SNAPSHOT_LIVENESS_MS) {
+        setWsConnected(false);
+      }
+    }, 3_000);
 
     const handleMessage = (ev: { data?: unknown }) => {
       if (typeof ev.data !== "string") return;
@@ -130,6 +145,8 @@ export function MobilePartyRealtimeBridge({
         };
 
         if (msg.type === "MATCHES_SNAPSHOT" && Array.isArray(msg.matches)) {
+          lastSnapshotAt = Date.now();
+          setWsConnected(true);
           if (msg.serverTime) {
             calibrateServerClockOffset({ serverTimeIso: msg.serverTime });
           }
@@ -241,6 +258,7 @@ export function MobilePartyRealtimeBridge({
     socket.addEventListener("message", handleMessage as EventListener);
 
     return () => {
+      clearInterval(livenessTimer);
       setWsConnected(false);
       socket.removeEventListener("open", handleOpen);
       socket.removeEventListener("close", handleClose);
@@ -349,8 +367,9 @@ export function useMobileMatchesSlimQuery(options?: {
   initialMatches?: ClientMatch[] | null;
 }) {
   const { wsConnected } = useMobileRealtimeStatus();
-  const baseMs = options?.baseIntervalMs ?? 5_000;
-  const fallbackMs = Math.round(baseMs * (options?.dataSaver ? 2.4 : 1));
+  const baseMs = options?.baseIntervalMs ?? 3_500;
+  const fallbackMs = Math.round(baseMs * (options?.dataSaver ? 2.2 : 1));
+  const wsSafetyMs = Math.round(15_000 * (options?.dataSaver ? 2 : 1));
 
   return useQuery({
     queryKey: mobileQueryKeys.matchesSlim,
@@ -362,9 +381,9 @@ export function useMobileMatchesSlimQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialMatches && options.initialMatches.length > 0
-        ? () => Date.now() - 4_000
+        ? () => Date.now() - 2_000
         : undefined,
-    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchInterval: wsConnected ? wsSafetyMs : fallbackMs,
     refetchIntervalInBackground: false,
   });
 }
@@ -378,8 +397,7 @@ export function useMobileMatchDetailQuery(
     isFinished?: boolean;
   }
 ) {
-  const { wsConnected } = useMobileRealtimeStatus();
-  const fallbackMs = Math.round(5_000 * (options?.dataSaver ? 2.4 : 1));
+  const detailMs = Math.round(3_500 * (options?.dataSaver ? 2.2 : 1));
   const initialIsSlim =
     Boolean(options?.initialMatch) &&
     options?.initialMatch?.status !== "finished" &&
@@ -396,13 +414,11 @@ export function useMobileMatchDetailQuery(
     initialDataUpdatedAt: options?.initialMatch
       ? initialIsSlim
         ? 0
-        : () => Date.now() - 4_000
+        : () => Date.now() - 2_000
       : undefined,
-    refetchInterval: options?.isFinished
-      ? false
-      : wsConnected
-        ? 45_000
-        : fallbackMs,
+    // Rafraîchit toujours `/api/matches/[id]` toutes les 3.5 s pour maintenir les 19 marchés,
+    // les stats réelles et la télémétrie 2D en direct.
+    refetchInterval: options?.isFinished ? false : detailMs,
     refetchIntervalInBackground: false,
   });
 }
@@ -412,8 +428,7 @@ export function useMobilePredictionsCatalogQuery(options?: {
   dataSaver?: boolean;
   initialQuestions?: ClientPrediction[] | null;
 }) {
-  const { wsConnected } = useMobileRealtimeStatus();
-  const fallbackMs = Math.round(15_000 * (options?.dataSaver ? 2.4 : 1));
+  const intervalMs = Math.round(8_000 * (options?.dataSaver ? 2.2 : 1));
 
   return useQuery({
     queryKey: mobileQueryKeys.predictionsCatalog,
@@ -425,9 +440,9 @@ export function useMobilePredictionsCatalogQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialQuestions && options.initialQuestions.length > 0
-        ? () => Date.now() - 5_000
+        ? () => Date.now() - 3_000
         : undefined,
-    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchInterval: intervalMs,
     refetchIntervalInBackground: false,
   });
 }
@@ -437,8 +452,7 @@ export function useMobileMatchHistoryQuery(options?: {
   dataSaver?: boolean;
   initialHistory?: ClientMatchHistoryItem[] | null;
 }) {
-  const { wsConnected } = useMobileRealtimeStatus();
-  const fallbackMs = Math.round(25_000 * (options?.dataSaver ? 2.4 : 1));
+  const intervalMs = Math.round(5_000 * (options?.dataSaver ? 2.2 : 1));
 
   return useQuery({
     queryKey: mobileQueryKeys.matchHistory,
@@ -450,9 +464,9 @@ export function useMobileMatchHistoryQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialHistory && options.initialHistory.length > 0
-        ? () => Date.now() - 5_000
+        ? () => Date.now() - 3_000
         : undefined,
-    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchInterval: intervalMs,
     refetchIntervalInBackground: false,
   });
 }

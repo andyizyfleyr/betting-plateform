@@ -15,7 +15,6 @@ import { PullToRefresh } from "@/components/pull-to-refresh";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useQuery } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
-import { useRealtimeStatus } from "@/lib/party-realtime";
 import { pulseQueryKeys } from "@/lib/query-client";
 import { getAllCachedBets } from "@/lib/client-entity-cache";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
@@ -24,7 +23,9 @@ import { cn, eur } from "@/lib/format";
 type Tab = "ongoing" | "finished";
 type OutcomeFilter = "all" | "won" | "lost" | "cashed" | "void";
 
-const POLL_INTERVAL = 5_000;
+const POLL_LIVE_MS = 3_500;
+const POLL_PENDING_MS = 6_000;
+const POLL_IDLE_MS = 18_000;
 
 function dayLabel(iso: string) {
   const d = new Date(iso);
@@ -45,10 +46,11 @@ function settledOrPlacedIso(b: ClientBet): string {
 }
 
 export default function ParisPage() {
-  const { wsConnected, userWsConnected } = useRealtimeStatus();
   const { betsVersion, user, setBalance } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
-  const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
+  const livePollMs = getAdaptiveIntervalMs(POLL_LIVE_MS, isConstrained);
+  const pendingPollMs = getAdaptiveIntervalMs(POLL_PENDING_MS, isConstrained);
+  const idlePollMs = getAdaptiveIntervalMs(POLL_IDLE_MS, isConstrained);
   const [tabChoice, setTabChoice] = useState<Tab | null>(null);
   const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction" | "combo">("all");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
@@ -63,20 +65,21 @@ export default function ParisPage() {
   }, []);
 
   // Liste complète des paris gérée par TanStack Query + invalidation instantanée PartyKit (`user-<id>`)
+  // Maintient un rafraîchissement continu (3.5 s en live pour le Cash Out, 6 s en avant-match, 18 s au repos).
   const allBetsQuery = useQuery({
     queryKey: [...pulseQueryKeys.userBets(user?.id, "all"), betsVersion],
     queryFn: () => api.allBets(),
     enabled: !isOffline,
     initialData: initialCachedBets,
-    initialDataUpdatedAt: initialCachedBets ? () => Date.now() - 4_000 : undefined,
-    staleTime: 2_500,
+    initialDataUpdatedAt: initialCachedBets ? () => Date.now() - 2_000 : undefined,
+    staleTime: 1_500,
     refetchInterval: (q) => {
       if (isOffline) return false;
       const currentBets = q.state.data?.bets;
       const anyPending = Boolean(
         currentBets?.some((b) => b.status === "pending")
       );
-      if (!anyPending) return false;
+      if (!anyPending) return idlePollMs;
       const livePending = Boolean(
         currentBets?.some(
           (b) =>
@@ -85,10 +88,7 @@ export default function ParisPage() {
               b.legs?.some((l) => l.matchStatus === "live"))
         )
       );
-      if (wsConnected && userWsConnected) {
-        return livePending ? 15_000 : false;
-      }
-      return livePending ? pollIntervalMs : Math.max(pollIntervalMs * 2, 12_000);
+      return livePending ? livePollMs : pendingPollMs;
     },
     refetchIntervalInBackground: false,
   });
