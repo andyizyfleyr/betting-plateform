@@ -5,7 +5,7 @@ import { minuteNumber } from "@/lib/markets";
 function matchStepMs(matchId: number, source?: string | null): number {
   if (source === "manual") return 40_000;
   const h = hashString(`virt-tempo|${matchId}`);
-  return 1_520 + (h % (1_840 - 1_520 + 1));
+  return 3_120 + (h % (3_200 - 3_120 + 1));
 }
 
 export interface MomentumBucket {

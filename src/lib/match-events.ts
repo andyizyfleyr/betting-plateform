@@ -562,11 +562,11 @@ export function formatGoalSummaryStrings(
           grp.isOwnGoal,
           only.isPenalty
         );
-        return label ? `${only.minute}' ${label}` : `${only.minute}'`;
+        return label ? `${only.minute}’ ${label}` : `${only.minute}’`;
       }
 
       const minutesStr = grp.entries
-        .map((e) => (e.isPenalty ? `${e.minute}' (P)` : `${e.minute}'`))
+        .map((e) => (e.isPenalty ? `${e.minute}’ (P)` : `${e.minute}’`))
         .join(", ");
       return `${minutesStr} ${grp.displayBase}`;
     });

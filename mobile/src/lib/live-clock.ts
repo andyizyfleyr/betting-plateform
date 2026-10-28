@@ -38,8 +38,8 @@ export interface LiveClockSnapshot {
   gameMinute: number;
 }
 
-const VIRTUAL_STEP_MIN_MS = 1_520;
-const VIRTUAL_STEP_MAX_MS = 1_840;
+const VIRTUAL_STEP_MIN_MS = 3_120;
+const VIRTUAL_STEP_MAX_MS = 3_200;
 
 function hashDjb2(s: string): number {
   let h = 5381;
@@ -55,9 +55,28 @@ export function stepMsForVirtualMatch(matchId: number): number {
   return VIRTUAL_STEP_MIN_MS + (h % (span + 1));
 }
 
-function pad2(n: number): string {
-  const v = Math.max(0, Math.floor(n));
-  return v < 10 ? `0${v}` : String(v);
+export function formatMinuteOnlyLabel(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return "LIVE";
+  if (isHalfTimeLabel(trimmed)) return "MT";
+  if (isStaticStatusLabel(trimmed)) return trimmed;
+
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?::\d{1,2})?\s*['’]?$/.exec(
+    trimmed
+  );
+  if (stopMatch) {
+    const base = Number(stopMatch[1]);
+    const added = Math.max(1, Number(stopMatch[2]));
+    return `${base}+${added}’`;
+  }
+
+  const regMatch = /^(\d{1,3})(?::\d{1,2})?\s*['’]?$/.exec(trimmed);
+  if (regMatch) {
+    const min = Math.max(1, Number(regMatch[1]));
+    return `${min}’`;
+  }
+
+  return trimmed.replace(/'/g, "’");
 }
 
 function isHalfTimeLabel(raw: string): boolean {
@@ -95,7 +114,7 @@ export function parseMatchMinuteLabel(
   const trimmed = minute.trim();
   if (!trimmed || isStaticStatusLabel(trimmed)) return null;
 
-  const stopMatch = /^(\d{1,3})\+(\d{1,2})'?$/.exec(trimmed);
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})\s*['’]?$/.exec(trimmed);
   if (stopMatch) {
     const baseMin = Number(stopMatch[1]);
     const addedMin = Math.max(1, Number(stopMatch[2]));
@@ -117,7 +136,7 @@ export function parseMatchMinuteLabel(
     };
   }
 
-  const regMatch = /^(\d{1,3})(?::(\d{1,2}))?'?$/.exec(trimmed);
+  const regMatch = /^(\d{1,3})(?::(\d{1,2}))?\s*['’]?$/.exec(trimmed);
   if (regMatch) {
     const minInt = Math.max(1, Number(regMatch[1]));
     const secInt = regMatch[2] != null ? Math.min(59, Number(regMatch[2])) : null;
@@ -283,7 +302,7 @@ function computeVirtualLiveSnapshot(
 ): LiveClockSnapshot {
   const startsAtMs = startsAtIso ? Date.parse(startsAtIso) : NaN;
   if (!Number.isFinite(startsAtMs)) {
-    const label = fallbackMinute?.trim() || "LIVE";
+    const label = formatMinuteOnlyLabel(fallbackMinute);
     const ht = isHalfTimeLabel(label);
     return {
       display: ht ? "MT" : label,
@@ -304,27 +323,21 @@ function computeVirtualLiveSnapshot(
 
   if (exactStep < 45) {
     const totalSimSec = Math.min(2699, Math.max(0, Math.floor(exactStep * 60)));
-    const mm = Math.floor(totalSimSec / 60);
-    const ss = totalSimSec % 60;
-    const display = `${pad2(mm)}:${pad2(ss)}`;
+    const gameMinute = Math.min(45, Math.max(1, Math.floor(exactStep) + 1));
+    const display = `${gameMinute}’`;
     return {
       display,
       badgeLabel: display,
       isHalfTime: false,
       isPaused: false,
       progressPct: Math.min(50, Math.max(1.5, (totalSimSec / 5400) * 100)),
-      gameMinute: Math.min(45, mm + 1),
+      gameMinute,
     };
   }
 
   if (exactStep < 46) {
-    const stopSec = Math.min(
-      120,
-      Math.max(0, Math.floor((exactStep - 45) * 120))
-    );
-    const stopM = Math.floor(stopSec / 60);
-    const stopS = stopSec % 60;
-    const display = `45+${stopM}:${pad2(stopS)}`;
+    const stopM = Math.max(1, Math.min(2, Math.floor((exactStep - 45) * 2) + 1));
+    const display = `45+${stopM}’`;
     return {
       display,
       badgeLabel: display,
@@ -352,26 +365,26 @@ function computeVirtualLiveSnapshot(
       Math.max(0, Math.floor((exactStep - 48) * 60))
     );
     const totalSimSec = 2700 + secIn2H;
-    const mm = Math.floor(totalSimSec / 60);
-    const ss = totalSimSec % 60;
-    const display = `${pad2(mm)}:${pad2(ss)}`;
+    const gameMinute = Math.min(
+      90,
+      Math.max(46, Math.floor(exactStep - 48) + 46)
+    );
+    const display = `${gameMinute}’`;
     return {
       display,
       badgeLabel: display,
       isHalfTime: false,
       isPaused: false,
       progressPct: Math.min(99.5, Math.max(50, (totalSimSec / 5400) * 100)),
-      gameMinute: Math.min(90, mm + 1),
+      gameMinute,
     };
   }
 
-  const stopSec = Math.min(
-    180,
-    Math.max(0, Math.floor(((exactStep - 93) / 2) * 180))
+  const stopM = Math.max(
+    1,
+    Math.min(3, Math.floor(((exactStep - 93) / 2) * 3) + 1)
   );
-  const stopM = Math.floor(stopSec / 60);
-  const stopS = stopSec % 60;
-  const display = `90+${stopM}:${pad2(stopS)}`;
+  const display = `90+${stopM}’`;
   return {
     display,
     badgeLabel: display,
@@ -403,7 +416,7 @@ function computeRealLiveSnapshot(
   }
 
   if (anchor?.phase === "PAUSED" || isStaticStatusLabel(rawMin)) {
-    const label = rawMin || "LIVE";
+    const label = formatMinuteOnlyLabel(rawMin);
     return {
       display: label,
       badgeLabel: label,
@@ -435,9 +448,10 @@ function computeRealLiveSnapshot(
   } else if (parsed) {
     serverTargetSec = parsed.expectedFloorSeconds;
   } else {
+    const label = formatMinuteOnlyLabel(rawMin);
     return {
-      display: rawMin || "LIVE",
-      badgeLabel: rawMin || "LIVE",
+      display: label,
+      badgeLabel: label,
       isHalfTime: false,
       isPaused: true,
       progressPct: 2,
@@ -482,9 +496,11 @@ function computeRealLiveSnapshot(
   if (half === 1) {
     if (currentSec >= 2700 || forceFirstHalfStoppage) {
       const stopSec = Math.max(0, currentSec - 2700);
-      const stopM = Math.floor(stopSec / 60);
-      const stopS = stopSec % 60;
-      const display = `45+${stopM}:${pad2(stopS)}`;
+      const stopM = Math.max(
+        anchor?.stoppageAdded ?? 1,
+        Math.floor(stopSec / 60) + 1
+      );
+      const display = `45+${stopM}’`;
       return {
         display,
         badgeLabel: display,
@@ -494,25 +510,26 @@ function computeRealLiveSnapshot(
         gameMinute: 45,
       };
     }
-    const mm = Math.floor(currentSec / 60);
-    const ss = currentSec % 60;
-    const display = `${pad2(mm)}:${pad2(ss)}`;
+    const gameMinute = Math.min(45, Math.max(1, Math.floor(currentSec / 60) + 1));
+    const display = `${gameMinute}’`;
     return {
       display,
       badgeLabel: display,
       isHalfTime: false,
       isPaused: false,
       progressPct: Math.min(50, Math.max(1.5, (currentSec / 5400) * 100)),
-      gameMinute: Math.min(45, mm + 1),
+      gameMinute,
     };
   }
 
   const sec2H = Math.max(2700, currentSec);
   if (sec2H >= 5400 || forceSecondHalfStoppage) {
     const stopSec = Math.max(0, sec2H - 5400);
-    const stopM = Math.floor(stopSec / 60);
-    const stopS = stopSec % 60;
-    const display = `90+${stopM}:${pad2(stopS)}`;
+    const stopM = Math.max(
+      anchor?.stoppageAdded ?? 1,
+      Math.floor(stopSec / 60) + 1
+    );
+    const display = `90+${stopM}’`;
     return {
       display,
       badgeLabel: display,
@@ -523,16 +540,15 @@ function computeRealLiveSnapshot(
     };
   }
 
-  const mm = Math.floor(sec2H / 60);
-  const ss = sec2H % 60;
-  const display = `${pad2(mm)}:${pad2(ss)}`;
+  const gameMinute = Math.min(90, Math.max(46, Math.floor(sec2H / 60) + 1));
+  const display = `${gameMinute}’`;
   return {
     display,
     badgeLabel: display,
     isHalfTime: false,
     isPaused: false,
     progressPct: Math.min(99.5, Math.max(50, (sec2H / 5400) * 100)),
-    gameMinute: Math.min(90, mm + 1),
+    gameMinute,
   };
 }
 
@@ -548,7 +564,7 @@ export function computeLiveClockSnapshot(
   const minute = input?.minute ?? fallbackMinute ?? reg?.minute ?? null;
 
   if (status !== "live") {
-    const label = minute?.trim() || "Terminé";
+    const label = minute?.trim() ? formatMinuteOnlyLabel(minute) : "Terminé";
     return {
       display: label,
       badgeLabel: label,
@@ -648,7 +664,7 @@ function syncSchedulerTimers() {
     if (!fastTimer) {
       fastTimer = setInterval(() => {
         notifySet(fastListeners);
-      }, 100);
+      }, 500);
     }
   } else if (fastTimer) {
     clearInterval(fastTimer);
@@ -659,7 +675,7 @@ function syncSchedulerTimers() {
     if (!realTimer) {
       realTimer = setInterval(() => {
         notifySet(realListeners);
-      }, 250);
+      }, 1_000);
     }
   } else if (realTimer) {
     clearInterval(realTimer);

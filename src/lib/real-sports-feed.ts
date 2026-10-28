@@ -301,10 +301,22 @@ export function clubsMatchCanonical(
 }
 
 function normalizeDisplayMinute(rawClock: string): string {
-  const cleaned = rawClock.replace(/\s+/g, "").replace(/'\+/g, "+");
+  const cleaned = rawClock.replace(/\s+/g, "").replace(/['’]\+/g, "+");
   if (!cleaned) return "LIVE";
   if (/^(MT|HT)$/i.test(cleaned)) return "MT";
-  return cleaned.endsWith("'") ? cleaned : `${cleaned}'`;
+  const stopMatch = /^(\d{1,3})\+(\d{1,2})(?::\d{1,2})?['’]?$/.exec(cleaned);
+  if (stopMatch) {
+    return `${Number(stopMatch[1])}+${Math.max(1, Number(stopMatch[2]))}’`;
+  }
+  const regMatch = /^(\d{1,3})(?::\d{1,2})?['’]?$/.exec(cleaned);
+  if (regMatch) {
+    return `${Math.max(1, Number(regMatch[1]))}’`;
+  }
+  return cleaned.endsWith("’")
+    ? cleaned
+    : cleaned.endsWith("'")
+      ? `${cleaned.slice(0, -1)}’`
+      : `${cleaned}’`;
 }
 
 function isExtraTimeDetail(
@@ -313,9 +325,9 @@ function isExtraTimeDetail(
   secVal: number | null
 ): boolean {
   if (periodNum != null && periodNum > 2) return true;
-  const mPlus = /(\d+)\s*'?\s*\+\s*(\d+)/.exec(rawClock);
+  const mPlus = /(\d+)\s*['’]?\s*\+\s*(\d+)/.exec(rawClock);
   if (mPlus) {
-    // 45'+2' -> base 45 (réglementaire) ; 90'+4' -> base 90 (réglementaire) ; 105'+1' -> prolongation
+    // 45’+2’ -> base 45 (réglementaire) ; 90’+4’ -> base 90 (réglementaire) ; 105’+1’ -> prolongation
     return Number(mPlus[1]) > 90;
   }
   const mSimple = /(\d+)/.exec(rawClock);
@@ -333,7 +345,7 @@ function parseClockMinuteInt(
   periodNum: number | null,
   secVal: number | null
 ): number {
-  const mPlus = /(\d+)\s*'?\s*\+\s*(\d+)/.exec(rawClock);
+  const mPlus = /(\d+)\s*['’]?\s*\+\s*(\d+)/.exec(rawClock);
   if (mPlus) {
     const base = Number(mPlus[1]);
     if (base <= 45) return 45;

@@ -58,7 +58,7 @@ const HERO_SLIDES: HeroSlide[] = [
     player: "Multiplex IA",
     club: "Matchs Virtuels 24h/24",
     title: "Matchs Virtuels 24h/24",
-    description: "4 directs simultanés de 2-3 min : cotes dynamiques non-stop.",
+    description: "4 directs simultanés de 5 min : cotes dynamiques non-stop.",
     ctaLabel: "Voir les virtuels",
     action: { type: "virtual" },
     image: require("../../assets/hero/virtual-matches.webp"),

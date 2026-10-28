@@ -969,19 +969,19 @@ function MatchTimelineStrip({
       ? Math.min(100, Math.max(2, liveClock.progressPct))
       : Math.min(100, Math.max(2, (minute / 90) * 100));
   const rightClockLabel = isFinished
-    ? "90'"
+    ? "90’"
     : match.status === "live"
       ? liveClock.display
       : isHalfTime
         ? "MT"
-        : `${minute}'`;
+        : `${minute}’`;
 
   return (
     <div>
       {activePinnedEvent && (
         <div className="mb-1 flex justify-center">
           <span className="truncate rounded-full bg-white/14 px-2 py-0.2 font-display text-[9.5px] font-bold text-amber-200">
-            {activePinnedEvent.minute}&apos; ·{" "}
+            {activePinnedEvent.minute}’ ·{" "}
             {activePinnedEvent.type === "red_card" ? "🟥 Rouge" : "⚽ But"}{" "}
             {activePinnedEvent.player ? `${activePinnedEvent.player} ` : ""}(
             {activePinnedEvent.team === "home" ? match.homeTeam : match.awayTeam})
@@ -990,7 +990,7 @@ function MatchTimelineStrip({
       )}
 
       <div className="flex items-center gap-2 text-[9px] font-semibold tabular-nums text-emerald-100/70">
-        <span>0&apos;</span>
+        <span>0’</span>
         <div className="relative h-3 flex-1">
           <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/14">
             <div

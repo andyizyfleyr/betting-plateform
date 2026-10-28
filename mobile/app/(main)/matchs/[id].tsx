@@ -584,7 +584,7 @@ export default function MatchDetailScreen() {
                       <View style={styles.timelineLeft}>
                         <View style={styles.minuteBox}>
                           <Text style={styles.minuteText}>
-                            {ev.minute}&apos;
+                            {ev.minute}’
                           </Text>
                         </View>
                         <Text style={{ fontSize: 11 }}>

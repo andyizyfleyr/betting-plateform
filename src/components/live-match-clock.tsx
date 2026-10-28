@@ -3,6 +3,7 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import {
   computeLiveClockSnapshot,
+  formatMinuteOnlyLabel,
   isVirtualClockInput,
   subscribeLiveClock,
   type LiveClockSnapshot,
@@ -10,8 +11,8 @@ import {
 } from "@/lib/live-clock";
 
 /**
- * Retourne la chaîne du chronomètre live (`MM:SS`, `45+M:SS`, `MT` / `Mi-temps`)
- * synchronisée avec le serveur, sans provoquer de re-render tant que la seconde affichée
+ * Retourne la minute live du match sans secondes (`88’`, `45+2’`, `MT` / `Mi-temps`)
+ * synchronisée avec le serveur, sans provoquer de re-render tant que la minute affichée
  * n'a pas changé.
  */
 export function useLiveMatchClock(
@@ -33,11 +34,8 @@ export function useLiveMatchClock(
   };
 
   const getServerSnapshot = () => {
-    const raw = (source?.minute ?? fallbackMinute ?? "LIVE").trim() || "LIVE";
-    if (
-      variant === "badge" &&
-      (raw.toUpperCase() === "MT" || raw.toUpperCase() === "HT")
-    ) {
+    const raw = formatMinuteOnlyLabel(source?.minute ?? fallbackMinute);
+    if (variant === "badge" && raw === "MT") {
       return "Mi-temps";
     }
     return raw;
@@ -87,11 +85,11 @@ export function useLiveMatchClockSnapshot(
   };
 
   const getServerSnapshot = (): LiveClockSnapshot => {
-    const raw = (source?.minute ?? fallbackMinute ?? "LIVE").trim() || "LIVE";
-    const isHt = raw.toUpperCase() === "MT" || raw.toUpperCase() === "HT";
+    const norm = formatMinuteOnlyLabel(source?.minute ?? fallbackMinute);
+    const isHt = norm === "MT";
     const fallbackSnap: LiveClockSnapshot = {
-      display: isHt ? "MT" : raw,
-      badgeLabel: isHt ? "Mi-temps" : raw,
+      display: isHt ? "MT" : norm,
+      badgeLabel: isHt ? "Mi-temps" : norm,
       isHalfTime: isHt,
       isPaused: true,
       progressPct: 50,

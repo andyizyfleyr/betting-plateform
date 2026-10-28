@@ -1159,7 +1159,7 @@ function MatchesTab({
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/70 px-3 py-2 text-[11.5px] text-mist">
           <span>
-            <strong className="font-display font-bold text-ink">Simulateur 2-3 min :</strong> 4
+            <strong className="font-display font-bold text-ink">Simulateur 5 min :</strong> 4
             matchs en direct simultanés (canaux décalés), 100 % séparés des matchs réels.
           </span>
           <button

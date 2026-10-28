@@ -919,19 +919,19 @@ function MatchTimelineStrip({
       ? Math.min(100, Math.max(2, liveClock.progressPct))
       : Math.min(100, Math.max(2, (minute / 90) * 100));
   const rightClockLabel = isFinished
-    ? "90'"
+    ? "90’"
     : match.status === "live"
       ? liveClock.display
       : isHalfTime
         ? "MT"
-        : `${minute}'`;
+        : `${minute}’`;
 
   return (
     <View>
       {activePinnedEvent ? (
         <View style={styles.pinnedPillRow}>
           <Text numberOfLines={1} style={styles.pinnedPillText}>
-            {activePinnedEvent.minute}&apos; ·{" "}
+            {activePinnedEvent.minute}’ ·{" "}
             {activePinnedEvent.type === "red_card" ? "🟥 Rouge" : "⚽ But"}{" "}
             {activePinnedEvent.player ? `${activePinnedEvent.player} ` : ""}(
             {activePinnedEvent.team === "home"
@@ -943,7 +943,7 @@ function MatchTimelineStrip({
       ) : null}
 
       <View style={styles.timelineRow}>
-        <Text style={styles.timelineEdgeText}>0&apos;</Text>
+        <Text style={styles.timelineEdgeText}>0’</Text>
         <View style={styles.timelineTrackWrap}>
           <View style={styles.timelineTrackBg}>
             <View

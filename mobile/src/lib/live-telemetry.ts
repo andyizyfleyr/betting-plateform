@@ -26,7 +26,7 @@ export function minuteNumber(minute: string | null | undefined): number {
   if (!minute) return 0;
   const trimmed = minute.trim().toUpperCase();
   if (trimmed === "MT" || trimmed === "HT" || trimmed.includes("MI-TEMPS")) return 45;
-  const plus = /^(\d+)\s*'?\s*\+\s*\d+/.exec(trimmed);
+  const plus = /^(\d+)\s*['’]?\s*\+\s*\d+/.exec(trimmed);
   if (plus) return Math.max(0, Math.min(90, parseInt(plus[1], 10)));
   const m = /^\d+/.exec(trimmed);
   const n = m ? parseInt(m[0], 10) : 0;
@@ -36,7 +36,7 @@ export function minuteNumber(minute: string | null | undefined): number {
 function matchStepMs(matchId: number, source?: string | null): number {
   if (source === "manual") return 40_000;
   const h = hashString(`virt-tempo|${matchId}`);
-  return 1_520 + (h % (1_840 - 1_520 + 1));
+  return 3_120 + (h % (3_200 - 3_120 + 1));
 }
 
 export interface MatchColors {
