@@ -58,6 +58,17 @@ export function mergeSlimIntoMobileMatch(
   existing: ClientMatch,
   slim: ClientMatch
 ): ClientMatch {
+  if (slim.status === "finished" || slim.marketCount === 0) {
+    return {
+      ...existing,
+      ...slim,
+      markets: [],
+      marketCount: 0,
+      realStats: slim.realStats ?? existing.realStats,
+      telemetry: slim.telemetry ?? existing.telemetry,
+    };
+  }
+
   const existingHasFullMarkets = (existing.markets?.length ?? 0) > 1;
   const incomingIsSlim = (slim.markets?.length ?? 0) <= 1;
 
@@ -66,26 +77,34 @@ export function mergeSlimIntoMobileMatch(
     const slimResultGroup = slim.markets?.find(
       (g) => g.key === "result" || g.key === "1x2"
     );
-    nextMarkets = existing.markets.map((group) => {
-      if (group.key !== "result" && group.key !== "1x2") return group;
-      if (slimResultGroup) {
+    if (slimResultGroup) {
+      nextMarkets = existing.markets.map((group) => {
+        if (group.key !== "result" && group.key !== "1x2") return group;
         return {
           ...group,
           outcomes: slimResultGroup.outcomes,
         };
-      }
-      return {
-        ...group,
-        outcomes: group.outcomes.map((o) => {
-          if (o.key === "home") return { ...o, odds: slim.oddsHome };
-          if (o.key === "draw" && slim.oddsDraw != null) {
-            return { ...o, odds: slim.oddsDraw };
-          }
-          if (o.key === "away") return { ...o, odds: slim.oddsAway };
-          return o;
-        }),
-      };
-    });
+      });
+    } else if (slim.status === "live" && Array.isArray(slim.markets)) {
+      nextMarkets = existing.markets.filter(
+        (group) => group.key !== "result" && group.key !== "1x2"
+      );
+    } else {
+      nextMarkets = existing.markets.map((group) => {
+        if (group.key !== "result" && group.key !== "1x2") return group;
+        return {
+          ...group,
+          outcomes: group.outcomes.map((o) => {
+            if (o.key === "home") return { ...o, odds: slim.oddsHome };
+            if (o.key === "draw" && slim.oddsDraw != null) {
+              return { ...o, odds: slim.oddsDraw };
+            }
+            if (o.key === "away") return { ...o, odds: slim.oddsAway };
+            return o;
+          }),
+        };
+      });
+    }
   }
 
   return {

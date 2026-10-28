@@ -636,34 +636,33 @@ export function skellamCDF(k: number, lambda1: number, lambda2: number): number 
 }
 
 /**
- * Paliers tactiques calmes d'actualisation temporelle des cotes :
+ * Paliers d'actualisation temporelle des cotes :
  * - Sur un match virtuel (5 min = 90’), 8 minutes simulées ≈ 25 secondes réelles :
  *   tant qu'aucun événement (but, carton rouge, mi-temps) ne survient, les cotes restent
  *   stables entre deux paliers au lieu de clignoter toutes les 3 secondes sans raison.
- * - Dès qu'un but ou carton survient à la minute `lastIncidentMin`, le modèle s'ancre
- *   immédiatement sur la minute exacte de l'incident puis reste stable jusqu'au palier suivant.
+ * - Sur un match réel (`isReal: true`) : AUCUN gel de 6 minutes — progression continue
+ *   minute par minute de 1’ à 74’ puis toutes les 30 secondes de 75’ à 90+’.
  */
 const VIRTUAL_PRICING_CHECKPOINTS = [
   0, 8, 16, 24, 32, 40, 45, 53, 61, 68, 75, 81, 85, 89, 90,
-] as const;
-const REAL_PRICING_CHECKPOINTS = [
-  0, 6, 12, 18, 24, 30, 36, 42, 45, 51, 57, 63, 69, 75, 79, 83, 86, 88, 90,
 ] as const;
 
 export function livePricingMinute(
   minute: number,
   opts?: { isReal?: boolean; lastIncidentMin?: number }
 ): number {
+  if (opts?.isReal) {
+    if (minute <= 0) return 0;
+    if (minute >= 90) return 90;
+    return clamp(Math.round(minute * 2) / 2, 0, 90);
+  }
+
   const m = clamp(Math.round(minute), 0, 90);
   if (m <= 0) return 0;
   if (m >= 90) return 90;
 
-  const checkpoints = opts?.isReal
-    ? REAL_PRICING_CHECKPOINTS
-    : VIRTUAL_PRICING_CHECKPOINTS;
-
   let snapped = 0;
-  for (const cp of checkpoints) {
+  for (const cp of VIRTUAL_PRICING_CHECKPOINTS) {
     if (cp <= m) snapped = cp;
     else break;
   }
@@ -694,8 +693,93 @@ export interface RealMatchLiveStatsInput {
   shotsOnTargetAway?: number | null;
   cornersHome?: number | null;
   cornersAway?: number | null;
+  savesHome?: number | null;
+  savesAway?: number | null;
   yellowCardsHome?: number | null;
   yellowCardsAway?: number | null;
+  clockSeconds?: number | null;
+  clockPeriod?: number | null;
+  statSnapshots?: Array<{
+    sec: number;
+    sotH: number;
+    sotA: number;
+    shH: number;
+    shA: number;
+    corH: number;
+    corA: number;
+  }>;
+  liveFeedProbs?: {
+    pHome: number;
+    pDraw: number;
+    pAway: number;
+    source: "bookmaker_live" | "espn_live" | "blended";
+    updatedAtSec: number | null;
+  } | null;
+  feedTotalGoalsExpected?: number | null;
+}
+
+/**
+ * Résout la minute effective d'un match réel en direct de manière 100 % déterministe :
+ * - 1’ à 74’ : granularité 1 minute exacte ;
+ * - 75’ à 90’ : granularité 30 secondes (ex. 78,5’ à 78m00s..78m29s, 79,0’ à 78m30s..78m59s) ;
+ * - 45+X’ et 90+X’ : gestion précise du temps additionnel toutes les 30 secondes.
+ */
+export function resolveEffectiveRealLiveMinute(
+  minute: number,
+  minuteLabel?: string | null,
+  realStats?: RealMatchLiveStatsInput | null
+): { pMin: number; remShare: number } {
+  const minLabel = (minuteLabel ?? "").trim().toUpperCase();
+  if (minLabel === "MT" || minLabel === "HT" || minLabel.includes("MI-TEMPS")) {
+    return { pMin: 45, remShare: 1 - goalTimeCDF(45) };
+  }
+
+  const stop1HMatch = /^45['’]?\+(\d+)/.exec(minLabel);
+  const stop2HMatch = /^90['’]?\+(\d+)/.exec(minLabel);
+  const sec =
+    realStats?.clockSeconds != null && Number.isFinite(realStats.clockSeconds)
+      ? Math.max(0, realStats.clockSeconds)
+      : null;
+  const period = realStats?.clockPeriod ?? (minute >= 46 || stop2HMatch ? 2 : 1);
+
+  // Temps additionnel 2e période (90+X’ ou clockSeconds >= 5400 en 2e MT)
+  if (stop2HMatch || (period === 2 && sec != null && sec >= 5400)) {
+    const addedMinFromLabel = stop2HMatch ? Math.max(1, Number(stop2HMatch[1])) : 1;
+    const stopHalfSteps =
+      sec != null && sec >= 5400
+        ? Math.floor((sec - 5400) / 30)
+        : (addedMinFromLabel - 1) * 2 + 1;
+    const remShare = clamp(0.036 * Math.exp(-0.22 * stopHalfSteps), 0.004, 0.036);
+    return { pMin: 90, remShare };
+  }
+
+  // Temps additionnel 1re période (45+X’ ou clockSeconds >= 2700 en 1re MT)
+  if (stop1HMatch || (period === 1 && sec != null && sec >= 2700)) {
+    const addedMinFromLabel = stop1HMatch ? Math.max(1, Number(stop1HMatch[1])) : 1;
+    const stopHalfSteps =
+      sec != null && sec >= 2700
+        ? Math.floor((sec - 2700) / 30)
+        : (addedMinFromLabel - 1) * 2 + 1;
+    const extra1H = clamp(0.018 * Math.exp(-0.28 * stopHalfSteps), 0.002, 0.018);
+    return { pMin: 45, remShare: clamp(1 - goalTimeCDF(45) + extra1H, 0.50, 0.58) };
+  }
+
+  // Temps réglementaire avec précision 30 s à partir de la 75e minute (`sec >= 4440`)
+  let pMin = clamp(minute, 1, 90);
+  if (sec != null) {
+    if (period === 1) {
+      pMin = clamp(Math.floor(sec / 60) + 1, 1, 45);
+    } else if (sec < 4440) {
+      pMin = clamp(Math.floor(sec / 60) + 1, 46, 74);
+    } else {
+      const halfStepsSince74 = Math.floor((sec - 4440) / 30);
+      pMin = clamp(74.5 + halfStepsSince74 * 0.5, 74.5, 90);
+    }
+  }
+
+  const effectiveElapsedMin = clamp(pMin - 0.5, 0.25, 89.75);
+  const remShare = clamp(1 - goalTimeCDF(effectiveElapsedMin), 0.008, 1);
+  return { pMin, remShare };
 }
 
 /**
@@ -887,12 +971,14 @@ export function liveScoreModel(
 }
 
 /**
- * Modèle de score dédié EXCLUSIVEMENT aux matchs réels ajoutés manuellement par l'admin (`source = "manual"`).
+ * Modèle de score dédié EXCLUSIVEMENT aux matchs réels (`source = "manual"`).
  * Ne consulte JAMAIS `teamStrength`, `homeForm` ni les paramètres du simulateur virtuel :
- * - calibre les forces intrinsèques 90' à partir des cotes officielles `(oddsHome, oddsDraw, oddsAway)` ;
- * - intègre en direct les vraies statistiques officielles du terrain (`realStats` : tirs cadrés,
- *   tirs totaux, corners, possession), le momentum des buts, les cartons rouges et le temps additionnel,
- *   avec quantification par paliers pour éviter toute oscillation inutile des cotes.
+ * - calibre les forces intrinsèques 90’ à partir des cotes pré-match `(oddsHome, oddsDraw, oddsAway)`
+ *   et, lorsqu'elle est connue, de la ligne de buts Over/Under (`feedTotalGoalsExpected`) ;
+ * - progresse chaque minute de 1’ à 74’ puis toutes les 30 secondes de 75’ à 90+’ (zéro gel de 6 min) ;
+ * - intègre avec pleine réactivité les statistiques cumulées du match, la pression offensive
+ *   glissante des 10–15 dernières minutes (`statSnapshots`), le verrouillage des matchs fermés,
+ *   les cartons rouges et les cotes/probabilités live officielles d'ESPN (`liveFeedProbs`).
  */
 export function realMatchScoreModel(params: {
   oddsHome: number;
@@ -914,6 +1000,7 @@ export function realMatchScoreModel(params: {
   const minute = clamp(Math.round(params.minute ?? 0), 0, 90);
   const redHome = Math.max(0, Math.round(params.redHome ?? 0));
   const redAway = Math.max(0, Math.round(params.redAway ?? 0));
+  const st = params.realStats ?? null;
 
   const invH = 1 / Math.max(1.02, params.oddsHome || 2.1);
   const invD =
@@ -926,16 +1013,25 @@ export function realMatchScoreModel(params: {
   const targetD = invD / sumInv;
   const targetA = invA / sumInv;
 
-  // 1) Calibrage exact des forces intrinsèques 90 min (0-0) à partir des cotes officielles de l'admin
-  let baseTotal = 2.62;
+  // 1) Calibrage exact des forces intrinsèques 90 min (0-0) à partir des cotes pré-match
+  //    et de l'espérance de buts Over/Under bookmaker/ligue lorsqu'elle est disponible.
+  const priorTotal =
+    st?.feedTotalGoalsExpected != null &&
+    Number.isFinite(st.feedTotalGoalsExpected) &&
+    st.feedTotalGoalsExpected >= 1.4 &&
+    st.feedTotalGoalsExpected <= 4.4
+      ? st.feedTotalGoalsExpected
+      : null;
+
+  let baseTotal = priorTotal ?? 2.68;
   const logEdge = Math.log(
-    clamp(targetH + 0.025, 0.03, 0.96) / clamp(targetA + 0.025, 0.03, 0.96)
+    clamp(targetH + 0.02, 0.025, 0.97) / clamp(targetA + 0.02, 0.025, 0.97)
   );
-  let shareH = clamp(0.5 + 0.24 * logEdge, 0.06, 0.94);
+  let shareH = clamp(0.5 + 0.25 * logEdge, 0.04, 0.96);
 
   const evalPreMatch = (tot: number, sh: number) => {
-    const lh = Math.max(0.05, tot * sh);
-    const la = Math.max(0.05, tot * (1 - sh));
+    const lh = Math.max(0.04, tot * sh);
+    const la = Math.max(0.04, tot * (1 - sh));
     const g = bivariatePoissonGrid(lh, la, 7, 1);
     let pH = 0;
     let pD = 0;
@@ -952,98 +1048,173 @@ export function realMatchScoreModel(params: {
     return { pH: pH / s, pD: pD / s, pA: pA / s };
   };
 
-  for (let iter = 0; iter < 10; iter++) {
+  for (let iter = 0; iter < 12; iter++) {
     const cur = evalPreMatch(baseTotal, shareH);
     const diffEdge = (targetH - targetA) - (cur.pH - cur.pA);
-    shareH = clamp(shareH + 0.28 * diffEdge, 0.05, 0.95);
+    shareH = clamp(shareH + 0.30 * diffEdge, 0.04, 0.96);
     if (invD > 0) {
       const diffDraw = targetD - cur.pD;
-      baseTotal = clamp(baseTotal * Math.exp(-1.15 * diffDraw), 0.9, 4.2);
+      const drawStep = priorTotal != null ? -0.45 : -0.58;
+      const minTot = targetD >= 0.33 ? 1.75 : 2.25;
+      baseTotal = clamp(baseTotal * Math.exp(drawStep * diffDraw), minTot, 4.25);
+      if (priorTotal != null) {
+        baseTotal = baseTotal * 0.65 + priorTotal * 0.35;
+      }
     }
   }
 
-  let lastIncidentMin = 0;
-  if (Array.isArray(params.events)) {
-    for (const ev of params.events) {
-      if (ev.minute > lastIncidentMin) lastIncidentMin = ev.minute;
-    }
-  }
-
-  const pMin = isLive
-    ? livePricingMinute(minute, { isReal: true, lastIncidentMin })
-    : 0;
-
-  // Gestion fine du temps restant (incluant la mi-temps `MT` et le temps additionnel `90'+X`)
-  const minLabel = (params.minuteLabel ?? "").trim().toUpperCase();
-  const isStoppage90 = isLive && (minLabel.startsWith("90'+") || minLabel.startsWith("90+"));
-  let remShare = 1;
-  if (isLive) {
-    if (isStoppage90) {
-      const addedMatch = /90'?\+(\d+)/.exec(minLabel);
-      const addedMin = addedMatch ? Number(addedMatch[1]) : 2;
-      remShare = clamp(0.032 - addedMin * 0.005, 0.006, 0.032);
-    } else if (minLabel === "MT" || minLabel === "HT") {
-      remShare = 1 - goalTimeCDF(45);
-    } else {
-      remShare = clamp(1 - goalTimeCDF(pMin), 0.01, 1);
-    }
-  }
+  // 2) Horloge de cotation live continue (1 min de 1’ à 74’, 30 s de 75’ à 90+’)
+  const liveClockTiming = isLive
+    ? resolveEffectiveRealLiveMinute(minute, params.minuteLabel, st)
+    : { pMin: 0, remShare: 1 };
+  const pMin = liveClockTiming.pMin;
+  const remShare = liveClockTiming.remShare;
 
   let liveH = baseTotal * shareH;
   let liveA = baseTotal * (1 - shareH);
 
   if (isLive) {
-    // 2) Intégration bayésienne quantifiée des statistiques officielles en direct (tirs cadrés, tirs, corners, possession)
-    const st = params.realStats;
-    if (st && pMin >= 10) {
-      const sotH = Math.max(0, st.shotsOnTargetHome ?? 0);
-      const sotA = Math.max(0, st.shotsOnTargetAway ?? 0);
-      const shTotH = Math.max(sotH, st.shotsTotalHome ?? 0);
-      const shTotA = Math.max(sotA, st.shotsTotalAway ?? 0);
+    const elapsedFrac = Math.max(0.06, 1 - remShare);
+
+    // 3) Réactivité calibrée aux statistiques réelles du match (cumulées + 12 dernières minutes)
+    if (st && pMin >= 5) {
+      const rawSotH = st.shotsOnTargetHome;
+      const rawSotA = st.shotsOnTargetAway;
+      // Si un flux fournit les arrêts du gardien adverse sans SOT explicite, on en déduit le plancher cadré
+      const inferredSotH =
+        rawSotH != null
+          ? Math.max(0, rawSotH)
+          : st.savesAway != null
+            ? Math.max(0, st.savesAway) + homeScore
+            : 0;
+      const inferredSotA =
+        rawSotA != null
+          ? Math.max(0, rawSotA)
+          : st.savesHome != null
+            ? Math.max(0, st.savesHome) + awayScore
+            : 0;
+
+      const hasShotStats =
+        rawSotH != null ||
+        rawSotA != null ||
+        st.shotsTotalHome != null ||
+        st.shotsTotalAway != null ||
+        st.cornersHome != null ||
+        st.cornersAway != null;
+
+      const shTotH = Math.max(inferredSotH, st.shotsTotalHome ?? 0);
+      const shTotA = Math.max(inferredSotA, st.shotsTotalAway ?? 0);
       const corH = Math.max(0, st.cornersHome ?? 0);
       const corA = Math.max(0, st.cornersAway ?? 0);
 
-      // Indice de menace offensive pondéré (1 tir cadré ≈ 0,11 xG, tir non cadré ≈ 0,03 xG, corner ≈ 0,035 xG)
-      const threatH = sotH * 3.0 + (shTotH - sotH) * 0.65 + corH * 0.85;
-      const threatA = sotA * 3.0 + (shTotA - sotA) * 0.65 + corA * 0.85;
-      const totalThreat = threatH + threatA;
+      if (hasShotStats) {
+        // Moyenne européenne sur 90 min : ~9 tirs cadrés, ~16 hors-cadre, ~10 corners -> ~45 pts d'activité
+        const threatH =
+          inferredSotH * 3.0 + (shTotH - inferredSotH) * 0.65 + corH * 0.75;
+        const threatA =
+          inferredSotA * 3.0 + (shTotA - inferredSotA) * 0.65 + corA * 0.75;
+        const totalThreat = threatH + threatA;
 
-      if (totalThreat >= 3) {
-        const obsShareH = (threatH + 1.5 * shareH) / (totalThreat + 1.5);
-        // Crédibilité croissante avec le volume d'occasions, quantifiée par pas de 4 % (zéro tremblement inutile)
-        const rawCred = clamp(totalThreat / (totalThreat + 15), 0, 0.52);
-        const blendedShareH = shareH * (1 - rawCred) + obsShareH * rawCred;
-        const quantizedShareH = clamp(
-          Math.round(blendedShareH * 25) / 25,
-          0.06,
-          0.94
-        );
+        if (totalThreat >= 1.5) {
+          const obsShareH = (threatH + 4.5 * shareH) / (totalThreat + 4.5);
+          const cred = clamp(totalThreat / (totalThreat + 22.0), 0, 0.44);
+          let liveShareH = clamp(shareH * (1 - cred) + obsShareH * cred, 0.14, 0.86);
 
-        // Rythme global d'occasions comparé au rythme standard à cette minute (~26 unités de menace sur 90')
-        const elapsedFrac = Math.max(0.12, goalTimeCDF(pMin));
-        const expectedThreatSoFar = 26 * elapsedFrac;
-        const rawTempo = clamp(
-          (totalThreat + 8) / (expectedThreatSoFar + 8),
-          0.82,
-          1.24
-        );
-        const quantizedTempo = Math.round(rawTempo * 20) / 20;
+          if (st.possessionHome != null && st.possessionAway != null) {
+            const possTilt = clamp((st.possessionHome - 50) / 100, -0.26, 0.26);
+            liveShareH = clamp(liveShareH + possTilt * 0.06, 0.14, 0.86);
+          }
 
-        const adjTotal = baseTotal * quantizedTempo;
-        liveH = adjTotal * quantizedShareH;
-        liveA = adjTotal * (1 - quantizedShareH);
-      } else if (st.possessionHome != null && st.possessionAway != null && pMin >= 18) {
-        // Légère inclinaison territoriale si seules les possessions sont très déséquilibrées (> 62 %)
-        const possDiff = clamp((st.possessionHome - 50) / 100, -0.25, 0.25);
-        if (Math.abs(possDiff) >= 0.12) {
-          const tilt = Math.round(possDiff * 20) / 20;
-          liveH *= 1 + tilt * 0.35;
-          liveA *= 1 - tilt * 0.35;
+          // Rythme réel du match [0.60x .. 1.28x] :
+          // - match verrouillé (peu de tirs/corners) -> baisse nette des buts restants attendus
+          // - match ouvert / attaque-défense -> hausse réaliste du rythme offensif
+          const expectedActivity = 45.0 * elapsedFrac;
+          const observedActivity = totalThreat + (homeScore + awayScore) * 3.8;
+          const priorWeight = clamp(10.5 - elapsedFrac * 4.5, 5.0, 10.5);
+          const tempo = clamp(
+            (observedActivity + priorWeight) / (expectedActivity + priorWeight),
+            0.60,
+            1.28
+          );
+
+          const adjTotal = baseTotal * tempo;
+          liveH = adjTotal * liveShareH;
+          liveA = adjTotal * (1 - liveShareH);
+        } else if (pMin >= 15) {
+          // Match extrêmement fermé (quasi 0 tir ni corner après 15’..75’) : contraction nette du tempo
+          const sterileSeverity = clamp((pMin - 12) / 58, 0.10, 0.40);
+          const sterileFactor = clamp(1 - sterileSeverity, 0.60, 0.90);
+          liveH *= sterileFactor;
+          liveA *= sterileFactor;
+
+          if (st.possessionHome != null && st.possessionAway != null) {
+            const possDiff = clamp((st.possessionHome - 50) / 100, -0.26, 0.26);
+            liveH *= 1 + possDiff * 0.26;
+            liveA *= 1 - possDiff * 0.26;
+          }
         }
+
+        // Pression offensive glissante sur les 10–15 dernières minutes (`statSnapshots`)
+        const snaps = st.statSnapshots;
+        const curSec = st.clockSeconds ?? Math.round(pMin * 60);
+        if (Array.isArray(snaps) && snaps.length > 0 && curSec >= 480) {
+          let refSnap = snaps[0];
+          for (const s of snaps) {
+            const age = curSec - s.sec;
+            if (age >= 360 && age <= 960) {
+              refSnap = s;
+              break;
+            }
+            if (age >= 240) {
+              refSnap = s;
+            }
+          }
+          const winSec = curSec - refSnap.sec;
+          if (winSec >= 240) {
+            const dSotH = Math.max(0, inferredSotH - refSnap.sotH);
+            const dSotA = Math.max(0, inferredSotA - refSnap.sotA);
+            const dShH = Math.max(dSotH, shTotH - refSnap.shH);
+            const dShA = Math.max(dSotA, shTotA - refSnap.shA);
+            const dCorH = Math.max(0, corH - refSnap.corH);
+            const dCorA = Math.max(0, corA - refSnap.corA);
+
+            const recThreatH = dSotH * 3.0 + (dShH - dSotH) * 0.65 + dCorH * 0.75;
+            const recThreatA = dSotA * 3.0 + (dShA - dSotA) * 0.65 + dCorA * 0.75;
+            const recTotal = recThreatH + recThreatA;
+            const normWinMin = Math.max(4, winSec / 60);
+            // Moyenne normale sur 12 min : ~6.0 pts d'activité cumulée
+            const recRatePer12Min = (recTotal / normWinMin) * 12;
+
+            if (recRatePer12Min >= 7.5) {
+              const recShareH = (recThreatH + 1.4) / (recTotal + 2.8);
+              const curShareH = liveH / Math.max(0.05, liveH + liveA);
+              // Accentue la dynamique récente par rapport à la moyenne cumulée sans double comptage excessif
+              const surgeIntensity = clamp((recRatePer12Min - 6.0) / 22.0, 0.03, 0.15);
+              const shiftH = (recShareH - curShareH) * 0.45 + (recShareH - 0.5) * surgeIntensity;
+              liveH *= clamp(1 + shiftH + surgeIntensity * 0.14, 0.88, 1.16);
+              liveA *= clamp(1 - shiftH + surgeIntensity * 0.08, 0.86, 1.16);
+            } else if (pMin >= 28 && recRatePer12Min <= 1.2) {
+              // Les 10–15 dernières minutes sont verrouillées (rythme retombé)
+              liveH *= 0.88;
+              liveA *= 0.88;
+            }
+          }
+        }
+
+        // Plafond global de cohérence bookmaker sur le taux 90 min équivalent
+        const curTot = liveH + liveA;
+        const clampedTot = clamp(curTot, baseTotal * 0.54, baseTotal * 1.32);
+        const clampedShareH = clamp(liveH / Math.max(0.05, curTot), 0.15, 0.85);
+        liveH = clampedTot * clampedShareH;
+        liveA = clampedTot * (1 - clampedShareH);
+      } else if (st.possessionHome != null && st.possessionAway != null && pMin >= 8) {
+        const possDiff = clamp((st.possessionHome - 50) / 100, -0.28, 0.28);
+        liveH *= 1 + possDiff * 0.36;
+        liveA *= 1 - possDiff * 0.36;
       }
     }
 
-    // 3) Dynamique tactique du score, statut favori mené et momentum des buts récents
+    // 4) Physionomie tactique du score, urgence du favori mené et gestion d'écart 2+ buts
     const gs = computeGameStateMultipliers({
       homeScore,
       awayScore,
@@ -1054,22 +1225,110 @@ export function realMatchScoreModel(params: {
     liveH *= gs.hMult;
     liveA *= gs.aMult;
 
-    // Ajustement doux selon les buts déjà marqués vs attendus
-    if (pMin >= 24) {
-      const elapsedFrac = Math.max(0.2, goalTimeCDF(pMin));
+    if (Math.abs(homeScore - awayScore) >= 2 && pMin >= 62) {
+      // À +2 ou +3 après l'heure de jeu, le bloc qui mène gère le chrono
+      liveH *= 0.86;
+      liveA *= 0.86;
+    }
+
+    // 5) Réalité des buts inscrits vs attendus (sans double-compter l'écoulement du chrono déjà porté par `remShare`)
+    if (pMin >= 20) {
       const expGoalsSoFar = baseTotal * elapsedFrac;
       const obsGoals = homeScore + awayScore;
-      const goalPace = clamp((obsGoals + 2.4) / (expGoalsSoFar + 2.4), 0.86, 1.2);
-      liveH *= goalPace;
-      liveA *= goalPace;
+      const goalPace = clamp(
+        (obsGoals + 3.4) / (expGoalsSoFar + 3.4),
+        0.82,
+        1.28
+      );
+      const hasShots =
+        st != null &&
+        (st.shotsOnTargetHome != null ||
+          st.shotsTotalHome != null ||
+          st.cornersHome != null);
+      const effectivePace = hasShots ? 1 + (goalPace - 1) * 0.30 : goalPace;
+      liveH *= effectivePace;
+      liveA *= effectivePace;
     }
   }
 
-  // 4) Impact cartons rouges et projection sur le temps restant
-  const redFactorH = Math.pow(0.66, redHome) * Math.pow(1.24, redAway);
-  const redFactorA = Math.pow(0.66, redAway) * Math.pow(1.24, redHome);
-  const remH = Math.max(0.004, liveH * remShare * redFactorH);
-  const remA = Math.max(0.004, liveA * remShare * redFactorA);
+  // 6) Impact réaliste des cartons rouges (infériorité numérique 10 contre 11 / 9 contre 11)
+  const redFactorH = Math.pow(0.54, redHome) * Math.pow(1.48, redAway);
+  const redFactorA = Math.pow(0.54, redAway) * Math.pow(1.48, redHome);
+  let remH = Math.max(0.003, liveH * remShare * redFactorH);
+  let remA = Math.max(0.003, liveA * remShare * redFactorA);
+
+  // 7) Ancrage sans arbitrage sur les cotes live `current` bookmaker & probabilités live ESPN
+  const feedProbs = isLive ? st?.liveFeedProbs : null;
+  if (
+    feedProbs &&
+    Number.isFinite(feedProbs.pHome) &&
+    Number.isFinite(feedProbs.pDraw) &&
+    Number.isFinite(feedProbs.pAway)
+  ) {
+    const curSec = st?.clockSeconds ?? null;
+    const ageSec =
+      curSec != null && feedProbs.updatedAtSec != null
+        ? Math.max(0, curSec - feedProbs.updatedAtSec)
+        : 0;
+    if (ageSec <= 240) {
+      const freshness = ageSec <= 90 ? 1 : clamp(1 - (ageSec - 90) / 160, 0.25, 1);
+      const baseWeight =
+        feedProbs.source === "bookmaker_live"
+          ? 0.62
+          : feedProbs.source === "blended"
+            ? 0.58
+            : 0.38;
+      const wFeed = baseWeight * freshness;
+
+      const dcProbe = Math.pow(remShare, 0.75);
+      const evalLive1x2 = (lh: number, la: number) => {
+        const g = bivariatePoissonGrid(Math.max(0.003, lh), Math.max(0.003, la), 6, dcProbe);
+        let pH = 0;
+        let pD = 0;
+        let pA = 0;
+        for (let i = 0; i <= 6; i++) {
+          for (let j = 0; j <= 6; j++) {
+            const v = g[i][j];
+            const fh = homeScore + i;
+            const fa = awayScore + j;
+            if (fh > fa) pH += v;
+            else if (fh === fa) pD += v;
+            else pA += v;
+          }
+        }
+        const s = pH + pD + pA || 1;
+        return { pH: pH / s, pD: pD / s, pA: pA / s };
+      };
+
+      let calTot = clamp(remH + remA, 0.02, 4.5);
+      let calShareH = clamp(remH / Math.max(0.006, remH + remA), 0.04, 0.96);
+      const fSum = feedProbs.pHome + feedProbs.pDraw + feedProbs.pAway || 1;
+      const fH = feedProbs.pHome / fSum;
+      const fD = feedProbs.pDraw / fSum;
+      const fA = feedProbs.pAway / fSum;
+
+      for (let it = 0; it < 8; it++) {
+        const cur = evalLive1x2(calTot * calShareH, calTot * (1 - calShareH));
+        const dEdge = (fH - fA) - (cur.pH - cur.pA);
+        calShareH = clamp(calShareH + 0.34 * dEdge, 0.03, 0.97);
+        if (homeScore === awayScore) {
+          const dDraw = fD - cur.pD;
+          calTot = clamp(calTot * Math.exp(-1.15 * dDraw), 0.02, 4.5);
+        } else if (homeScore > awayScore) {
+          const dComeback = (fD + fA) - (cur.pD + cur.pA);
+          calTot = clamp(calTot * Math.exp(0.85 * dComeback), 0.02, 4.5);
+        } else {
+          const dComeback = (fD + fH) - (cur.pD + cur.pH);
+          calTot = clamp(calTot * Math.exp(0.85 * dComeback), 0.02, 4.5);
+        }
+      }
+
+      const feedRemH = calTot * calShareH;
+      const feedRemA = calTot * (1 - calShareH);
+      remH = Math.max(0.003, remH * (1 - wFeed) + feedRemH * wFeed);
+      remA = Math.max(0.003, remA * (1 - wFeed) + feedRemA * wFeed);
+    }
+  }
 
   const liveMargin = isLive
     ? round2(clamp(baseMargin + (1 - remShare) * 0.035, baseMargin, 1.125))

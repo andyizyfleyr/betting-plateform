@@ -177,7 +177,9 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
   const resGroup = match.markets?.find((g) => g.key === "result");
   const openKeys = resGroup
     ? new Set(resGroup.outcomes.map((o) => o.key))
-    : null;
+    : match.status === "live" && Array.isArray(match.markets)
+      ? new Set<string>()
+      : null;
 
   const cells: Array<{
     key: string;

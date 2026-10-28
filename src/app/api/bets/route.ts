@@ -356,6 +356,7 @@ export async function GET(req: NextRequest) {
               oddsHome: match.oddsHome,
               oddsDraw: match.oddsDraw,
               oddsAway: match.oddsAway,
+              realStats: match.realStats ?? null,
               markets: match.markets ?? null,
             })
           : null,

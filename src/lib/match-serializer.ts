@@ -6,6 +6,7 @@ import {
   buildLiveMarkets,
   buildMarkets,
   buildRealMatchMarkets,
+  computeRealLiveHeadline1x2Odds,
   isRealMatchKickoffReached,
   isRealMatchPostIncidentSuspended,
   minuteNumber,
@@ -73,17 +74,32 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
     const kickoffReached = isRealMatchKickoffReached(m, now);
     const postIncidentSuspended = isRealMatchPostIncidentSuspended(m, now);
     const feedStale = isRealMatchFeedStale(m, now);
+    const lateLock = m.status === "live" && minuteNumber(m.minute) >= 88;
     const effectiveSuspended =
-      Boolean(m.suspended) || kickoffReached || postIncidentSuspended || feedStale;
+      Boolean(m.suspended) ||
+      kickoffReached ||
+      postIncidentSuspended ||
+      feedStale ||
+      lateLock;
     const markets = buildRealMatchMarkets(m, now);
     const resGroup = markets.find((g) => g.key === "result");
+    const liveHeadline =
+      m.status === "live"
+        ? computeRealLiveHeadline1x2Odds(m)
+        : {
+            oddsHome: m.oddsHome,
+            oddsDraw: m.oddsDraw,
+            oddsAway: m.oddsAway,
+          };
     const oddsHome =
-      resGroup?.outcomes.find((o) => o.key === "home")?.odds ?? m.oddsHome;
-    const oddsDraw = resGroup
-      ? (resGroup.outcomes.find((o) => o.key === "draw")?.odds ?? m.oddsDraw)
-      : m.oddsDraw;
+      resGroup?.outcomes.find((o) => o.key === "home")?.odds ??
+      liveHeadline.oddsHome;
+    const oddsDraw =
+      resGroup?.outcomes.find((o) => o.key === "draw")?.odds ??
+      liveHeadline.oddsDraw;
     const oddsAway =
-      resGroup?.outcomes.find((o) => o.key === "away")?.odds ?? m.oddsAway;
+      resGroup?.outcomes.find((o) => o.key === "away")?.odds ??
+      liveHeadline.oddsAway;
 
     const {
       feedSyncedAt: _feedSyncedAt,

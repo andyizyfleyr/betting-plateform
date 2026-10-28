@@ -488,7 +488,7 @@ async function handleAdminPost(
           redAway: 0,
           events: [],
           tickHistory: [],
-          regime: "balanced",
+          regime: source === "manual" && !externalId ? "admin_odds_locked" : "balanced",
           homeForm: 1,
           awayForm: 1,
           markets,
@@ -779,6 +779,12 @@ async function handleAdminPost(
         });
       }
 
+      const oddsManuallyEdited =
+        m.source === "manual" &&
+        (Math.abs(oddsHome - m.oddsHome) >= 0.01 ||
+          Math.abs(oddsDraw - (m.oddsDraw ?? 3.2)) >= 0.01 ||
+          Math.abs(oddsAway - m.oddsAway) >= 0.01);
+
       const [updated] = await db
         .update(matches)
         .set({
@@ -788,6 +794,7 @@ async function handleAdminPost(
           oddsHome,
           oddsDraw,
           oddsAway,
+          ...(oddsManuallyEdited ? { regime: "admin_odds_locked" } : {}),
           homeLogo: teamLogo(homeTeam, homeTeam === m.homeTeam ? m.homeLogo : null),
           awayLogo: teamLogo(awayTeam, awayTeam === m.awayTeam ? m.awayLogo : null),
           markets: updatedMarkets,
