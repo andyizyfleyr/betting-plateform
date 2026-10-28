@@ -22,21 +22,41 @@ import {
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, type PaymentProvider } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatPresetChip,
+  localToEur,
+} from "@/lib/countries";
 import { eur } from "@/lib/format";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 
-const QUICK = [10, 25, 50, 100, 250];
 type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
 
 export default function DepositScreen() {
   const router = useRouter();
-  const { authReady, sessionRestoring, toast, user, bumpBets, hapticsEnabled } =
-    useApp();
+  const {
+    authReady,
+    sessionRestoring,
+    toast,
+    user,
+    bumpBets,
+    hapticsEnabled,
+    countryConfig,
+    currency,
+    currencyConfig,
+  } = useApp();
 
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
-  const [amountText, setAmountText] = useState("25");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [amountText, setAmountText] = useState(() =>
+    String(currencyConfig.defaultDepositLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setAmountText(String(currencyConfig.defaultDepositLocal));
+  }
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
   const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
@@ -91,10 +111,26 @@ export default function DepositScreen() {
   }
 
   const parsed = Number(amountText.replace(",", "."));
-  const amount = Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0;
-  const validAmount = amount >= 5 && amount <= 2000;
-
+  const localAmount =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const amount = localToEur(localAmount, currency);
   const isManual = method === "mobile_money" || method === "sepa";
+  const effectiveMinLocal = isManual
+    ? currencyConfig.minDepositLocal
+    : Math.max(
+        currencyConfig.minDepositLocal,
+        currencyConfig.decimals === 0
+          ? Math.ceil(0.5 * currencyConfig.rateFromEur)
+          : Math.ceil(0.5 * currencyConfig.rateFromEur * 100) / 100
+      );
+  const validAmount =
+    localAmount >= effectiveMinLocal &&
+    localAmount <= currencyConfig.maxDepositLocal;
+
   const onlineProvider =
     method === "stripe" || method === "paypal"
       ? providers.find((p) => p.id === method)
@@ -229,23 +265,27 @@ export default function DepositScreen() {
             {/* Montant compact */}
             <View style={styles.card}>
               <Text style={styles.fieldCaps}>
-                MONTANT À CRÉDITER (5 € – 2 000 €)
+                MONTANT À CRÉDITER (
+                {formatLocalAmount(effectiveMinLocal, currency)} –{" "}
+                {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
               </Text>
               <View style={styles.amountInputWrap}>
                 <TextInput
                   value={amountText}
                   onChangeText={setAmountText}
-                  keyboardType="decimal-pad"
-                  placeholder="25"
+                  keyboardType={
+                    currencyConfig.decimals === 0 ? "number-pad" : "decimal-pad"
+                  }
+                  placeholder={String(currencyConfig.defaultDepositLocal)}
                   placeholderTextColor={COLORS.dim}
                   style={styles.amountInput}
                 />
-                <Text style={styles.euroSymbol}>€</Text>
+                <Text style={styles.euroSymbol}>{currencyConfig.symbol}</Text>
               </View>
 
               <View style={styles.quickGrid}>
-                {QUICK.map((q) => {
-                  const active = amount === q;
+                {currencyConfig.depositPresetsLocal.map((q) => {
+                  const active = localAmount === q;
                   return (
                     <Pressable
                       key={q}
@@ -256,12 +296,13 @@ export default function DepositScreen() {
                       ]}
                     >
                       <Text
+                        numberOfLines={1}
                         style={[
                           styles.quickChipText,
                           active && { color: "#ffffff" },
                         ]}
                       >
-                        {q} €
+                        {formatPresetChip(q, currency)}
                       </Text>
                     </Pressable>
                   );
@@ -278,14 +319,14 @@ export default function DepositScreen() {
                   {
                     id: "mobile_money" as const,
                     label: "Mobile Money",
-                    sub: "MTN · Moov · Orange",
+                    sub: countryConfig.mobileMoneyHint || "Transfert mobile",
                     Icon: Smartphone,
                     available: true,
                   },
                   {
                     id: "sepa" as const,
-                    label: "Virement SEPA",
-                    sub: "IBAN instantané",
+                    label: "Virement bancaire",
+                    sub: "IBAN / Réf. bancaire",
                     Icon: Building2,
                     available: true,
                   },
@@ -339,15 +380,15 @@ export default function DepositScreen() {
                   <Text style={styles.fieldCaps}>
                     {method === "mobile_money"
                       ? "NUMÉRO OU RÉF. MOBILE MONEY"
-                      : "RÉFÉRENCE VIREMENT SEPA"}
+                      : "RÉFÉRENCE VIREMENT BANCAIRE"}
                   </Text>
                   <TextInput
                     value={reference}
                     onChangeText={setReference}
                     placeholder={
                       method === "mobile_money"
-                        ? "Ex. MTN +229 01 … / ID TXN"
-                        : "Ex. Réf. virement SEPA"
+                        ? `Ex. ${countryConfig.mobileMoneyHint || "Mobile Money"} / ID TXN`
+                        : "Ex. Réf. virement bancaire"
                     }
                     placeholderTextColor={COLORS.dim}
                     style={styles.refInput}

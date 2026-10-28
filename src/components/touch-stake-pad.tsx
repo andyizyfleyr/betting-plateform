@@ -2,11 +2,16 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Delete, Keyboard } from "lucide-react";
+import {
+  formatLocalInputString,
+  formatPresetChip,
+  maxSpendableLocalFromEur,
+  type CurrencyCode,
+} from "@/lib/countries";
 import { triggerHaptic } from "@/lib/feedback";
 import { cn, eur } from "@/lib/format";
+import { useApp } from "./providers";
 
-const DESKTOP_QUICK_STAKES = [5, 10, 25, 50] as const;
-const MOBILE_QUICK_STAKES = [5, 10, 25, 50] as const;
 const MOBILE_MEDIA_QUERY = "(max-width: 1023px)";
 
 function subscribeMobile(cb: () => void): () => void {
@@ -25,22 +30,25 @@ function getServerSnapshot(): boolean {
   return false;
 }
 
-function sanitizeStakeInput(raw: string): string | null {
+function sanitizeStakeInput(
+  raw: string,
+  decimals: 0 | 2,
+  maxCap: number
+): string | null {
   const clean = raw.replace(",", ".").replace(/[^0-9.]/g, "");
+  if (decimals === 0 && clean.includes(".")) return null;
   const parts = clean.split(".");
   if (parts.length > 2) return null;
-  if (parts[1] && parts[1].length > 2) return null;
+  if (parts[1] && parts[1].length > decimals) return null;
   const num = Number(clean);
-  if (clean !== "" && clean !== "." && (!Number.isFinite(num) || num > 99999)) {
+  if (clean !== "" && clean !== "." && (!Number.isFinite(num) || num > maxCap)) {
     return null;
   }
   return clean;
 }
 
-function formatNumberClean(val: number): string {
-  const rounded = Math.round(val * 100) / 100;
-  if (rounded <= 0) return "";
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, "");
+function formatNumberClean(val: number, currency: CurrencyCode): string {
+  return formatLocalInputString(val, currency, ".");
 }
 
 export interface TouchStakePadProps {
@@ -63,12 +71,14 @@ export function TouchStakePad({
   stakeText,
   onChangeStakeText,
   balance,
-  maxCap = 99999,
+  maxCap,
   hasError = false,
   haptics = true,
   collapsibleOnMobile = false,
   defaultExpandedOnMobile = true,
 }: TouchStakePadProps) {
+  const { currency, currencyConfig } = useApp();
+  const resolvedMaxCap = maxCap ?? currencyConfig.maxInputLocal;
   const isMobile = useSyncExternalStore(
     subscribeMobile,
     getMobileSnapshot,
@@ -79,11 +89,15 @@ export function TouchStakePad({
 
   const parsed = Number(stakeText.replace(",", "."));
   const numericStake =
-    Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
 
   const effectiveMax = Math.max(
     0,
-    Math.min(maxCap, Math.floor(Math.max(0, balance) * 100) / 100)
+    Math.min(resolvedMaxCap, maxSpendableLocalFromEur(balance, currency))
   );
 
   const emitChange = (next: string, markTouched = true) => {
@@ -92,7 +106,7 @@ export function TouchStakePad({
   };
 
   const handleDesktopTyping = (raw: string) => {
-    const next = sanitizeStakeInput(raw);
+    const next = sanitizeStakeInput(raw, currencyConfig.decimals, resolvedMaxCap);
     if (next !== null) emitChange(next, true);
   };
 
@@ -100,12 +114,16 @@ export function TouchStakePad({
     triggerHaptic(haptics, 8);
     const base = pristine ? "" : stakeText.replace(",", ".");
     if (digit === ".") {
-      if (base.includes(".")) return;
+      if (currencyConfig.decimals === 0 || base.includes(".")) return;
       emitChange(base === "" ? "0." : `${base}.`);
       return;
     }
     const candidate = base === "0" ? digit : `${base}${digit}`;
-    const valid = sanitizeStakeInput(candidate);
+    const valid = sanitizeStakeInput(
+      candidate,
+      currencyConfig.decimals,
+      resolvedMaxCap
+    );
     if (valid !== null) emitChange(valid);
   };
 
@@ -125,14 +143,33 @@ export function TouchStakePad({
       emitChange("0");
       return;
     }
-    const valid = sanitizeStakeInput(`${base}00`);
+    const valid = sanitizeStakeInput(
+      `${base}00`,
+      currencyConfig.decimals,
+      resolvedMaxCap
+    );
+    if (valid !== null) emitChange(valid);
+  };
+
+  const pressTripleZero = () => {
+    triggerHaptic(haptics, 8);
+    const base = pristine ? "" : stakeText.replace(",", ".");
+    if (base === "" || base === "0") {
+      emitChange("0");
+      return;
+    }
+    const valid = sanitizeStakeInput(
+      `${base}000`,
+      currencyConfig.decimals,
+      resolvedMaxCap
+    );
     if (valid !== null) emitChange(valid);
   };
 
   const pressPreset = (amount: number) => {
     triggerHaptic(haptics, 10);
-    const capped = Math.min(maxCap, amount);
-    emitChange(formatNumberClean(capped));
+    const capped = Math.min(resolvedMaxCap, amount);
+    emitChange(formatNumberClean(capped, currency));
   };
 
   const pressMax = () => {
@@ -141,7 +178,7 @@ export function TouchStakePad({
       emitChange("0");
       return;
     }
-    emitChange(formatNumberClean(effectiveMax));
+    emitChange(formatNumberClean(effectiveMax, currency));
   };
 
   const showMobilePad = !collapsibleOnMobile || padOpen;
@@ -220,13 +257,15 @@ export function TouchStakePad({
           </button>
         )}
 
-        <span className="font-display text-[13.5px] font-medium text-dim">€</span>
+        <span className="shrink-0 font-display text-[12px] font-medium text-dim">
+          {currencyConfig.symbol}
+        </span>
       </div>
 
-      {/* ── MOBILE (< lg) : Jetons rapides 5 · 10 · 25 · 50 · MAX + Pavé 0-9 repliable ── */}
+      {/* ── MOBILE (< lg) : Jetons rapides adaptés à la devise + Pavé 0-9 repliable ── */}
       <div className="mt-2 space-y-1.5 lg:hidden">
         <div className="grid grid-cols-5 gap-1.5">
-          {MOBILE_QUICK_STAKES.map((amount) => {
+          {currencyConfig.stakePresets.map((amount) => {
             const active = numericStake === amount;
             return (
               <button
@@ -234,13 +273,13 @@ export function TouchStakePad({
                 type="button"
                 onClick={() => pressPreset(amount)}
                 className={cn(
-                  "flex h-8.5 touch-manipulation items-center justify-center rounded-xl border font-display text-[10.5px] font-medium transition-transform active:scale-95",
+                  "flex h-8.5 touch-manipulation items-center justify-center rounded-xl border px-1 font-display text-[9.5px] font-medium transition-transform active:scale-95",
                   active
                     ? "border-ink bg-ink text-white"
                     : "border-edge bg-elev text-ink active:bg-edge"
                 )}
               >
-                {amount} €
+                <span className="truncate">{formatPresetChip(amount, currency)}</span>
               </button>
             );
           })}
@@ -276,7 +315,11 @@ export function TouchStakePad({
             {["7", "8", "9"].map((d) => (
               <NumKey key={d} label={d} onPress={() => pressDigit(d)} />
             ))}
-            <NumKey label="," subtle onPress={() => pressDigit(".")} />
+            {currencyConfig.decimals === 0 ? (
+              <NumKey label="000" subtle onPress={pressTripleZero} />
+            ) : (
+              <NumKey label="," subtle onPress={() => pressDigit(".")} />
+            )}
 
             <NumKey label="0" className={collapsibleOnMobile ? "col-span-3" : "col-span-4"} onPress={() => pressDigit("0")} />
             {collapsibleOnMobile && (
@@ -295,9 +338,9 @@ export function TouchStakePad({
         )}
       </div>
 
-      {/* ── DESKTOP (>= lg) : Mises rapides classiques ── */}
+      {/* ── DESKTOP (>= lg) : Mises rapides adaptées à la devise ── */}
       <div className="mt-2 hidden grid-cols-5 gap-1.5 lg:grid">
-        {DESKTOP_QUICK_STAKES.map((amount) => {
+        {currencyConfig.stakePresets.map((amount) => {
           const active = numericStake === amount;
           return (
             <button
@@ -307,13 +350,13 @@ export function TouchStakePad({
                 onChangeStakeText(String(amount));
               }}
               className={cn(
-                "h-8.5 rounded-xl border font-display text-[10.5px] font-medium transition-colors active:scale-95",
+                "h-8.5 rounded-xl border px-1 font-display text-[10px] font-medium transition-colors active:scale-95",
                 active
                   ? "border-ink bg-ink text-white"
                   : "border-edge bg-elev text-ink hover:bg-edge/70"
               )}
             >
-              {amount} €
+              <span className="truncate">{formatPresetChip(amount, currency)}</span>
             </button>
           );
         })}

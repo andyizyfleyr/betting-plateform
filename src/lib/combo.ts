@@ -283,8 +283,8 @@ export async function settlePendingCombos(): Promise<void> {
       const quote = allVoid ? null : computeComboQuote(wonOdds, cb.stake);
       const payout =
         quote == null
-          ? round2(cb.stake)
-          : round2(Math.min(cb.potentialWin, quote.potentialWin));
+          ? Math.round(cb.stake * 1_000_000) / 1_000_000
+          : Math.round(Math.min(cb.potentialWin, quote.potentialWin) * 1_000_000) / 1_000_000;
 
       statusPatches.push({
         id: cb.id,
@@ -342,7 +342,7 @@ export async function settlePendingCombos(): Promise<void> {
         RETURNING cb."user_id", v.payout
       )
       UPDATE "app_user" AS u
-      SET "balance" = ROUND((u."balance" + agg.total_payout)::numeric, 2)::float8
+      SET "balance" = ROUND((u."balance" + agg.total_payout)::numeric, 6)::float8
       FROM (
         SELECT "user_id", SUM(payout)::float8 AS total_payout
         FROM updated

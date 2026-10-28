@@ -28,6 +28,12 @@ import {
   invalidatePredictionsCatalogCache,
   jsonWithEtag,
 } from "@/lib/response-cache";
+import {
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { requireUserId } from "@/lib/session";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 
@@ -205,14 +211,27 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (stake < PRED_MIN_STAKE || stake > PRED_MAX_STAKE) {
+  const [currencyUser] = await db
+    .select({ currency: appUser.currency })
+    .from(appUser)
+    .where(eq(appUser.id, uid))
+    .limit(1);
+  const userCurrency = getCurrencyConfig(currencyUser?.currency);
+  const minPredEur = localToEur(userCurrency.minStakeLocal, userCurrency.code);
+  const maxPredEur = Math.max(
+    PRED_MAX_STAKE,
+    localToEur(userCurrency.maxPredictionStakeLocal, userCurrency.code)
+  );
+  if (stake < minPredEur - 1e-4 || stake > maxPredEur + 1e-4) {
     return NextResponse.json(
-      { error: `Mise hors limites (${PRED_MIN_STAKE} € – ${PRED_MAX_STAKE} €)` },
+      {
+        error: `Mise hors limites (${formatLocalAmount(userCurrency.minStakeLocal, userCurrency.code)} – ${formatLocalAmount(userCurrency.maxPredictionStakeLocal, userCurrency.code)})`,
+      },
       { status: 400 }
     );
   }
 
-  const roundedInputStake = round2(stake);
+  const roundedInputStake = roundEurPivot(stake);
   const requestHash = computeIdempotencyHash({
     questionId: Number(questionId),
     selection,
@@ -257,7 +276,7 @@ export async function POST(req: NextRequest) {
     if (
       alreadyPlaced.questionId !== Number(questionId) ||
       alreadyPlaced.selection !== selection ||
-      Math.round(alreadyPlaced.stake * 100) !== Math.round(roundedInputStake * 100)
+      Math.abs(alreadyPlaced.stake - roundedInputStake) > 1e-4
     ) {
       return idempotencyConflictResponse();
     }
@@ -284,7 +303,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const roundedStakeValue = round2(stake);
+  const roundedStakeValue = roundEurPivot(stake);
 
   type PredTxOutcome =
     | {
@@ -373,8 +392,7 @@ export async function POST(req: NextRequest) {
       if (
         concurrentExisting.questionId !== question.id ||
         concurrentExisting.selection !== selection ||
-        Math.round(concurrentExisting.stake * 100) !==
-          Math.round(roundedStakeValue * 100)
+        Math.abs(concurrentExisting.stake - roundedStakeValue) > 1e-4
       ) {
         return { kind: "idempotency_conflict" };
       }
@@ -457,7 +475,7 @@ export async function POST(req: NextRequest) {
       return { kind: "error", status: 429, error: "Trop rapide — veuillez patienter" };
     }
 
-    const potentialWin = round2(roundedStakeValue * serverOdds);
+    const potentialWin = roundEurPivot(roundedStakeValue * serverOdds);
 
     const [bet] = await tx
       .insert(predictionBets)
@@ -479,7 +497,7 @@ export async function POST(req: NextRequest) {
     const [updatedUser] = await tx
       .update(appUser)
       .set({
-        balance: sql`ROUND((${appUser.balance} - ${roundedStakeValue})::numeric, 2)::float8`,
+        balance: sql`ROUND((${appUser.balance} - ${roundedStakeValue})::numeric, 6)::float8`,
       })
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });

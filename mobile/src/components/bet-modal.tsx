@@ -18,6 +18,11 @@ import {
   roundOdds2,
   type OddsChangedDetails,
 } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  localToEur,
+} from "@/lib/countries";
 import { eur, formatOdds } from "@/lib/format";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
@@ -48,10 +53,21 @@ export function BetModal() {
     openRecharge,
     toast,
     feedMatches,
+    currency,
+    currencyConfig,
   } = useApp();
   const authPending = !authReady || sessionRestoring;
 
-  const [stake, setStake] = useState("10");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [stake, setStake] = useState(() =>
+    formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStake(
+      formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+    );
+  }
   const [lockedOdds, setLockedOdds] = useState<number>(1.8);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(
     null
@@ -74,14 +90,16 @@ export function BetModal() {
       setPolledMatch(null);
       return;
     }
-    setStake("10");
+    setStake(
+      formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+    );
     setLockedOdds(roundOdds2(target.odds));
     setOddsChanged(null);
     setErrorMsg(null);
     setSubmitting(false);
     setPolledMatch(null);
     idempotencyRef.current = generateBetIdempotencyKey();
-  }, [target]);
+  }, [currency, currencyConfig.defaultStakeLocal, target]);
 
   useEffect(() => {
     if (!target || target.match.status === "finished") return;
@@ -128,11 +146,13 @@ export function BetModal() {
 
   if (!target || !liveMatch) return null;
 
-  const numericStake = Math.max(
-    0,
-    Math.round((parseFloat(stake.replace(",", ".")) || 0) * 100) / 100
-  );
-  const potentialWin = Math.round(numericStake * lockedOdds * 100) / 100;
+  const rawLocalStake = Math.max(0, parseFloat(stake.replace(",", ".")) || 0);
+  const localStake =
+    currencyConfig.decimals === 0
+      ? Math.round(rawLocalStake)
+      : Math.round(rawLocalStake * 100) / 100;
+  const numericStake = localToEur(localStake, currency, balance);
+  const potentialWin = numericStake * lockedOdds;
   const uid = `sport-${liveMatch.id}`;
   const inCombo = isInCombo(uid, target.market, target.selection);
 
@@ -185,11 +205,13 @@ export function BetModal() {
       router.push("/auth");
       return;
     }
-    if (numericStake < 0.5) {
-      setErrorMsg("Mise minimale : 0,50 €.");
+    if (localStake < currencyConfig.minStakeLocal) {
+      setErrorMsg(
+        `Mise minimale : ${formatLocalAmount(currencyConfig.minStakeLocal, currency)}.`
+      );
       return;
     }
-    if (numericStake > balance + 0.001) {
+    if (numericStake > balance + 1e-5) {
       setErrorMsg("Solde insuffisant pour cette mise.");
       return;
     }

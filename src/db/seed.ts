@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v11";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v12";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -89,6 +89,8 @@ async function runSeedInternal(): Promise<void> {
       "haptics" boolean DEFAULT true NOT NULL,
       "odds_format" text DEFAULT 'decimal' NOT NULL,
       "language" text DEFAULT 'fr' NOT NULL,
+      "country_code" text DEFAULT 'FR' NOT NULL,
+      "currency" text DEFAULT 'EUR' NOT NULL,
       "live_sim" boolean DEFAULT true NOT NULL,
       "role" text DEFAULT 'user' NOT NULL,
       "bonus_locked" double precision DEFAULT 0 NOT NULL,
@@ -213,6 +215,8 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "country_code" text DEFAULT 'FR' NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "currency" text DEFAULT 'EUR' NOT NULL;
     UPDATE "app_user" SET "balance" = 0 WHERE "balance" < 0;
     UPDATE "app_user" SET "bonus_locked" = 0 WHERE "bonus_locked" < 0;
     DO $$

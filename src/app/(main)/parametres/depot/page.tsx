@@ -22,16 +22,28 @@ import {
   PulseFlashLoader,
   triggerRouteLoader,
 } from "@/components/pulse-flash-loader";
+import {
+  formatLocalAmount,
+  formatPresetChip,
+  localToEur,
+} from "@/lib/countries";
 import { cn, eur } from "@/lib/format";
 
-const QUICK = [10, 25, 50, 100, 250];
 type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
 
 export default function DepositPage() {
   const router = useRouter();
-  const { authReady, toast, user, bumpBets } = useApp();
+  const { authReady, toast, user, bumpBets, countryConfig, currency, currencyConfig } =
+    useApp();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
-  const [amountText, setAmountText] = useState("25");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [amountText, setAmountText] = useState(() =>
+    String(currencyConfig.defaultDepositLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setAmountText(String(currencyConfig.defaultDepositLocal));
+  }
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
   const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,10 +95,26 @@ export default function DepositPage() {
   }
 
   const parsed = Number(amountText.replace(",", "."));
-  const amount = Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0;
-  const validAmount = amount >= 5 && amount <= 2000;
-
+  const localAmount =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const amount = localToEur(localAmount, currency);
   const isManual = method === "mobile_money" || method === "sepa";
+  const effectiveMinLocal = isManual
+    ? currencyConfig.minDepositLocal
+    : Math.max(
+        currencyConfig.minDepositLocal,
+        currencyConfig.decimals === 0
+          ? Math.ceil(0.5 * currencyConfig.rateFromEur)
+          : Math.ceil(0.5 * currencyConfig.rateFromEur * 100) / 100
+      );
+  const validAmount =
+    localAmount >= effectiveMinLocal &&
+    localAmount <= currencyConfig.maxDepositLocal;
+
   const onlineProvider =
     method === "stripe" || method === "paypal"
       ? providers.find((p) => p.id === method)
@@ -131,7 +159,7 @@ export default function DepositPage() {
       }
       const r = await api.payments.create(method, amount, idempotencyKey);
       idempotencySlotRef.current = null;
-      window.location.href = r.url;
+      window.location.assign(r.url);
     } catch (e) {
       if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
         idempotencySlotRef.current = null;
@@ -218,38 +246,39 @@ export default function DepositPage() {
             {/* Montant compact */}
             <section className="glass-card rounded-xl p-3 lg:rounded-2xl lg:p-4">
               <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">
-                Montant à créditer (5 € – 2 000 €)
+                Montant à créditer ({formatLocalAmount(effectiveMinLocal, currency)} –{" "}
+                {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
               </label>
               <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-edge bg-elev/60 px-3 py-1.5 focus-within:border-betclic-red lg:py-2.5">
                 <input
                   type="text"
-                  inputMode="decimal"
+                  inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value)}
                   className="w-full bg-transparent font-display text-[13.5px] font-medium tabular-nums text-ink outline-none lg:text-[16px]"
-                  placeholder="25"
+                  placeholder={String(currencyConfig.defaultDepositLocal)}
                 />
-                <span className="font-display text-[12px] font-medium text-dim lg:text-[13.5px]">
-                  €
+                <span className="shrink-0 font-display text-[12px] font-medium text-dim lg:text-[13.5px]">
+                  {currencyConfig.symbol}
                 </span>
               </div>
 
               <div className="mt-2 grid grid-cols-5 gap-1.5">
-                {QUICK.map((q) => {
-                  const active = amount === q;
+                {currencyConfig.depositPresetsLocal.map((q) => {
+                  const active = localAmount === q;
                   return (
                     <button
                       key={q}
                       type="button"
                       onClick={() => setAmountText(String(q))}
                       className={cn(
-                        "h-8 rounded-lg font-display text-[10.5px] font-medium tabular-nums transition-colors lg:h-9 lg:rounded-xl lg:text-[10.5px]",
+                        "h-8 rounded-lg px-1 font-display text-[9.5px] font-medium tabular-nums transition-colors lg:h-9 lg:rounded-xl lg:text-[10px]",
                         active
                           ? "bg-betclic-red text-white shadow-xs"
                           : "bg-elev text-ink hover:bg-edge"
                       )}
                     >
-                      {q} €
+                      <span className="block truncate">{formatPresetChip(q, currency)}</span>
                     </button>
                   );
                 })}
@@ -267,14 +296,14 @@ export default function DepositPage() {
                   {
                     id: "mobile_money" as const,
                     label: "Mobile Money",
-                    sub: "MTN · Moov · Orange",
+                    sub: countryConfig.mobileMoneyHint || "Transfert mobile",
                     Icon: Smartphone,
                     available: true,
                   },
                   {
                     id: "sepa" as const,
-                    label: "Virement SEPA",
-                    sub: "IBAN instantané",
+                    label: "Virement bancaire",
+                    sub: "IBAN / Réf. bancaire",
                     Icon: Building2,
                     available: true,
                   },
@@ -340,8 +369,8 @@ export default function DepositPage() {
                     onChange={(e) => setReference(e.target.value)}
                     placeholder={
                       method === "mobile_money"
-                        ? "Ex. MTN +229 01 … / ID TXN"
-                        : "Ex. Réf. virement SEPA"
+                        ? `Ex. ${countryConfig.mobileMoneyHint || "Mobile Money"} / ID TXN`
+                        : "Ex. Réf. virement bancaire"
                     }
                     className="mt-1 h-9.5 w-full rounded-lg border border-edge bg-elev/60 px-3 text-[10.5px] font-medium text-ink outline-none focus:border-betclic-red lg:h-11 lg:rounded-xl lg:text-[11px]"
                   />

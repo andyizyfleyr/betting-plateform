@@ -52,6 +52,7 @@ import { TouchStakePad } from "@/components/touch-stake-pad";
 import { useApp, useFeedMatches } from "@/components/providers";
 import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
 import { triggerRouteLoader } from "@/components/pulse-flash-loader";
+import { formatLocalAmount, localToEur } from "@/lib/countries";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
 function LegLiveOddsBadge({
@@ -103,6 +104,8 @@ export default function BetslipPage() {
     authReady,
     user,
     setFeedMatches,
+    currency,
+    currencyConfig,
   } = useApp();
   const feedMatches = useFeedMatches();
 
@@ -111,7 +114,14 @@ export default function BetslipPage() {
   >({});
   const [livePredictions, setLivePredictions] = useState<ClientPrediction[]>([]);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
-  const [stakeText, setStakeText] = useState("10");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [stakeText, setStakeText] = useState(() =>
+    String(currencyConfig.defaultStakeLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStakeText(String(currencyConfig.defaultStakeLocal));
+  }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
@@ -349,9 +359,15 @@ export default function BetslipPage() {
   }, [comboLegs, matchMap, predMap, nowMs, legOverrides]);
 
   const parsed = Number(stakeText.replace(",", "."));
-  const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = Boolean(user) && stake > balance;
-  const belowMin = stake > 0 && stake < 0.5;
+  const localStake =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const stake = localToEur(localStake, currency, balance);
+  const overBalance = Boolean(user) && stake > balance + 1e-5;
+  const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
   const isCombo = enrichedLegs.length >= 2;
   const hasClosedLeg = enrichedLegs.some((l) => l.closed);
   const hasSuspendedLeg = enrichedLegs.some((l) => l.suspended);
@@ -377,7 +393,7 @@ export default function BetslipPage() {
     !hasClosedLeg &&
     !hasSuspendedLeg &&
     !hasMixedSources &&
-    stake >= 0.5 &&
+    localStake >= currencyConfig.minStakeLocal &&
     !overBalance;
 
   const submitSlip = async () => {
@@ -891,6 +907,11 @@ export default function BetslipPage() {
                 setError(null);
               }}
               balance={balance}
+              maxCap={
+                isCombo
+                  ? currencyConfig.maxComboStakeLocal
+                  : currencyConfig.maxInputLocal
+              }
               hasError={overBalance || belowMin}
               haptics={user?.haptics}
               collapsibleOnMobile
@@ -949,7 +970,7 @@ export default function BetslipPage() {
 
             {belowMin && (
               <p className="text-[10.5px] font-medium text-betclic-red">
-                La mise minimale est de 0,50 €.
+                La mise minimale est de {formatLocalAmount(currencyConfig.minStakeLocal, currency)}.
               </p>
             )}
 

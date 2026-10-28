@@ -37,17 +37,49 @@ const MONTHS_LONG = [
   "décembre",
 ];
 
+import {
+  DEFAULT_CURRENCY_CODE,
+  formatEurAsCurrency,
+  normalizeCurrencyCode,
+  type CurrencyCode,
+} from "./countries";
+
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
-export function eur(value: number): string {
-  const safe = Number.isFinite(value) ? value : 0;
-  const sign = safe < 0 ? "-" : "";
-  const abs = Math.abs(safe);
-  const [intPart, decPart] = abs.toFixed(2).split(".");
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f");
-  return `${sign}${grouped},${decPart} €`;
+let activeDisplayCurrency: CurrencyCode = DEFAULT_CURRENCY_CODE;
+const currencyListeners = new Set<() => void>();
+
+export function getActiveDisplayCurrency(): CurrencyCode {
+  return activeDisplayCurrency;
+}
+
+export function setActiveDisplayCurrency(next: unknown): void {
+  const normalized = normalizeCurrencyCode(next, DEFAULT_CURRENCY_CODE);
+  if (normalized === activeDisplayCurrency) return;
+  activeDisplayCurrency = normalized;
+  for (const listener of currencyListeners) {
+    listener();
+  }
+}
+
+export function subscribeActiveDisplayCurrency(listener: () => void): () => void {
+  currencyListeners.add(listener);
+  return () => {
+    currencyListeners.delete(listener);
+  };
+}
+
+export function eur(value: number, currencyOverride?: CurrencyCode): string {
+  return formatEurAsCurrency(
+    value,
+    currencyOverride ?? activeDisplayCurrency
+  );
+}
+
+export function eurPivot(value: number): string {
+  return formatEurAsCurrency(value, "EUR");
 }
 
 export function formatOdds(

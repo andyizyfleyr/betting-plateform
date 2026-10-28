@@ -23,23 +23,28 @@ import {
   PulseFlashLoader,
   triggerRouteLoader,
 } from "@/components/pulse-flash-loader";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  formatPresetChip,
+  localToEur,
+  maxSpendableLocalFromEur,
+} from "@/lib/countries";
 import { cn, eur } from "@/lib/format";
-
-const QUICK_AMOUNTS = [20, 50, 100, 250];
 
 const METHODS = [
   {
     id: "mobile_money",
     label: "Mobile Money",
-    placeholder: "MTN / Moov / Orange · +229 01 …",
+    placeholder: "Opérateur + numéro Mobile Money",
     hint: "Opérateur + numéro Mobile Money",
     Icon: Smartphone,
   },
   {
     id: "iban",
-    label: "Virement SEPA",
+    label: "Virement bancaire",
     placeholder: "FR76 3000 6000 0112 3456 7890 189",
-    hint: "IBAN européen",
+    hint: "IBAN / compte bancaire",
     Icon: Building2,
   },
   {
@@ -60,11 +65,29 @@ const METHODS = [
 
 export default function WithdrawPage() {
   const router = useRouter();
-  const { authReady, balance, setBalance, toast, user, bumpBets, betsVersion } = useApp();
+  const {
+    authReady,
+    balance,
+    setBalance,
+    toast,
+    user,
+    bumpBets,
+    betsVersion,
+    countryConfig,
+    currency,
+    currencyConfig,
+  } = useApp();
   const [method, setMethod] =
     useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
-  const [amountText, setAmountText] = useState("20");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [amountText, setAmountText] = useState(() =>
+    String(currencyConfig.defaultWithdrawalLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setAmountText(String(currencyConfig.defaultWithdrawalLocal));
+  }
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,15 +166,25 @@ export default function WithdrawPage() {
       : 100;
 
   const currentMethod = METHODS.find((m) => m.id === method) ?? METHODS[0];
+  const methodPlaceholder =
+    currentMethod.id === "mobile_money"
+      ? `${countryConfig.mobileMoneyHint || "Mobile Money"} · numéro de compte`
+      : currentMethod.placeholder;
   const parsed = Number(amountText.replace(",", "."));
-  const amount =
-    Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overWithdrawable = amount > withdrawable;
-  const belowMin = amount > 0 && amount < 10;
+  const localAmount =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const amount = localToEur(localAmount, currency, withdrawable);
+  const overWithdrawable = amount > withdrawable + 1e-5;
+  const belowMin = localAmount > 0 && localAmount < currencyConfig.minWithdrawalLocal;
+  const quickWithdrawPresets = currencyConfig.withdrawalPresetsLocal;
 
   const canSubmit =
     !loading &&
-    amount >= 10 &&
+    localAmount >= currencyConfig.minWithdrawalLocal &&
     !overWithdrawable &&
     destination.trim().length >= 4;
 
@@ -296,43 +329,59 @@ export default function WithdrawPage() {
             <section className="glass-card space-y-2.5 rounded-xl p-3 lg:space-y-3.5 lg:rounded-2xl lg:p-4">
               <div>
                 <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">
-                  Montant du retrait (min. 10 €)
+                  Montant du retrait (min.{" "}
+                  {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)})
                 </label>
                 <div className="mt-1 flex items-center gap-2 rounded-xl border border-edge bg-elev/60 px-3 py-1.5 focus-within:border-betclic-red lg:py-2.5">
                   <input
                     type="text"
-                    inputMode="decimal"
+                    inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
                     value={amountText}
                     onChange={(e) => setAmountText(e.target.value)}
                     className="w-full bg-transparent font-display text-[13.5px] font-medium tabular-nums text-ink outline-none lg:text-[16px]"
-                    placeholder="20"
+                    placeholder={String(currencyConfig.defaultWithdrawalLocal)}
                   />
-                  <span className="font-display text-[12px] font-medium text-dim lg:text-[13.5px]">
-                    €
+                  <span className="shrink-0 font-display text-[12px] font-medium text-dim lg:text-[13.5px]">
+                    {currencyConfig.symbol}
                   </span>
                 </div>
 
                 <div className="mt-2 grid grid-cols-4 gap-1.5">
-                  {QUICK_AMOUNTS.map((q) => (
+                  {quickWithdrawPresets.map((q) => (
                     <button
                       key={q}
                       type="button"
                       onClick={() => setAmountText(String(q))}
                       className={cn(
-                        "h-8 rounded-lg font-display text-[10.5px] font-medium tabular-nums transition-colors lg:h-9 lg:rounded-xl lg:text-[10.5px]",
-                        amount === q
+                        "h-8 rounded-lg px-1 font-display text-[9.5px] font-medium tabular-nums transition-colors lg:h-9 lg:rounded-xl lg:text-[10px]",
+                        localAmount === q
                           ? "bg-betclic-red text-white"
                           : "bg-elev text-ink hover:bg-edge"
                       )}
                     >
-                      {q} €
+                      <span className="block truncate">{formatPresetChip(q, currency)}</span>
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const maxLoc = maxSpendableLocalFromEur(withdrawable, currency);
+                      setAmountText(
+                        maxLoc > 0
+                          ? formatLocalInputString(maxLoc, currency, ".")
+                          : "0"
+                      );
+                    }}
+                    className="h-8 rounded-lg border border-betclic-red/30 bg-betclic-red/10 font-display text-[10px] font-medium text-betclic-red lg:h-9 lg:rounded-xl"
+                  >
+                    MAX
+                  </button>
                 </div>
 
                 {belowMin && (
                   <p className="mt-1 text-[10px] font-medium text-betclic-red">
-                    Minimum de retrait : 10,00 €.
+                    Minimum de retrait :{" "}
+                    {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}.
                   </p>
                 )}
                 {overWithdrawable && (
@@ -384,7 +433,7 @@ export default function WithdrawPage() {
                   type="text"
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
-                  placeholder={currentMethod.placeholder}
+                  placeholder={methodPlaceholder}
                   className="mt-1 h-9.5 w-full rounded-lg border border-edge bg-elev/60 px-3 text-[10.5px] font-medium text-ink outline-none focus:border-betclic-red lg:h-11 lg:rounded-xl lg:text-[11px]"
                 />
               </div>
@@ -410,7 +459,7 @@ export default function WithdrawPage() {
                 ) : (
                   <>
                     <ArrowUpRight className="h-3.5 w-3.5" />
-                    Retirer {amount >= 10 ? eur(amount) : ""}
+                    Retirer {localAmount >= currencyConfig.minWithdrawalLocal ? eur(amount) : ""}
                   </>
                 )}
               </button>

@@ -17,6 +17,12 @@ import { triggerRouteLoader } from "./pulse-flash-loader";
 import { AnimatedNumber } from "./animated-number";
 import { OddsLockControls } from "./odds-lock-controls";
 import { TouchStakePad } from "./touch-stake-pad";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  localToEur,
+  maxSpendableLocalFromEur,
+} from "@/lib/countries";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
 interface Props {
@@ -84,13 +90,26 @@ function PredictionBetSheet({
     toggleComboLeg,
     authReady,
     user,
+    currency,
+    currencyConfig,
   } = useApp();
   const dragControls = useDragControls();
 
-  const [stakeText, setStakeText] = useState(() => {
-    const def = balance > 0 ? Math.min(10, Math.max(1, Math.floor(balance))) : 10;
-    return String(def);
-  });
+  const computeDefaultStakeStr = () => {
+    const maxLocal = maxSpendableLocalFromEur(balance, currency);
+    const def =
+      balance > 0 && maxLocal >= currencyConfig.minStakeLocal
+        ? Math.min(currencyConfig.defaultStakeLocal, maxLocal)
+        : currencyConfig.defaultStakeLocal;
+    return formatLocalInputString(def, currency, ".");
+  };
+
+  const [prevCur, setPrevCur] = useState(currency);
+  const [stakeText, setStakeText] = useState(computeDefaultStakeStr);
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStakeText(computeDefaultStakeStr());
+  }
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
@@ -140,9 +159,15 @@ function PredictionBetSheet({
   const initialMeta = getSelectionMeta(question, selection);
   const odds = roundOdds2(serverOverrideOdds ?? liveOdds ?? initialMeta.odds);
   const parsed = Number(stakeText.replace(",", "."));
-  const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = Boolean(user) && stake > balance;
-  const belowMin = stake > 0 && stake < 0.5;
+  const localStake =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const stake = localToEur(localStake, currency, balance);
+  const overBalance = Boolean(user) && stake > balance + 1e-5;
+  const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
   const payout = stake * odds;
   const profit = payout - stake;
 
@@ -183,7 +208,12 @@ function PredictionBetSheet({
   };
 
   const confirm = async () => {
-    if (phase !== "input" || stake < 0.5 || overBalance || inFlightRef.current) {
+    if (
+      phase !== "input" ||
+      localStake < currencyConfig.minStakeLocal ||
+      overBalance ||
+      inFlightRef.current
+    ) {
       return;
     }
     if (!authReady && !user) return;
@@ -371,7 +401,7 @@ function PredictionBetSheet({
 
               {belowMin && !overBalance && (
                 <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                  Mise minimale : 0,50 €
+                  Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
                 </p>
               )}
 
@@ -436,11 +466,15 @@ function PredictionBetSheet({
 
                 <button
                   type="button"
-                  disabled={stake < 0.5 || overBalance || phase === "loading"}
+                  disabled={
+                    localStake < currencyConfig.minStakeLocal ||
+                    overBalance ||
+                    phase === "loading"
+                  }
                   onClick={confirm}
                   className={cn(
                     "flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl px-3 font-display text-[11.5px] font-medium transition-all active:scale-[0.99]",
-                    stake >= 0.5 && !overBalance
+                    localStake >= currencyConfig.minStakeLocal && !overBalance
                       ? "bg-betclic-red text-white shadow-sm"
                       : "bg-elev text-dim"
                   )}

@@ -1,16 +1,51 @@
+import {
+  DEFAULT_CURRENCY_CODE,
+  formatEurAsCurrency,
+  normalizeCurrencyCode,
+  type CurrencyCode,
+} from "./countries";
+
 export function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-const eurFormatter = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+let activeDisplayCurrency: CurrencyCode = DEFAULT_CURRENCY_CODE;
+const currencyListeners = new Set<() => void>();
 
-export function eur(value: number) {
-  return eurFormatter.format(value);
+export function getActiveDisplayCurrency(): CurrencyCode {
+  return activeDisplayCurrency;
+}
+
+export function setActiveDisplayCurrency(next: unknown): void {
+  const normalized = normalizeCurrencyCode(next, DEFAULT_CURRENCY_CODE);
+  if (normalized === activeDisplayCurrency) return;
+  activeDisplayCurrency = normalized;
+  for (const listener of currencyListeners) {
+    listener();
+  }
+}
+
+export function subscribeActiveDisplayCurrency(listener: () => void): () => void {
+  currencyListeners.add(listener);
+  return () => {
+    currencyListeners.delete(listener);
+  };
+}
+
+/**
+ * Formate un montant pivot interne (stocké en EUR) dans la devise officielle active du joueur
+ * (ou dans `currencyOverride` si fourni explicitement).
+ */
+export function eur(value: number, currencyOverride?: CurrencyCode): string {
+  return formatEurAsCurrency(
+    value,
+    currencyOverride ?? activeDisplayCurrency
+  );
+}
+
+/** Formate explicitement en pivot comptable EUR (ex: reporting global Admin). */
+export function eurPivot(value: number): string {
+  return formatEurAsCurrency(value, "EUR");
 }
 
 export function formatOdds(odds: number, format: "decimal" | "fractional" = "decimal") {

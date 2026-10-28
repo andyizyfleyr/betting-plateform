@@ -1,7 +1,14 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { appUser } from "@/db/schema";
 import { ensureSeeded } from "@/db/seed";
+import {
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import {
   claimExternalIdempotency,
@@ -54,13 +61,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const amount = Math.round(Number(body.amount) * 100) / 100;
-    if (!amount || amount < 5 || amount > 2000) {
+    const amount = roundEurPivot(Number(body.amount));
+    const [currencyUser] = await db
+      .select({ currency: appUser.currency })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .limit(1);
+    const userCurrency = getCurrencyConfig(currencyUser?.currency);
+    const minDepEur = Math.max(
+      0.5,
+      localToEur(userCurrency.minDepositLocal, userCurrency.code)
+    );
+    const maxDepEur = Math.max(
+      2000,
+      localToEur(userCurrency.maxDepositLocal, userCurrency.code)
+    );
+    if (!amount || amount < minDepEur - 1e-4 || amount > maxDepEur + 1e-4) {
       return NextResponse.json(
-        { error: "Montant invalide (5 à 2000 €)" },
+        {
+          error: `Montant invalide (${formatLocalAmount(userCurrency.minDepositLocal, userCurrency.code)} à ${formatLocalAmount(userCurrency.maxDepositLocal, userCurrency.code)})`,
+        },
         { status: 400 }
       );
     }
+
+    const stripeChargeEur = Math.max(0.5, Math.round(amount * 100) / 100);
 
     const requestHash = computeIdempotencyHash({
       provider: "stripe",
@@ -86,7 +111,7 @@ export async function POST(req: NextRequest) {
     try {
       session = await createStripeCheckout({
         userId: uid,
-        amount,
+        amount: stripeChargeEur,
         currency: "EUR",
         successUrl: `${origin}/parametres?deposit=stripe&ref={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/parametres?deposit=cancelled`,

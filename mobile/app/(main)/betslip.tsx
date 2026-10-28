@@ -48,6 +48,12 @@ import {
   MIN_ELIGIBLE_BOOST_ODDS,
   nextBoostHint,
 } from "@/lib/combo-math";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { eur, formatKickoff, formatOdds } from "@/lib/format";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
@@ -99,9 +105,20 @@ export default function BetslipScreen() {
     toast,
     hapticsEnabled,
     feedMatches,
+    currency,
+    currencyConfig,
   } = useApp();
 
-  const [stakeText, setStakeText] = useState("10");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [stakeText, setStakeText] = useState(() =>
+    formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStakeText(
+      formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+    );
+  }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(
@@ -335,22 +352,29 @@ export default function BetslipScreen() {
   }, [comboLegs, matchesMap, predsMap, nowMs, legOverrides]);
 
   const rawStake = Number(stakeText.replace(",", "."));
-  const stake = Number.isFinite(rawStake) && rawStake > 0 ? rawStake : 0;
+  const localStake =
+    Number.isFinite(rawStake) && rawStake > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(rawStake)
+        : Math.round(rawStake * 100) / 100
+      : 0;
+  const stake = localToEur(localStake, currency, balance);
 
   const isCombo = enrichedLegs.length >= 2;
 
   const quote = useMemo(() => {
     if (!isCombo) {
       const singleOdds = enrichedLegs[0]?.liveOdds ?? 1;
+      const singleWin = roundEurPivot(stake * singleOdds);
       return {
         legCount: enrichedLegs.length,
         eligibleLegs: singleOdds >= MIN_ELIGIBLE_BOOST_ODDS ? 1 : 0,
         rawOdds: singleOdds,
         boostPct: 0,
         totalOdds: singleOdds,
-        baseWin: Math.round(stake * singleOdds * 100) / 100,
+        baseWin: singleWin,
         boostAmount: 0,
-        potentialWin: Math.round(stake * singleOdds * 100) / 100,
+        potentialWin: singleWin,
       };
     }
     return computeComboQuote(
@@ -373,14 +397,15 @@ export default function BetslipScreen() {
     return sources.size > 1;
   }, [enrichedLegs]);
 
-  const overBalance = Boolean(user) && stake > balance;
-  const belowMin = stake > 0 && stake < 0.5;
+  const overBalance = Boolean(user) && stake > balance + 1e-5;
+  const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
   const canSubmit =
     enrichedLegs.length >= 1 &&
+    enrichedLegs.length <= MAX_COMBO_LEGS &&
     !hasClosedLeg &&
     !hasSuspendedLeg &&
     !hasMixedSources &&
-    stake >= 0.5 &&
+    localStake >= currencyConfig.minStakeLocal &&
     !overBalance &&
     !submitting;
 
@@ -976,6 +1001,11 @@ export default function BetslipScreen() {
               setError(null);
             }}
             balance={balance}
+            maxCap={
+              isCombo
+                ? currencyConfig.maxComboStakeLocal
+                : currencyConfig.maxInputLocal
+            }
             hasError={overBalance || belowMin}
             collapsibleOnMobile
             defaultExpandedOnMobile={false}
@@ -1056,7 +1086,8 @@ export default function BetslipScreen() {
 
           {belowMin ? (
             <Text style={styles.inlineRedError}>
-              La mise minimale est de 0,50 €.
+              La mise minimale est de{" "}
+              {formatLocalAmount(currencyConfig.minStakeLocal, currency)}.
             </Text>
           ) : null}
 

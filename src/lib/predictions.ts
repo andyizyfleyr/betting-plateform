@@ -145,7 +145,7 @@ export async function settleQuestion(
         "status" = CASE WHEN pb."selection" = ${resolution} THEN 'won' ELSE 'lost' END,
         "potential_win" = CASE
           WHEN pb."selection" = ${resolution}
-            THEN ROUND((pb."stake" * pb."odds" * 100)::numeric)::float8 / 100.0
+            THEN ROUND((pb."stake" * pb."odds")::numeric, 6)::float8
           ELSE pb."potential_win"
         END,
         "settled_at" = LEAST(
@@ -161,12 +161,12 @@ export async function settleQuestion(
         pb."user_id",
         CASE
           WHEN pb."selection" = ${resolution}
-            THEN ROUND((pb."stake" * pb."odds" * 100)::numeric)::float8 / 100.0
+            THEN ROUND((pb."stake" * pb."odds")::numeric, 6)::float8
           ELSE 0::float8
         END AS payout
     )
     UPDATE "app_user" AS u
-    SET "balance" = ROUND((u."balance" + agg.total_payout)::numeric, 2)::float8
+    SET "balance" = ROUND((u."balance" + agg.total_payout)::numeric, 6)::float8
     FROM (
       SELECT "user_id", SUM(payout)::float8 AS total_payout
       FROM settled
@@ -209,14 +209,14 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
       UPDATE "prediction_bets" AS pb
       SET
         "status" = 'pending',
-        "potential_win" = ROUND((pb."stake" * pb."odds" * 100)::numeric)::float8 / 100.0,
+        "potential_win" = ROUND((pb."stake" * pb."odds")::numeric, 6)::float8,
         "settled_at" = NULL
       FROM q_reopened
       WHERE pb."question_id" = q_reopened."id"
         AND pb."status" IN ('won', 'lost')
       RETURNING
         pb."user_id",
-        CASE WHEN pb."status" = 'won' THEN ROUND((pb."potential_win" * 100)::numeric)::float8 / 100.0 ELSE 0::float8 END AS clawback
+        CASE WHEN pb."status" = 'won' THEN ROUND((pb."potential_win")::numeric, 6)::float8 ELSE 0::float8 END AS clawback
     ),
     clawed AS (
       UPDATE "app_user" AS u

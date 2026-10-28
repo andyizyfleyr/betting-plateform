@@ -64,6 +64,13 @@ import {
   lookupIdempotencyRecord,
   saveIdempotencyRecord,
 } from "@/lib/idempotency";
+import {
+  formatEurAsCurrency,
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { requireUserId } from "@/lib/session";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { isManualRefreshRequest, jsonWithEtag } from "@/lib/response-cache";
@@ -73,8 +80,7 @@ import { teamLogo } from "@/lib/team-logos";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Anti-triche : limites de mise (€) et intervalle minimal entre deux paris. */
-const MIN_STAKE = 0.5;
+/** Anti-triche : intervalle minimal entre deux paris. */
 const BET_COOLDOWN_MS = 700;
 /** Délai court de validation des paris en direct (recotation serveur + vérification anti-but). */
 const LIVE_VALIDATION_MS = 300;
@@ -687,14 +693,24 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (stake < MIN_STAKE) {
+
+  const [currencyUser] = await db
+    .select({ currency: appUser.currency })
+    .from(appUser)
+    .where(eq(appUser.id, uid))
+    .limit(1);
+  const userCurrency = getCurrencyConfig(currencyUser?.currency);
+  const minStakeEur = localToEur(userCurrency.minStakeLocal, userCurrency.code);
+  if (stake < minStakeEur - 1e-4) {
     return NextResponse.json(
-      { error: `Mise hors limites (minimum ${MIN_STAKE} €)` },
+      {
+        error: `Mise minimale : ${formatLocalAmount(userCurrency.minStakeLocal, userCurrency.code)}`,
+      },
       { status: 400 }
     );
   }
 
-  const roundedInputStake = Math.round(Number(stake) * 100) / 100;
+  const roundedInputStake = roundEurPivot(Number(stake));
   const requestHash = computeIdempotencyHash({
     matchId: Number(matchId),
     market,
@@ -737,7 +753,7 @@ export async function POST(req: NextRequest) {
       alreadyPlaced.matchId !== Number(matchId) ||
       alreadyPlaced.market !== market ||
       alreadyPlaced.selection !== selection ||
-      Math.round(alreadyPlaced.stake * 100) !== Math.round(roundedInputStake * 100)
+      Math.abs(alreadyPlaced.stake - roundedInputStake) > 1e-4
     ) {
       return idempotencyConflictResponse();
     }
@@ -781,9 +797,11 @@ export async function POST(req: NextRequest) {
       closingOdds: b.closingOdds ?? null,
     }));
   const maxAllowedStake = maxStakeFor(playerRiskProfile(settledHistory));
-  if (stake > maxAllowedStake) {
+  if (stake > maxAllowedStake + 1e-4) {
     return NextResponse.json(
-      { error: `Mise maximale autorisée sur ce marché : ${maxAllowedStake} €` },
+      {
+        error: `Mise maximale autorisée sur ce marché : ${formatEurAsCurrency(maxAllowedStake, userCurrency.code)}`,
+      },
       { status: 400 }
     );
   }
@@ -807,9 +825,11 @@ export async function POST(req: NextRequest) {
   const mlRiskMap = await predictBatchUserMlRisk([uid]);
   const mlCeiling = mlRiskMap.get(uid)?.maxStake ?? 500;
   const maxStake = Math.min(maxStakeFor(profile), mlCeiling);
-  if (stake > maxStake) {
+  if (stake > maxStake + 1e-4) {
     return NextResponse.json(
-      { error: `Mise plafonnée à ${maxStake} € pour votre profil de risque` },
+      {
+        error: `Mise plafonnée à ${formatEurAsCurrency(maxStake, userCurrency.code)} pour votre profil de risque`,
+      },
       { status: 400 }
     );
   }
@@ -852,10 +872,10 @@ export async function POST(req: NextRequest) {
       )
     );
   const maxMatchCumulative = Math.min(600, Math.round(maxStake * 1.5));
-  if ((existingMatchStake?.staked ?? 0) + stake > maxMatchCumulative) {
+  if ((existingMatchStake?.staked ?? 0) + stake > maxMatchCumulative + 1e-4) {
     return NextResponse.json(
       {
-        error: `Exposition maximale atteinte sur ce match (${maxMatchCumulative} € cumulés)`,
+        error: `Exposition maximale atteinte sur ce match (${formatEurAsCurrency(maxMatchCumulative, userCurrency.code)} cumulés)`,
       },
       { status: 400 }
     );
@@ -1014,7 +1034,7 @@ export async function POST(req: NextRequest) {
       ? "stale_near_decided"
       : null;
 
-  const roundedStake = Math.round(stake * 100) / 100;
+  const roundedStake = roundEurPivot(stake);
 
   // Transaction courte purement SQL (0 appel externe) :
   //  1) `SET LOCAL lock_timeout = '2500ms'` pour éviter toute file d'attente infinie
@@ -1287,7 +1307,7 @@ export async function POST(req: NextRequest) {
         : null;
 
     // Gain potentiel calculé EXCLUSIVEMENT avec `serverOdds`
-    const potentialWin = Math.round(roundedStake * serverOdds * 100) / 100;
+    const potentialWin = roundEurPivot(roundedStake * serverOdds);
 
     const [bet] = await tx
       .insert(bets)
@@ -1313,7 +1333,7 @@ export async function POST(req: NextRequest) {
     const [updatedUser] = await tx
       .update(appUser)
       .set({
-        balance: sql`ROUND((${appUser.balance} - ${roundedStake})::numeric, 2)::float8`,
+        balance: sql`ROUND((${appUser.balance} - ${roundedStake})::numeric, 6)::float8`,
       })
       .where(eq(appUser.id, uid))
       .returning({ balance: appUser.balance });

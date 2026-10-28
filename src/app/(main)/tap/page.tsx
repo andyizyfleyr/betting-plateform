@@ -4,13 +4,18 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Eye, EyeOff, HandCoins, Play, Trophy } from "lucide-react";
-import { cn } from "@/lib/format";
+import { useApp } from "@/components/providers";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  localToEur,
+  maxSpendableLocalFromEur,
+  type CurrencyCode,
+} from "@/lib/countries";
+import { cn, eur } from "@/lib/format";
 import s from "./tap-game.module.css";
 
-const SYM = "$";
-const DEC = 2;
-const MIN_BET = 1;
-const MAX_BET = 100;
+const MAX_BET_EUR = 100;
 
 interface Game {
   active: boolean;
@@ -43,22 +48,20 @@ interface ConfettiPiece {
   col: string;
 }
 
-function fmt(n: number): string {
-  return (
-    Number(n)
-      .toLocaleString("fr-FR", {
-        minimumFractionDigits: DEC,
-        maximumFractionDigits: DEC,
-      })
-      .replace(/\u202F/g, " ") +
-    " " +
-    SYM
-  );
-}
-
 const emptySubscribe = () => () => {};
 
 export default function TapPage() {
+  const { currency, currencyConfig, setBalance } = useApp();
+  const minBetLocal = currencyConfig.minStakeLocal;
+  const maxBetLocal = Math.max(
+    minBetLocal,
+    maxSpendableLocalFromEur(MAX_BET_EUR, currency)
+  );
+  const fmt = useCallback(
+    (eurAmount: number) => eur(eurAmount, currency),
+    [currency]
+  );
+
   const mount = useSyncExternalStore(
     emptySubscribe,
     () => true,
@@ -76,7 +79,14 @@ export default function TapPage() {
   const [crashed, setCrashed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [stake, setStake] = useState("1.00");
+  const [prevCur, setPrevCur] = useState<CurrencyCode>(currency);
+  const [stake, setStake] = useState(() =>
+    formatLocalInputString(currencyConfig.stakePresets[0], currency, ".")
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStake(formatLocalInputString(currencyConfig.stakePresets[0], currency, "."));
+  }
   const [sliderPct, setSliderPct] = useState(0);
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ModalState>({
@@ -218,7 +228,11 @@ export default function TapPage() {
       lockRef.current = false;
       setLocked(false);
       if (d.multiplier !== undefined) upGame({ mult: parseFloat(String(d.multiplier)) });
-      if (d.new_balance !== undefined) setBal(parseFloat(String(d.new_balance)));
+      if (d.new_balance !== undefined) {
+        const nb = parseFloat(String(d.new_balance));
+        setBal(nb);
+        setBalance(nb);
+      }
 
       if (win) {
         fireConfetti();
@@ -239,7 +253,7 @@ export default function TapPage() {
         upGame({ mult: 1.0, bet: 0 });
       }, 1500);
     },
-    [upGame]
+    [fmt, setBalance, upGame]
   );
 
   useEffect(() => {
@@ -251,18 +265,24 @@ export default function TapPage() {
   }, [bal, end, game]);
 
   const getBounds = () => {
-    const effectiveMax = Math.max(MIN_BET, Math.min(balRef.current, MAX_BET));
-    return { min: MIN_BET, max: effectiveMax };
+    const spendable = maxSpendableLocalFromEur(balRef.current, currency);
+    const effectiveMax = Math.max(minBetLocal, Math.min(spendable, maxBetLocal));
+    return { min: minBetLocal, max: effectiveMax };
   };
 
   const clampPct = (n: number) => Math.max(0, Math.min(100, n));
+
+  const formatLocalStake = (amount: number) =>
+    currencyConfig.decimals === 0
+      ? String(Math.round(amount))
+      : amount.toFixed(2);
 
   const onSliderChange = (percent: number) => {
     const b = getBounds();
     let amount = b.min + ((b.max - b.min) * percent) / 100;
     if (percent === 100) amount = b.max;
     if (percent === 0) amount = b.min;
-    setStake(amount.toFixed(DEC));
+    setStake(formatLocalStake(amount));
     setSliderPct(clampPct(percent));
   };
 
@@ -275,7 +295,7 @@ export default function TapPage() {
     const num = parseFloat(val);
     const b = getBounds();
     if (!isNaN(num) && num > b.max) {
-      setStake(b.max.toFixed(DEC));
+      setStake(formatLocalStake(b.max));
       setSliderPct(100);
       return;
     }
@@ -292,24 +312,25 @@ export default function TapPage() {
     const num = parseFloat(stake);
     const b = getBounds();
     if (isNaN(num) || num < b.min) {
-      setStake(b.min.toFixed(DEC));
+      setStake(formatLocalStake(b.min));
       setSliderPct(0);
     }
   };
 
   const start = async () => {
     if (isSyncingRef.current) return;
-    const amt = parseFloat(stake);
-    if (isNaN(amt) || amt <= 0) {
+    const localAmt = parseFloat(stake);
+    if (isNaN(localAmt) || localAmt <= 0) {
       setError("Mise invalide");
       return;
     }
-    if (amt < MIN_BET) {
-      setError(`Mise minimale : ${MIN_BET} ${SYM}`);
-      setStake(MIN_BET.toFixed(DEC));
+    if (localAmt < minBetLocal) {
+      setError(`Mise minimale : ${formatLocalAmount(minBetLocal, currency)}`);
+      setStake(formatLocalStake(minBetLocal));
       setSliderPct(0);
       return;
     }
+    const amt = localToEur(localAmt, currency, balRef.current);
     isSyncingRef.current = true;
     setError("");
     setLoading(true);
@@ -321,7 +342,9 @@ export default function TapPage() {
       });
       const d = await res.json();
       if (d.status === "success") {
-        setBal(parseFloat(d.new_balance));
+        const nb = parseFloat(d.new_balance);
+        setBal(nb);
+        setBalance(nb);
         pendingRef.current = 0;
         lockRef.current = false;
         setLocked(false);
@@ -403,7 +426,6 @@ export default function TapPage() {
       .then((d) => {
         if (d.status === "success") {
           setBal(d.balance);
-          setStake(Math.min(MIN_BET, d.balance).toFixed(DEC));
         }
       })
       .catch(() => undefined);
@@ -444,7 +466,7 @@ export default function TapPage() {
       try {
         const res = await fetch("/api/tap");
         const d = await res.json();
-        if (d.status === "success" && Math.abs(balRef.current - d.balance) > 0.01) {
+        if (d.status === "success" && Math.abs(balRef.current - d.balance) > 0.00001) {
           setBal(d.balance);
           setBalFlash(true);
           setTimeout(() => setBalFlash(false), 500);
@@ -463,7 +485,7 @@ export default function TapPage() {
     });
   };
 
-  const balText = balanceHidden ? "******" : fmt(bal).replace(SYM, "").trim();
+  const balText = balanceHidden ? "******" : fmt(bal);
   const btnText = playing ? " ENCAISSER" : " JOUER";
 
   if (!mount) return null;
@@ -479,7 +501,6 @@ export default function TapPage() {
             <span className={s.amountHl} style={{ color: balFlash ? "#22C55E" : undefined }}>
               {balText}
             </span>
-            <span>{SYM}</span>
             <button className={s.balanceToggle} onClick={toggleBalance} aria-label="Masquer le solde">
               {balanceHidden ? (
                 <EyeOff className="h-4 w-4" strokeWidth={2} />
@@ -522,6 +543,11 @@ export default function TapPage() {
                   onBlur={onStakeBlur}
                   onSlider={onSliderChange}
                   disabled={playing}
+                  minBetLocal={minBetLocal}
+                  maxBetLocal={maxBetLocal}
+                  currency={currency}
+                  symbol={currencyConfig.symbol}
+                  decimals={currencyConfig.decimals}
                 />
                 <button
                   className={cn(s.btnPlace, playing && s.btnCashout)}
@@ -550,6 +576,11 @@ export default function TapPage() {
               onBlur={onStakeBlur}
               onSlider={onSliderChange}
               disabled={playing}
+              minBetLocal={minBetLocal}
+              maxBetLocal={maxBetLocal}
+              currency={currency}
+              symbol={currencyConfig.symbol}
+              decimals={currencyConfig.decimals}
             />
           </div>
           <div className={s.slipFoot}>
@@ -619,6 +650,11 @@ function StakeControl({
   onBlur,
   onSlider,
   disabled,
+  minBetLocal,
+  maxBetLocal,
+  currency,
+  symbol,
+  decimals,
 }: {
   s: Record<string, string>;
   stake: string;
@@ -627,6 +663,11 @@ function StakeControl({
   onBlur: () => void;
   onSlider: (pct: number) => void;
   disabled: boolean;
+  minBetLocal: number;
+  maxBetLocal: number;
+  currency: CurrencyCode;
+  symbol: string;
+  decimals: 0 | 2;
 }) {
   return (
     <>
@@ -635,26 +676,21 @@ function StakeControl({
           type="number"
           className={s.stakeIn}
           placeholder="Mise"
-          min={MIN_BET}
-          max={MAX_BET}
-          step="0.01"
+          min={minBetLocal}
+          max={maxBetLocal}
+          step={decimals === 0 ? "50" : "0.01"}
           value={stake}
           onChange={(e) => onStake(e.target.value)}
           onBlur={onBlur}
           disabled={disabled}
-          inputMode="numeric"
-          pattern="[0-9]*"
+          inputMode={decimals === 0 ? "numeric" : "decimal"}
         />
-        <span className={s.currencyBadge}>{SYM}</span>
+        <span className={s.currencyBadge}>{symbol}</span>
       </div>
 
       <div className={s.limitInfo}>
-        <span>
-          Min: {MIN_BET} {SYM}
-        </span>
-        <span>
-          Max: {MAX_BET} {SYM}
-        </span>
+        <span>Min: {formatLocalAmount(minBetLocal, currency)}</span>
+        <span>Max: {formatLocalAmount(maxBetLocal, currency)}</span>
       </div>
 
       <div className={s.rangeWrapper}>

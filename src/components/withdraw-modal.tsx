@@ -13,26 +13,31 @@ import {
   X,
 } from "lucide-react";
 import { ApiRequestError, api } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  formatPresetChip,
+  localToEur,
+  maxSpendableLocalFromEur,
+} from "@/lib/countries";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "./providers";
 import { cn, eur } from "@/lib/format";
 
-const QUICK_AMOUNTS = [20, 50, 100];
-
 const METHODS = [
   {
     id: "mobile_money",
     label: "Mobile Money",
-    placeholder: "MTN / Moov / Orange · +229 01 …",
+    placeholder: "Opérateur + numéro Mobile Money",
     hint: "Opérateur + numéro Mobile Money",
     Icon: Smartphone,
   },
   {
     id: "iban",
-    label: "Virement SEPA",
+    label: "Virement bancaire",
     placeholder: "FR76 3000 6000 0112 3456 7890 189",
-    hint: "IBAN européen",
+    hint: "IBAN / compte bancaire",
     Icon: Building2,
   },
   {
@@ -60,10 +65,18 @@ export function WithdrawModal({
   onClose: () => void;
   onSuccess?: () => void;
 }) {
-  const { balance, setBalance, toast, user } = useApp();
+  const { balance, setBalance, toast, user, countryConfig, currency, currencyConfig } =
+    useApp();
   const [method, setMethod] = useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
-  const [amountText, setAmountText] = useState("20");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [amountText, setAmountText] = useState(() =>
+    String(currencyConfig.defaultWithdrawalLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setAmountText(String(currencyConfig.defaultWithdrawalLocal));
+  }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
@@ -105,14 +118,25 @@ export function WithdrawModal({
     bonusLocked > 0 ? Math.min(100, Math.round((qualifiedWagered / bonusLocked) * 100)) : 100;
 
   const currentMethod = METHODS.find((m) => m.id === method) ?? METHODS[0];
+  const methodPlaceholder =
+    currentMethod.id === "mobile_money"
+      ? `${countryConfig.mobileMoneyHint || "Mobile Money"} · numéro de compte`
+      : currentMethod.placeholder;
   const parsed = Number(amountText.replace(",", "."));
-  const amount = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overWithdrawable = amount > withdrawable;
-  const belowMin = amount > 0 && amount < 10;
+  const localAmount =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const amount = localToEur(localAmount, currency, withdrawable);
+  const overWithdrawable = amount > withdrawable + 1e-5;
+  const belowMin = localAmount > 0 && localAmount < currencyConfig.minWithdrawalLocal;
+  const quickWithdrawPresets = currencyConfig.withdrawalPresetsLocal;
 
   const canSubmit =
     !loading &&
-    amount >= 10 &&
+    localAmount >= currencyConfig.minWithdrawalLocal &&
     !overWithdrawable &&
     destination.trim().length >= 4;
 
@@ -263,14 +287,15 @@ export function WithdrawModal({
                   setDestination(e.target.value);
                   setError(null);
                 }}
-                placeholder={currentMethod.placeholder}
+                placeholder={methodPlaceholder}
                 className="mt-1.5 h-11 w-full rounded-2xl border border-edge bg-white px-3.5 text-[12px] font-medium text-ink outline-none focus:border-ink"
               />
             </div>
 
             <div className="mt-3.5">
               <label className="text-[10.5px] font-medium text-mist">
-                Montant à retirer (min. 10 €)
+                Montant à retirer (min.{" "}
+                {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)})
               </label>
               <div
                 className={cn(
@@ -282,20 +307,22 @@ export function WithdrawModal({
               >
                 <input
                   type="text"
-                  inputMode="decimal"
+                  inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
                   value={amountText}
                   onChange={(e) => {
                     setAmountText(e.target.value.replace(/[^0-9.,]/g, ""));
                     setError(null);
                   }}
-                  placeholder="20"
+                  placeholder={String(currencyConfig.defaultWithdrawalLocal)}
                   className="w-full bg-transparent font-display text-[14.5px] font-medium tabular-nums text-ink outline-none"
                 />
-                <span className="font-display text-[12.5px] font-medium text-dim">€</span>
+                <span className="shrink-0 font-display text-[12px] font-medium text-dim">
+                  {currencyConfig.symbol}
+                </span>
               </div>
 
               <div className="mt-2 grid grid-cols-4 gap-1.5">
-                {QUICK_AMOUNTS.map((amt) => (
+                {quickWithdrawPresets.map((amt) => (
                   <button
                     key={amt}
                     type="button"
@@ -304,19 +331,24 @@ export function WithdrawModal({
                       setError(null);
                     }}
                     className={cn(
-                      "h-8 rounded-xl border font-display text-[10.5px] font-medium",
-                      amount === amt
+                      "h-8 rounded-xl border px-1 font-display text-[9.5px] font-medium",
+                      localAmount === amt
                         ? "border-ink bg-ink text-white"
                         : "border-edge bg-elev text-ink"
                     )}
                   >
-                    {amt} €
+                    <span className="block truncate">{formatPresetChip(amt, currency)}</span>
                   </button>
                 ))}
                 <button
                   type="button"
                   onClick={() => {
-                    setAmountText(String(Math.max(0, Math.floor(withdrawable * 100) / 100)));
+                    const maxLoc = maxSpendableLocalFromEur(withdrawable, currency);
+                    setAmountText(
+                      maxLoc > 0
+                        ? formatLocalInputString(maxLoc, currency, ".")
+                        : "0"
+                    );
                     setError(null);
                   }}
                   className="h-8 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red"
@@ -328,7 +360,8 @@ export function WithdrawModal({
 
             {belowMin && (
               <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                Montant minimum de retrait : 10,00 €
+                Montant minimum de retrait :{" "}
+                {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}
               </p>
             )}
             {overWithdrawable && (

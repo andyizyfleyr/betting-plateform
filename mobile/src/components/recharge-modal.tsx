@@ -19,11 +19,14 @@ import {
 } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, generateIdempotencyKey } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatPresetChip,
+  localToEur,
+} from "@/lib/countries";
 import { eur } from "@/lib/format";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
-
-const AMOUNTS = [10, 25, 50, 100, 250] as const;
 
 export function RechargeModal() {
   const router = useRouter();
@@ -33,9 +36,19 @@ export function RechargeModal() {
     balance,
     paymentProviders,
     toast,
+    countryConfig,
+    currency,
+    currencyConfig,
   } = useApp();
 
-  const [amount, setAmount] = useState("25");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [amount, setAmount] = useState(() =>
+    String(currencyConfig.defaultDepositLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setAmount(String(currencyConfig.defaultDepositLocal));
+  }
   const [method, setMethod] = useState<
     "stripe" | "paypal" | "mobile_money" | "sepa"
   >("mobile_money");
@@ -44,10 +57,21 @@ export function RechargeModal() {
 
   if (!rechargeOpen) return null;
 
-  const numAmount = Math.max(
-    0,
-    Math.round((parseFloat(amount.replace(",", ".")) || 0) * 100) / 100
-  );
+  const rawLocal = Math.max(0, parseFloat(amount.replace(",", ".")) || 0);
+  const localAmount =
+    currencyConfig.decimals === 0
+      ? Math.round(rawLocal)
+      : Math.round(rawLocal * 100) / 100;
+  const numAmount = localToEur(localAmount, currency);
+  const isManual = method === "mobile_money" || method === "sepa";
+  const effectiveMinLocal = isManual
+    ? currencyConfig.minDepositLocal
+    : Math.max(
+        currencyConfig.minDepositLocal,
+        currencyConfig.decimals === 0
+          ? Math.ceil(0.5 * currencyConfig.rateFromEur)
+          : Math.ceil(0.5 * currencyConfig.rateFromEur * 100) / 100
+      );
 
   const stripeEnabled = paymentProviders.some(
     (p) => p.id === "stripe" && p.enabled
@@ -57,10 +81,17 @@ export function RechargeModal() {
   );
 
   const handleSubmit = async () => {
-    if (numAmount < 5) {
+    if (localAmount < effectiveMinLocal) {
       toast({
         kind: "error",
-        title: "Montant minimum : 5,00 €",
+        title: `Montant minimum : ${formatLocalAmount(effectiveMinLocal, currency)}`,
+      });
+      return;
+    }
+    if (localAmount > currencyConfig.maxDepositLocal) {
+      toast({
+        kind: "error",
+        title: `Montant maximum : ${formatLocalAmount(currencyConfig.maxDepositLocal, currency)}`,
       });
       return;
     }
@@ -138,8 +169,8 @@ export function RechargeModal() {
             contentContainerStyle={styles.body}
           >
             <View style={styles.chipsRow}>
-              {AMOUNTS.map((a) => {
-                const active = Math.abs(numAmount - a) < 0.01;
+              {currencyConfig.depositPresetsLocal.map((a) => {
+                const active = Math.abs(localAmount - a) < 0.01;
                 return (
                   <Pressable
                     key={a}
@@ -147,12 +178,13 @@ export function RechargeModal() {
                     style={[styles.chip, active && styles.chipActive]}
                   >
                     <Text
+                      numberOfLines={1}
                       style={[
                         styles.chipText,
                         active && styles.chipTextActive,
                       ]}
                     >
-                      {a} €
+                      {formatPresetChip(a, currency)}
                     </Text>
                   </Pressable>
                 );
@@ -162,8 +194,10 @@ export function RechargeModal() {
             <TextInput
               value={amount}
               onChangeText={setAmount}
-              keyboardType="decimal-pad"
-              placeholder="Montant en €"
+              keyboardType={
+                currencyConfig.decimals === 0 ? "number-pad" : "decimal-pad"
+              }
+              placeholder={`Montant en ${currencyConfig.symbol}`}
               placeholderTextColor={COLORS.dim}
               style={styles.input}
             />
@@ -196,7 +230,7 @@ export function RechargeModal() {
                   size={16}
                   color={method === "sepa" ? COLORS.betclicRed : COLORS.mist}
                 />
-                <Text style={styles.methodLabel}>Virement SEPA</Text>
+                <Text style={styles.methodLabel}>Virement bancaire</Text>
               </Pressable>
 
               {stripeEnabled ? (
@@ -240,7 +274,11 @@ export function RechargeModal() {
               <TextInput
                 value={reference}
                 onChangeText={setReference}
-                placeholder="Référence de transaction (ex. TXN-94820)"
+                placeholder={
+                  method === "mobile_money"
+                    ? `${countryConfig.mobileMoneyHint || "Mobile Money"} · Réf TXN`
+                    : "Référence du virement bancaire"
+                }
                 placeholderTextColor={COLORS.dim}
                 style={styles.input}
               />

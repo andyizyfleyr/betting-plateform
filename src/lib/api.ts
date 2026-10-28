@@ -248,6 +248,8 @@ export interface ClientUser {
   haptics: boolean;
   oddsFormat: "decimal" | "fractional";
   language: string;
+  countryCode?: string;
+  currency?: string;
   liveSim: boolean;
   bonusLocked?: number;
   email?: string | null;
@@ -937,6 +939,7 @@ export const api = {
       name: string;
       email: string;
       password: string;
+      countryCode: string;
       acceptedTerms: boolean;
     }) =>
       request<{ user: ClientUser }>("/api/auth/register", {
@@ -944,6 +947,12 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       }),
+    geo: () =>
+      request<{
+        detected: boolean;
+        countryCode: string | null;
+        currency: string | null;
+      }>("/api/geo"),
     forgotPassword: (payload: { email: string }) =>
       request<{ ok: boolean; expiresInMinutes: number }>(
         "/api/auth/forgot-password",

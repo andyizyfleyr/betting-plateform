@@ -17,13 +17,16 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   Eye,
   EyeOff,
+  Globe,
   KeyRound,
   Loader2,
   Lock,
   Mail,
   RefreshCw,
+  Search,
   ShieldCheck,
   TrendingUp,
   User,
@@ -33,6 +36,11 @@ import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { PulseLogo } from "@/components/pulse-logo";
 import { useApp } from "@/components/providers";
 import { api, type ClientUser } from "@/lib/api";
+import {
+  COUNTRIES,
+  getCountryConfig,
+  getCurrencyConfig,
+} from "@/lib/countries";
 import {
   evaluatePasswordStrength,
   isValidAuthEmail,
@@ -182,7 +190,7 @@ function AuthShellInner({
   initialView: AuthView;
   autoResolveFromQuery: boolean;
 }) {
-  const { user, applyUser, toast } = useApp();
+  const { user, applyUser, toast, countryCode, setGuestCountryCode } = useApp();
   const router = useRouter();
   const params = useSearchParams();
 
@@ -209,6 +217,33 @@ function AuthShellInner({
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+
+  const selectedCountryCfg = useMemo(
+    () => getCountryConfig(countryCode),
+    [countryCode]
+  );
+  const selectedCurrencyCfg = useMemo(
+    () => getCurrencyConfig(selectedCountryCfg.currency),
+    [selectedCountryCfg.currency]
+  );
+
+  const filteredCountries = useMemo(() => {
+    const q = countrySearch.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter((c) => {
+      const cur = getCurrencyConfig(c.currency);
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.code.toLowerCase().includes(q) ||
+        c.currency.toLowerCase().includes(q) ||
+        cur.symbol.toLowerCase().includes(q) ||
+        cur.name.toLowerCase().includes(q) ||
+        c.region.toLowerCase().includes(q)
+      );
+    });
+  }, [countrySearch]);
 
   // États spécifiques « Mot de passe oublié »
   const [forgotStep, setForgotStep] = useState<"request" | "verify">("request");
@@ -337,6 +372,7 @@ function AuthShellInner({
         name: cleanName,
         email: cleanEmail,
         password,
+        countryCode: selectedCountryCfg.code,
         acceptedTerms: true,
       });
       completeAuth(r.user, "register");
@@ -801,6 +837,142 @@ function AuthShellInner({
                       className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor="reg-country-btn"
+                      className="block text-[10.5px] font-medium text-ink"
+                    >
+                      Pays de résidence & devise officielle
+                    </label>
+                    <span className="inline-flex items-center gap-1 text-[9.5px] text-dim">
+                      <Lock className="h-2.5 w-2.5" strokeWidth={2.2} />
+                      Fixé à l&apos;inscription
+                    </span>
+                  </div>
+
+                  <button
+                    id="reg-country-btn"
+                    type="button"
+                    onClick={() => setCountryPickerOpen((o) => !o)}
+                    className={cn(
+                      "flex h-12 w-full items-center justify-between gap-2.5 rounded-2xl border bg-deep/45 px-3.5 text-left transition-colors hover:bg-white",
+                      countryPickerOpen ? "border-ink bg-white" : "border-edge"
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="text-[17px] leading-none" aria-hidden="true">
+                        {selectedCountryCfg.flag}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[12px] font-medium text-ink">
+                          {selectedCountryCfg.name}
+                        </p>
+                        <p className="truncate text-[9.5px] text-dim">
+                          {selectedCurrencyCfg.name}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="rounded-lg bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-medium text-betclic-red">
+                        {selectedCurrencyCfg.code} · {selectedCurrencyCfg.symbol}
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 text-dim transition-transform",
+                          countryPickerOpen && "rotate-180"
+                        )}
+                        strokeWidth={2.1}
+                      />
+                    </div>
+                  </button>
+
+                  {countryPickerOpen && (
+                    <div className="overflow-hidden rounded-2xl border border-edge bg-white shadow-sm">
+                      <div className="flex items-center gap-2 border-b border-edge bg-deep/40 px-3 py-2">
+                        <Search className="h-3.5 w-3.5 shrink-0 text-dim" strokeWidth={2.1} />
+                        <input
+                          value={countrySearch}
+                          onChange={(e) => setCountrySearch(e.target.value)}
+                          placeholder="Rechercher un pays ou une devise (ex. Bénin, XOF, Canada…)"
+                          className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
+                        />
+                      </div>
+                      <div className="max-h-56 divide-y divide-edge/60 overflow-y-auto">
+                        {filteredCountries.length === 0 ? (
+                          <p className="px-3 py-4 text-center text-[11px] text-dim">
+                            Aucun pays trouvé.
+                          </p>
+                        ) : (
+                          filteredCountries.map((c) => {
+                            const cur = getCurrencyConfig(c.currency);
+                            const active = c.code === selectedCountryCfg.code;
+                            return (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setGuestCountryCode(c.code);
+                                  setCountryPickerOpen(false);
+                                  setCountrySearch("");
+                                  if (error) setError(null);
+                                }}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-deep/50",
+                                  active && "bg-betclic-red/6"
+                                )}
+                              >
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  <span className="text-[15px] leading-none">
+                                    {c.flag}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-[11.5px] font-medium text-ink">
+                                      {c.name}
+                                    </p>
+                                    <p className="truncate text-[9.5px] text-dim">
+                                      {c.region} · {cur.name}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                  <span
+                                    className={cn(
+                                      "rounded-md px-1.5 py-0.5 text-[9.5px] font-medium",
+                                      active
+                                        ? "bg-betclic-red text-white"
+                                        : "bg-elev text-mist"
+                                    )}
+                                  >
+                                    {cur.code} ({cur.symbol})
+                                  </span>
+                                  {active && (
+                                    <Check
+                                      className="h-3.5 w-3.5 text-betclic-red"
+                                      strokeWidth={2.5}
+                                    />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="flex items-center gap-1.5 px-0.5 text-[10px] text-dim">
+                    <Globe className="h-3 w-3 shrink-0 text-betclic-red" strokeWidth={2.1} />
+                    <span>
+                      Votre solde, vos mises et vos retraits seront affichés en{" "}
+                      <span className="text-ink">
+                        {selectedCurrencyCfg.name} ({selectedCurrencyCfg.symbol})
+                      </span>
+                      .
+                    </span>
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">

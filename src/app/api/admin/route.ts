@@ -180,6 +180,8 @@ export async function GET(req: NextRequest) {
   const matchRows = [...manualMatchRows, ...virtualMatchRows];
 
   const userNameMap = new Map(users.map((u) => [u.id, u.name]));
+  const userCountryMap = new Map(users.map((u) => [u.id, u.countryCode ?? "FR"]));
+  const userCurrencyMap = new Map(users.map((u) => [u.id, u.currency ?? "EUR"]));
 
   const seenQ = new Set<string>();
   const uniqueQuestions = questionRows.filter((q) => {
@@ -261,10 +263,14 @@ export async function GET(req: NextRequest) {
     deposits: depRows.map((d) => ({
       ...d,
       userName: userNameMap.get(d.userId) ?? `Joueur #${d.userId}`,
+      userCountryCode: userCountryMap.get(d.userId) ?? "FR",
+      userCurrency: userCurrencyMap.get(d.userId) ?? "EUR",
     })),
     withdrawals: wdRows.map((w) => ({
       ...w,
       userName: userNameMap.get(w.userId) ?? `Joueur #${w.userId}`,
+      userCountryCode: userCountryMap.get(w.userId) ?? "FR",
+      userCurrency: userCurrencyMap.get(w.userId) ?? "EUR",
     })),
     matches: matchRows.map((m) => {
       const cleanEvents = sanitizeMatchEvents(m.events, m.homeScore, m.awayScore);
@@ -320,9 +326,12 @@ async function handleAdminPost(
     resetSyncThrottle();
     if (action === "setBalance") {
       const userId = Number(body.userId);
-      const amount = roundNumber(body.amount);
+      const rawNum = Number(body.amount);
+      const amount = Number.isFinite(rawNum)
+        ? Math.round(rawNum * 1_000_000) / 1_000_000
+        : null;
       if (!userId || amount == null || amount < 0) {
-        return NextResponse.json({ error: "Montant valide requis (≥ 0 €)" }, { status: 400 });
+        return NextResponse.json({ error: "Montant valide requis (≥ 0)" }, { status: 400 });
       }
       const [prevUser] = await db
         .select({ balance: appUser.balance })
@@ -330,17 +339,17 @@ async function handleAdminPost(
         .where(eq(appUser.id, userId));
       if (!prevUser) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
 
-      const delta = round2(amount - (prevUser.balance ?? 0));
+      const delta = Math.round((amount - (prevUser.balance ?? 0)) * 1_000_000) / 1_000_000;
       const [u] = await db
         .update(appUser)
         .set({ balance: amount })
         .where(eq(appUser.id, userId))
         .returning();
-      if (Math.abs(delta) >= 0.01) {
+      if (Math.abs(delta) >= 0.0001) {
         await db.insert(walletAdjustments).values({
           userId,
           amount: delta,
-          reason: `Mise à jour manuelle du solde (${amount.toFixed(2)} €)`,
+          reason: `Mise à jour manuelle du solde`,
         });
       }
       return NextResponse.json({ ok: true, user: publicUser(u) });
@@ -813,7 +822,7 @@ async function handleAdminPost(
       await db.transaction(async (tx) => {
         await tx.execute(sql`
           WITH refunded AS (
-            SELECT "user_id", SUM(ROUND(("stake" * 100)::numeric)::float8 / 100.0)::float8 AS refund
+            SELECT "user_id", SUM(ROUND(("stake")::numeric, 6)::float8)::float8 AS refund
             FROM "bets"
             WHERE "match_id" = ${matchId}
               AND "status" = 'pending'
@@ -1126,15 +1135,15 @@ async function handleAdminPost(
             UPDATE "bets" AS b
             SET
               "status" = 'pending',
-              "potential_win" = ROUND((b."stake" * b."odds" * 100)::numeric)::float8 / 100.0,
+              "potential_win" = ROUND((b."stake" * b."odds")::numeric, 6)::float8,
               "settled_at" = NULL
             WHERE b."match_id" = ${matchId}
               AND b."status" IN ('won', 'lost', 'void')
             RETURNING
               b."user_id",
               CASE
-                WHEN b."status" = 'void' THEN ROUND((b."stake" * 100)::numeric)::float8 / 100.0
-                WHEN b."status" = 'won' THEN ROUND(((b."stake" * b."odds" * COALESCE(b."payout_multiplier", 1) + COALESCE(b."stake_returned", 0)) * 100)::numeric)::float8 / 100.0
+                WHEN b."status" = 'void' THEN ROUND((b."stake")::numeric, 6)::float8
+                WHEN b."status" = 'won' THEN ROUND((b."stake" * b."odds" * COALESCE(b."payout_multiplier", 1) + COALESCE(b."stake_returned", 0))::numeric, 6)::float8
                 ELSE 0::float8
               END AS clawback
           )
@@ -1309,7 +1318,7 @@ async function handleAdminPost(
         // Remboursement groupé en 1 seule requête SQL + suppression en cascade
         await tx.execute(sql`
           WITH refunded AS (
-            SELECT "user_id", SUM(ROUND(("stake" * 100)::numeric)::float8 / 100.0)::float8 AS refund
+            SELECT "user_id", SUM(ROUND(("stake")::numeric, 6)::float8)::float8 AS refund
             FROM "prediction_bets"
             WHERE "question_id" = ${questionId}
               AND "status" = 'pending'
@@ -1371,7 +1380,7 @@ async function handleAdminPost(
         await tx
           .update(appUser)
           .set({
-            balance: sql`ROUND((${appUser.balance} + ${round2(rejected.amount)})::numeric, 2)::float8`,
+            balance: sql`ROUND((${appUser.balance} + ${ Math.round(rejected.amount * 1_000_000) / 1_000_000 })::numeric, 6)::float8`,
           })
           .where(eq(appUser.id, rejected.userId));
 
@@ -1400,7 +1409,7 @@ async function handleAdminPost(
         await tx
           .update(appUser)
           .set({
-            balance: sql`ROUND((${appUser.balance} + ${round2(credited.amount)})::numeric, 2)::float8`,
+            balance: sql`ROUND((${appUser.balance} + ${ Math.round(credited.amount * 1_000_000) / 1_000_000 })::numeric, 6)::float8`,
           })
           .where(eq(appUser.id, credited.userId));
 

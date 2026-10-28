@@ -19,6 +19,12 @@ import { LiveMatchClock } from "./live-match-clock";
 import { TeamAvatar } from "./team-avatar";
 import { AnimatedNumber } from "./animated-number";
 import { TouchStakePad } from "./touch-stake-pad";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  localToEur,
+  maxSpendableLocalFromEur,
+} from "@/lib/countries";
 import { cn, eur, formatOdds } from "@/lib/format";
 
 const POLL_INTERVAL = 3_500;
@@ -89,14 +95,27 @@ function BetModalSheet({
     toggleComboLeg,
     authReady,
     user,
+    currency,
+    currencyConfig,
   } = useApp();
   const feedMatches = useFeedMatches();
   const dragControls = useDragControls();
 
-  const [stakeText, setStakeText] = useState(() => {
-    const def = balance > 0 ? Math.min(10, Math.max(1, Math.floor(balance))) : 10;
-    return String(def);
-  });
+  const computeDefaultStakeStr = () => {
+    const maxLocal = maxSpendableLocalFromEur(balance, currency);
+    const def =
+      balance > 0 && maxLocal >= currencyConfig.minStakeLocal
+        ? Math.min(currencyConfig.defaultStakeLocal, maxLocal)
+        : currencyConfig.defaultStakeLocal;
+    return formatLocalInputString(def, currency, ".");
+  };
+
+  const [prevCur, setPrevCur] = useState(currency);
+  const [stakeText, setStakeText] = useState(computeDefaultStakeStr);
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStakeText(computeDefaultStakeStr());
+  }
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
@@ -181,9 +200,15 @@ function BetModalSheet({
   }, [target.market, target.match.id, target.match.status, target.selection]);
 
   const parsed = Number(stakeText.replace(",", "."));
-  const stake = Number(Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0);
-  const overBalance = Boolean(user) && stake > balance;
-  const belowMin = stake > 0 && stake < 0.5;
+  const localStake =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const stake = localToEur(localStake, currency, balance);
+  const overBalance = Boolean(user) && stake > balance + 1e-5;
+  const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
 
   const derivedFromFeed = sharedFreshMatch
     ? (() => {
@@ -276,7 +301,7 @@ function BetModalSheet({
 
   const canSubmit =
     phase === "input" &&
-    stake >= 0.5 &&
+    localStake >= currencyConfig.minStakeLocal &&
     !overBalance &&
     !marketSuspended &&
     !marketClosed;
@@ -525,7 +550,7 @@ function BetModalSheet({
 
               {belowMin && !overBalance && (
                 <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                  Mise minimale : 0,50 €
+                  Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
                 </p>
               )}
 

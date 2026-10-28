@@ -38,6 +38,7 @@ import {
   extractIdempotencyKey,
   type CashoutChangedDetails,
 } from "@/lib/odds-lock";
+import { formatEurAsCurrency } from "@/lib/countries";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import { requireUserId } from "@/lib/session";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
@@ -51,10 +52,19 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function cashoutChangedResponse(details: CashoutChangedDetails): NextResponse {
+async function cashoutChangedResponse(
+  uid: number,
+  details: CashoutChangedDetails
+): Promise<NextResponse> {
+  const [u] = await db
+    .select({ currency: appUser.currency })
+    .from(appUser)
+    .where(eq(appUser.id, uid))
+    .limit(1);
+  const cur = u?.currency ?? "EUR";
   return NextResponse.json(
     {
-      error: `Le montant du Cash Out a baissé (${details.previousCashout.toFixed(2).replace(".", ",")} € → ${details.currentCashout.toFixed(2).replace(".", ",")} €). Confirmez le nouveau montant pour vendre le coupon.`,
+      error: `Le montant du Cash Out a baissé (${formatEurAsCurrency(details.previousCashout, cur)} → ${formatEurAsCurrency(details.currentCashout, cur)}). Confirmez le nouveau montant pour vendre le coupon.`,
       code: CASHOUT_CHANGED_CODE,
       details,
     },
@@ -429,7 +439,7 @@ export async function POST(req: NextRequest) {
         const [updatedUser] = await tx
           .update(appUser)
           .set({
-            balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 2)::float8`,
+            balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 6)::float8`,
           })
           .where(eq(appUser.id, uid))
           .returning({ balance: appUser.balance });
@@ -447,7 +457,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
-      if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
+      if (txRes.kind === "cashout_changed") return cashoutChangedResponse(uid, txRes.details);
       if (txRes.kind === "live_incident") {
         return NextResponse.json({ error: txRes.error }, { status: 409 });
       }
@@ -660,7 +670,7 @@ export async function POST(req: NextRequest) {
             const [updatedUser] = await tx
               .update(appUser)
               .set({
-                balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 2)::float8`,
+                balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 6)::float8`,
               })
               .where(eq(appUser.id, uid))
               .returning({ balance: appUser.balance });
@@ -678,7 +688,7 @@ export async function POST(req: NextRequest) {
           });
 
           if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
-          if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
+          if (txRes.kind === "cashout_changed") return cashoutChangedResponse(uid, txRes.details);
           if (txRes.kind === "live_incident") {
             return NextResponse.json({ error: txRes.error }, { status: 409 });
           }
@@ -822,7 +832,7 @@ export async function POST(req: NextRequest) {
         const [updatedUser] = await tx
           .update(appUser)
           .set({
-            balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 2)::float8`,
+            balance: sql`ROUND((${appUser.balance} + ${finalValue})::numeric, 6)::float8`,
           })
           .where(eq(appUser.id, uid))
           .returning({ balance: appUser.balance });
@@ -840,7 +850,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (txRes.kind === "idempotency_conflict") return idempotencyConflictResponse();
-      if (txRes.kind === "cashout_changed") return cashoutChangedResponse(txRes.details);
+      if (txRes.kind === "cashout_changed") return cashoutChangedResponse(uid, txRes.details);
       if (txRes.kind === "settled") {
         return NextResponse.json(
           { error: "Ce pari vient d'être réglé" },

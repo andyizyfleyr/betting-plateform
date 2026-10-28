@@ -255,6 +255,10 @@ export const appUser = pgTable(
     haptics: boolean("haptics").notNull().default(true),
     oddsFormat: text("odds_format").notNull().default("decimal"), // "decimal" | "fractional"
     language: text("language").notNull().default("fr"),
+    /** Pays ISO 3166-1 alpha-2 choisi à l'inscription et verrouillé ensuite (ex: "BJ", "FR", "CA"). */
+    countryCode: text("country_code").notNull().default("FR"),
+    /** Devise officielle ISO 4217 liée automatiquement au pays (ex: "XOF", "EUR", "CAD"). */
+    currency: text("currency").notNull().default("EUR"),
     liveSim: boolean("live_sim").notNull().default(true), // moteur de matchs en direct
     /** Rôle du compte : "user" (joueur) ou "admin" (espace d'administration). */
     role: text("role").notNull().default("user"),

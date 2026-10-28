@@ -24,13 +24,18 @@ import {
 } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  localToEur,
+  maxSpendableLocalFromEur,
+  type CurrencyCode,
+} from "@/lib/countries";
+import { eur } from "@/lib/format";
 import { useRouter } from "@/lib/router";
 import { triggerHaptic } from "@/theme/tokens";
 
-const SYM = "$";
-const DEC = 2;
-const MIN_BET = 1;
-const MAX_BET = 100;
+const MAX_BET_EUR = 100;
 
 interface Game {
   active: boolean;
@@ -64,17 +69,19 @@ interface ConfettiPiece {
   anim: Animated.Value;
 }
 
-function fmt(n: number): string {
-  const safe = Number.isFinite(n) ? n : 0;
-  const fixed = safe.toFixed(DEC).replace(".", ",");
-  const [intPart, decPart] = fixed.split(",");
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `${grouped},${decPart} ${SYM}`;
-}
-
 export default function TapScreen() {
   const router = useRouter();
-  const { user, setBalance, hapticsEnabled } = useApp();
+  const { user, setBalance, hapticsEnabled, currency, currencyConfig } =
+    useApp();
+  const minBetLocal = currencyConfig.minStakeLocal;
+  const maxBetLocal = Math.max(
+    minBetLocal,
+    maxSpendableLocalFromEur(MAX_BET_EUR, currency)
+  );
+  const fmt = useCallback(
+    (eurAmount: number) => eur(eurAmount, currency),
+    [currency]
+  );
 
   const [bal, setBal] = useState<number>(() => user?.balance ?? 0);
   const [balanceHidden, setBalanceHidden] = useState(false);
@@ -90,7 +97,16 @@ export default function TapScreen() {
   const [crashed, setCrashed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [stake, setStake] = useState("1.00");
+  const [prevCur, setPrevCur] = useState<CurrencyCode>(currency);
+  const [stake, setStake] = useState(() =>
+    formatLocalInputString(currencyConfig.stakePresets[0], currency, ".")
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStake(
+      formatLocalInputString(currencyConfig.stakePresets[0], currency, ".")
+    );
+  }
   const [sliderPct, setSliderPct] = useState(0);
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ModalState>({
@@ -256,7 +272,7 @@ export default function TapScreen() {
         upGame({ mult: 1.0, bet: 0 });
       }, 1500);
     },
-    [fireConfetti, hapticsEnabled, syncGlobalBal, upGame]
+    [fireConfetti, fmt, hapticsEnabled, syncGlobalBal, upGame]
   );
 
   useEffect(() => {
@@ -268,11 +284,23 @@ export default function TapScreen() {
   }, [bal, end, game]);
 
   const getBounds = useCallback(() => {
-    const effectiveMax = Math.max(MIN_BET, Math.min(balRef.current, MAX_BET));
-    return { min: MIN_BET, max: effectiveMax };
-  }, []);
+    const spendable = maxSpendableLocalFromEur(balRef.current, currency);
+    const effectiveMax = Math.max(
+      minBetLocal,
+      Math.min(spendable, maxBetLocal)
+    );
+    return { min: minBetLocal, max: effectiveMax };
+  }, [currency, maxBetLocal, minBetLocal]);
 
   const clampPct = (n: number) => Math.max(0, Math.min(100, n));
+
+  const formatLocalStake = useCallback(
+    (amount: number) =>
+      currencyConfig.decimals === 0
+        ? String(Math.round(amount))
+        : amount.toFixed(2),
+    [currencyConfig.decimals]
+  );
 
   const onSliderChange = useCallback(
     (percent: number) => {
@@ -281,10 +309,10 @@ export default function TapScreen() {
       let amount = b.min + ((b.max - b.min) * pct) / 100;
       if (pct >= 100) amount = b.max;
       if (pct <= 0) amount = b.min;
-      setStake(amount.toFixed(DEC));
+      setStake(formatLocalStake(amount));
       setSliderPct(pct);
     },
-    [getBounds]
+    [formatLocalStake, getBounds]
   );
 
   const onStakeChange = (val: string) => {
@@ -297,7 +325,7 @@ export default function TapScreen() {
     const num = parseFloat(clean);
     const b = getBounds();
     if (!isNaN(num) && num > b.max) {
-      setStake(b.max.toFixed(DEC));
+      setStake(formatLocalStake(b.max));
       setSliderPct(100);
       return;
     }
@@ -315,7 +343,7 @@ export default function TapScreen() {
     const num = parseFloat(stake);
     const b = getBounds();
     if (isNaN(num) || num < b.min) {
-      setStake(b.min.toFixed(DEC));
+      setStake(formatLocalStake(b.min));
       setSliderPct(0);
     }
   };
@@ -326,17 +354,18 @@ export default function TapScreen() {
       return;
     }
     if (isSyncingRef.current) return;
-    const amt = parseFloat(stake);
-    if (isNaN(amt) || amt <= 0) {
+    const localAmt = parseFloat(stake);
+    if (isNaN(localAmt) || localAmt <= 0) {
       setError("Mise invalide");
       return;
     }
-    if (amt < MIN_BET) {
-      setError(`Mise minimale : ${MIN_BET} ${SYM}`);
-      setStake(MIN_BET.toFixed(DEC));
+    if (localAmt < minBetLocal) {
+      setError(`Mise minimale : ${formatLocalAmount(minBetLocal, currency)}`);
+      setStake(formatLocalStake(minBetLocal));
       setSliderPct(0);
       return;
     }
+    const amt = localToEur(localAmt, currency, balRef.current);
     isSyncingRef.current = true;
     setError("");
     setLoading(true);
@@ -433,7 +462,6 @@ export default function TapScreen() {
       .then((d) => {
         if (d.status === "success" && typeof d.balance === "number") {
           syncGlobalBal(d.balance);
-          setStake(Math.min(MIN_BET, Math.max(MIN_BET, d.balance)).toFixed(DEC));
         }
       })
       .catch(() => {});
@@ -477,7 +505,7 @@ export default function TapScreen() {
         if (
           d.status === "success" &&
           typeof d.balance === "number" &&
-          Math.abs(balRef.current - d.balance) > 0.01
+          Math.abs(balRef.current - d.balance) > 0.00001
         ) {
           syncGlobalBal(d.balance);
           setBalFlash(true);
@@ -495,7 +523,7 @@ export default function TapScreen() {
     outputRange: ["0deg", "360deg"],
   });
 
-  const balText = balanceHidden ? "******" : fmt(bal).replace(SYM, "").trim();
+  const balText = balanceHidden ? "******" : fmt(bal);
   const circumference = Math.PI * (circleSize - 10);
 
   return (
@@ -516,7 +544,6 @@ export default function TapScreen() {
             >
               {balText}
             </Text>
-            <Text style={styles.symText}>{SYM}</Text>
             <Pressable
               hitSlop={8}
               onPress={() => setBalanceHidden((h) => !h)}
@@ -632,6 +659,11 @@ export default function TapScreen() {
           onBlur={onStakeBlur}
           onSlider={onSliderChange}
           disabled={playing}
+          minBetLocal={minBetLocal}
+          maxBetLocal={maxBetLocal}
+          currency={currency}
+          symbol={currencyConfig.symbol}
+          decimals={currencyConfig.decimals}
         />
 
         <Pressable
@@ -792,6 +824,11 @@ function StakeSliderControl({
   onBlur,
   onSlider,
   disabled,
+  minBetLocal,
+  maxBetLocal,
+  currency,
+  symbol,
+  decimals,
 }: {
   stake: string;
   sliderPct: number;
@@ -799,6 +836,11 @@ function StakeSliderControl({
   onBlur: () => void;
   onSlider: (pct: number) => void;
   disabled: boolean;
+  minBetLocal: number;
+  maxBetLocal: number;
+  currency: CurrencyCode;
+  symbol: string;
+  decimals: 0 | 2;
 }) {
   const trackWidthRef = useRef(0);
   const startPctRef = useRef(0);
@@ -839,20 +881,20 @@ function StakeSliderControl({
           onChangeText={onStake}
           onBlur={onBlur}
           editable={!disabled}
-          keyboardType="decimal-pad"
+          keyboardType={decimals === 0 ? "number-pad" : "decimal-pad"}
           placeholder="Mise"
           placeholderTextColor="#6b7280"
           style={styles.stakeIn}
         />
-        <Text style={styles.currencyBadge}>{SYM}</Text>
+        <Text style={styles.currencyBadge}>{symbol}</Text>
       </View>
 
       <View style={styles.limitInfo}>
         <Text style={styles.limitText}>
-          Min: {MIN_BET} {SYM}
+          Min: {formatLocalAmount(minBetLocal, currency)}
         </Text>
         <Text style={styles.limitText}>
-          Max: {MAX_BET} {SYM}
+          Max: {formatLocalAmount(maxBetLocal, currency)}
         </Text>
       </View>
 

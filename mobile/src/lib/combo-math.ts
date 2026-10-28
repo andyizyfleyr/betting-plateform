@@ -17,6 +17,10 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function roundPivot(n: number): number {
+  return Math.round(n * 1_000_000) / 1_000_000;
+}
+
 /** Retourne le pourcentage de Bonus Combiné applicable au nombre de sélections éligibles (cote ≥ 1,35). */
 export function comboBoostPct(eligibleLegsCount: number): number {
   if (eligibleLegsCount >= 8) return 20;
@@ -79,10 +83,10 @@ export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
   const totalOdds = round2(Math.min(MAX_COMBO_ODDS, rawTotalOdds));
 
   const cleanStake = Math.max(0, stake);
-  const basePayout = round2(cleanStake * baseOdds);
-  const uncappedWin = round2(cleanStake * totalOdds);
-  const potentialWin = round2(Math.min(MAX_COMBO_PAYOUT, uncappedWin));
-  const boostAmount = round2(Math.max(0, potentialWin - basePayout));
+  const basePayout = roundPivot(cleanStake * baseOdds);
+  const uncappedWin = roundPivot(cleanStake * totalOdds);
+  const potentialWin = roundPivot(Math.min(MAX_COMBO_PAYOUT, uncappedWin));
+  const boostAmount = roundPivot(Math.max(0, potentialWin - basePayout));
 
   return {
     baseOdds,

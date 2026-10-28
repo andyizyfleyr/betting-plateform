@@ -9,6 +9,10 @@ import {
   publicUser,
   validateProductionPassword,
 } from "@/lib/auth";
+import {
+  getOfficialCurrencyForCountry,
+  isValidCountryCode,
+} from "@/lib/countries";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
@@ -35,6 +39,7 @@ export async function POST(req: NextRequest) {
     name?: string;
     email?: string;
     password?: string;
+    countryCode?: string;
     acceptedTerms?: boolean;
   };
   try {
@@ -46,6 +51,15 @@ export async function POST(req: NextRequest) {
   const name = (body.name ?? "").toString().trim().replace(/\s+/g, " ").slice(0, 40);
   const email = (body.email ?? "").toString().trim().toLowerCase();
   const password = (body.password ?? "").toString();
+  const rawCountry = (
+    body.countryCode ??
+    req.headers.get("x-vercel-ip-country") ??
+    req.headers.get("cf-ipcountry") ??
+    ""
+  )
+    .toString()
+    .trim()
+    .toUpperCase();
 
   if (name.length < 2) {
     return NextResponse.json(
@@ -53,6 +67,14 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  if (!isValidCountryCode(rawCountry)) {
+    return NextResponse.json(
+      { error: "Veuillez sélectionner votre pays de résidence." },
+      { status: 400 }
+    );
+  }
+  const countryCode = rawCountry;
+  const currency = getOfficialCurrencyForCountry(countryCode);
   if (!AUTH_EMAIL_RE.test(email) || email.length > 160) {
     return NextResponse.json(
       { error: "Veuillez saisir une adresse e-mail valide." },
@@ -93,6 +115,8 @@ export async function POST(req: NextRequest) {
         name,
         email,
         passwordHash: hashPassword(password),
+        countryCode,
+        currency,
         balance: 0,
         bonusLocked: 0,
         tokenVersion: 0,

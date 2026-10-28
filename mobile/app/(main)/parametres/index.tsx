@@ -15,6 +15,7 @@ import {
   ArrowUpRight,
   Bell,
   ChevronRight,
+  Globe,
   History,
   Lock,
   LogOut,
@@ -51,6 +52,8 @@ export default function ParametresScreen() {
     setBalance,
     toast,
     betsVersion,
+    countryConfig,
+    currencyConfig,
     dataSaverEnabled,
     setDataSaverEnabled,
   } = useApp();
@@ -476,6 +479,27 @@ export default function ParametresScreen() {
       ) : (
         <View style={styles.sectionStack}>
           <View style={styles.listCard}>
+            {/* Pays & devise officielle verrouillés à l'inscription */}
+            <View style={styles.prefRow}>
+              <View style={[styles.prefLeft, { flex: 1 }]}>
+                <View style={styles.grayIconBox}>
+                  <Globe size={16} color={COLORS.ink} strokeWidth={2.1} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.prefLabel}>Pays & devise du compte</Text>
+                  <Text numberOfLines={1} style={styles.navRowSub}>
+                    {countryConfig.flag} {countryConfig.name} · {currencyConfig.name}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.lockedCurrencyPill}>
+                <Lock size={11} color={COLORS.dim} strokeWidth={2.2} />
+                <Text style={styles.lockedCurrencyPillText}>
+                  {currencyConfig.code} ({currencyConfig.symbol})
+                </Text>
+              </View>
+            </View>
+
             {/* Format des cotes */}
             <View style={styles.prefRow}>
               <View style={styles.prefLeft}>
@@ -1022,5 +1046,19 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: "500",
     color: "#ffffff",
+  },
+  lockedCurrencyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 8,
+    backgroundColor: COLORS.elev,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  lockedCurrencyPillText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: COLORS.ink,
   },
 });

@@ -11,6 +11,12 @@ import {
   saveIdempotencyRecord,
 } from "@/lib/idempotency";
 import { extractIdempotencyKey } from "@/lib/odds-lock";
+import {
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { requireUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const method = String(body.method ?? "").trim().toLowerCase();
     const reference = String(body.reference ?? "").trim();
-    const amount = round2(Number(body.amount));
+    const amount = roundEurPivot(Number(body.amount));
     const idempotencyKey = extractIdempotencyKey(
       body.idempotencyKey,
       req.headers.get("idempotency-key")
@@ -67,9 +73,27 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (!Number.isFinite(amount) || amount < 5 || amount > 2_000) {
+
+    const [currencyUser] = await db
+      .select({ currency: appUser.currency })
+      .from(appUser)
+      .where(eq(appUser.id, uid))
+      .limit(1);
+    const userCurrency = getCurrencyConfig(currencyUser?.currency);
+    const minDepEur = localToEur(userCurrency.minDepositLocal, userCurrency.code);
+    const maxDepEur = Math.max(
+      2_000,
+      localToEur(userCurrency.maxDepositLocal, userCurrency.code)
+    );
+    if (
+      !Number.isFinite(amount) ||
+      amount < minDepEur - 1e-4 ||
+      amount > maxDepEur + 1e-4
+    ) {
       return NextResponse.json(
-        { error: "Le montant doit être compris entre 5 € et 2 000 €" },
+        {
+          error: `Le montant doit être compris entre ${formatLocalAmount(userCurrency.minDepositLocal, userCurrency.code)} et ${formatLocalAmount(userCurrency.maxDepositLocal, userCurrency.code)}`,
+        },
         { status: 400 }
       );
     }

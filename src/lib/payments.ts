@@ -374,7 +374,7 @@ export async function creditDepositInTx(
     await tx
       .update(appUser)
       .set({
-        balance: sql`ROUND((${appUser.balance} + ${amount})::numeric, 2)::float8`,
+        balance: sql`ROUND((${appUser.balance} + ${amount})::numeric, 6)::float8`,
       })
       .where(eq(appUser.id, uid));
     return { creditedNow: true, userId: uid };

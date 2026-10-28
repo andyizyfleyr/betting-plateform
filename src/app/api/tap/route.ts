@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
 import { appUser } from "@/db/schema";
+import {
+  formatLocalAmount,
+  getCurrencyConfig,
+  localToEur,
+  roundEurPivot,
+} from "@/lib/countries";
 import { getAuthUserId } from "@/lib/session";
 import {
   analyzePlayerProfile,
@@ -31,7 +37,7 @@ async function getUserBalance(uid: number): Promise<number> {
 async function setUserBalance(uid: number, balance: number) {
   await db
     .update(appUser)
-    .set({ balance: round2(balance) })
+    .set({ balance: roundEurPivot(balance) })
     .where(eq(appUser.id, uid));
 }
 
@@ -61,28 +67,41 @@ export async function POST(req: NextRequest) {
 
   // ---- start_game : mise + déduction + point de crash ----
   if (act === "start_game") {
-    const betInput = Number(body.bet);
-    if (!betInput || betInput < TAP_CONFIG.MIN_BET) {
+    const betInput = roundEurPivot(Number(body.bet));
+    const [u] = await db
+      .select({ balance: appUser.balance, currency: appUser.currency })
+      .from(appUser)
+      .where(eq(appUser.id, uid));
+    const userCurrency = getCurrencyConfig(u?.currency);
+    const minBetEur = localToEur(userCurrency.minMiniGameLocal, userCurrency.code);
+    if (!betInput || betInput < minBetEur - 1e-4) {
       return json(
-        { message: `Mise minimale : ${TAP_CONFIG.MIN_BET} ${TAP_CONFIG.CURRENCY_SYMBOL}` },
+        {
+          message: `Mise minimale : ${formatLocalAmount(userCurrency.minMiniGameLocal, userCurrency.code)}`,
+        },
         400
       );
     }
-    const betUsd = Math.min(TAP_CONFIG.BET_MAX_USD, betInput);
-    const balance = await getUserBalance(uid);
-    if (betUsd > balance) {
+    const maxBetEur = Math.max(
+      TAP_CONFIG.BET_MAX_USD,
+      localToEur(userCurrency.maxTapLocal, userCurrency.code)
+    );
+    const betUsd = roundEurPivot(Math.min(maxBetEur, betInput));
+    const balance = u?.balance ?? 0;
+    if (betUsd > balance + 1e-5) {
       return json({ message: "Solde insuffisant" }, 400);
     }
+    const effectiveBet = Math.min(betUsd, balance);
 
-    await setUserBalance(uid, balance - betUsd);
+    await setUserBalance(uid, Math.max(0, balance - effectiveBet));
 
     const systemHealth = await getSystemHealthModifier();
-    const profile = await analyzePlayerProfile(uid, betUsd);
-    const crashPoint = getSmartCrashValue(betUsd, profile, systemHealth);
+    const profile = await analyzePlayerProfile(uid, effectiveBet);
+    const crashPoint = getSmartCrashValue(effectiveBet, profile, systemHealth);
 
     const session: TapSession = {
       active: true,
-      bet: betUsd,
+      bet: effectiveBet,
       multiplier: TAP_CONFIG.INITIAL_MULTIPLIER,
       clicks: 0,
       mMax: TAP_CONFIG.MAX_MULTIPLIER,

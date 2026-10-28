@@ -43,7 +43,20 @@ import { Toggle } from "@/components/toggle";
 import { LEAGUES, findLeague } from "@/lib/leagues";
 import { OFFICIAL_SOCCER_LEAGUES } from "@/lib/real-leagues";
 import { teamLogo } from "@/lib/team-logos";
-import { cn, eur, formatKickoff, formatOdds, formatPlacedAt, initials } from "@/lib/format";
+import {
+  formatEurAsCurrency,
+  getCountryConfig,
+  getCurrencyConfig,
+} from "@/lib/countries";
+import {
+  cn,
+  eur,
+  eurPivot,
+  formatKickoff,
+  formatOdds,
+  formatPlacedAt,
+  initials,
+} from "@/lib/format";
 
 type TabKey = "dashboard" | "forecasts" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
 
@@ -55,6 +68,8 @@ interface AdminUser {
   email?: string | null;
   balance: number;
   role: string;
+  countryCode?: string;
+  currency?: string;
 }
 
 interface AdminBet {
@@ -82,6 +97,8 @@ interface AdminDeposit {
   id: number;
   userId?: number;
   userName?: string;
+  userCountryCode?: string;
+  userCurrency?: string;
   provider: string;
   providerRef?: string;
   amount: number;
@@ -190,6 +207,8 @@ interface AdminWithdrawal {
   userId: number;
   userName: string;
   userEmail: string;
+  userCountryCode?: string;
+  userCurrency?: string;
   method: string;
   destination: string;
   amount: number;
@@ -3485,7 +3504,10 @@ function UsersTab({
         resultCountText={`${filteredUsers.length} joueur${filteredUsers.length > 1 ? "s" : ""}`}
       />
       <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
-      {pagedUsers.map((u) => (
+      {pagedUsers.map((u) => {
+        const uCountry = getCountryConfig(u.countryCode);
+        const uCur = getCurrencyConfig(u.currency ?? uCountry.currency).code;
+        return (
         <div key={u.id} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -3502,16 +3524,27 @@ function UsersTab({
                     />
                   )}
                 </p>
-                <p className="truncate text-[10.5px] text-dim">{u.email ?? "—"}</p>
+                <p className="truncate text-[10.5px] text-dim">
+                  <span>{uCountry.flag} {uCountry.code} · {uCur}</span>
+                  {" · "}
+                  {u.email ?? "—"}
+                </p>
               </div>
             </div>
-            <p className="shrink-0 font-display text-[12px] font-medium tabular-nums text-ink">
-              {eur(u.balance)}
-            </p>
+            <div className="shrink-0 text-right">
+              <p className="font-display text-[12px] font-medium tabular-nums text-ink">
+                {eurPivot(u.balance)}
+              </p>
+              {uCur !== "EUR" && (
+                <p className="text-[9.5px] tabular-nums text-dim">
+                  ≈ {formatEurAsCurrency(u.balance, uCur)}
+                </p>
+              )}
+            </div>
           </div>
           <div className="mt-2.5 flex gap-2">
             <AdminInput
-              placeholder="Nouveau solde (€)"
+              placeholder="Nouveau solde pivot (€)"
               type="text"
               inputMode="decimal"
               className="flex-1"
@@ -3538,7 +3571,8 @@ function UsersTab({
             </button>
           </div>
         </div>
-      ))}
+        );
+      })}
       </div>
       <InfiniteScrollSentinel
         hasMore={usersBatch.hasMore}
@@ -3868,15 +3902,18 @@ function DepositsTab({
           {pendingDeposits.map((d) => {
             const appKey = `d-app-${d.id}`;
             const rejKey = `d-rej-${d.id}`;
+            const dCountry = getCountryConfig(d.userCountryCode);
+            const dCur = getCurrencyConfig(d.userCurrency ?? d.currency ?? dCountry.currency).code;
+            const localLabel = dCur !== "EUR" ? `${formatEurAsCurrency(d.amount, dCur)} (${eurPivot(d.amount)})` : eurPivot(d.amount);
             return (
               <div key={d.id} className="glass-card rounded-2xl p-3.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-display text-[11.5px] font-medium text-ink">
-                      {d.userName ?? `Joueur #${d.userId ?? 1}`} · +{eur(d.amount)}
+                      {dCountry.flag} {d.userName ?? `Joueur #${d.userId ?? 1}`} · +{localLabel}
                     </p>
                     <p className="truncate text-[10.5px] font-medium text-mist">
-                      {d.provider === "mobile_money" ? "Mobile Money" : "Virement SEPA"} ·{" "}
+                      {d.provider === "mobile_money" ? "Mobile Money" : "Virement bancaire"} ·{" "}
                       {d.providerRef ?? "—"}
                     </p>
                     <p className="text-[10px] text-dim">{formatPlacedAt(d.createdAt)}</p>
@@ -3892,7 +3929,7 @@ function DepositsTab({
                       act(
                         { action: "approveDeposit", depositId: d.id },
                         appKey,
-                        `Dépôt de ${eur(d.amount)} crédité sur le compte`
+                        `Dépôt de ${localLabel} crédité sur le compte`
                       )
                     }
                     className="h-9 rounded-xl bg-win font-display text-[10.5px] font-medium text-white disabled:opacity-50"
@@ -3932,12 +3969,15 @@ function DepositsTab({
             const approveKey = `w-app-${w.id}`;
             const rejectKey = `w-rej-${w.id}`;
             const noteVal = wdNotes[w.id] ?? "";
+            const wCountry = getCountryConfig(w.userCountryCode);
+            const wCur = getCurrencyConfig(w.userCurrency ?? wCountry.currency).code;
+            const localLabel = wCur !== "EUR" ? `${formatEurAsCurrency(w.amount, wCur)} (${eurPivot(w.amount)})` : eurPivot(w.amount);
             return (
               <div key={w.id} className="glass-card rounded-2xl p-3.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-display text-[11.5px] font-medium text-ink">
-                      {w.userName} · {eur(w.amount)}
+                      {wCountry.flag} {w.userName} · {localLabel}
                     </p>
                     <p className="truncate text-[10.5px] font-medium text-mist">
                       {w.method.toUpperCase()} · {w.destination}
@@ -3969,7 +4009,7 @@ function DepositsTab({
                           ...(noteVal.trim() ? { note: noteVal.trim() } : {}),
                         },
                         approveKey,
-                        `Retrait de ${eur(w.amount)} approuvé`
+                        `Retrait de ${localLabel} approuvé`
                       )
                     }
                     className="h-9 rounded-xl bg-win font-display text-[10.5px] font-medium text-white disabled:opacity-50"
@@ -3987,7 +4027,7 @@ function DepositsTab({
                           ...(noteVal.trim() ? { note: noteVal.trim() } : {}),
                         },
                         rejectKey,
-                        `Retrait refusé et ${eur(w.amount)} recrédités`
+                        `Retrait refusé et ${localLabel} recrédités`
                       )
                     }
                     className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red disabled:opacity-50"
@@ -4008,11 +4048,15 @@ function DepositsTab({
             count={settledWithdrawals.length}
           />
           <div className="flex flex-col gap-2">
-            {pagedSettledWithdrawals.map((w) => (
+            {pagedSettledWithdrawals.map((w) => {
+                const wCountry = getCountryConfig(w.userCountryCode);
+                const wCur = getCurrencyConfig(w.userCurrency ?? wCountry.currency).code;
+                const localLabel = wCur !== "EUR" ? `${formatEurAsCurrency(w.amount, wCur)} (${eurPivot(w.amount)})` : eurPivot(w.amount);
+                return (
                 <div key={w.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-display text-[11px] font-medium text-ink">
-                      {w.userName} · {eur(w.amount)} ({w.method.toUpperCase()})
+                      {wCountry.flag} {w.userName} · {localLabel} ({w.method.toUpperCase()})
                     </p>
                     <p className="truncate text-[10px] text-dim">
                       {w.destination}
@@ -4022,7 +4066,8 @@ function DepositsTab({
                   </div>
                   <StatusBadge status={w.status} />
                 </div>
-              ))}
+                );
+              })}
           </div>
           <InfiniteScrollSentinel
             hasMore={wdHistoryBatch.hasMore}
@@ -4038,15 +4083,19 @@ function DepositsTab({
       ) : (
         <>
           <div className="grid grid-cols-1 gap-2 xl:grid-cols-2 xl:gap-3">
-            {pagedSettledDeposits.map((d) => (
+            {pagedSettledDeposits.map((d) => {
+              const dCountry = getCountryConfig(d.userCountryCode);
+              const dCur = getCurrencyConfig(d.userCurrency ?? d.currency ?? dCountry.currency).code;
+              const localLabel = dCur !== "EUR" ? `${formatEurAsCurrency(d.amount, dCur)} (${eurPivot(d.amount)})` : eurPivot(d.amount);
+              return (
               <div key={d.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev text-ink">
                   <CircleDollarSign className="h-4 w-4" strokeWidth={2.1} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="font-display text-[11.5px] font-medium capitalize text-ink">
-                    {d.userName ? `${d.userName} · ` : ""}
-                    {d.provider === "mobile_money" ? "Mobile Money" : d.provider} · {eur(d.amount)}
+                  <p className="font-display text-[11.5px] font-medium text-ink">
+                    {dCountry.flag} {d.userName ? `${d.userName} · ` : ""}
+                    {d.provider === "mobile_money" ? "Mobile Money" : d.provider} · {localLabel}
                   </p>
                   <p className="truncate text-[10.5px] text-dim">
                     {d.providerRef ? `${d.providerRef} · ` : ""}
@@ -4055,7 +4104,8 @@ function DepositsTab({
                 </div>
                 <StatusBadge status={d.status} />
               </div>
-            ))}
+              );
+            })}
           </div>
           <InfiniteScrollSentinel
             hasMore={depHistoryBatch.hasMore}

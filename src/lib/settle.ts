@@ -185,9 +185,9 @@ async function settleRows(
     const payoutMultiplier = bet.payoutMultiplier ?? 1;
     const stakeReturned = bet.stakeReturned ?? 0;
     const payout = voided
-      ? Math.round(bet.stake * 100) / 100
+      ? Math.round(bet.stake * 1_000_000) / 1_000_000
       : won
-        ? Math.round((bet.stake * bet.odds * payoutMultiplier + stakeReturned) * 100) / 100
+        ? Math.round((bet.stake * bet.odds * payoutMultiplier + stakeReturned) * 1_000_000) / 1_000_000
         : 0;
 
     const closingOdds = closingOddsForBet(bet, match);
@@ -241,7 +241,7 @@ async function settleRows(
     ),
     credited AS (
       UPDATE "app_user" AS u
-      SET "balance" = ROUND((u."balance" + agg.total_payout)::numeric, 2)::float8
+      SET "balance" = ROUND((u."balance" + agg.total_payout)::numeric, 6)::float8
       FROM (
         SELECT "user_id", SUM(payout)::float8 AS total_payout
         FROM updated
@@ -387,7 +387,7 @@ export async function voidMatchBets(matchId: number) {
       UPDATE "bets"
       SET
         "status" = 'void',
-        "potential_win" = ROUND(("stake" * 100)::numeric)::float8 / 100.0,
+        "potential_win" = ROUND(("stake")::numeric, 6)::float8,
         "settled_at" = now()
       WHERE "match_id" = ${matchId}
         AND "status" = 'pending'

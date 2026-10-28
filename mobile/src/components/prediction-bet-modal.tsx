@@ -19,6 +19,11 @@ import {
   type ClientPrediction,
   type OddsChangedDetails,
 } from "@/lib/api";
+import {
+  formatLocalAmount,
+  formatLocalInputString,
+  localToEur,
+} from "@/lib/countries";
 import { eur, formatOdds } from "@/lib/format";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
@@ -53,6 +58,8 @@ export function PredictionBetModal({
     isInCombo,
     openRecharge,
     toast,
+    currency,
+    currencyConfig,
   } = useApp();
   const authPending = !authReady || sessionRestoring;
 
@@ -64,7 +71,16 @@ export function PredictionBetModal({
       : ctxTarget;
   const closePredictionBet = onClose ?? ctxClose;
 
-  const [stake, setStake] = useState("10");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [stake, setStake] = useState(() =>
+    formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStake(
+      formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+    );
+  }
   const [lockedOdds, setLockedOdds] = useState(1.85);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(
     null
@@ -82,13 +98,15 @@ export function PredictionBetModal({
       : selection === "yes"
         ? question.oddsYes
         : question.oddsNo;
-    setStake("10");
+    setStake(
+      formatLocalInputString(currencyConfig.defaultStakeLocal, currency, ",")
+    );
     setLockedOdds(roundOdds2(initialOdds));
     setOddsChanged(null);
     setErrorMsg(null);
     setSubmitting(false);
     idempotencyRef.current = generateBetIdempotencyKey();
-  }, [predictionTarget]);
+  }, [currency, currencyConfig.defaultStakeLocal, predictionTarget]);
 
   if (!predictionTarget) return null;
 
@@ -100,11 +118,13 @@ export function PredictionBetModal({
       ? "Oui"
       : "Non";
 
-  const numericStake = Math.max(
-    0,
-    Math.round((parseFloat(stake.replace(",", ".")) || 0) * 100) / 100
-  );
-  const potentialWin = Math.round(numericStake * lockedOdds * 100) / 100;
+  const rawLocalStake = Math.max(0, parseFloat(stake.replace(",", ".")) || 0);
+  const localStake =
+    currencyConfig.decimals === 0
+      ? Math.round(rawLocalStake)
+      : Math.round(rawLocalStake * 100) / 100;
+  const numericStake = localToEur(localStake, currency, balance);
+  const potentialWin = numericStake * lockedOdds;
   const uid = `pred-${question.id}`;
   const inCombo = isInCombo(uid, "prediction", selection);
 
@@ -140,11 +160,13 @@ export function PredictionBetModal({
       router.push("/auth");
       return;
     }
-    if (numericStake < 0.5) {
-      setErrorMsg("Mise minimale : 0,50 €.");
+    if (localStake < currencyConfig.minStakeLocal) {
+      setErrorMsg(
+        `Mise minimale : ${formatLocalAmount(currencyConfig.minStakeLocal, currency)}.`
+      );
       return;
     }
-    if (numericStake > balance + 0.001) {
+    if (numericStake > balance + 1e-5) {
       setErrorMsg("Solde insuffisant pour cette mise.");
       return;
     }

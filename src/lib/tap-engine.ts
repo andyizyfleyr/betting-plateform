@@ -21,8 +21,8 @@ export const TAP_CONFIG = {
   GROWTH_FACTOR: 1.05,
   MAX_MULTIPLIER: 100.0,
   HIGH_BET_THRESHOLD: 2.5,
-  MIN_BET: 1,
-  CURRENCY_SYMBOL: "$",
+  MIN_BET: 0.14,
+  CURRENCY_SYMBOL: "€",
   DECIMALS: 2,
 } as const;
 
@@ -210,13 +210,13 @@ export async function finalizeRound(
   let winAmount = 0;
 
   if (win) {
-    winAmount = round2(bet * mult);
-    newBal = round2(balance + winAmount);
+    winAmount = Math.round(bet * mult * 1_000_000) / 1_000_000;
+    newBal = Math.round((balance + winAmount) * 1_000_000) / 1_000_000;
   }
 
   await db.insert(tapHistory).values({
     userId: uid,
-    betAmount: round2(bet),
+    betAmount: Math.round(bet * 1_000_000) / 1_000_000,
     targetMultiplier: round2(mult),
     crashMultiplier: round2(s.crashPoint),
     win,

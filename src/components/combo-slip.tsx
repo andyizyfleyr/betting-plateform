@@ -24,6 +24,10 @@ import { CardOverlayLink } from "./card-overlay-link";
 import { OddsLockControls } from "./odds-lock-controls";
 import { TeamAvatar } from "./team-avatar";
 import { TouchStakePad } from "./touch-stake-pad";
+import {
+  formatLocalAmount,
+  localToEur,
+} from "@/lib/countries";
 import { useApp } from "./providers";
 import { triggerRouteLoader } from "./pulse-flash-loader";
 import { cn, eur, formatOdds } from "@/lib/format";
@@ -174,9 +178,18 @@ export function ComboSheet() {
     toast,
     authReady,
     user,
+    currency,
+    currencyConfig,
   } = useApp();
 
-  const [stakeText, setStakeText] = useState("10");
+  const [prevCur, setPrevCur] = useState(currency);
+  const [stakeText, setStakeText] = useState(() =>
+    String(currencyConfig.defaultStakeLocal)
+  );
+  if (prevCur !== currency) {
+    setPrevCur(currency);
+    setStakeText(String(currencyConfig.defaultStakeLocal));
+  }
   const [phase, setPhase] = useState<"input" | "loading" | "success">("input");
   const [error, setError] = useState<string | null>(null);
   const [oddsChanged, setOddsChanged] = useState<OddsChangedDetails | null>(null);
@@ -306,9 +319,15 @@ export function ComboSheet() {
   if (!comboOpen) return null;
 
   const parsed = Number(stakeText.replace(",", "."));
-  const stake = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0;
-  const overBalance = Boolean(user) && stake > balance;
-  const belowMin = stake > 0 && stake < 0.5;
+  const localStake =
+    Number.isFinite(parsed) && parsed > 0
+      ? currencyConfig.decimals === 0
+        ? Math.round(parsed)
+        : Math.round(parsed * 100) / 100
+      : 0;
+  const stake = localToEur(localStake, currency, balance);
+  const overBalance = Boolean(user) && stake > balance + 1e-5;
+  const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
   const enoughLegs = comboLegs.length >= MIN_COMBO_LEGS;
 
   const quote = computeComboQuote(
@@ -321,7 +340,7 @@ export function ComboSheet() {
     phase === "input" &&
     enoughLegs &&
     comboLegs.length <= MAX_COMBO_LEGS &&
-    stake >= 0.5 &&
+    localStake >= currencyConfig.minStakeLocal &&
     !overBalance;
 
   const submitCombo = async () => {
@@ -655,7 +674,7 @@ export function ComboSheet() {
                       setError(null);
                     }}
                     balance={balance}
-                    maxCap={200}
+                    maxCap={currencyConfig.maxComboStakeLocal}
                     hasError={overBalance || belowMin}
                     haptics={user?.haptics}
                     collapsibleOnMobile
@@ -678,6 +697,12 @@ export function ComboSheet() {
                       Recharger
                     </button>
                   </div>
+                )}
+
+                {belowMin && !overBalance && (
+                  <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
+                    Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
+                  </p>
                 )}
 
                 {error && !overBalance && (
