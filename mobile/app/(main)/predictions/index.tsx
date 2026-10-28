@@ -265,7 +265,7 @@ export default function PredictionsScreen() {
         if (res === "full") {
           toast({
             kind: "error",
-            title: "Betslip complet (8 sélections max)",
+            title: "Betslip complet (30 sélections max)",
           });
         }
         return;
@@ -681,7 +681,7 @@ function MultiChoiceQuestionCard({
                 } else if (res === "full") {
                   toast({
                     kind: "error",
-                    title: "Betslip complet (8 sélections max)",
+                    title: "Betslip complet (30 sélections max)",
                   });
                 }
               }}
@@ -910,7 +910,7 @@ function BinaryQuestionCard({
                 } else if (res === "full") {
                   toast({
                     kind: "error",
-                    title: "Betslip complet (8 sélections max)",
+                    title: "Betslip complet (30 sélections max)",
                   });
                 }
               }}

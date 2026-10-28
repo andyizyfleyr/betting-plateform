@@ -1,5 +1,5 @@
 export const MIN_COMBO_LEGS = 2;
-export const MAX_COMBO_LEGS = 8;
+export const MAX_COMBO_LEGS = 30;
 export const MIN_ELIGIBLE_BOOST_ODDS = 1.35;
 export const MAX_COMBO_ODDS = 500;
 export const MAX_COMBO_PAYOUT = 10_000;

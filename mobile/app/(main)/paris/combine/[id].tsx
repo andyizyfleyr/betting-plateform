@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -59,6 +61,22 @@ function legBucket(leg: ComboLegClient): number {
 function legSortTimestamp(leg: ComboLegClient): number {
   const t = leg.startsAt ? new Date(leg.startsAt).getTime() : NaN;
   return Number.isFinite(t) ? t : 0;
+}
+
+function ProgressSegment({ leg }: { leg: ComboLegClient }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  const live = leg.status === "pending" && leg.matchStatus === "live";
+  useEffect(() => {
+    if (!live) return;
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 0.45, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => { animation.stop(); pulse.setValue(1); };
+  }, [live, pulse]);
+  const color = leg.status === "won" ? COLORS.win : leg.status === "lost" ? COLORS.betclicRed : live ? "#f59e0b" : COLORS.elev;
+  return <Animated.View style={[styles.progressSegment, { backgroundColor: color, opacity: live ? pulse : 1 }]} />;
 }
 
 export default function ComboDetailScreen() {
@@ -411,21 +429,8 @@ export default function ComboDetailScreen() {
                   ) : null}
                 </View>
 
-                <View style={styles.progressTrack}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${
-                          progress.total > 0
-                            ? Math.round((progress.won / progress.total) * 100)
-                            : 0
-                        }%`,
-                        backgroundColor:
-                          bet.status === "lost" ? COLORS.betclicRed : COLORS.win,
-                      },
-                    ]}
-                  />
+                <View style={styles.progressTrack} accessibilityLabel={`Progression : ${progress.won} sur ${progress.total} sélections validées`}>
+                  {orderedLegs.map((leg) => <ProgressSegment key={leg.id} leg={leg} />)}
                 </View>
 
                 <View style={styles.amountsRow}>
@@ -685,7 +690,7 @@ function ComboLegCard({
       <View style={styles.pickRow}>
         <View style={styles.pickLeft}>
           <Text numberOfLines={1} style={styles.pickLabel}>
-            {leg.selectionLabel}
+            Choix : {leg.selectionLabel}
           </Text>
           {legMarketTag ? (
             <View style={styles.marketBadge}>
@@ -880,11 +885,11 @@ const styles = StyleSheet.create({
   progressTrack: {
     marginTop: 8,
     height: 8,
-    borderRadius: 999,
-    backgroundColor: COLORS.elev,
-    overflow: "hidden",
+    flexDirection: "row",
+    gap: 3,
   },
-  progressFill: {
+  progressSegment: {
+    flex: 1,
     height: "100%",
     borderRadius: 999,
   },

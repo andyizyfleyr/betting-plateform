@@ -245,7 +245,7 @@ export default function PredictionsPage() {
         startsAt: q.resolvesAt,
       });
       if (res === "full") {
-        toast({ kind: "error", title: "Combiné complet (8 sélections max)" });
+        toast({ kind: "error", title: "Combiné complet (30 sélections max)" });
       }
       return;
     }

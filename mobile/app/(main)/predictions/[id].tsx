@@ -209,7 +209,7 @@ export default function PredictionDetailScreen() {
         if (res === "full") {
           toast({
             kind: "error",
-            title: "Betslip complet (8 sélections max)",
+            title: "Betslip complet (30 sélections max)",
           });
         }
         return;
@@ -399,7 +399,7 @@ export default function PredictionDetailScreen() {
                           } else if (res === "full") {
                             toast({
                               kind: "error",
-                              title: "Betslip complet (8 sélections max)",
+                              title: "Betslip complet (30 sélections max)",
                             });
                           }
                         }}

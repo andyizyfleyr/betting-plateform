@@ -146,7 +146,7 @@ export function PredictionBetModal({
       toast({
         kind: "error",
         title: "Combiné complet",
-        description: "Maximum 8 sélections par ticket combiné.",
+        description: "Maximum 30 sélections par ticket combiné.",
       });
       return;
     }
