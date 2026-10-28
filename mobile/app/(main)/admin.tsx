@@ -187,6 +187,7 @@ interface AdminMlOverview {
 }
 
 interface AdminPanelData {
+  bettingLimits?: { minStakeXof: number; maxStakeXof: number; maxPayoutXof: number; maxComboLegs: number };
   stats: {
     totalUsers: number;
     totalBets: number;
@@ -229,6 +230,32 @@ interface AdminPanelData {
   deposits: AdminDepositRow[];
   withdrawals?: AdminWithdrawalRow[];
   ml?: AdminMlOverview;
+}
+
+function MobileBettingLimits({ limits, busy, act }: {
+  limits: NonNullable<AdminPanelData["bettingLimits"]>;
+  busy: boolean;
+  act: (payload: Record<string, unknown>, key: string, message: string) => Promise<void>;
+}) {
+  const [values, setValues] = useState(() => ({
+    minStakeXof: String(limits.minStakeXof), maxStakeXof: String(limits.maxStakeXof),
+    maxPayoutXof: String(limits.maxPayoutXof), maxComboLegs: String(limits.maxComboLegs),
+  }));
+  const fields = [["minStakeXof", "Mise minimale (₣)"], ["maxStakeXof", "Mise maximale (₣)"],
+    ["maxPayoutXof", "Gain maximum (₣)"], ["maxComboLegs", "Sélections maximum"]] as const;
+  return <View style={styles.card}>
+    <Text style={styles.cardTitle}>Limites de paris</Text>
+    <Text style={styles.cardSub}>Montants convertis pour les autres devises. Le gain maximum doit être au moins égal à la mise maximale.</Text>
+    {fields.map(([key, label]) => <View key={key} style={{ marginTop: 8 }}>
+      <Text style={styles.cardSub}>{label}</Text>
+      <TextInput keyboardType="number-pad" value={values[key]} onChangeText={(text) => setValues((v) => ({ ...v, [key]: text }))}
+        style={{ borderWidth: 1, borderColor: COLORS.edge, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, color: COLORS.ink }} />
+    </View>)}
+    <Pressable disabled={busy} onPress={() => void act({ action: "setBettingLimits", limits: values }, "bettingLimits", "Limites enregistrées")}
+      style={{ marginTop: 10, backgroundColor: COLORS.betclicRed, padding: 10, borderRadius: 8, opacity: busy ? 0.5 : 1 }}>
+      <Text style={{ color: "white", textAlign: "center" }}>Enregistrer</Text>
+    </Pressable>
+  </View>;
 }
 
 export default function AdminScreen() {
@@ -564,6 +591,7 @@ export default function AdminScreen() {
               </View>
             ))}
           </View>
+          {panel.bettingLimits && <MobileBettingLimits key={JSON.stringify(panel.bettingLimits)} limits={panel.bettingLimits} busy={busyKey === "bettingLimits"} act={act} />}
         </View>
       ) : tab === "forecasts" ? (
         <View style={styles.stack}>

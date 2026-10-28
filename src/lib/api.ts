@@ -753,6 +753,7 @@ export const api = {
       }>;
     }>("/api/pulse"),
   placeBet: (payload: {
+    expectedMaxPayoutXof?: number;
     matchId: number;
     selection: string;
     market?: string;
@@ -767,6 +768,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   placeComboBet: (payload: {
+    expectedMaxPayoutXof?: number;
     legs: Array<{
       kind: "sport" | "prediction";
       matchId?: number;
@@ -868,6 +870,7 @@ export const api = {
       >;
     }>("/api/predictions/my-bets", undefined, opts),
   placePredictionBet: (payload: {
+    expectedMaxPayoutXof?: number;
     questionId: number;
     selection: string;
     stake: number;

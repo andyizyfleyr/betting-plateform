@@ -21,6 +21,8 @@ import {
   type PaymentProvider,
 } from "@/lib/api";
 import { MAX_COMBO_LEGS } from "@/lib/combo-math";
+import { DEFAULT_BETTING_LIMITS, limitsForCurrency, validateBettingLimits, type BettingLimits } from "@/lib/betting-limits-shared";
+import { API_BASE_URL } from "@/lib/http";
 import {
   detectCountryFromDevice,
   getCountryConfig,
@@ -119,6 +121,9 @@ interface AppContextValue {
   currency: CurrencyCode;
   countryConfig: CountryConfig;
   currencyConfig: CurrencyConfig;
+  bettingLimits: BettingLimits;
+  bettingLimitsReady: boolean;
+  maxPayoutEur: number;
   setGuestCountryCode: (code: string) => void;
   setBalance: (b: number) => void;
   applyUser: (u: ClientUser | null) => void;
@@ -336,10 +341,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => getCountryConfig(countryCode),
     [countryCode]
   );
-  const currencyConfig = useMemo(
-    () => getCurrencyConfig(currency),
-    [currency]
-  );
+  const limitsQuery = useQuery({
+    queryKey: ["betting-limits"],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/api/betting-limits`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Limites indisponibles");
+      const value = validateBettingLimits(await response.json());
+      if (!value) throw new Error("Limites invalides");
+      return value;
+    },
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+  });
+  const bettingLimits = limitsQuery.data ?? DEFAULT_BETTING_LIMITS;
+  const bettingLimitsReady = Boolean(limitsQuery.data) && !limitsQuery.isError;
+  const maxPayoutEur = limitsForCurrency(bettingLimits, currency).maxPayoutEur;
+  const currencyConfig = useMemo(() => {
+    const base = getCurrencyConfig(currency);
+    const limits = limitsForCurrency(bettingLimits, currency);
+    return { ...base, minStakeLocal: limits.minLocal, maxComboStakeLocal: limits.maxLocal, maxPredictionStakeLocal: limits.maxLocal };
+  }, [currency, bettingLimits]);
 
   const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   setActiveDisplayCurrency(isAdminPath ? "EUR" : currency);
@@ -734,7 +755,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return "replaced";
       }
 
-      if (prev.length >= MAX_COMBO_LEGS) {
+      if (prev.length >= bettingLimits.maxComboLegs) {
         triggerHaptic("warning", hapticsEnabled);
         return "full";
       }
@@ -744,7 +765,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       triggerHaptic("light", hapticsEnabled);
       return "added";
     },
-    [hapticsEnabled, persistCombo]
+    [hapticsEnabled, persistCombo, bettingLimits.maxComboLegs]
   );
 
   const removeComboLeg = useCallback(
@@ -874,6 +895,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       currency,
       countryConfig,
       currencyConfig,
+      bettingLimits,
+      bettingLimitsReady,
+      maxPayoutEur,
       setGuestCountryCode,
       setBalance,
       applyUser,
@@ -938,6 +962,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       currency,
       countryConfig,
       currencyConfig,
+      bettingLimits,
+      bettingLimitsReady,
+      maxPayoutEur,
       setGuestCountryCode,
       betsVersion,
       bumpBets,

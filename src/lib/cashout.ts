@@ -188,6 +188,7 @@ export function matchProgress(
 export function computeCashOut(params: {
   stake: number;
   odds: number;
+  potentialWin?: number;
   sport: string;
   minute: string | null;
   market?: string;
@@ -215,7 +216,7 @@ export function computeCashOut(params: {
 }): number | null {
   const { stake, odds, selection } = params;
   const market = params.market ?? "result";
-  const potential = stake * odds;
+  const potential = Math.min(stake * odds, params.potentialWin ?? Infinity);
   const isManual = params.source === "manual";
   const effectiveMinute = isManual
     ? normalizeRealLiveMinuteLabel({

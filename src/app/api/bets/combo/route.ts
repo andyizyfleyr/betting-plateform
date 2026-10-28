@@ -35,6 +35,7 @@ import {
   realMatchOddsFor,
 } from "@/lib/markets";
 import { getBettingLimits } from "@/lib/betting-limits";
+import { limitsForCurrency } from "@/lib/betting-limits-shared";
 import {
   checkOddsChange,
   extractIdempotencyKey,
@@ -92,6 +93,7 @@ export async function POST(req: NextRequest) {
     expectedTotalOdds?: number;
     oddsPolicy?: string;
     idempotencyKey?: string;
+    expectedMaxPayoutXof?: number;
   };
   try {
     body = await req.json();
@@ -122,28 +124,15 @@ export async function POST(req: NextRequest) {
   }
   const bettingLimits = await getBettingLimits();
   const comboLimit = Math.min(MAX_COMBO_LEGS, bettingLimits.maxComboLegs);
-  if (rawLegs.length > comboLimit) {
-    return NextResponse.json(
-      { error: `Maximum ${comboLimit} sélections par combiné` },
-      { status: 400 }
-    );
-  }
+
   const [currencyUser] = await db
     .select({ currency: appUser.currency })
     .from(appUser)
     .where(eq(appUser.id, uid))
     .limit(1);
   const userCurrency = getCurrencyConfig(currencyUser?.currency);
-  const minStakeEur = localToEur(bettingLimits.minStakeXof, "XOF");
-  const maxStakeEur = localToEur(bettingLimits.maxStakeXof, "XOF");
-  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-6 || stake > maxStakeEur + 1e-6) {
-    return NextResponse.json(
-      {
-        error: `Mise hors limites : ${formatEurAsCurrency(minStakeEur, userCurrency.code)} – ${formatEurAsCurrency(maxStakeEur, userCurrency.code)}`,
-      },
-      { status: 400 }
-    );
-  }
+  const { minEur: minStakeEur, maxEur: maxStakeEur } = limitsForCurrency(bettingLimits, userCurrency.code);
+
   if (!Number.isFinite(expectedTotalOdds) || expectedTotalOdds <= 1) {
     return NextResponse.json(
       { error: "Cote totale attendue manquante ou invalide — veuillez rafraîchir le coupon" },
@@ -266,6 +255,26 @@ export async function POST(req: NextRequest) {
       balance: u?.balance ?? 0,
       deduplicated: true,
     });
+  }
+
+  if (body.expectedMaxPayoutXof !== bettingLimits.maxPayoutXof) {
+    return NextResponse.json({ error: "Le plafond de gain a changé ou votre application doit être actualisée. Vérifiez le coupon avant de confirmer.", code: "BETTING_LIMITS_CHANGED" }, { status: 409 });
+  }
+
+  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-6 || stake > maxStakeEur + 1e-6) {
+    return NextResponse.json(
+      {
+        error: `Mise hors limites : ${formatEurAsCurrency(minStakeEur, userCurrency.code)} – ${formatEurAsCurrency(maxStakeEur, userCurrency.code)}`,
+      },
+      { status: 400 }
+    );
+  }
+
+  if (rawLegs.length > comboLimit) {
+    return NextResponse.json(
+      { error: `Maximum ${comboLimit} sélections par combiné` },
+      { status: 400 }
+    );
   }
 
   const initialMatchRows =
@@ -751,6 +760,9 @@ export async function POST(req: NextRequest) {
       localToEur(bettingLimits.maxPayoutXof, "XOF")
     );
 
+    if (!Number.isFinite(serverQuote.totalOdds) || !Number.isFinite(serverQuote.potentialWin)) {
+      return { kind: "error" as const, status: 400, error: "Cote combinée trop élevée pour être calculée en sécurité." };
+    }
     const totalCheck = checkOddsChange({
       expectedOdds: expectedTotalOdds,
       serverOdds: serverQuote.totalOdds,

@@ -599,6 +599,7 @@ export async function POST(req: NextRequest) {
             const value = computeCashOut({
               stake: lockedBet.stake,
               odds: lockedBet.odds,
+              potentialWin: lockedBet.potentialWin,
               sport: lockedBet.sport,
               minute: effectiveMatch.minute,
               market: lockedBet.market,

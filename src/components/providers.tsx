@@ -26,6 +26,7 @@ import {
   sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import { DEFAULT_BETTING_LIMITS, limitsForCurrency, validateBettingLimits, type BettingLimits } from "@/lib/betting-limits-shared";
 import {
   DEFAULT_COUNTRY_CODE,
   detectCountryFromDevice,
@@ -98,6 +99,9 @@ interface AppContextValue {
   currency: CurrencyCode;
   countryConfig: CountryConfig;
   currencyConfig: CurrencyConfig;
+  bettingLimits: BettingLimits;
+  bettingLimitsReady: boolean;
+  maxPayoutEur: number;
   setGuestCountryCode: (code: string) => void;
   oddsFormat: "decimal" | "fractional";
   setBalance: (n: number) => void;
@@ -512,10 +516,26 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     () => getCountryConfig(countryCode),
     [countryCode]
   );
-  const currencyConfig = useMemo(
-    () => getCurrencyConfig(currency),
-    [currency]
-  );
+  const limitsQuery = useQuery({
+    queryKey: ["betting-limits"],
+    queryFn: async () => {
+      const response = await fetch("/api/betting-limits", { cache: "no-store" });
+      if (!response.ok) throw new Error("Limites indisponibles");
+      const value = validateBettingLimits(await response.json());
+      if (!value) throw new Error("Limites invalides");
+      return value;
+    },
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+  });
+  const bettingLimits = limitsQuery.data ?? DEFAULT_BETTING_LIMITS;
+  const bettingLimitsReady = Boolean(limitsQuery.data) && !limitsQuery.isError;
+  const maxPayoutEur = limitsForCurrency(bettingLimits, currency).maxPayoutEur;
+  const currencyConfig = useMemo(() => {
+    const base = getCurrencyConfig(currency);
+    const limits = limitsForCurrency(bettingLimits, currency);
+    return { ...base, minStakeLocal: limits.minLocal, maxComboStakeLocal: limits.maxLocal, maxPredictionStakeLocal: limits.maxLocal };
+  }, [currency, bettingLimits]);
 
   const isAdminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   if (typeof window !== "undefined" && clientHydrated) {
@@ -717,14 +737,14 @@ function ProvidersInner({ children }: { children: ReactNode }) {
         }
       }
 
-      if (comboLegs.length >= MAX_COMBO_LEGS) {
+      if (comboLegs.length >= bettingLimits.maxComboLegs) {
         return "full";
       }
       const next = [...comboLegs, sel];
       persistCombo(next);
       return "added";
     },
-    [comboLegs, persistCombo]
+    [comboLegs, persistCombo, bettingLimits.maxComboLegs]
   );
 
   const isInCombo = useCallback(
@@ -877,7 +897,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
         };
         const res = toggleComboLeg(comboSel);
         if (res === "full") {
-          toast({ kind: "error", title: "Coupon complet (30 sélections max)" });
+          toast({ kind: "error", title: "Coupon complet (limite atteinte)" });
         } else if (res === "source_conflict") {
           toast({
             kind: "error",
@@ -923,6 +943,9 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       currency,
       countryConfig,
       currencyConfig,
+      bettingLimits,
+      bettingLimitsReady,
+      maxPayoutEur,
       setGuestCountryCode,
       oddsFormat: user?.oddsFormat ?? "decimal",
       setBalance,
@@ -973,6 +996,9 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       currency,
       countryConfig,
       currencyConfig,
+      bettingLimits,
+      bettingLimitsReady,
+      maxPayoutEur,
       setGuestCountryCode,
       setBalance,
       applyUser,

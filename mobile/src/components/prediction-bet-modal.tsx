@@ -60,6 +60,9 @@ export function PredictionBetModal({
     toast,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
   const authPending = !authReady || sessionRestoring;
 
@@ -124,7 +127,7 @@ export function PredictionBetModal({
       ? Math.round(rawLocalStake)
       : Math.round(rawLocalStake * 100) / 100;
   const numericStake = localToEur(localStake, currency, balance);
-  const potentialWin = numericStake * lockedOdds;
+  const potentialWin = Math.min(maxPayoutEur, numericStake * lockedOdds);
   const uid = `pred-${question.id}`;
   const inCombo = isInCombo(uid, "prediction", selection);
 
@@ -146,7 +149,7 @@ export function PredictionBetModal({
       toast({
         kind: "error",
         title: "Combiné complet",
-        description: "Maximum 30 sélections par ticket combiné.",
+        description: "Limite de sélections atteinte pour ce combiné.",
       });
       return;
     }
@@ -158,6 +161,10 @@ export function PredictionBetModal({
     if (!user) {
       closePredictionBet();
       router.push("/auth");
+      return;
+    }
+    if (!bettingLimitsReady || localStake > currencyConfig.maxComboStakeLocal) {
+      setErrorMsg(!bettingLimitsReady ? "Limites indisponibles, veuillez réessayer." : `Mise maximale : ${formatLocalAmount(currencyConfig.maxComboStakeLocal, currency)}.`);
       return;
     }
     if (localStake < currencyConfig.minStakeLocal) {
@@ -175,6 +182,7 @@ export function PredictionBetModal({
     setErrorMsg(null);
     try {
       const res = await api.placePredictionBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
         questionId: question.id,
         selection,
         stake: numericStake,
@@ -272,6 +280,7 @@ export function PredictionBetModal({
                 setErrorMsg(null);
               }}
               balance={balance}
+              maxCap={currencyConfig.maxComboStakeLocal}
               isLoggedIn={Boolean(user)}
             />
 
@@ -309,6 +318,7 @@ export function PredictionBetModal({
               <View style={{ alignItems: "flex-end" }}>
                 <Text style={styles.summaryLabel}>Gain potentiel</Text>
                 <Text style={styles.summaryWin}>{eur(potentialWin)}</Text>
+                <Text style={styles.summaryLabel}>Plafond : {eur(maxPayoutEur)}</Text>
               </View>
             </View>
 

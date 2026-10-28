@@ -1,3 +1,4 @@
+import { settlementPayout } from "@/lib/settlement-payout";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, bets, matches, type MatchRow } from "@/db/schema";
@@ -182,13 +183,7 @@ async function settleRows(
     if (!match) continue;
     const { won, voided } = overrideDecision ?? resolveBet(bet, match);
 
-    const payoutMultiplier = bet.payoutMultiplier ?? 1;
-    const stakeReturned = bet.stakeReturned ?? 0;
-    const payout = voided
-      ? Math.round(bet.stake * 1_000_000) / 1_000_000
-      : won
-        ? Math.round((bet.stake * bet.odds * payoutMultiplier + stakeReturned) * 1_000_000) / 1_000_000
-        : 0;
+    const payout = settlementPayout(bet, won, voided);
 
     const closingOdds = closingOddsForBet(bet, match);
     const rawFinishedMs = match.finishedAt ? match.finishedAt.getTime() : nowMs;
@@ -204,7 +199,7 @@ async function settleRows(
       won,
       voided,
       status: voided ? "void" : won ? "won" : "lost",
-      potentialWin: voided ? payout : bet.potentialWin,
+      potentialWin: bet.potentialWin,
       payout,
       settledAtIso: settledAt.toISOString(),
       closingOdds,
@@ -387,16 +382,15 @@ export async function voidMatchBets(matchId: number) {
       UPDATE "bets"
       SET
         "status" = 'void',
-        "potential_win" = ROUND(("stake")::numeric, 6)::float8,
         "settled_at" = now()
       WHERE "match_id" = ${matchId}
         AND "status" = 'pending'
-      RETURNING "user_id", "potential_win"
+      RETURNING "user_id", "stake"
     )
     UPDATE "app_user" AS u
     SET "balance" = u."balance" + agg.refund
     FROM (
-      SELECT "user_id", SUM("potential_win")::float8 AS refund
+      SELECT "user_id", SUM("stake")::float8 AS refund
       FROM voided
       WHERE "potential_win" > 0
       GROUP BY "user_id"

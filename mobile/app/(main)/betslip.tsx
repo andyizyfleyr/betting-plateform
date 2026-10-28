@@ -44,7 +44,6 @@ import {
 } from "@/lib/api";
 import {
   computeComboQuote,
-  MAX_COMBO_LEGS,
   MIN_ELIGIBLE_BOOST_ODDS,
   nextBoostHint,
 } from "@/lib/combo-math";
@@ -107,6 +106,9 @@ export default function BetslipScreen() {
     feedMatches,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
 
   const [prevCur, setPrevCur] = useState(currency);
@@ -365,7 +367,7 @@ export default function BetslipScreen() {
   const quote = useMemo(() => {
     if (!isCombo) {
       const singleOdds = enrichedLegs[0]?.liveOdds ?? 1;
-      const singleWin = roundEurPivot(stake * singleOdds);
+      const singleWin = roundEurPivot(Math.min(maxPayoutEur, stake * singleOdds));
       return {
         legCount: enrichedLegs.length,
         eligibleLegs: singleOdds >= MIN_ELIGIBLE_BOOST_ODDS ? 1 : 0,
@@ -379,9 +381,9 @@ export default function BetslipScreen() {
     }
     return computeComboQuote(
       enrichedLegs.map((l) => l.liveOdds),
-      stake
+      stake, maxPayoutEur
     );
-  }, [enrichedLegs, isCombo, stake]);
+  }, [enrichedLegs, isCombo, stake, maxPayoutEur]);
 
   const nextBoost = isCombo ? nextBoostHint(quote.eligibleLegs) : null;
   const hasClosedLeg = enrichedLegs.some((l) => l.closed);
@@ -401,10 +403,12 @@ export default function BetslipScreen() {
   const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
   const canSubmit =
     enrichedLegs.length >= 1 &&
-    enrichedLegs.length <= MAX_COMBO_LEGS &&
+    enrichedLegs.length <= bettingLimits.maxComboLegs &&
     !hasClosedLeg &&
     !hasSuspendedLeg &&
     !hasMixedSources &&
+    bettingLimitsReady &&
+    localStake <= currencyConfig.maxComboStakeLocal &&
     localStake >= currencyConfig.minStakeLocal &&
     !overBalance &&
     !submitting;
@@ -444,6 +448,7 @@ export default function BetslipScreen() {
         const leg = enrichedLegs[0];
         if (leg.kind === "sport" && leg.matchId) {
           const res = await api.bets.placeSingle({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
             matchId: leg.matchId,
             selection: leg.selection,
             market: leg.market,
@@ -469,6 +474,7 @@ export default function BetslipScreen() {
           clearCombo();
         } else if (leg.kind === "prediction" && leg.questionId) {
           const res = await api.predictions.place({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
             questionId: leg.questionId,
             selection: leg.selection,
             stake,
@@ -494,6 +500,7 @@ export default function BetslipScreen() {
         }
       } else {
         const res = await api.bets.placeCombo({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
           legs: enrichedLegs.map((l) => ({
             kind: l.kind,
             ...(l.matchId ? { matchId: l.matchId } : {}),
@@ -669,7 +676,7 @@ export default function BetslipScreen() {
             {enrichedLegs.length > 0 ? (
               <View style={styles.countBadge}>
                 <Text style={styles.countBadgeText}>
-                  {enrichedLegs.length}/{MAX_COMBO_LEGS}
+                  {enrichedLegs.length}/{bettingLimits.maxComboLegs}
                 </Text>
               </View>
             ) : null}
@@ -1002,9 +1009,7 @@ export default function BetslipScreen() {
             }}
             balance={balance}
             maxCap={
-              isCombo
-                ? currencyConfig.maxComboStakeLocal
-                : currencyConfig.maxInputLocal
+              currencyConfig.maxComboStakeLocal
             }
             hasError={overBalance || belowMin}
             collapsibleOnMobile
@@ -1040,7 +1045,7 @@ export default function BetslipScreen() {
             ) : null}
 
             <View style={[styles.summaryLine, { paddingTop: 2 }]}>
-              <Text style={styles.potentialLabel}>Gain potentiel</Text>
+              <Text style={styles.potentialLabel}>Gain potentiel · plafond {eur(maxPayoutEur)}</Text>
               <Text style={styles.potentialValue}>
                 {eur(quote.potentialWin)}
               </Text>

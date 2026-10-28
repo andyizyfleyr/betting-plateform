@@ -595,7 +595,7 @@ export default function MatchDetailScreen() {
                             if (res === "full") {
                               toast({
                                 kind: "error",
-                                title: "Betslip complet (30 sélections max)",
+                                title: "Betslip complet (limite atteinte)",
                               });
                             } else if (res === "source_conflict") {
                               toast({

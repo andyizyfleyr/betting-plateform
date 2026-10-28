@@ -5,8 +5,6 @@ import { ensureSeeded } from "@/db/seed";
 import { notifyNewBetPlaced } from "@/lib/active-state-cache";
 import { appUser, predictionBets, predictionQuestions } from "@/db/schema";
 import {
-  PRED_MAX_STAKE,
-  PRED_MIN_STAKE,
   round2,
 } from "@/lib/predictions";
 import {
@@ -29,12 +27,14 @@ import {
   jsonWithEtag,
 } from "@/lib/response-cache";
 import {
-  formatLocalAmount,
+  formatEurAsCurrency,
   getCurrencyConfig,
   localToEur,
   roundEurPivot,
 } from "@/lib/countries";
 import { requireUserId } from "@/lib/session";
+import { getBettingLimits } from "@/lib/betting-limits";
+import { limitsForCurrency } from "@/lib/betting-limits-shared";
 import { syncAllSettlementsThrottled } from "@/lib/sync-throttle";
 
 export const dynamic = "force-dynamic";
@@ -181,6 +181,7 @@ export async function POST(req: NextRequest) {
     expectedOdds?: number;
     oddsPolicy?: string;
     idempotencyKey?: string;
+    expectedMaxPayoutXof?: number;
   };
   try {
     body = await req.json();
@@ -217,19 +218,8 @@ export async function POST(req: NextRequest) {
     .where(eq(appUser.id, uid))
     .limit(1);
   const userCurrency = getCurrencyConfig(currencyUser?.currency);
-  const minPredEur = localToEur(userCurrency.minStakeLocal, userCurrency.code);
-  const maxPredEur = Math.max(
-    PRED_MAX_STAKE,
-    localToEur(userCurrency.maxPredictionStakeLocal, userCurrency.code)
-  );
-  if (stake < minPredEur - 1e-4 || stake > maxPredEur + 1e-4) {
-    return NextResponse.json(
-      {
-        error: `Mise hors limites (${formatLocalAmount(userCurrency.minStakeLocal, userCurrency.code)} – ${formatLocalAmount(userCurrency.maxPredictionStakeLocal, userCurrency.code)})`,
-      },
-      { status: 400 }
-    );
-  }
+  const bettingLimits = await getBettingLimits();
+  const { minEur: minPredEur, maxEur: maxPredEur, maxPayoutEur } = limitsForCurrency(bettingLimits, userCurrency.code);
 
   const roundedInputStake = roundEurPivot(stake);
   const requestHash = computeIdempotencyHash({
@@ -302,6 +292,15 @@ export async function POST(req: NextRequest) {
       deduplicated: true,
     });
   }
+
+  if (body.expectedMaxPayoutXof !== bettingLimits.maxPayoutXof) {
+    return NextResponse.json({ error: "Le plafond de gain a changé ou votre application doit être actualisée. Vérifiez le coupon avant de confirmer.", code: "BETTING_LIMITS_CHANGED" }, { status: 409 });
+  }
+
+  if (!Number.isFinite(stake) || stake < minPredEur - 1e-6 || stake > maxPredEur + 1e-6) {
+    return NextResponse.json({ error: `Mise hors limites (${formatEurAsCurrency(minPredEur, userCurrency.code)} – ${formatEurAsCurrency(maxPredEur, userCurrency.code)})` }, { status: 400 });
+  }
+
 
   const roundedStakeValue = roundEurPivot(stake);
 
@@ -475,7 +474,7 @@ export async function POST(req: NextRequest) {
       return { kind: "error", status: 429, error: "Trop rapide — veuillez patienter" };
     }
 
-    const potentialWin = roundEurPivot(roundedStakeValue * serverOdds);
+    const potentialWin = roundEurPivot(Math.min(maxPayoutEur, roundedStakeValue * serverOdds));
 
     const [bet] = await tx
       .insert(predictionBets)

@@ -44,12 +44,14 @@ import {
   minuteNumber,
   realMatchOddsFor,
 } from "@/lib/markets";
-import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
+import { ensureMlLoaded } from "@/lib/ml-engine";
 import {
   isRealMatchFeedStale,
   verifyLiveRealMatchesBeforeBet,
 } from "@/lib/real-sports-feed";
-import { clvOf, isNearDecided, maxStakeFor, playerRiskProfile } from "@/lib/risk";
+import { clvOf, isNearDecided } from "@/lib/risk";
+import { getBettingLimits } from "@/lib/betting-limits";
+import { limitsForCurrency } from "@/lib/betting-limits-shared";
 import {
   checkOddsChange,
   extractIdempotencyKey,
@@ -66,7 +68,6 @@ import {
 } from "@/lib/idempotency";
 import {
   formatEurAsCurrency,
-  formatLocalAmount,
   getCurrencyConfig,
   localToEur,
   roundEurPivot,
@@ -347,6 +348,7 @@ export async function GET(req: NextRequest) {
           ? computeCashOut({
               stake: bet.stake,
               odds: bet.odds,
+              potentialWin: bet.potentialWin,
               sport: bet.sport,
               minute: match.minute ?? null,
               market: bet.market,
@@ -662,6 +664,7 @@ export async function POST(req: NextRequest) {
     expectedOdds?: number;
     oddsPolicy?: string;
     idempotencyKey?: string;
+    expectedMaxPayoutXof?: number;
   };
   try {
     body = await req.json();
@@ -700,15 +703,8 @@ export async function POST(req: NextRequest) {
     .where(eq(appUser.id, uid))
     .limit(1);
   const userCurrency = getCurrencyConfig(currencyUser?.currency);
-  const minStakeEur = localToEur(userCurrency.minStakeLocal, userCurrency.code);
-  if (stake < minStakeEur - 1e-4) {
-    return NextResponse.json(
-      {
-        error: `Mise minimale : ${formatLocalAmount(userCurrency.minStakeLocal, userCurrency.code)}`,
-      },
-      { status: 400 }
-    );
-  }
+  const bettingLimits = await getBettingLimits();
+  const { minEur: minStakeEur, maxEur: maxStakeEur, maxPayoutEur } = limitsForCurrency(bettingLimits, userCurrency.code);
 
   const roundedInputStake = roundEurPivot(Number(stake));
   const requestHash = computeIdempotencyHash({
@@ -768,71 +764,14 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Profilage risque intelligent du joueur (détection sharp / ROI / CLV sur les 20 derniers paris)
-  const recentSettled = await db
-    .select({
-      odds: bets.odds,
-      stake: bets.stake,
-      status: bets.status,
-      potentialWin: bets.potentialWin,
-      cashOutAmount: bets.cashOutAmount,
-      closingOdds: bets.closingOdds,
-    })
-    .from(bets)
-    .where(eq(bets.userId, uid))
-    .orderBy(desc(bets.id))
-    .limit(25);
-
-  const settledHistory = recentSettled
-    .filter((b) => b.status !== "pending")
-    .map((b) => ({
-      odds: b.odds,
-      stake: b.stake,
-      payout:
-        b.status === "won"
-          ? b.potentialWin
-          : b.status === "cashed"
-            ? (b.cashOutAmount ?? 0)
-            : 0,
-      closingOdds: b.closingOdds ?? null,
-    }));
-  const maxAllowedStake = maxStakeFor(playerRiskProfile(settledHistory));
-  if (stake > maxAllowedStake + 1e-4) {
-    return NextResponse.json(
-      {
-        error: `Mise maximale autorisée sur ce marché : ${formatEurAsCurrency(maxAllowedStake, userCurrency.code)}`,
-      },
-      { status: 400 }
-    );
+  if (body.expectedMaxPayoutXof !== bettingLimits.maxPayoutXof) {
+    return NextResponse.json({ error: "Le plafond de gain a changé ou votre application doit être actualisée. Vérifiez le coupon avant de confirmer.", code: "BETTING_LIMITS_CHANGED" }, { status: 409 });
   }
 
-  // Profil joueur (ROI/CLV sur la fenêtre) → limite de mise dynamique.
-  // Un profil « sharp » voit sa limite réduite (jamais bloqué).
-  const recentRows = await db
-    .select({ odds: bets.odds, stake: bets.stake, closingOdds: bets.closingOdds, status: bets.status })
-    .from(bets)
-    .where(eq(bets.userId, uid))
-    .orderBy(desc(bets.placedAt))
-    .limit(40);
-  const profile = playerRiskProfile(
-    recentRows.map((b) => ({
-      odds: b.odds,
-      stake: b.stake,
-      payout: b.status === "won" ? roundEurPivot(b.stake * b.odds) : 0,
-      closingOdds: b.closingOdds ?? null,
-    }))
-  );
-  const mlRiskMap = await predictBatchUserMlRisk([uid]);
-  const mlCeiling = mlRiskMap.get(uid)?.maxStake ?? 500;
-  const maxStake = Math.min(maxStakeFor(profile), mlCeiling);
-  if (stake > maxStake + 1e-4) {
-    return NextResponse.json(
-      {
-        error: `Mise plafonnée à ${formatEurAsCurrency(maxStake, userCurrency.code)} pour votre profil de risque`,
-      },
-      { status: 400 }
-    );
+  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-6 || stake > maxStakeEur + 1e-6) {
+    return NextResponse.json({ error: `Mise hors limites : ${formatEurAsCurrency(minStakeEur, userCurrency.code)} – ${formatEurAsCurrency(maxStakeEur, userCurrency.code)}` }, { status: 400 });
   }
+
 
   const [rawMatch] = await db.select().from(matches).where(eq(matches.id, matchId));
   if (!rawMatch) {
@@ -871,7 +810,7 @@ export async function POST(req: NextRequest) {
         sql`${bets.idempotencyKey} IS DISTINCT FROM ${idempotencyKey}`
       )
     );
-  const maxMatchCumulative = Math.min(600, Math.round(maxStake * 1.5));
+  const maxMatchCumulative = maxStakeEur * 1.5;
   if ((existingMatchStake?.staked ?? 0) + stake > maxMatchCumulative + 1e-4) {
     return NextResponse.json(
       {
@@ -1307,7 +1246,7 @@ export async function POST(req: NextRequest) {
         : null;
 
     // Gain potentiel calculé EXCLUSIVEMENT avec `serverOdds`
-    const potentialWin = roundEurPivot(roundedStake * serverOdds);
+    const potentialWin = roundEurPivot(Math.min(maxPayoutEur, roundedStake * serverOdds));
 
     const [bet] = await tx
       .insert(bets)

@@ -7,7 +7,6 @@ import { ArrowRight, Check, Flame, Layers, Loader2, Plus, Trash2, X, Zap } from 
 import { ApiRequestError, api } from "@/lib/api";
 import {
   computeComboQuote,
-  MAX_COMBO_LEGS,
   MIN_COMBO_LEGS,
   nextComboBoostTier,
   sortSlipSelectionsChronologically,
@@ -180,6 +179,9 @@ export function ComboSheet() {
     user,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
 
   const [prevCur, setPrevCur] = useState(currency);
@@ -332,14 +334,16 @@ export function ComboSheet() {
 
   const quote = computeComboQuote(
     comboLegs.map((l) => l.odds),
-    stake
+    stake, maxPayoutEur
   );
   const nextBoost = nextComboBoostTier(quote.eligibleLegs);
 
   const canSubmit =
     phase === "input" &&
     enoughLegs &&
-    comboLegs.length <= MAX_COMBO_LEGS &&
+    comboLegs.length <= bettingLimits.maxComboLegs &&
+    bettingLimitsReady &&
+    localStake <= currencyConfig.maxComboStakeLocal &&
     localStake >= currencyConfig.minStakeLocal &&
     !overBalance;
 
@@ -365,6 +369,7 @@ export function ComboSheet() {
     setError(null);
     try {
       const res = await api.placeComboBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
         legs: comboLegs.map((l) => ({
           kind: l.kind,
           ...(l.matchId ? { matchId: l.matchId } : {}),
@@ -510,7 +515,7 @@ export function ComboSheet() {
                     </span>
                     <div>
                       <h2 className="font-display text-[12.5px] font-bold text-ink">
-                        Coupon de pari ({comboLegs.length}/{MAX_COMBO_LEGS})
+                        Coupon de pari ({comboLegs.length}/{bettingLimits.maxComboLegs})
                       </h2>
                       <p className="text-[10px] text-dim">
                         Pari combiné · 2 à 8 événements
@@ -730,6 +735,7 @@ export function ComboSheet() {
                   <div className="mt-2 flex items-center justify-between border-t border-edge pt-2">
                     <span className="font-display text-[11px] font-medium text-ink">
                       Gain potentiel
+                    <span className="ml-1 text-[10px] text-mist">(plafond {eur(maxPayoutEur)})</span>
                     </span>
                     <AnimatedNumber
                       value={enoughLegs ? quote.potentialWin : 0}

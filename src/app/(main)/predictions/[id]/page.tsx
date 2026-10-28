@@ -166,7 +166,7 @@ export default function PredictionDetailPage() {
       if (res === "full") {
         toast({
           kind: "error",
-          title: "Betslip complet (30 sélections max)",
+          title: "Betslip complet (limite atteinte)",
         });
       }
       return;

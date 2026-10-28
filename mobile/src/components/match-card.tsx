@@ -99,7 +99,7 @@ function OddsCell({
     if (res === "full") {
       toast({
         kind: "error",
-        title: "Betslip complet (30 sélections max)",
+        title: "Betslip complet (limite atteinte)",
       });
     } else if (res === "source_conflict") {
       toast({
@@ -259,7 +259,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
                   if (res === "full") {
                     toast({
                       kind: "error",
-                      title: "Betslip complet (30 sélections max)",
+                      title: "Betslip complet (limite atteinte)",
                     });
                   } else if (res === "source_conflict") {
                     toast({

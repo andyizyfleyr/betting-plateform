@@ -805,7 +805,7 @@ function BettingLimitsForm({ limits, busy, act }: {
   ] as const;
   return <section className="glass-card mt-4 rounded-xl p-4">
     <h2 className="font-display text-[13px] font-bold text-ink">Limites de paris</h2>
-    <p className="mt-1 text-[11px] text-mist">Montants en ₣, convertis pour les autres devises.</p>
+    <p className="mt-1 text-[11px] text-mist">Montants en ₣, convertis pour les autres devises. Le gain maximum doit être au moins égal à la mise maximale.</p>
     <div className="mt-3 grid grid-cols-2 gap-3">
       {fields.map(([key, label]) => <label key={key} className="text-[11px] text-mist">{label}
         <input type="number" min="1" value={values[key]} onChange={(e) => {

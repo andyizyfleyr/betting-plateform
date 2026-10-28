@@ -748,6 +748,7 @@ export const api = {
         return { bet: found, balance: data.balance };
       },
       placeSingle: (payload: {
+    expectedMaxPayoutXof?: number;
         matchId: number;
         selection: string;
         market?: string;
@@ -764,6 +765,7 @@ export const api = {
           }
         ),
       placeCombo: (payload: {
+    expectedMaxPayoutXof?: number;
         legs: Array<{
           kind: "sport" | "prediction";
           matchId?: number;
@@ -818,6 +820,7 @@ export const api = {
   },
 
   placeBet: (payload: {
+    expectedMaxPayoutXof?: number;
     matchId: number;
     selection: string;
     market?: string;
@@ -835,6 +838,7 @@ export const api = {
     ),
 
   placeComboBet: (payload: {
+    expectedMaxPayoutXof?: number;
     legs: Array<{
       kind: "sport" | "prediction";
       matchId?: number;
@@ -919,6 +923,7 @@ export const api = {
 
   predictions: {
     place: (payload: {
+    expectedMaxPayoutXof?: number;
       questionId: number;
       selection: string;
       stake: number;
@@ -952,6 +957,7 @@ export const api = {
   },
 
   placePredictionBet: (payload: {
+    expectedMaxPayoutXof?: number;
     questionId: number;
     selection: string;
     stake: number;
