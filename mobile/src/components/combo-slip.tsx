@@ -26,7 +26,6 @@ import {
 } from "@/lib/api";
 import {
   computeComboQuote,
-  MAX_COMBO_LEGS,
   MIN_COMBO_LEGS,
   MIN_ELIGIBLE_BOOST_ODDS,
   nextComboBoostTier,
@@ -174,6 +173,9 @@ export function ComboSheet() {
     hapticsEnabled,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
 
   const [prevCur, setPrevCur] = useState(currency);
@@ -330,14 +332,16 @@ export function ComboSheet() {
 
   const quote = computeComboQuote(
     orderedLegs.map((l) => l.odds),
-    stake
+    stake, maxPayoutEur
   );
   const nextBoost = nextComboBoostTier(quote.eligibleLegs);
 
   const canSubmit =
     phase === "input" &&
     enoughLegs &&
-    orderedLegs.length <= MAX_COMBO_LEGS &&
+    orderedLegs.length <= bettingLimits.maxComboLegs &&
+    bettingLimitsReady &&
+    localStake <= currencyConfig.maxComboStakeLocal &&
     localStake >= currencyConfig.minStakeLocal &&
     !overBalance;
 
@@ -362,6 +366,7 @@ export function ComboSheet() {
     setError(null);
     try {
       const res = await api.placeComboBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
         legs: orderedLegs.map((l) => ({
           kind: l.kind,
           ...(l.matchId ? { matchId: l.matchId } : {}),
@@ -486,7 +491,7 @@ export function ComboSheet() {
                     <Text style={styles.sheetTitle}>Coupon combiné</Text>
                     <View style={styles.sheetCountBadge}>
                       <Text style={styles.sheetCountText}>
-                        {orderedLegs.length}/{MAX_COMBO_LEGS}
+                        {orderedLegs.length}/{bettingLimits.maxComboLegs}
                       </Text>
                     </View>
                   </View>
@@ -644,6 +649,7 @@ export function ComboSheet() {
                   </Text>
                 </View>
 
+                <Text style={styles.quoteLabel}>Plafond de gain : {eur(maxPayoutEur)}</Text>
                 <Pressable
                   disabled={!canSubmit}
                   onPress={() => void submitCombo()}

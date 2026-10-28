@@ -33,7 +33,6 @@ import {
 } from "@/lib/api";
 import {
   computeComboQuote,
-  MAX_COMBO_LEGS,
   nextComboBoostTier,
   sortSlipSelectionsChronologically,
 } from "@/lib/combo-math";
@@ -272,6 +271,9 @@ export function DesktopBetslipSidebar() {
     bumpBets,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
   const feedMatches = useFeedMatches();
 
@@ -469,9 +471,9 @@ export function DesktopBetslipSidebar() {
     () =>
       computeComboQuote(
         enrichedLegs.map((l) => l.liveOdds),
-        stake
+        stake, maxPayoutEur
       ),
-    [enrichedLegs, stake]
+    [enrichedLegs, stake, maxPayoutEur]
   );
 
   const nextBoost = nextComboBoostTier(quote.eligibleLegs);
@@ -485,17 +487,17 @@ export function DesktopBetslipSidebar() {
   );
   const hasMixedMatchSources = sportSourcesInSlip.size > 1;
   const insufficient = user !== null && stake > balance + 1e-5;
-  const maxLocalAllowed = isCombo
-    ? currencyConfig.maxComboStakeLocal
-    : currencyConfig.maxInputLocal;
+  const maxLocalAllowed = currencyConfig.maxComboStakeLocal;
   const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
 
   const canSubmit =
     enrichedLegs.length >= 1 &&
-    enrichedLegs.length <= MAX_COMBO_LEGS &&
+    enrichedLegs.length <= bettingLimits.maxComboLegs &&
     !hasClosedLeg &&
     !hasSuspendedLeg &&
     !hasMixedMatchSources &&
+    bettingLimitsReady &&
+    localStake <= currencyConfig.maxComboStakeLocal &&
     localStake >= currencyConfig.minStakeLocal &&
     localStake <= maxLocalAllowed &&
     !insufficient &&
@@ -535,6 +537,7 @@ export function DesktopBetslipSidebar() {
         const leg = enrichedLegs[0];
         if (leg.kind === "sport" && leg.matchId) {
           const res = await api.placeBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
             matchId: leg.matchId,
             selection: leg.selection,
             stake,
@@ -548,6 +551,7 @@ export function DesktopBetslipSidebar() {
           potentialWin = res.bet.potentialWin;
         } else if (leg.kind === "prediction" && leg.questionId) {
           const res = await api.placePredictionBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
             questionId: leg.questionId,
             selection: leg.selection,
             stake,
@@ -561,6 +565,7 @@ export function DesktopBetslipSidebar() {
         }
       } else {
         const res = await api.placeComboBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
           stake,
           expectedTotalOdds: quote.totalOdds,
           oddsPolicy,
@@ -1063,6 +1068,7 @@ export function DesktopBetslipSidebar() {
                 <div className="flex items-baseline justify-between pt-0.5">
                   <span className="text-[11px] font-medium text-ink">
                     Gains possibles
+                    <span className="ml-1 text-[10px] text-mist">(plafond {eur(maxPayoutEur)})</span>
                   </span>
                   <AnimatedNumber
                     value={quote.potentialWin}

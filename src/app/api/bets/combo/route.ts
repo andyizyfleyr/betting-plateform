@@ -34,7 +34,8 @@ import {
   minuteNumber,
   realMatchOddsFor,
 } from "@/lib/markets";
-import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
+import { getBettingLimits } from "@/lib/betting-limits";
+import { limitsForCurrency } from "@/lib/betting-limits-shared";
 import {
   checkOddsChange,
   extractIdempotencyKey,
@@ -51,11 +52,10 @@ import {
   saveIdempotencyRecord,
 } from "@/lib/idempotency";
 import { formatServerErrorResponse } from "@/lib/db-error";
-import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
+import { ensureMlLoaded } from "@/lib/ml-engine";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import {
   formatEurAsCurrency,
-  formatLocalAmount,
   getCurrencyConfig,
   localToEur,
   roundEurPivot,
@@ -66,7 +66,6 @@ import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
-const MAX_COMBO_STAKE = 200;
 const BET_COOLDOWN_MS = 700;
 const LIVE_VALIDATION_MS = 300;
 
@@ -94,6 +93,7 @@ export async function POST(req: NextRequest) {
     expectedTotalOdds?: number;
     oddsPolicy?: string;
     idempotencyKey?: string;
+    expectedMaxPayoutXof?: number;
   };
   try {
     body = await req.json();
@@ -122,27 +122,17 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (rawLegs.length > MAX_COMBO_LEGS) {
-    return NextResponse.json(
-      { error: `Maximum ${MAX_COMBO_LEGS} sélections par combiné` },
-      { status: 400 }
-    );
-  }
+  const bettingLimits = await getBettingLimits();
+  const comboLimit = Math.min(MAX_COMBO_LEGS, bettingLimits.maxComboLegs);
+
   const [currencyUser] = await db
     .select({ currency: appUser.currency })
     .from(appUser)
     .where(eq(appUser.id, uid))
     .limit(1);
   const userCurrency = getCurrencyConfig(currencyUser?.currency);
-  const minStakeEur = localToEur(userCurrency.minStakeLocal, userCurrency.code);
-  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-4) {
-    return NextResponse.json(
-      {
-        error: `Mise minimale : ${formatLocalAmount(userCurrency.minStakeLocal, userCurrency.code)}`,
-      },
-      { status: 400 }
-    );
-  }
+  const { minEur: minStakeEur, maxEur: maxStakeEur } = limitsForCurrency(bettingLimits, userCurrency.code);
+
   if (!Number.isFinite(expectedTotalOdds) || expectedTotalOdds <= 1) {
     return NextResponse.json(
       { error: "Cote totale attendue manquante ou invalide — veuillez rafraîchir le coupon" },
@@ -267,35 +257,22 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Limite de mise dynamique selon le profil de risque du joueur
-  const recentRows = await db
-    .select({
-      odds: bets.odds,
-      stake: bets.stake,
-      closingOdds: bets.closingOdds,
-      status: bets.status,
-    })
-    .from(bets)
-    .where(eq(bets.userId, uid))
-    .orderBy(desc(bets.placedAt))
-    .limit(30);
+  if (body.expectedMaxPayoutXof !== bettingLimits.maxPayoutXof) {
+    return NextResponse.json({ error: "Le plafond de gain a changé ou votre application doit être actualisée. Vérifiez le coupon avant de confirmer.", code: "BETTING_LIMITS_CHANGED" }, { status: 409 });
+  }
 
-  const profile = playerRiskProfile(
-    recentRows.map((b) => ({
-      odds: b.odds,
-      stake: b.stake,
-      payout: b.status === "won" ? roundEurPivot(b.stake * b.odds) : 0,
-      closingOdds: b.closingOdds ?? null,
-    }))
-  );
-  const mlRiskMap = await predictBatchUserMlRisk([uid]);
-  const mlCeiling = mlRiskMap.get(uid)?.maxStake ?? 500;
-  const maxAllowed = Math.min(MAX_COMBO_STAKE, maxStakeFor(profile), mlCeiling);
-  if (stake > maxAllowed + 1e-4) {
+  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-6 || stake > maxStakeEur + 1e-6) {
     return NextResponse.json(
       {
-        error: `Mise maximale autorisée sur ce combiné : ${formatEurAsCurrency(maxAllowed, userCurrency.code)}`,
+        error: `Mise hors limites : ${formatEurAsCurrency(minStakeEur, userCurrency.code)} – ${formatEurAsCurrency(maxStakeEur, userCurrency.code)}`,
       },
+      { status: 400 }
+    );
+  }
+
+  if (rawLegs.length > comboLimit) {
+    return NextResponse.json(
+      { error: `Maximum ${comboLimit} sélections par combiné` },
       { status: 400 }
     );
   }
@@ -779,9 +756,13 @@ export async function POST(req: NextRequest) {
     // Cote totale calculée EXCLUSIVEMENT à partir des cotes serveur verrouillées
     const serverQuote = computeComboQuote(
       pricedLegs.map((l) => l.odds),
-      roundedStake
+      roundedStake,
+      localToEur(bettingLimits.maxPayoutXof, "XOF")
     );
 
+    if (!Number.isFinite(serverQuote.totalOdds) || !Number.isFinite(serverQuote.potentialWin)) {
+      return { kind: "error" as const, status: 400, error: "Cote combinée trop élevée pour être calculée en sécurité." };
+    }
     const totalCheck = checkOddsChange({
       expectedOdds: expectedTotalOdds,
       serverOdds: serverQuote.totalOdds,

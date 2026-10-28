@@ -561,7 +561,7 @@ export default function ComboDetailPage() {
                             : leg.status === "void"
                               ? "bg-amber-400"
                               : isLegLive
-                                ? "live-dot bg-betclic-red"
+                                ? "live-dot bg-amber-500"
                                 : "bg-ink/12"
                       )}
                     />
@@ -823,7 +823,7 @@ export default function ComboDetailPage() {
                                   : "text-ink"
                               )}
                             >
-                              {leg.selectionLabel}
+                              Choix : {leg.selectionLabel}
                             </span>
                           </div>
 

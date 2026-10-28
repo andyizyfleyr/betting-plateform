@@ -55,6 +55,9 @@ export function BetModal() {
     feedMatches,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
   const authPending = !authReady || sessionRestoring;
 
@@ -152,7 +155,7 @@ export function BetModal() {
       ? Math.round(rawLocalStake)
       : Math.round(rawLocalStake * 100) / 100;
   const numericStake = localToEur(localStake, currency, balance);
-  const potentialWin = numericStake * lockedOdds;
+  const potentialWin = Math.min(maxPayoutEur, numericStake * lockedOdds);
   const uid = `sport-${liveMatch.id}`;
   const inCombo = isInCombo(uid, target.market, target.selection);
 
@@ -182,7 +185,7 @@ export function BetModal() {
       toast({
         kind: "error",
         title: "Combiné complet",
-        description: "Maximum 8 sélections par ticket combiné.",
+        description: "Limite de sélections atteinte pour ce combiné.",
       });
       return;
     }
@@ -205,6 +208,10 @@ export function BetModal() {
       router.push("/auth");
       return;
     }
+    if (!bettingLimitsReady || localStake > currencyConfig.maxComboStakeLocal) {
+      setErrorMsg(!bettingLimitsReady ? "Limites indisponibles, veuillez réessayer." : `Mise maximale : ${formatLocalAmount(currencyConfig.maxComboStakeLocal, currency)}.`);
+      return;
+    }
     if (localStake < currencyConfig.minStakeLocal) {
       setErrorMsg(
         `Mise minimale : ${formatLocalAmount(currencyConfig.minStakeLocal, currency)}.`
@@ -220,6 +227,7 @@ export function BetModal() {
     setErrorMsg(null);
     try {
       const res = await api.placeBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
         matchId: liveMatch.id,
         selection: target.selection,
         market: target.market,
@@ -338,6 +346,7 @@ export function BetModal() {
                 setErrorMsg(null);
               }}
               balance={balance}
+              maxCap={currencyConfig.maxComboStakeLocal}
               isLoggedIn={Boolean(user)}
             />
 
@@ -375,6 +384,7 @@ export function BetModal() {
               <View style={[styles.summaryCol, { alignItems: "flex-end" }]}>
                 <Text style={styles.summaryLabel}>Gain potentiel</Text>
                 <Text style={styles.summaryWin}>{eur(potentialWin)}</Text>
+                <Text style={styles.summaryLabel}>Plafond : {eur(maxPayoutEur)}</Text>
               </View>
             </View>
 

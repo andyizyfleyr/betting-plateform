@@ -1,8 +1,8 @@
 export const MIN_COMBO_LEGS = 2;
-export const MAX_COMBO_LEGS = 8;
+export const MAX_COMBO_LEGS = 30;
 export const MIN_ELIGIBLE_BOOST_ODDS = 1.35;
-export const MAX_COMBO_ODDS = 500;
-export const MAX_COMBO_PAYOUT = 10_000;
+// Default gain cap in EUR pivot, corresponding to 10,000,000 XOF.
+export const MAX_COMBO_PAYOUT = Math.round((10_000_000 / 655.957) * 1_000_000) / 1_000_000;
 
 export const COMBO_BOOST_TIERS: ReadonlyArray<{ legs: number; pct: number }> = [
   { legs: 3, pct: 3 },
@@ -53,7 +53,7 @@ export interface ComboQuote {
 }
 
 /** Calcule la cote combinée fixe, le Bonus Combiné sur le bénéfice net et le plafond bookmaker. */
-export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
+export function computeComboQuote(oddsList: number[], stake = 10, payoutLimit = MAX_COMBO_PAYOUT): ComboQuote {
   if (oddsList.length === 0) {
     return {
       baseOdds: 1,
@@ -75,15 +75,15 @@ export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
     if (clean >= MIN_ELIGIBLE_BOOST_ODDS) eligibleLegs += 1;
   }
 
-  const baseOdds = round2(Math.min(MAX_COMBO_ODDS, rawProduct));
+  const baseOdds = round2(rawProduct);
   const boostPct = comboBoostPct(eligibleLegs);
   const rawTotalOdds = baseOdds + Math.max(0, baseOdds - 1) * (boostPct / 100);
-  const totalOdds = round2(Math.min(MAX_COMBO_ODDS, rawTotalOdds));
+  const totalOdds = round2(rawTotalOdds);
 
   const cleanStake = Math.max(0, stake);
   const basePayout = roundPivot(cleanStake * baseOdds);
   const uncappedWin = roundPivot(cleanStake * totalOdds);
-  const potentialWin = roundPivot(Math.min(MAX_COMBO_PAYOUT, uncappedWin));
+  const potentialWin = roundPivot(Math.min(payoutLimit, uncappedWin));
   const boostAmount = roundPivot(Math.max(0, potentialWin - basePayout));
 
   return {
@@ -94,7 +94,7 @@ export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
     basePayout,
     boostAmount,
     potentialWin,
-    capped: uncappedWin > MAX_COMBO_PAYOUT || rawTotalOdds > MAX_COMBO_ODDS,
+    capped: uncappedWin > payoutLimit,
   };
 }
 

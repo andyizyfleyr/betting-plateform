@@ -72,7 +72,7 @@ export function TouchStakePad({
           : key
         : value + key;
     const parts = nextRaw.replace(",", ".").split(".");
-    if (parts[0].length > currencyConfig.maxInputDigits) return;
+    if (parts[0].length > Math.max(currencyConfig.maxInputDigits, Math.floor(resolvedMaxCap).toString().length)) return;
     if (parts[1] && parts[1].length > currencyConfig.decimals) return;
     const nextNum = parseFloat(nextRaw.replace(",", "."));
     if (Number.isFinite(nextNum) && nextNum > resolvedMaxCap) return;

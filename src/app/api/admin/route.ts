@@ -27,6 +27,7 @@ import {
   type RealMatchStats,
 } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
+import { getBettingLimits, saveBettingLimits, validateBettingLimits } from "@/lib/betting-limits";
 import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
@@ -198,7 +199,9 @@ export async function GET(req: NextRequest) {
     getRealMatchSettlementMode(),
   ]);
 
+  const bettingLimits = await getBettingLimits();
   return NextResponse.json({
+    bettingLimits,
     ml,
     scenarioMode: scenarioInfo.mode,
     realSettlementMode,
@@ -324,6 +327,12 @@ async function handleAdminPost(
 ): Promise<NextResponse> {
   try {
     resetSyncThrottle();
+    if (action === "setBettingLimits") {
+      const limits = validateBettingLimits(body.limits);
+      if (!limits) return NextResponse.json({ error: "Limites de paris invalides" }, { status: 400 });
+      await saveBettingLimits(limits);
+      return NextResponse.json({ ok: true, limits });
+    }
     if (action === "setBalance") {
       const userId = Number(body.userId);
       const rawNum = Number(body.amount);
@@ -1131,19 +1140,22 @@ async function handleAdminPost(
 
       await db.transaction(async (tx) => {
         await tx.execute(sql`
-          WITH reopened AS (
+          WITH previous_bets AS MATERIALIZED (
+            SELECT b."id", b."status", b."stake", b."odds", b."potential_win", b."payout_multiplier", b."stake_returned"
+            FROM "bets" b WHERE b."match_id" = ${matchId} AND b."status" IN ('won', 'lost', 'void')
+            ORDER BY b."id" FOR UPDATE OF b
+          ), reopened AS (
             UPDATE "bets" AS b
             SET
               "status" = 'pending',
-              "potential_win" = ROUND((b."stake" * b."odds")::numeric, 6)::float8,
               "settled_at" = NULL
-            WHERE b."match_id" = ${matchId}
-              AND b."status" IN ('won', 'lost', 'void')
+            FROM previous_bets old
+            WHERE b."id" = old."id"
             RETURNING
               b."user_id",
               CASE
-                WHEN b."status" = 'void' THEN ROUND((b."stake")::numeric, 6)::float8
-                WHEN b."status" = 'won' THEN ROUND((b."stake" * b."odds" * COALESCE(b."payout_multiplier", 1) + COALESCE(b."stake_returned", 0))::numeric, 6)::float8
+                WHEN old."status" = 'void' THEN ROUND((old."stake")::numeric, 6)::float8
+                WHEN old."status" = 'won' THEN ROUND(LEAST(old."potential_win", old."stake" * old."odds" * COALESCE(old."payout_multiplier", 1) + COALESCE(old."stake_returned", 0))::numeric, 6)::float8
                 ELSE 0::float8
               END AS clawback
           )

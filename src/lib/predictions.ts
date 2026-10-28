@@ -143,11 +143,6 @@ export async function settleQuestion(
       UPDATE "prediction_bets" AS pb
       SET
         "status" = CASE WHEN pb."selection" = ${resolution} THEN 'won' ELSE 'lost' END,
-        "potential_win" = CASE
-          WHEN pb."selection" = ${resolution}
-            THEN ROUND((pb."stake" * pb."odds")::numeric, 6)::float8
-          ELSE pb."potential_win"
-        END,
         "settled_at" = LEAST(
           ${nowIso}::timestamptz::timestamp,
           GREATEST(
@@ -161,7 +156,7 @@ export async function settleQuestion(
         pb."user_id",
         CASE
           WHEN pb."selection" = ${resolution}
-            THEN ROUND((pb."stake" * pb."odds")::numeric, 6)::float8
+            THEN pb."potential_win"
           ELSE 0::float8
         END AS payout
     )
@@ -205,18 +200,21 @@ export async function reopenSettledQuestion(questionId: number): Promise<boolean
       WHERE pq."id" = ${questionId}
       RETURNING pq."id"
     ),
+    previous_bets AS MATERIALIZED (
+      SELECT pb."id", pb."status", pb."potential_win" FROM "prediction_bets" pb
+      JOIN q_reopened ON pb."question_id" = q_reopened."id"
+      WHERE pb."status" IN ('won', 'lost') ORDER BY pb."id" FOR UPDATE OF pb
+    ),
     reopened_bets AS (
       UPDATE "prediction_bets" AS pb
       SET
         "status" = 'pending',
-        "potential_win" = ROUND((pb."stake" * pb."odds")::numeric, 6)::float8,
         "settled_at" = NULL
-      FROM q_reopened
-      WHERE pb."question_id" = q_reopened."id"
-        AND pb."status" IN ('won', 'lost')
+      FROM previous_bets old
+      WHERE pb."id" = old."id"
       RETURNING
         pb."user_id",
-        CASE WHEN pb."status" = 'won' THEN ROUND((pb."potential_win")::numeric, 6)::float8 ELSE 0::float8 END AS clawback
+        CASE WHEN old."status" = 'won' THEN old."potential_win" ELSE 0::float8 END AS clawback
     ),
     clawed AS (
       UPDATE "app_user" AS u

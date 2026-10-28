@@ -92,6 +92,9 @@ function PredictionBetSheet({
     user,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
   const dragControls = useDragControls();
 
@@ -168,7 +171,7 @@ function PredictionBetSheet({
   const stake = localToEur(localStake, currency, balance);
   const overBalance = Boolean(user) && stake > balance + 1e-5;
   const belowMin = localStake > 0 && localStake < currencyConfig.minStakeLocal;
-  const payout = stake * odds;
+  const payout = Math.min(maxPayoutEur, stake * odds);
   const profit = payout - stake;
 
   const comboUid = `pred-${question.id}`;
@@ -192,7 +195,7 @@ function PredictionBetSheet({
       startsAt: question.resolvesAt,
     });
     if (res === "full") {
-      toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
+      toast({ kind: "error", title: "Coupon complet (limite atteinte)" });
       return;
     }
     if (res === "removed") {
@@ -210,6 +213,7 @@ function PredictionBetSheet({
   const confirm = async () => {
     if (
       phase !== "input" ||
+      !bettingLimitsReady || localStake > currencyConfig.maxComboStakeLocal ||
       localStake < currencyConfig.minStakeLocal ||
       overBalance ||
       inFlightRef.current
@@ -233,6 +237,7 @@ function PredictionBetSheet({
     setError(null);
     try {
       const res = await api.placePredictionBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
         questionId: question.id,
         selection,
         stake,
@@ -377,7 +382,7 @@ function PredictionBetSheet({
                     setError(null);
                   }}
                   balance={balance}
-                  maxCap={500}
+                  maxCap={currencyConfig.maxComboStakeLocal}
                   hasError={overBalance || belowMin}
                   haptics={user?.haptics}
                   collapsibleOnMobile
@@ -438,6 +443,7 @@ function PredictionBetSheet({
                 />
               </div>
 
+              <p className="mb-1 text-[10px] text-mist">Plafond de gain : {eur(maxPayoutEur)}</p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -467,14 +473,16 @@ function PredictionBetSheet({
                 <button
                   type="button"
                   disabled={
-                    localStake < currencyConfig.minStakeLocal ||
+                    !bettingLimitsReady || localStake > currencyConfig.maxComboStakeLocal ||
+      localStake < currencyConfig.minStakeLocal ||
                     overBalance ||
                     phase === "loading"
                   }
                   onClick={confirm}
                   className={cn(
                     "flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl px-3 font-display text-[11.5px] font-medium transition-all active:scale-[0.99]",
-                    localStake >= currencyConfig.minStakeLocal && !overBalance
+                    bettingLimitsReady && localStake <= currencyConfig.maxComboStakeLocal &&
+    localStake >= currencyConfig.minStakeLocal && !overBalance
                       ? "bg-betclic-red text-white shadow-sm"
                       : "bg-elev text-dim"
                   )}

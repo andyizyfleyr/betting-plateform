@@ -24,7 +24,6 @@ import {
 } from "@/lib/api";
 import {
   computeComboQuote,
-  MAX_COMBO_LEGS,
   MIN_ELIGIBLE_BOOST_ODDS,
   nextComboBoostTier,
   sortSlipSelectionsChronologically,
@@ -106,6 +105,9 @@ export default function BetslipPage() {
     setFeedMatches,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
   const feedMatches = useFeedMatches();
 
@@ -379,9 +381,9 @@ export default function BetslipPage() {
     () =>
       computeComboQuote(
         enrichedLegs.map((l) => l.liveOdds),
-        stake
+        stake, maxPayoutEur
       ),
-    [enrichedLegs, stake]
+    [enrichedLegs, stake, maxPayoutEur]
   );
 
   const nextBoost = nextComboBoostTier(quote.eligibleLegs);
@@ -389,10 +391,12 @@ export default function BetslipPage() {
   const canSubmit =
     !submitting &&
     enrichedLegs.length >= 1 &&
-    enrichedLegs.length <= MAX_COMBO_LEGS &&
+    enrichedLegs.length <= bettingLimits.maxComboLegs &&
     !hasClosedLeg &&
     !hasSuspendedLeg &&
     !hasMixedSources &&
+    bettingLimitsReady &&
+    localStake <= currencyConfig.maxComboStakeLocal &&
     localStake >= currencyConfig.minStakeLocal &&
     !overBalance;
 
@@ -425,6 +429,7 @@ export default function BetslipPage() {
         const single = enrichedLegs[0];
         if (single.kind === "sport" && single.matchId) {
           const res = await api.placeBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
             matchId: single.matchId,
             market: single.market,
             selection: single.selection,
@@ -451,6 +456,7 @@ export default function BetslipPage() {
           clearCombo();
         } else if (single.kind === "prediction" && single.questionId) {
           const res = await api.placePredictionBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
             questionId: single.questionId,
             selection: single.selection,
             stake,
@@ -477,6 +483,7 @@ export default function BetslipPage() {
         }
       } else {
         const res = await api.placeComboBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
           legs: enrichedLegs.map((l) => ({
             kind: l.kind,
             ...(l.matchId ? { matchId: l.matchId } : {}),
@@ -639,7 +646,7 @@ export default function BetslipPage() {
           </h1>
           {enrichedLegs.length > 0 && (
             <span className="rounded-full bg-betclic-red px-2 py-0.5 font-display text-[10px] font-medium text-white">
-              {enrichedLegs.length}/{MAX_COMBO_LEGS}
+              {enrichedLegs.length}/{bettingLimits.maxComboLegs}
             </span>
           )}
         </div>
@@ -908,9 +915,7 @@ export default function BetslipPage() {
               }}
               balance={balance}
               maxCap={
-                isCombo
-                  ? currencyConfig.maxComboStakeLocal
-                  : currencyConfig.maxInputLocal
+                currencyConfig.maxComboStakeLocal
               }
               hasError={overBalance || belowMin}
               haptics={user?.haptics}
@@ -937,6 +942,7 @@ export default function BetslipPage() {
               <div className="flex items-center justify-between pt-0.5">
                 <span className="font-display text-[11.5px] font-medium text-ink">
                   Gain potentiel
+                    <span className="ml-1 text-[10px] text-mist">(plafond {eur(maxPayoutEur)})</span>
                 </span>
                 <span className="font-display text-[13.5px] font-medium tabular-nums text-win">
                   <AnimatedNumber value={quote.potentialWin} format={eur} />

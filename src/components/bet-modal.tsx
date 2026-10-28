@@ -97,6 +97,9 @@ function BetModalSheet({
     user,
     currency,
     currencyConfig,
+    bettingLimits,
+    bettingLimitsReady,
+    maxPayoutEur,
   } = useApp();
   const feedMatches = useFeedMatches();
   const dragControls = useDragControls();
@@ -252,7 +255,7 @@ function BetModalSheet({
   const liveHomeScore = liveActive ? liveActive.homeScore : target.match.homeScore;
   const liveAwayScore = liveActive ? liveActive.awayScore : target.match.awayScore;
 
-  const payout = stake * displayOdds;
+  const payout = Math.min(maxPayoutEur, stake * displayOdds);
   const profit = payout - stake;
 
   const comboUid = `sport-${target.match.id}`;
@@ -284,7 +287,7 @@ function BetModalSheet({
       isLive: target.match.status === "live",
     });
     if (outcome === "full") {
-      toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
+      toast({ kind: "error", title: "Coupon complet (limite atteinte)" });
       return;
     }
     if (outcome === "removed") {
@@ -301,6 +304,7 @@ function BetModalSheet({
 
   const canSubmit =
     phase === "input" &&
+    bettingLimitsReady && localStake <= currencyConfig.maxComboStakeLocal &&
     localStake >= currencyConfig.minStakeLocal &&
     !overBalance &&
     !marketSuspended &&
@@ -325,6 +329,7 @@ function BetModalSheet({
     setError(null);
     try {
       const res = await api.placeBet({
+        expectedMaxPayoutXof: bettingLimits.maxPayoutXof,
         matchId: target.match.id,
         selection: target.selection,
         market: target.market,
@@ -527,6 +532,7 @@ function BetModalSheet({
                     setError(null);
                   }}
                   balance={balance}
+                  maxCap={currencyConfig.maxComboStakeLocal}
                   hasError={overBalance || belowMin}
                   haptics={user?.haptics}
                   collapsibleOnMobile
@@ -587,6 +593,7 @@ function BetModalSheet({
                 />
               </div>
 
+              <p className="mb-1 text-[10px] text-mist">Plafond de gain : {eur(maxPayoutEur)}</p>
               <div className="flex items-center gap-2">
                 {!marketClosed && !marketSuspended && (
                   <button
