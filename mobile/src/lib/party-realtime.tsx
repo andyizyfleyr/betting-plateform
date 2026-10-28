@@ -115,12 +115,24 @@ export function MobilePartyRealtimeBridge({
   });
 
   const cfg = realtimeQuery.data;
-  const extraHost = (
-    Constants.expoConfig?.extra as { partykitHost?: string } | undefined
-  )?.partykitHost?.trim();
+  const envPartyHost =
+    typeof process !== "undefined" &&
+    process.env &&
+    typeof process.env.EXPO_PUBLIC_PARTYKIT_HOST === "string"
+      ? process.env.EXPO_PUBLIC_PARTYKIT_HOST.trim()
+      : "";
+  const extraHost =
+    envPartyHost ||
+    (
+      Constants.expoConfig?.extra as { partykitHost?: string } | undefined
+    )?.partykitHost?.trim();
 
   const partyHost =
-    (cfg?.enabled && cfg.host ? cfg.host : null) || extraHost || null;
+    cfg !== undefined
+      ? cfg.enabled && cfg.host
+        ? cfg.host
+        : null
+      : extraHost || null;
   const partyProtocol =
     cfg?.protocol ??
     (partyHost &&

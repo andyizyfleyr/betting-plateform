@@ -15,7 +15,9 @@ workflows:
       node: 22
       java: 17
       vars:
+        NODE_ENV: "production"
         EXPO_PUBLIC_API_URL: "https://be-plateform.vercel.app"
+        EXPO_PUBLIC_PARTYKIT_HOST: "pulse-bet.matiasanauld.workers.dev"
         EXPO_NO_TELEMETRY: "1"
         CI: "1"
     scripts:
@@ -32,10 +34,9 @@ workflows:
           SDK_DIR="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           echo "sdk.dir=$SDK_DIR" > "$CM_BUILD_DIR/mobile/android/local.properties"
           cd "$CM_BUILD_DIR/mobile/android"
-          printf "\norg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m\norg.gradle.parallel=true\n" >> gradle.properties
           chmod +x gradlew
           ./gradlew assembleRelease \
-            -PreactNativeArchitectures=arm64-v8a,armeabi-v7a \
+            -PreactNativeArchitectures=armeabi-v7a,arm64-v8a \
             -Pexpo.useLegacyPackaging=true \
             --no-daemon
           cp app/build/outputs/apk/release/app-release.apk "$CM_BUILD_DIR/Pulse-Bet-ReactNative.apk"

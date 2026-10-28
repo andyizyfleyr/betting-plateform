@@ -29,6 +29,10 @@ module.exports = ({ config }) => {
       process.env.EXPO_PUBLIC_API_URL ||
       config?.extra?.apiBaseUrl ||
       "https://be-plateform.vercel.app",
+    partykitHost:
+      process.env.EXPO_PUBLIC_PARTYKIT_HOST ||
+      config?.extra?.partykitHost ||
+      "pulse-bet.matiasanauld.workers.dev",
   };
 
   if (validEasProjectId) {
@@ -42,6 +46,8 @@ module.exports = ({ config }) => {
     ...config,
     owner: config.owner || "andyizyfleur",
     slug: config.slug || "pulsebets-android",
+    platforms: ["android"],
+    jsEngine: "hermes",
     extra: nextExtra,
   };
 };

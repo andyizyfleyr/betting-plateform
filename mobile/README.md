@@ -16,15 +16,15 @@ Par défaut, l'application consomme `https://be-plateform.vercel.app`. Pour cibl
 EXPO_PUBLIC_API_URL=https://be-plateform.vercel.app npx expo start --android
 ```
 
-## Build APK / AAB Android (EAS)
+## Build APK Natif Android Production (Expo EAS / Codemagic)
 
 ```bash
 cd mobile
-# APK installable directement sur Android :
-eas build --platform android --profile preview
+# APK natif Production signé (Hermes AOT, ARM compressé ~24 Mo) :
+npx eas-cli build --platform android --profile production
 
-# Android App Bundle (Google Play) :
-eas build --platform android --profile production
+# APK interne Preview :
+npx eas-cli build --platform android --profile preview
 ```
 
 ## Optimisations intégrées (Client Android & APIs Next.js)
