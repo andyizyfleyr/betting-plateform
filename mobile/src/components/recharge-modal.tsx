@@ -100,14 +100,17 @@ export function RechargeModal() {
     try {
       const idem = generateIdempotencyKey("dep");
       if (method === "stripe" || method === "paypal") {
-        const res = await api.payments.create(method, numAmount, idem);
+        const res = await api.payments.create(method, numAmount, idem, {
+          returnPath: "/parametres/depot",
+        });
         if (res.url) {
           closeRecharge();
           openInAppUrl(res.url, {
             title:
-              method === "paypal" ? "Paiement PayPal" : "Paiement sécurisé",
+              method === "paypal" ? "Paiement PayPal" : "Paiement par carte",
             provider: method,
             providerRef: res.providerRef,
+            amountLabel: formatLocalAmount(localAmount, currency),
           });
           return;
         }

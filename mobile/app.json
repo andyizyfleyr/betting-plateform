@@ -3,7 +3,7 @@
     "name": "Pulse Bet",
     "slug": "pulsebets-android",
     "owner": "andyizyfleur",
-    "version": "1.2.4",
+    "version": "1.2.5",
     "runtimeVersion": "pulse-sdk52-v1",
     "updates": {
       "enabled": true,
@@ -44,7 +44,7 @@
     },
     "android": {
       "package": "app.pulsebets.android",
-      "versionCode": 7,
+      "versionCode": 8,
       "jsEngine": "hermes",
       "backgroundColor": "#090D16",
       "adaptiveIcon": {
@@ -67,6 +67,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/with-pulse-android-release",
       "expo-updates",
       "expo-secure-store",
       "expo-system-ui",
@@ -77,8 +78,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 260
         }
-      ],
-      "./plugins/with-pulse-android-release"
+      ]
     ],
     "extra": {
       "apiBaseUrl": "https://be-plateform.vercel.app",

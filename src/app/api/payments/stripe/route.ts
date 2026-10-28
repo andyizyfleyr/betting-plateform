@@ -43,7 +43,12 @@ export async function POST(req: NextRequest) {
     const auth = await requireUserId(req);
     if (typeof auth !== "number") return auth;
     const uid = auth;
-    let body: { amount?: number; idempotencyKey?: string } = {};
+    let body: {
+      amount?: number;
+      idempotencyKey?: string;
+      uiMode?: "embedded" | "hosted";
+      returnPath?: string;
+    } = {};
     try {
       body = await req.json();
     } catch {
@@ -85,10 +90,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const wantEmbedded = body.uiMode === "embedded";
+    const safeReturnPath =
+      body.returnPath === "/parametres/depot" ? "/parametres/depot" : "/parametres";
+
     const requestHash = computeIdempotencyHash({
       provider: "stripe",
       amount,
       userCurrency: userCurrency.code,
+      ...(wantEmbedded ? { uiMode: "embedded" } : {}),
     });
 
     const claim = await claimExternalIdempotency({
@@ -106,15 +116,16 @@ export async function POST(req: NextRequest) {
     const origin = new URL(req.url).origin;
     const gatewayKey = buildGatewayIdempotencyHeader(uid, "stripe", idempotencyKey);
 
-    let session: { id: string; url: string | null };
+    let session: { id: string; url: string | null; clientSecret?: string | null };
     try {
       session = await createStripeCheckout({
         userId: uid,
         amount,
         currency: "EUR",
         userCurrency: userCurrency.code,
-        successUrl: `${origin}/parametres?deposit=stripe&ref={CHECKOUT_SESSION_ID}`,
-        cancelUrl: `${origin}/parametres?deposit=cancelled`,
+        successUrl: `${origin}${safeReturnPath}?deposit=stripe&ref={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${origin}${safeReturnPath}?deposit=cancelled`,
+        embedded: wantEmbedded,
         idempotencyKey: gatewayKey,
       });
     } catch {
@@ -129,7 +140,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!session.url) {
+    if (wantEmbedded ? !session.clientSecret : !session.url) {
       await releaseExternalIdempotencyClaim({
         userId: uid,
         scope: "deposit:stripe",
@@ -140,6 +151,12 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
+
+    const responsePayload = {
+      url: session.url,
+      providerRef: session.id,
+      ...(session.clientSecret ? { clientSecret: session.clientSecret } : {}),
+    };
 
     await db.transaction(async (tx) => {
       await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
@@ -158,11 +175,11 @@ export async function POST(req: NextRequest) {
         idempotencyKey,
         requestHash,
         statusCode: 200,
-        responseBody: { url: session.url, providerRef: session.id },
+        responseBody: responsePayload,
       });
     });
 
-    return NextResponse.json({ url: session.url, providerRef: session.id });
+    return NextResponse.json(responsePayload);
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/payments/stripe");
   }

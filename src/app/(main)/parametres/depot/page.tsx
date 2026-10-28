@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
-  Check,
   CreditCard,
   History,
   Loader2,
@@ -15,7 +14,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { ApiRequestError, api, type PaymentProvider } from "@/lib/api";
-import { playUiSound, triggerHaptic } from "@/lib/feedback";
+import {
+  DepositCheckoutSheet,
+  type DepositCheckoutSheetSession,
+} from "@/components/deposit-checkout-sheet";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
 import {
@@ -27,15 +29,19 @@ import {
   formatPresetChip,
   localToEur,
 } from "@/lib/countries";
-import { cn, eur } from "@/lib/format";
+import { cn } from "@/lib/format";
 
 type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
 
 export default function DepositPage() {
   const router = useRouter();
-  const { authReady, toast, user, bumpBets, countryConfig, currency, currencyConfig } =
+  const { authReady, toast, user, countryConfig, currency, currencyConfig } =
     useApp();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
+  const [paypalClientId, setPaypalClientId] = useState<string | null>(null);
+  const [stripePublishableKey, setStripePublishableKey] = useState<
+    string | null
+  >(null);
   const [prevCur, setPrevCur] = useState(currency);
   const [amountText, setAmountText] = useState(() =>
     String(currencyConfig.defaultDepositLocal)
@@ -45,12 +51,15 @@ export default function DepositPage() {
     setAmountText(String(currencyConfig.defaultDepositLocal));
   }
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
-  const [reference, setReference] = useState("");
   const [loading, setLoading] = useState(false);
-  const [doneManual, setDoneManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sheetSession, setSheetSession] =
+    useState<DepositCheckoutSheetSession | null>(null);
+
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
+  const popupWindowRef = useRef<Window | null>(null);
+  const handledUrlReturnRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -59,6 +68,8 @@ export default function DepositPage() {
       .then((r) => {
         if (!active) return;
         setProviders(r.providers);
+        setPaypalClientId(r.paypalClientId ?? null);
+        setStripePublishableKey(r.stripePublishableKey ?? null);
         const autoOnline = r.providers.find((p) => p.enabled);
         if (autoOnline) setMethod(autoOnline.id);
       })
@@ -69,6 +80,43 @@ export default function DepositPage() {
       active = false;
     };
   }, []);
+
+  // Traitement sur place d'un éventuel retour `?deposit=stripe|paypal|cancelled` sur `/parametres/depot`
+  useEffect(() => {
+    if (handledUrlReturnRef.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const dep = params.get("deposit");
+    if (!dep) return;
+    handledUrlReturnRef.current = true;
+
+    const ref = params.get("ref");
+    const token = params.get("token") ?? params.get("ba_token");
+    window.history.replaceState(null, "", "/parametres/depot");
+
+    if (dep === "cancelled") {
+      toast({ kind: "info", title: "Paiement annulé" });
+      return;
+    }
+    if (dep === "stripe" && ref) {
+      queueMicrotask(() => {
+        setSheetSession({
+          kind: "verifying",
+          provider: "stripe",
+          providerRef: ref,
+        });
+      });
+      return;
+    }
+    if (dep === "paypal" && token) {
+      queueMicrotask(() => {
+        setSheetSession({
+          kind: "verifying",
+          provider: "paypal",
+          providerRef: token,
+        });
+      });
+    }
+  }, [toast]);
 
   if (!authReady && !user) {
     return <PulseFlashLoader />;
@@ -102,6 +150,8 @@ export default function DepositPage() {
         : Math.round(parsed * 100) / 100
       : 0;
   const amount = localToEur(localAmount, currency);
+  const localFormatted =
+    localAmount > 0 ? formatLocalAmount(localAmount, currency) : "";
   const isManual = method === "mobile_money" || method === "sepa";
   const effectiveMinLocal = isManual
     ? currencyConfig.minDepositLocal
@@ -123,13 +173,26 @@ export default function DepositPage() {
   const canSubmit =
     !loading &&
     validAmount &&
-    (isManual ? reference.trim().length >= 4 : Boolean(onlineProvider?.enabled));
+    (isManual || Boolean(onlineProvider?.enabled));
 
   const submit = async () => {
     if (!canSubmit || inFlightRef.current) return;
+    setError(null);
+
+    if (method === "mobile_money" || method === "sepa") {
+      setSheetSession({
+        kind: "manual",
+        method,
+        amountEur: amount,
+        amountLabel: localFormatted,
+      });
+      return;
+    }
+
     inFlightRef.current = true;
-    const cleanRef = reference.trim();
-    const sig = `${method}:${isManual ? cleanRef : "online"}:${amount}`;
+    const useEmbeddedStripe =
+      method === "stripe" && Boolean(stripePublishableKey);
+    const sig = `${method}:${useEmbeddedStripe ? "emb" : "online"}:${amount}`;
     if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
       idempotencySlotRef.current = {
         key: generateIdempotencyKey("dep"),
@@ -138,29 +201,69 @@ export default function DepositPage() {
     }
     const idempotencyKey = idempotencySlotRef.current.key;
 
+    // Si Stripe fonctionne en mode hébergé (sans clé publique `pk_...`) sur navigateur,
+    // on pré-ouvre une fenêtre compacte centrée dans le geste utilisateur tout en gardant
+    // le BottomSheet de suivi ouvert sur la page Déposer des fonds.
+    let preOpenedPopup: Window | null = null;
+    if (
+      method === "stripe" &&
+      !useEmbeddedStripe &&
+      typeof window !== "undefined" &&
+      !/PulseBetAndroid/i.test(window.navigator.userAgent)
+    ) {
+      const w = 460;
+      const h = 680;
+      const left = Math.max(0, Math.round((window.screen.width - w) / 2));
+      const top = Math.max(0, Math.round((window.screen.height - h) / 2));
+      preOpenedPopup = window.open(
+        "about:blank",
+        "pulse_deposit_checkout",
+        `popup=yes,width=${w},height=${h},left=${left},top=${top}`
+      );
+      popupWindowRef.current = preOpenedPopup;
+    }
+
     setLoading(true);
-    setError(null);
     try {
-      if (method === "mobile_money" || method === "sepa") {
-        await api.payments.manual({
-          method,
-          reference: cleanRef,
-          amount,
-          idempotencyKey,
-        });
-        idempotencySlotRef.current = null;
-        playUiSound(user.sound, "bet");
-        triggerHaptic(user.haptics, [18, 28]);
-        bumpBets();
-        setDoneManual(true);
-        inFlightRef.current = false;
-        setLoading(false);
-        return;
-      }
-      const r = await api.payments.create(method, amount, idempotencyKey);
+      const r = await api.payments.create(method, amount, idempotencyKey, {
+        uiMode: useEmbeddedStripe ? "embedded" : "hosted",
+        returnPath: "/parametres/depot",
+      });
       idempotencySlotRef.current = null;
-      window.location.assign(r.url);
+
+      if (method === "paypal") {
+        setSheetSession({
+          kind: "paypal",
+          amountLabel: localFormatted,
+          providerRef: r.providerRef || "",
+          checkoutUrl: r.url,
+          paypalClientId,
+          chargeCurrency: r.chargeCurrency || "EUR",
+        });
+      } else {
+        if (preOpenedPopup && !preOpenedPopup.closed && r.url) {
+          preOpenedPopup.location.assign(r.url);
+        }
+        setSheetSession({
+          kind: "stripe",
+          amountLabel: localFormatted,
+          providerRef: r.providerRef || "",
+          checkoutUrl: r.url,
+          clientSecret: r.clientSecret ?? null,
+          stripePublishableKey,
+        });
+      }
+      inFlightRef.current = false;
+      setLoading(false);
     } catch (e) {
+      if (preOpenedPopup && !preOpenedPopup.closed) {
+        try {
+          preOpenedPopup.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      popupWindowRef.current = null;
       if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
         idempotencySlotRef.current = null;
       }
@@ -179,69 +282,44 @@ export default function DepositPage() {
   const paypalInfo = providers.find((p) => p.id === "paypal");
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2 lg:px-0 lg:py-0">
-      {/* En-tête compact en ligne */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined" && window.history.length > 1) {
-                router.back();
-              } else {
-                triggerRouteLoader("/parametres");
-                router.push("/parametres");
-              }
-            }}
-            aria-label="Retour au compte"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:h-9 lg:w-9"
+    <>
+      <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2 lg:px-0 lg:py-0">
+        {/* En-tête compact en ligne */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  router.back();
+                } else {
+                  triggerRouteLoader("/parametres");
+                  router.push("/parametres");
+                }
+              }}
+              aria-label="Retour au compte"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:h-9 lg:w-9"
+            >
+              <ArrowLeft
+                className="h-3.5 w-3.5 lg:h-4 lg:w-4"
+                strokeWidth={2.3}
+              />
+            </button>
+            <h1 className="truncate font-display text-[12px] font-bold leading-tight text-ink lg:text-[13.5px]">
+              Déposer des fonds
+            </h1>
+          </div>
+
+          <Link
+            href="/parametres/transactions"
+            className="inline-flex h-7.5 shrink-0 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10px] font-medium text-ink transition-colors hover:bg-edge"
           >
-            <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
-          </button>
-          <h1 className="truncate font-display text-[12px] font-bold leading-tight text-ink lg:text-[13.5px]">
-            Déposer des fonds
-          </h1>
+            <History className="h-3 w-3" />
+            Historique
+          </Link>
         </div>
 
-        <Link
-          href="/parametres/transactions"
-          className="inline-flex h-7.5 shrink-0 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10px] font-medium text-ink transition-colors hover:bg-edge"
-        >
-          <History className="h-3 w-3" />
-          Historique
-        </Link>
-      </div>
-
-      <div className="mt-2.5 lg:mt-4">
-        {doneManual ? (
-          <div className="glass-card rounded-xl p-4 text-center lg:rounded-2xl lg:p-6">
-            <div className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-win/15 text-win">
-              <Check className="h-5 w-5" strokeWidth={2.6} />
-            </div>
-            <h2 className="mt-2.5 font-display text-[12.5px] font-bold text-ink">
-              Demande enregistrée
-            </h2>
-            <p className="mt-1 text-[10.5px] leading-relaxed text-mist">
-              Votre dépôt de <strong className="text-ink">{eur(amount)}</strong> (
-              {method === "mobile_money" ? "Mobile Money" : "Virement SEPA"}) sera
-              crédité dès validation.
-            </p>
-            <div className="mt-3.5 flex flex-wrap justify-center gap-2">
-              <Link
-                href="/parametres/transactions"
-                className="rounded-lg bg-elev px-3.5 py-2 font-display text-[10.5px] font-medium text-ink"
-              >
-                Transactions
-              </Link>
-              <Link
-                href="/matchs"
-                className="btn-red rounded-lg px-4 py-2 text-[10.5px]"
-              >
-                Matchs
-              </Link>
-            </div>
-          </div>
-        ) : (
+        <div className="mt-2.5 lg:mt-4">
           <div className="space-y-2.5 lg:space-y-4">
             {/* Montant compact */}
             <section className="glass-card rounded-xl p-3 lg:rounded-2xl lg:p-4">
@@ -252,7 +330,9 @@ export default function DepositPage() {
               <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-edge bg-elev/60 px-3 py-1.5 focus-within:border-betclic-red lg:py-2.5">
                 <input
                   type="text"
-                  inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
+                  inputMode={
+                    currencyConfig.decimals === 0 ? "numeric" : "decimal"
+                  }
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value)}
                   className="w-full bg-transparent font-display text-[13.5px] font-medium tabular-nums text-ink outline-none lg:text-[16px]"
@@ -278,7 +358,9 @@ export default function DepositPage() {
                           : "bg-elev text-ink hover:bg-edge"
                       )}
                     >
-                      <span className="block truncate">{formatPresetChip(q, currency)}</span>
+                      <span className="block truncate">
+                        {formatPresetChip(q, currency)}
+                      </span>
                     </button>
                   );
                 })}
@@ -328,7 +410,10 @@ export default function DepositPage() {
                       key={m.id}
                       type="button"
                       disabled={!m.available}
-                      onClick={() => setMethod(m.id)}
+                      onClick={() => {
+                        setMethod(m.id);
+                        setError(null);
+                      }}
                       className={cn(
                         "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-all lg:rounded-xl lg:p-3",
                         selected
@@ -356,32 +441,11 @@ export default function DepositPage() {
                 })}
               </div>
 
-              {isManual && (
-                <div className="mt-2.5">
-                  <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">
-                    {method === "mobile_money"
-                      ? "Numéro ou réf. Mobile Money"
-                      : "Référence virement SEPA"}
-                  </label>
-                  <input
-                    type="text"
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    placeholder={
-                      method === "mobile_money"
-                        ? `Ex. ${countryConfig.mobileMoneyHint || "Mobile Money"} / ID TXN`
-                        : "Ex. Réf. virement bancaire"
-                    }
-                    className="mt-1 h-9.5 w-full rounded-lg border border-edge bg-elev/60 px-3 text-[10.5px] font-medium text-ink outline-none focus:border-betclic-red lg:h-11 lg:rounded-xl lg:text-[11px]"
-                  />
-                </div>
-              )}
-
-              {error && (
+              {error ? (
                 <p className="mt-2 rounded-lg bg-betclic-red/10 px-2.5 py-1.5 text-[10px] font-medium text-betclic-red">
                   {error}
                 </p>
-              )}
+              ) : null}
 
               <button
                 type="button"
@@ -399,14 +463,20 @@ export default function DepositPage() {
                 ) : (
                   <>
                     <Lock className="h-3.5 w-3.5" />
-                    Créditer {validAmount ? eur(amount) : ""}
+                    Créditer {validAmount ? localFormatted : ""}
                   </>
                 )}
               </button>
             </section>
           </div>
-        )}
+        </div>
       </div>
-    </div>
+
+      <DepositCheckoutSheet
+        session={sheetSession}
+        onClose={() => setSheetSession(null)}
+        popupWindowRef={popupWindowRef}
+      />
+    </>
   );
 }

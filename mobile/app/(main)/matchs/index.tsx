@@ -130,7 +130,7 @@ function RealMatchCarouselRow({
           >
             <Text style={styles.seeAllText}>{trailingLabel}</Text>
             <ChevronRight
-              size={14}
+              size={12}
               color={COLORS.betclicRed}
               strokeWidth={2.5}
             />
@@ -587,17 +587,17 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   seeAllPill: {
-    height: 26,
+    height: 22,
     borderRadius: 999,
     backgroundColor: "rgba(225, 0, 20, 0.09)",
-    paddingLeft: 9,
-    paddingRight: 5,
+    paddingLeft: 7.5,
+    paddingRight: 4,
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
+    gap: 1.5,
   },
   seeAllText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.betclicRed,
   },

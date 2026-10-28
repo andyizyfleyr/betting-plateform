@@ -1011,17 +1011,28 @@ export const api = {
 
   payments: {
     providers: () =>
-      requestJson<{ providers: PaymentProvider[] }>("/api/payments"),
+      requestJson<{
+        providers: PaymentProvider[];
+        paypalClientId?: string | null;
+        paypalMode?: "live" | "sandbox";
+        stripePublishableKey?: string | null;
+      }>("/api/payments"),
     create: (
       provider: "stripe" | "paypal",
       amount: number,
-      idempotencyKey: string
+      idempotencyKey: string,
+      options?: { returnPath?: string }
     ) =>
-      requestJson<{ url: string; providerRef?: string; deduplicated?: boolean }>(
+      requestJson<{
+        url: string;
+        providerRef?: string;
+        chargeCurrency?: string;
+        deduplicated?: boolean;
+      }>(
         `/api/payments/${provider}`,
         {
           method: "POST",
-          body: { amount, idempotencyKey },
+          body: { amount, idempotencyKey, ...options },
         }
       ),
     manual: (payload: {

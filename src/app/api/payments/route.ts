@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { paymentProviders } from "@/lib/payments";
+import { publicPaymentClientConfig } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ providers: paymentProviders() });
+  return NextResponse.json(publicPaymentClientConfig());
 }

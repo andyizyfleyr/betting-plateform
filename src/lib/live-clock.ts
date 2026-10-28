@@ -15,11 +15,11 @@ export type LiveClockPhase =
   | "PAUSED";
 
 export interface LiveClockAnchor {
-  /** "virtual" (5 min accéléré déterministe) | "real" (temps réel 1s = 1s) */
+  /** "virtual" (10 min accéléré déterministe) | "real" (temps réel 1s = 1s) */
   mode: "virtual" | "real";
   /** Coup d'envoi ISO */
   startsAt: string;
-  /** Durée réelle (ms) d'une minute de match (3120..3200 ms en virtuel ≈ 5 min, 60000 ms en réel) */
+  /** Durée réelle (ms) d'une minute de match (6240..6400 ms en virtuel ≈ 10 min, 60000 ms en réel) */
   stepMs: number;
   /** Secondes cumulées exactes du match réel au moment `syncedAtMs` */
   anchorSeconds?: number | null;
@@ -64,8 +64,8 @@ export interface LiveClockSnapshot {
   gameMinute: number;
 }
 
-const VIRTUAL_STEP_MIN_MS = 3_120;
-const VIRTUAL_STEP_MAX_MS = 3_200;
+const VIRTUAL_STEP_MIN_MS = 6_240;
+const VIRTUAL_STEP_MAX_MS = 6_400;
 
 function hashDjb2(s: string): number {
   let h = 5381;
@@ -75,7 +75,7 @@ function hashDjb2(s: string): number {
   return h >>> 0;
 }
 
-/** Strictement identique à `stepMsForMatch(matchId, "virtual")` dans `src/db/engine.ts` (95 pas ≈ 5 min). */
+/** Strictement identique à `stepMsForMatch(matchId, "virtual")` dans `src/db/engine.ts` (95 pas ≈ 10 min). */
 export function stepMsForVirtualMatch(matchId: number): number {
   const h = hashDjb2(`virt-tempo|${matchId}`);
   const span = VIRTUAL_STEP_MAX_MS - VIRTUAL_STEP_MIN_MS;

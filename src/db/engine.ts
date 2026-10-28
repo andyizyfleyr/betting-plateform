@@ -41,15 +41,15 @@ const INTER_MATCH_GAP_MS = 3_000;
 
 /**
  * Rythme des matchs :
- * - Matchs virtuels automatiques (`source = "virtual"`) : durée totale de 5 minutes
- *   (95 pas d'horloge × [3 120 ms .. 3 200 ms] ≈ 4m56s .. 5m04s, moyenne exacte 5 min 00 s),
+ * - Matchs virtuels automatiques (`source = "virtual"`) : durée totale de 10 minutes
+ *   (95 pas d'horloge × [6 240 ms .. 6 400 ms] ≈ 9m53s .. 10m08s, moyenne exacte 10 min 00 s),
  *   avec 4 matchs virtuels en direct simultanément sur 4 canaux décalés (multiplex fluide continu 24h/24).
  * - Matchs manuels créés par l'admin (`source = "manual"`) : rythme réel confortable (40 s / min)
  *   pour laisser le pilotage complet à l'administrateur.
  */
 export const MANUAL_MINUTE_REAL_MS = 40_000;
-export const VIRTUAL_STEP_MIN_MS = 3_120; // ~4 min 56 s au total
-export const VIRTUAL_STEP_MAX_MS = 3_200; // ~5 min 04 s au total (moyenne 5 min 00 s)
+export const VIRTUAL_STEP_MIN_MS = 6_240; // ~9 min 53 s au total
+export const VIRTUAL_STEP_MAX_MS = 6_400; // ~10 min 08 s au total (moyenne 10 min 00 s)
 const TOTAL_CLOCK_STEPS = 95;
 
 /** Nombre de matchs virtuels diffusés en direct simultanément (décalés sur 4 canaux parallèles). */
@@ -840,7 +840,7 @@ async function syncUpcomingQueue(
   const laneCursors: number[] = Array.from({ length: CONCURRENT_LIVE_VIRTUAL }, (_, idx) =>
     idx < activeLives.length
       ? expectedMatchEndMs(activeLives[idx], now) + INTER_MATCH_GAP_MS
-      : now + INTER_MATCH_GAP_MS + idx * 75_000
+      : now + INTER_MATCH_GAP_MS + idx * 150_000
   );
 
   interface QueuedMatchPatch {
@@ -1017,7 +1017,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
     }
   }
 
-  const waveSlot = Math.floor(now / 300_000);
+  const waveSlot = Math.floor(now / 600_000);
   const waveOffset = hmacUint32(`wave-offset|${waveSlot}`) % FIXTURE_POOL.length;
   const stepStride = 7; // premier avec 36 (PGCD(7, 36) = 1) → parcourt tout le pool sans cycle court
   const needed = TARGET_ACTIVE_VIRTUAL - activeVirtual.length;
@@ -1037,7 +1037,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
 
   const laneTails: number[] = Array.from(
     { length: CONCURRENT_LIVE_VIRTUAL },
-    (_, laneIdx) => (activeVirtual.length > 0 ? tailEndMs + INTER_MATCH_GAP_MS : now + laneIdx * 75_000)
+    (_, laneIdx) => (activeVirtual.length > 0 ? tailEndMs + INTER_MATCH_GAP_MS : now + laneIdx * 150_000)
   );
   const rows: Array<typeof matches.$inferInsert> = [];
 
@@ -1162,9 +1162,9 @@ async function bridgeIdleGapAndStartLives(
     busy.add(r.awayTeam);
   }
 
-  const slot = Math.floor(now / 300_000);
+  const slot = Math.floor(now / 600_000);
   const offset = hmacUint32(`bridge-offset|${slot}`) % FIXTURE_POOL.length;
-  const needPast = now - latestEnd > 10 * 60_000 ? 2 : 0;
+  const needPast = now - latestEnd > 20 * 60_000 ? 2 : 0;
   const totalPick = needPast + targetCount;
   const picked: FixtureTemplate[] = [];
   let bridgeNetHome = 0;
@@ -1182,7 +1182,7 @@ async function bridgeIdleGapAndStartLives(
   }
   if (picked.length === 0) return [];
 
-  const avgDur = 300_000;
+  const avgDur = 600_000;
   const neutralPressure: MatchBookPressure = { tickets: [], houseTightness: 1 };
   const pastCount = picked.length > targetCount ? needPast : 0;
   const pastFx = picked.slice(0, pastCount);
@@ -1362,7 +1362,7 @@ function stepLiveMatchInMemory(
   }
 
   // Transition fluide sans retour d'horloge lorsqu'un match virtuel déjà en cours
-  // passe à la cadence de 5 minutes : on réancre `startsAt` sur `prevSimMin`.
+  // passe à la cadence de 10 minutes : on réancre `startsAt` sur `prevSimMin`.
   if (m.source === "virtual" && prevSimMin > clock.gameMinute + 1) {
     effectiveStartsAt = backdateStartsAtForMinute(prevSimMin, now, "virtual", m.id);
     clock = computeClockState(effectiveStartsAt.getTime(), now, stepMs);

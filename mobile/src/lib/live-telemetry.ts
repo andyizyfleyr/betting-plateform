@@ -36,7 +36,7 @@ export function minuteNumber(minute: string | null | undefined): number {
 function matchStepMs(matchId: number, source?: string | null): number {
   if (source === "manual") return 40_000;
   const h = hashString(`virt-tempo|${matchId}`);
-  return 3_120 + (h % (3_200 - 3_120 + 1));
+  return 6_240 + (h % (6_400 - 6_240 + 1));
 }
 
 export interface MatchColors {

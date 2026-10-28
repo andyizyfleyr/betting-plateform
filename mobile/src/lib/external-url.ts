@@ -1,9 +1,10 @@
-import { UIManager } from "react-native";
+import { NativeModules, TurboModuleRegistry, UIManager } from "react-native";
 
 export interface InAppBrowserOptions {
   title?: string;
   provider?: "stripe" | "paypal";
   providerRef?: string;
+  amountLabel?: string;
 }
 
 export interface InAppBrowserRequest extends InAppBrowserOptions {
@@ -19,19 +20,25 @@ export type PaymentReturnEvent =
 let cachedHasWebView: boolean | null = null;
 
 /**
- * Détecte sans lever d'exception si le composant natif `RNCWebView` est compilé
- * dans le binaire Android courant (Expo Go SDK 52 ou APK natif récent).
- * Si absent sur un ancien binaire mis à jour uniquement en OTA, on bascule
- * proprement sur l'onglet intégré `expo-web-browser` dans la même tâche d'application.
+ * Détecte sans lever d'exception si le composant natif `RNCWebView` / `RNCWebViewModule`
+ * est présent dans le binaire Android courant — compatible à la fois avec la Nouvelle
+ * Architecture Bridgeless/Fabric (Expo Go SDK 52 via `TurboModuleRegistry`) et avec
+ * l'Architecture classique (`NativeModules` / `UIManager.getViewManagerConfig` sur APK natif).
  */
 export function hasNativeWebView(): boolean {
   if (cachedHasWebView !== null) return cachedHasWebView;
   try {
+    const turboMod =
+      typeof TurboModuleRegistry?.get === "function"
+        ? TurboModuleRegistry.get("RNCWebViewModule")
+        : null;
+    const legacyMod =
+      NativeModules?.RNCWebViewModule ?? NativeModules?.RNCWebView ?? null;
     const cfg =
       typeof UIManager?.getViewManagerConfig === "function"
         ? UIManager.getViewManagerConfig("RNCWebView")
         : null;
-    cachedHasWebView = Boolean(cfg);
+    cachedHasWebView = Boolean(turboMod || legacyMod || cfg);
   } catch {
     cachedHasWebView = false;
   }
@@ -94,8 +101,9 @@ export function extractHostnameLabel(rawUrl: string): string {
 }
 
 /**
- * Détecte les URLs de retour Stripe / PayPal (`/parametres?deposit=...` ou schéma `pulsebets://`)
- * afin de refermer automatiquement le BottomSheet et créditer le solde sans quitter l'application.
+ * Détecte les URLs de retour Stripe / PayPal (`/parametres?deposit=...`,
+ * `/parametres/depot?deposit=...` ou schéma `pulsebets://`) afin de refermer
+ * automatiquement le BottomSheet sur place et créditer le solde sans quitter la page.
  */
 export function parsePaymentReturnUrl(rawUrl: string): PaymentReturnEvent | null {
   const clean = String(rawUrl ?? "").trim();
