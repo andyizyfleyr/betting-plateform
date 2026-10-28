@@ -38,6 +38,16 @@ export interface CashoutChangedDetails {
 const TOKEN_STORE_KEY = "pulse_android_jwt_v1";
 
 function resolveApiBaseUrl(): string {
+  const envUrl =
+    typeof process !== "undefined" &&
+    process.env &&
+    typeof process.env.EXPO_PUBLIC_API_URL === "string"
+      ? process.env.EXPO_PUBLIC_API_URL.trim()
+      : "";
+  if (envUrl.length > 0) {
+    return envUrl.replace(/\/+$/, "");
+  }
+
   const cAny = Constants as unknown as {
     expoConfig?: { extra?: { apiBaseUrl?: string } };
     manifest2?: { extra?: { expoClient?: { extra?: { apiBaseUrl?: string } } } };

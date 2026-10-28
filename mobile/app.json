@@ -3,7 +3,11 @@
     "name": "Pulse Bet",
     "slug": "pulsebets-android",
     "owner": "andyizyfleur",
-    "version": "1.1.0",
+    "version": "1.2.0",
+    "platforms": [
+      "android"
+    ],
+    "jsEngine": "hermes",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "pulsebets",
@@ -30,7 +34,8 @@
     },
     "android": {
       "package": "app.pulsebets.android",
-      "versionCode": 2,
+      "versionCode": 3,
+      "jsEngine": "hermes",
       "backgroundColor": "#090D16",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -41,6 +46,11 @@
       "permissions": [
         "INTERNET",
         "VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -48,6 +58,7 @@
     },
     "plugins": [
       "expo-secure-store",
+      "expo-system-ui",
       [
         "expo-splash-screen",
         {
@@ -55,10 +66,12 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 260
         }
-      ]
+      ],
+      "./plugins/with-pulse-android-release"
     ],
     "extra": {
-      "apiBaseUrl": "https://be-plateform.vercel.app"
+      "apiBaseUrl": "https://be-plateform.vercel.app",
+      "partykitHost": "pulse-bet.matiasanauld.workers.dev"
     }
   }
 }
