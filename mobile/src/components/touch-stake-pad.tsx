@@ -206,7 +206,7 @@ export function TouchStakePad({
                           styles.keyText,
                           dark && { color: "#ffffff" },
                           isClear && { color: COLORS.betclicRed },
-                          isOk && { color: "#ffffff", fontSize: 13.5 },
+                          isOk && { color: "#ffffff", fontSize: 11.5 },
                         ]}
                       >
                         {isClear ? "Effacer" : k}
@@ -235,8 +235,8 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   label: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   chipsRow: {
@@ -261,8 +261,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   chipText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -290,8 +290,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.betclicRed,
   },
   displayVal: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 13.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -304,13 +304,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   euroSign: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   toggleHint: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   padGrid: {
@@ -340,8 +340,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.12)",
   },
   keyText: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },

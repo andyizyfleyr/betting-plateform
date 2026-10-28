@@ -60,7 +60,7 @@ function DesktopLegLiveOddsBadge({
   return (
     <span
       className={cn(
-        "relative overflow-hidden rounded-lg border border-edge bg-white px-2 py-0.5 font-display text-[12px] font-extrabold tabular-nums transition-colors duration-200",
+        "relative overflow-hidden rounded-lg border border-edge bg-white px-2 py-0.5 font-display text-[10.5px] font-medium tabular-nums transition-colors duration-200",
         oddsTrendTextClass(trend)
       )}
     >
@@ -657,11 +657,11 @@ export function DesktopBetslipSidebar() {
         {/* En-tête Betslip */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-4 py-3.5">
           <div className="flex items-center gap-2">
-            <span className="font-display text-[14.5px] font-bold tracking-tight text-ink">
+            <span className="font-display text-[12px] font-medium tracking-tight text-ink">
               {headerLabel}
             </span>
             {quote.boostPct > 0 && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-win/12 px-2 py-0.5 font-display text-[10.5px] font-extrabold text-win">
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-win/12 px-2 py-0.5 font-display text-[10px] font-medium text-win">
                 <Flame className="h-3 w-3" strokeWidth={2.4} />+{quote.boostPct}%
               </span>
             )}
@@ -674,7 +674,7 @@ export function DesktopBetslipSidebar() {
                 clearCombo();
                 setError(null);
               }}
-              className="inline-flex items-center gap-1 rounded-full bg-elev px-2.5 py-1 font-display text-[11px] font-semibold text-mist transition-colors hover:bg-betclic-red/10 hover:text-betclic-red"
+              className="inline-flex items-center gap-1 rounded-full bg-elev px-2.5 py-1 font-display text-[10px] font-medium text-mist transition-colors hover:bg-betclic-red/10 hover:text-betclic-red"
             >
               <Trash2 className="h-3 w-3" strokeWidth={2.2} />
               Vider
@@ -688,10 +688,10 @@ export function DesktopBetslipSidebar() {
             <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-win/12 text-win">
               <CheckCircle2 className="h-6 w-6" strokeWidth={2.3} />
             </div>
-            <h2 className="mt-3 font-display text-[17px] font-bold text-ink">
+            <h2 className="mt-3 font-display text-[13.5px] font-bold text-ink">
               Coupon enregistré !
             </h2>
-            <p className="mt-0.5 text-[12px] text-mist">
+            <p className="mt-0.5 text-[10.5px] text-mist">
               {placedReceipt.mode === "single"
                 ? "Votre pari simple est en cours."
                 : `Votre combiné (${placedReceipt.legsCount} sélections) est en cours.`}
@@ -699,20 +699,20 @@ export function DesktopBetslipSidebar() {
 
             <div className="mt-4 grid grid-cols-3 divide-x divide-edge rounded-xl bg-elev py-2.5 text-center">
               <div className="px-1.5">
-                <p className="text-[10px] font-medium text-dim">Mise</p>
-                <p className="mt-0.5 font-display text-[12.5px] font-bold tabular-nums text-ink">
+                <p className="text-[9.5px] font-medium text-dim">Mise</p>
+                <p className="mt-0.5 font-display text-[11px] font-medium tabular-nums text-ink">
                   {eur(placedReceipt.stake)}
                 </p>
               </div>
               <div className="px-1.5">
-                <p className="text-[10px] font-medium text-dim">Cote</p>
-                <p className="mt-0.5 font-display text-[12.5px] font-bold tabular-nums text-betclic-red">
+                <p className="text-[9.5px] font-medium text-dim">Cote</p>
+                <p className="mt-0.5 font-display text-[11px] font-medium tabular-nums text-betclic-red">
                   {formatOdds(placedReceipt.finalOdds, oddsFormat)}
                 </p>
               </div>
               <div className="px-1.5">
-                <p className="text-[10px] font-medium text-dim">Gain pot.</p>
-                <p className="mt-0.5 font-display text-[12.5px] font-bold tabular-nums text-win">
+                <p className="text-[9.5px] font-medium text-dim">Gain pot.</p>
+                <p className="mt-0.5 font-display text-[11px] font-medium tabular-nums text-win">
                   {eur(placedReceipt.potentialWin)}
                 </p>
               </div>
@@ -722,14 +722,14 @@ export function DesktopBetslipSidebar() {
               <button
                 type="button"
                 onClick={() => setPlacedReceipt(null)}
-                className="flex h-10 items-center justify-center rounded-xl bg-elev font-display text-[12px] font-bold text-ink transition-colors hover:bg-edge/70"
+                className="flex h-10 items-center justify-center rounded-xl bg-elev font-display text-[10.5px] font-medium text-ink transition-colors hover:bg-edge/70"
               >
                 Nouveau pari
               </button>
               <Link
                 href="/paris"
                 onClick={() => setPlacedReceipt(null)}
-                className="flex h-10 items-center justify-center gap-1 rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white transition-colors hover:bg-betclic-red-deep"
+                className="flex h-10 items-center justify-center gap-1 rounded-xl bg-betclic-red font-display text-[10.5px] font-medium text-white transition-colors hover:bg-betclic-red-deep"
               >
                 Mes paris
                 <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.4} />
@@ -741,10 +741,10 @@ export function DesktopBetslipSidebar() {
           <>
             <div className="px-5 py-9 text-center">
               <EmptyBetslipIllustration />
-              <h2 className="mt-3 font-display text-[17.5px] font-extrabold italic tracking-tight text-ink">
+              <h2 className="mt-3 font-display text-[13.5px] font-bold italic tracking-tight text-ink">
                 Place un nouveau pari
               </h2>
-              <p className="mt-1 text-[12.5px] text-mist">
+              <p className="mt-1 text-[11px] text-mist">
                 On croise les doigts pour toi !
               </p>
             </div>
@@ -755,10 +755,10 @@ export function DesktopBetslipSidebar() {
 
             <div className="border-t border-edge bg-white p-4">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[13px] font-semibold text-ink">
+                <span className="text-[11px] font-medium text-ink">
                   Gains possibles
                 </span>
-                <span className="font-display text-[16px] font-extrabold tabular-nums text-ink">
+                <span className="font-display text-[12.5px] font-medium tabular-nums text-ink">
                   0,00 €
                 </span>
               </div>
@@ -766,7 +766,7 @@ export function DesktopBetslipSidebar() {
               <button
                 type="button"
                 disabled
-                className="mt-3 flex h-11 w-full cursor-not-allowed items-center justify-center rounded-xl bg-betclic-red/35 font-display text-[14px] font-bold text-white"
+                className="mt-3 flex h-11 w-full cursor-not-allowed items-center justify-center rounded-xl bg-betclic-red/35 font-display text-[11.5px] font-medium text-white"
               >
                 Parier
               </button>
@@ -778,8 +778,8 @@ export function DesktopBetslipSidebar() {
             <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-3.5 py-3">
               {/* Jauge Bonus Combiné */}
               {(isCombo || nextBoost) && (
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-elev/85 px-3 py-2 text-[11px]">
-                  <span className="flex items-center gap-1.5 font-semibold text-ink">
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-elev/85 px-3 py-2 text-[10px]">
+                  <span className="flex items-center gap-1.5 font-medium text-ink">
                     <Sparkles
                       className="h-3.5 w-3.5 shrink-0 text-betclic-red"
                       strokeWidth={2.3}
@@ -789,7 +789,7 @@ export function DesktopBetslipSidebar() {
                       : "Bonus Combiné dès 3 sél. (cote ≥ 1,35)"}
                   </span>
                   {nextBoost && (
-                    <span className="shrink-0 font-display text-[10.5px] font-bold text-win">
+                    <span className="shrink-0 font-display text-[10px] font-medium text-win">
                       +{nextBoost.needed} → +{nextBoost.pct}%
                     </span>
                   )}
@@ -839,13 +839,13 @@ export function DesktopBetslipSidebar() {
                     />
                     <div className="pointer-events-none relative z-[1] flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                          <span className="truncate font-display font-bold uppercase text-mist">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[9.5px]">
+                          <span className="truncate font-display font-medium uppercase text-mist">
                             {leg.league ||
                               (leg.kind === "prediction" ? "Prédiction" : "Match")}
                           </span>
                           {leg.liveMatch?.status === "live" && (
-                            <span className="inline-flex items-center gap-1 font-display font-bold tabular-nums text-betclic-red">
+                            <span className="inline-flex items-center gap-1 font-display font-medium tabular-nums text-betclic-red">
                               <span className="live-dot !h-1.5 !w-1.5" />
                               <LiveMatchClock
                                 match={leg.liveMatch}
@@ -864,7 +864,7 @@ export function DesktopBetslipSidebar() {
                                 logo={leg.homeLogo}
                                 size="2xs"
                               />
-                              <p className="truncate font-display text-[12.5px] font-bold leading-snug text-ink">
+                              <p className="truncate font-display text-[11px] font-medium leading-snug text-ink">
                                 {sportTeams.homeTeam}
                               </p>
                             </div>
@@ -874,13 +874,13 @@ export function DesktopBetslipSidebar() {
                                 logo={leg.awayLogo}
                                 size="2xs"
                               />
-                              <p className="truncate font-display text-[12.5px] font-bold leading-snug text-ink">
+                              <p className="truncate font-display text-[11px] font-medium leading-snug text-ink">
                                 {sportTeams.awayTeam}
                               </p>
                             </div>
                           </div>
                         ) : (
-                          <p className="mt-1 line-clamp-2 font-display text-[12.5px] font-bold leading-snug text-ink">
+                          <p className="mt-1 line-clamp-2 font-display text-[11px] font-medium leading-snug text-ink">
                             {leg.title}
                           </p>
                         )}
@@ -898,26 +898,26 @@ export function DesktopBetslipSidebar() {
 
                     <div className="pointer-events-none relative z-[1] mt-2 flex items-center justify-between gap-2 border-t border-edge/80 pt-2">
                       <div className="flex min-w-0 items-center gap-1.5">
-                        <span className="shrink-0 rounded-md bg-elev px-1.5 py-0.5 text-[10px] font-semibold text-mist">
+                        <span className="shrink-0 rounded-md bg-elev px-1.5 py-0.5 text-[9.5px] font-medium text-mist">
                           {formatMarketName(leg.market)}
                         </span>
-                        <span className="truncate font-display text-[12px] font-bold text-ink">
+                        <span className="truncate font-display text-[10.5px] font-medium text-ink">
                           {leg.selectionLabel}
                         </span>
                       </div>
 
                       {leg.closed ? (
-                        <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[10.5px] font-bold text-betclic-red">
+                        <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-medium text-betclic-red">
                           Fermé
                         </span>
                       ) : leg.suspended ? (
-                        <span className="shrink-0 rounded-md bg-warn/15 px-2 py-0.5 font-display text-[10.5px] font-bold text-warn">
+                        <span className="shrink-0 rounded-md bg-warn/15 px-2 py-0.5 font-display text-[10px] font-medium text-warn">
                           Suspendu
                         </span>
                       ) : (
                         <div className="flex shrink-0 items-center gap-1">
                           {oddsChanged && (
-                            <span className="font-display text-[10px] text-dim line-through tabular-nums">
+                            <span className="font-display text-[9.5px] text-dim line-through tabular-nums">
                               {formatOdds(leg.odds, oddsFormat)}
                             </span>
                           )}
@@ -935,14 +935,14 @@ export function DesktopBetslipSidebar() {
               <CouponCodeBox variant="compact" />
 
               {hasMixedMatchSources && (
-                <div className="flex items-center gap-2 rounded-xl border border-betclic-red/30 bg-betclic-red/[0.06] px-3 py-2 text-[11.5px] font-medium text-betclic-red">
+                <div className="flex items-center gap-2 rounded-xl border border-betclic-red/30 bg-betclic-red/[0.06] px-3 py-2 text-[10.5px] font-medium text-betclic-red">
                   <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2.2} />
                   Impossible de mélanger un match réel et un match virtuel.
                 </div>
               )}
 
               {(hasClosedLeg || hasSuspendedLeg) && (
-                <div className="flex items-center gap-2 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-[11.5px] font-medium text-ink">
+                <div className="flex items-center gap-2 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-[10.5px] font-medium text-ink">
                   <AlertTriangle
                     className="h-4 w-4 shrink-0 text-warn"
                     strokeWidth={2.2}
@@ -958,7 +958,7 @@ export function DesktopBetslipSidebar() {
             <div className="shrink-0 border-t border-edge bg-white p-3.5">
               {/* Champ Mise */}
               <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/60 px-3 py-2 focus-within:border-betclic-red focus-within:bg-white">
-                <span className="text-[11.5px] font-semibold text-mist">Mise</span>
+                <span className="text-[10.5px] font-medium text-mist">Mise</span>
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
@@ -972,9 +972,9 @@ export function DesktopBetslipSidebar() {
                       const v = parseFloat(e.target.value);
                       setStake(Number.isNaN(v) ? 0 : v);
                     }}
-                    className="w-24 bg-transparent text-right font-display text-[16px] font-bold tabular-nums text-ink outline-none"
+                    className="w-24 bg-transparent text-right font-display text-[12.5px] font-medium tabular-nums text-ink outline-none"
                   />
-                  <span className="font-display text-[13px] font-bold text-dim">
+                  <span className="font-display text-[11px] font-medium text-dim">
                     €
                   </span>
                 </div>
@@ -991,7 +991,7 @@ export function DesktopBetslipSidebar() {
                       setStake(q);
                     }}
                     className={cn(
-                      "h-7 rounded-lg font-display text-[11.5px] font-bold transition-colors",
+                      "h-7 rounded-lg font-display text-[10.5px] font-medium transition-colors",
                       stake === q
                         ? "bg-ink text-white"
                         : "bg-elev text-ink hover:bg-edge/70"
@@ -1008,7 +1008,7 @@ export function DesktopBetslipSidebar() {
                       Math.max(0.5, Math.min(10_000, Math.floor(balance || 50)))
                     );
                   }}
-                  className="h-7 rounded-lg bg-elev font-display text-[10.5px] font-bold uppercase text-mist transition-colors hover:bg-edge/70 hover:text-ink"
+                  className="h-7 rounded-lg bg-elev font-display text-[10px] font-medium uppercase text-mist transition-colors hover:bg-edge/70 hover:text-ink"
                 >
                   Max
                 </button>
@@ -1016,39 +1016,39 @@ export function DesktopBetslipSidebar() {
 
               {/* Récapitulatif Cote & Gains */}
               <div className="mt-3 space-y-1 border-t border-edge pt-2.5">
-                <div className="flex items-center justify-between text-[12px] text-mist">
+                <div className="flex items-center justify-between text-[10.5px] text-mist">
                   <span>{isCombo ? "Cote totale" : "Cote"}</span>
-                  <span className="font-display font-bold tabular-nums text-betclic-red">
+                  <span className="font-display font-medium tabular-nums text-betclic-red">
                     {formatOdds(quote.totalOdds, oddsFormat)}
                   </span>
                 </div>
                 {quote.boostAmount > 0 && (
-                  <div className="flex items-center justify-between text-[11.5px] font-medium text-win">
+                  <div className="flex items-center justify-between text-[10.5px] font-medium text-win">
                     <span>Bonus Combiné (+{quote.boostPct}%)</span>
-                    <span className="font-display font-bold tabular-nums">
+                    <span className="font-display font-medium tabular-nums">
                       +{eur(quote.boostAmount)}
                     </span>
                   </div>
                 )}
                 <div className="flex items-baseline justify-between pt-0.5">
-                  <span className="text-[13px] font-semibold text-ink">
+                  <span className="text-[11px] font-medium text-ink">
                     Gains possibles
                   </span>
                   <AnimatedNumber
                     value={quote.potentialWin}
                     format={eur}
-                    className="font-display text-[17px] font-extrabold tabular-nums text-win"
+                    className="font-display text-[13.5px] font-medium tabular-nums text-win"
                   />
                 </div>
               </div>
 
               {insufficient && (
-                <div className="mt-2 flex items-center justify-between rounded-lg bg-betclic-red/8 px-2.5 py-1.5 text-[11px] font-medium text-betclic-red">
+                <div className="mt-2 flex items-center justify-between rounded-lg bg-betclic-red/8 px-2.5 py-1.5 text-[10px] font-medium text-betclic-red">
                   <span>Solde insuffisant ({eur(balance)})</span>
                   <button
                     type="button"
                     onClick={openRecharge}
-                    className="font-display font-bold underline"
+                    className="font-display font-medium underline"
                   >
                     Dépôt +
                   </button>
@@ -1069,7 +1069,7 @@ export function DesktopBetslipSidebar() {
               />
 
               {error && (
-                <p className="mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1.5 text-[11px] font-medium text-betclic-red">
+                <p className="mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1.5 text-[10px] font-medium text-betclic-red">
                   {error}
                 </p>
               )}
@@ -1079,7 +1079,7 @@ export function DesktopBetslipSidebar() {
                 disabled={user ? !canSubmit : !authReady || loading}
                 onClick={submit}
                 className={cn(
-                  "mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl font-display text-[13.5px] font-bold text-white transition-all",
+                  "mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl font-display text-[11.5px] font-medium text-white transition-all",
                   (authReady && !user) || canSubmit
                     ? "bg-betclic-red shadow-xs hover:bg-betclic-red-deep active:scale-[0.99]"
                     : "cursor-not-allowed bg-betclic-red/35"

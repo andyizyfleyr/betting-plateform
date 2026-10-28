@@ -180,7 +180,7 @@ export default function PredictionDetailPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>
-    <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -205,7 +205,7 @@ export default function PredictionDetailPage() {
               className="h-3.5 w-3.5 shrink-0 text-betclic-red"
               strokeWidth={2.3}
             />
-            <h1 className="truncate font-display text-[14px] font-extrabold text-ink lg:text-[18px]">
+            <h1 className="truncate font-display text-[11.5px] font-bold text-ink lg:text-[13.5px]">
               {question?.category ?? "Prédiction"}
             </h1>
           </div>
@@ -214,7 +214,7 @@ export default function PredictionDetailPage() {
         {question && (
           <span
             className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+              "shrink-0 rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium",
               question.status === "open"
                 ? "bg-win/12 text-win"
                 : question.status === "resolved"
@@ -237,24 +237,24 @@ export default function PredictionDetailPage() {
         ) : question === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
-            <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
+            <p className="mt-1.5 font-display text-[12px] font-medium text-ink">
               {loadError ? "Connexion interrompue" : "Prédiction introuvable"}
             </p>
-            <p className="mt-0.5 text-[11.5px] text-mist">
+            <p className="mt-0.5 text-[10.5px] text-mist">
               {loadError ?? "Ce marché n'est plus disponible."}
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => void fetchPrediction(true)}
-                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[11.5px] font-bold text-ink"
+                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[10.5px] font-medium text-ink"
               >
                 <RefreshCw className="h-3 w-3" />
                 Réessayer
               </button>
               <Link
                 href="/predictions"
-                className="btn-red rounded-lg px-3.5 py-1.5 text-[11.5px]"
+                className="btn-red rounded-lg px-3.5 py-1.5 text-[10.5px]"
               >
                 Prédictions
               </Link>
@@ -264,7 +264,7 @@ export default function PredictionDetailPage() {
           <div className="space-y-2.5 lg:space-y-4">
             {/* Carte compacte de la question */}
             <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-              <div className="flex items-center justify-end text-[10px] font-semibold tabular-nums text-dim lg:text-[11px]">
+              <div className="flex items-center justify-end text-[9.5px] font-medium tabular-nums text-dim lg:text-[10px]">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {question.status === "resolved" && question.resolvedAt
@@ -273,7 +273,7 @@ export default function PredictionDetailPage() {
                 </span>
               </div>
 
-              <h2 className="mt-1 font-display text-[14.5px] font-extrabold leading-snug text-ink lg:text-[17.5px]">
+              <h2 className="mt-1 font-display text-[12px] font-bold leading-snug text-ink lg:text-[13.5px]">
                 {question.question}
               </h2>
             </section>
@@ -281,11 +281,11 @@ export default function PredictionDetailPage() {
             {/* Issues compactes en une seule ligne chacune */}
             <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+                <h3 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
                   Issues ({sortedOptions.length})
                 </h3>
                 {comboPick && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-display text-[9.5px] font-bold text-white">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-display text-[9.5px] font-medium text-white">
                     <Layers className="h-2.5 w-2.5 text-betclic-red" />
                     Betslip
                   </span>
@@ -333,7 +333,7 @@ export default function PredictionDetailPage() {
                       <div className="relative flex min-w-0 flex-1 items-center gap-1.5">
                         <span
                           className={cn(
-                            "truncate font-display text-[12px] font-bold leading-snug lg:text-[13.5px]",
+                            "truncate font-display text-[10.5px] font-medium leading-snug lg:text-[11.5px]",
                             inCombo ? "text-white" : "text-ink"
                           )}
                         >
@@ -341,14 +341,14 @@ export default function PredictionDetailPage() {
                         </span>
                         <span
                           className={cn(
-                            "shrink-0 text-[10.5px] font-semibold tabular-nums",
+                            "shrink-0 text-[10px] font-medium tabular-nums",
                             inCombo ? "text-white/75" : "text-dim"
                           )}
                         >
                           {opt.sharePct}%
                         </span>
                         {isWinner && (
-                          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-win px-1.5 py-0.5 font-display text-[9px] font-bold text-white">
+                          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-win px-1.5 py-0.5 font-display text-[9px] font-medium text-white">
                             <Check className="h-2.5 w-2.5" strokeWidth={3} />
                             Gagnant
                           </span>
@@ -361,7 +361,7 @@ export default function PredictionDetailPage() {
                         ) : (
                           <span
                             className={cn(
-                              "inline-flex min-w-[48px] justify-center rounded-md px-2 py-1 font-display text-[12px] font-extrabold tabular-nums lg:min-w-[54px] lg:rounded-lg lg:text-[13px]",
+                              "inline-flex min-w-[48px] justify-center rounded-md px-2 py-1 font-display text-[10.5px] font-medium tabular-nums lg:min-w-[54px] lg:rounded-lg lg:text-[11px]",
                               inCombo
                                 ? "bg-betclic-red text-white"
                                 : "bg-white text-ink shadow-2xs"

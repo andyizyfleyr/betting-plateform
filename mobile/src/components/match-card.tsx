@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 16,
+    padding: 12,
     justifyContent: "space-between",
     shadowColor: "#111827",
     shadowOpacity: 0.03,
@@ -514,8 +514,8 @@ const styles = StyleSheet.create({
   },
   leagueText: {
     flexShrink: 1,
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   headerRight: {
@@ -540,8 +540,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   liveText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -555,8 +555,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
   },
   suspendedText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "#b45309",
   },
   finishedPill: {
@@ -569,8 +569,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
   },
   finishedText: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   kickoffPill: {
@@ -580,8 +580,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
   },
   kickoffText: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   nextUpPill: {
@@ -591,8 +591,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
   },
   nextUpText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   marketCountPill: {
@@ -605,8 +605,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
   },
   marketCountText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -621,8 +621,8 @@ const styles = StyleSheet.create({
   },
   teamName: {
     flex: 1,
-    fontSize: 14.5,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
     lineHeight: 19,
   },
   redCardsRow: {
@@ -651,8 +651,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   scoreText: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
   oddsWrap: {
@@ -691,12 +691,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.ink,
   },
   oddsTag: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
   },
   oddsVal: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
 });

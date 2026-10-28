@@ -203,7 +203,7 @@ export default function DepositScreen() {
             <Text style={styles.doneTitle}>Demande enregistrée</Text>
             <Text style={styles.doneSub}>
               Votre dépôt de{" "}
-              <Text style={{ fontWeight: "700", color: COLORS.ink }}>
+              <Text style={{ fontWeight: "500", color: COLORS.ink }}>
                 {eur(amount)}
               </Text>{" "}
               ({method === "mobile_money" ? "Mobile Money" : "Virement SEPA"})
@@ -403,12 +403,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 28,
   },
   guestWrap: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 16,
   },
   headerRow: {
@@ -436,8 +436,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   historyPill: {
@@ -450,8 +450,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   historyPillText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   card: {
@@ -462,8 +462,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   fieldCaps: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     letterSpacing: 0.5,
     color: COLORS.mist,
   },
@@ -481,15 +481,15 @@ const styles = StyleSheet.create({
   },
   amountInput: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 13.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
     paddingVertical: 0,
   },
   euroSymbol: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   quickGrid: {
@@ -509,8 +509,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   quickChipText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -537,8 +537,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(225,0,20,0.08)",
   },
   methodLabel: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   methodSub: {
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
     backgroundColor: "rgba(241,243,245,0.65)",
     paddingHorizontal: 12,
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.ink,
   },
@@ -565,8 +565,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   errorText: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   submitBtn: {
@@ -585,8 +585,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   submitBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   doneCircle: {
@@ -599,13 +599,13 @@ const styles = StyleSheet.create({
   },
   doneTitle: {
     marginTop: 10,
-    fontSize: 15.5,
-    fontWeight: "800",
+    fontSize: 12.5,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   doneSub: {
     marginTop: 4,
-    fontSize: 11.5,
+    fontSize: 10.5,
     lineHeight: 17,
     color: COLORS.mist,
     textAlign: "center",
@@ -622,8 +622,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   grayBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   redBtn: {
@@ -633,12 +633,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   redBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   guestTitle: {
-    fontSize: 14.5,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.ink,
     textAlign: "center",

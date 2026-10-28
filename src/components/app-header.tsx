@@ -62,18 +62,18 @@ export function AppHeader() {
     return (
       <header className="pt-safe sticky top-0 z-30 border-b border-edge bg-white/95 backdrop-blur-md">
         {/* Barre mobile (< lg) */}
-        <div className="flex h-[52px] items-center justify-between px-4 lg:hidden">
-          <Link href="/admin" className="flex items-center gap-2 active:opacity-80">
+        <div className="flex h-[48px] items-center justify-between px-2 lg:hidden">
+          <Link href="/admin" className="flex items-center gap-1.5 active:opacity-80">
             <PulseLogo size="sm" variant="light" />
-            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-betclic-red">
-              <ShieldCheck className="h-3 w-3" strokeWidth={2.4} />
+            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wide text-betclic-red">
+              <ShieldCheck className="h-3 w-3" strokeWidth={2.2} />
               Admin
             </span>
           </Link>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {user?.name && (
-              <span className="max-w-[110px] truncate text-[12px] font-semibold text-mist">
+              <span className="max-w-[110px] truncate text-[11px] font-normal text-mist">
                 {user.name}
               </span>
             )}
@@ -82,7 +82,7 @@ export function AppHeader() {
               onClick={handleAdminLogout}
               disabled={loggingOut}
               aria-label="Se déconnecter"
-              className="flex h-8.5 items-center gap-1.5 rounded-full border border-edge bg-elev px-3 font-display text-[12px] font-semibold text-ink transition-colors active:bg-edge/70 disabled:opacity-60"
+              className="flex h-8 items-center gap-1.5 rounded-full border border-edge bg-elev px-2.5 font-display text-[11px] font-medium text-ink transition-colors active:bg-edge/70 disabled:opacity-60"
             >
               {loggingOut ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-dim" strokeWidth={2.3} />
@@ -95,20 +95,20 @@ export function AppHeader() {
         </div>
 
         {/* Barre desktop (lg+) */}
-        <div className="hidden h-[60px] items-center justify-between px-8 lg:flex">
+        <div className="hidden h-[52px] items-center justify-between px-3.5 lg:flex">
           <div className="min-w-0">
-            <p className="truncate font-display text-[16px] font-bold tracking-tight text-ink">
+            <h1 className="truncate font-display text-[14.5px] font-bold tracking-tight text-ink">
               {ADMIN_TAB_TITLES[adminTab] ?? "Administration"}
-            </p>
-            <p className="truncate text-[11.5px] text-mist">
+            </h1>
+            <p className="truncate text-[10.5px] text-mist">
               Synchronisation temps réel · Espace strictement réservé à l&apos;administrateur
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {user?.name && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-elev px-3 py-1 text-[12px] font-semibold text-ink">
-                <ShieldCheck className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-elev px-2.5 py-1 text-[11px] font-medium text-ink">
+                <ShieldCheck className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
                 {user.name}
               </span>
             )}
@@ -116,7 +116,7 @@ export function AppHeader() {
               type="button"
               onClick={handleAdminLogout}
               disabled={loggingOut}
-              className="flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[12px] font-semibold text-ink transition-colors hover:bg-elev disabled:opacity-60"
+              className="flex h-8.5 items-center gap-1.5 rounded-full border border-edge bg-white px-3 font-display text-[11px] font-medium text-ink transition-colors hover:bg-elev disabled:opacity-60"
             >
               {loggingOut ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-dim" strokeWidth={2.3} />
@@ -150,49 +150,49 @@ export function AppHeader() {
   return (
     <header className="pt-safe sticky top-0 z-30 border-b border-edge bg-white/95 backdrop-blur-md lg:border-b-0 lg:bg-betclic-red lg:shadow-xs lg:backdrop-blur-none">
       {/* Barre mobile (< lg) : Logo -> /matchs + Solde */}
-      <div className="flex h-[52px] items-center justify-between px-4 lg:hidden">
+      <div className="flex h-[48px] items-center justify-between px-2 lg:hidden">
         <Link
           href="/matchs"
           onClick={() => {
             setSportStatusFilter("all");
             setSportLeagueFilter("all");
           }}
-          className="flex items-center gap-2 active:opacity-80"
+          className="flex items-center gap-1.5 active:opacity-80"
         >
           <PulseLogo size="sm" variant="light" />
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {user ? (
             <button
               type="button"
               onClick={openRecharge}
               aria-label="Solde et rechargement"
-              className="flex h-9 items-center gap-2 rounded-full border border-edge bg-elev pl-3 pr-1.5 transition-transform active:scale-[0.98]"
+              className="flex h-[33px] items-center gap-1.5 rounded-full border border-edge bg-elev pl-2.5 pr-1 transition-transform active:scale-[0.98]"
             >
               <AnimatedNumber
                 value={balance}
                 format={eur}
-                className="font-display text-[13px] font-bold tabular-nums text-ink"
+                className="font-display text-[12px] font-medium tabular-nums text-ink"
               />
-              <span className="grid h-6 w-6 place-items-center rounded-full bg-betclic-red text-white">
-                <Plus className="h-3.5 w-3.5" strokeWidth={2.8} />
+              <span className="grid h-[22px] w-[22px] place-items-center rounded-full bg-betclic-red text-white">
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
               </span>
             </button>
           ) : !authReady ? (
             <div
               aria-hidden="true"
-              className="flex h-9 w-[108px] items-center justify-between rounded-full border border-edge bg-elev pl-3 pr-1.5"
+              className="flex h-[33px] w-[98px] items-center justify-between rounded-full border border-edge bg-elev pl-2.5 pr-1"
             >
-              <span className="h-3 w-14 animate-pulse rounded-full bg-ink/15" />
-              <span className="grid h-6 w-6 place-items-center rounded-full bg-betclic-red text-white">
-                <Plus className="h-3.5 w-3.5" strokeWidth={2.8} />
+              <span className="h-2.5 w-12 animate-pulse rounded-full bg-ink/15" />
+              <span className="grid h-[22px] w-[22px] place-items-center rounded-full bg-betclic-red text-white">
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
               </span>
             </div>
           ) : (
             <Link
               href="/auth/connexion"
-              className="flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[12.5px] font-bold text-white active:opacity-90"
+              className="flex h-[33px] items-center rounded-full bg-betclic-red px-3 font-display text-[11.5px] font-medium text-white active:opacity-90"
             >
               Connexion
             </Link>
@@ -201,9 +201,9 @@ export function AppHeader() {
       </div>
 
       {/* Barre de navigation supérieure desktop pleine largeur (lg+) */}
-      <div className="mx-auto hidden h-[58px] w-full max-w-[1480px] items-center justify-between gap-6 px-5 lg:flex">
+      <div className="mx-auto hidden h-[52px] w-full max-w-[1680px] items-center justify-between gap-4 px-2.5 lg:flex">
         {/* Marque Pulse Bet + Navigation horizontale */}
-        <div className="flex min-w-0 items-center gap-7">
+        <div className="flex min-w-0 items-center gap-5">
           <Link
             href="/matchs"
             onClick={() => {
@@ -215,12 +215,12 @@ export function AppHeader() {
             <PulseLogo size="lg" variant="onRed" />
           </Link>
 
-          <nav aria-label="Navigation principale" className="flex items-center gap-1.5">
+          <nav aria-label="Navigation principale" className="flex items-center gap-1">
             <Link
               href="/matchs"
               onClick={() => setSportStatusFilter("all")}
               className={cn(
-                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                "relative inline-flex h-8.5 items-center rounded-full px-3 font-display text-[12px] font-medium transition-colors",
                 isSportActive
                   ? "bg-white/18 text-white"
                   : "text-white/88 hover:bg-white/10 hover:text-white"
@@ -236,7 +236,7 @@ export function AppHeader() {
                 setSportLeagueFilter("all");
               }}
               className={cn(
-                "relative inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                "relative inline-flex h-8.5 items-center gap-1.5 rounded-full px-3 font-display text-[12px] font-medium transition-colors",
                 isLiveActive
                   ? "bg-white/18 text-white"
                   : "text-white/88 hover:bg-white/10 hover:text-white"
@@ -249,7 +249,7 @@ export function AppHeader() {
             <Link
               href="/predictions"
               className={cn(
-                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                "relative inline-flex h-8.5 items-center rounded-full px-3 font-display text-[12px] font-medium transition-colors",
                 isPredictionsActive
                   ? "bg-white/18 text-white"
                   : "text-white/88 hover:bg-white/10 hover:text-white"
@@ -261,7 +261,7 @@ export function AppHeader() {
             <Link
               href="/paris"
               className={cn(
-                "relative inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                "relative inline-flex h-8.5 items-center gap-1.5 rounded-full px-3 font-display text-[12px] font-medium transition-colors",
                 isParisActive
                   ? "bg-white/18 text-white"
                   : "text-white/88 hover:bg-white/10 hover:text-white"
@@ -269,7 +269,7 @@ export function AppHeader() {
             >
               <span>Mes paris</span>
               {pendingCount > 0 && (
-                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 font-display text-[10.5px] font-extrabold tabular-nums text-white">
+                <span className="grid h-4.5 min-w-4.5 place-items-center rounded-full bg-ink px-1.5 font-display text-[9.5px] font-medium tabular-nums text-white">
                   {pendingCount}
                 </span>
               )}
@@ -278,7 +278,7 @@ export function AppHeader() {
             <Link
               href="/resultats"
               className={cn(
-                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                "relative inline-flex h-8.5 items-center rounded-full px-3 font-display text-[12px] font-medium transition-colors",
                 isResultatsActive
                   ? "bg-white/18 text-white"
                   : "text-white/88 hover:bg-white/10 hover:text-white"
@@ -290,7 +290,7 @@ export function AppHeader() {
             <Link
               href="/jeux"
               className={cn(
-                "relative inline-flex h-9 items-center rounded-full px-3.5 font-display text-[13.5px] font-bold transition-colors",
+                "relative inline-flex h-8.5 items-center rounded-full px-3 font-display text-[12px] font-medium transition-colors",
                 isJeuxActive
                   ? "bg-white/18 text-white"
                   : "text-white/88 hover:bg-white/10 hover:text-white"
@@ -302,22 +302,22 @@ export function AppHeader() {
         </div>
 
         {/* Actions utilisateur à droite */}
-        <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex shrink-0 items-center gap-2">
           {user ? (
             <>
               <button
                 type="button"
                 onClick={openRecharge}
                 aria-label="Solde et dépôt"
-                className="flex h-9.5 items-center gap-2.5 rounded-full bg-white pl-3.5 pr-1.5 text-ink shadow-xs transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                className="flex h-8.5 items-center gap-2 rounded-full bg-white pl-3 pr-1 text-ink shadow-xs transition-transform hover:scale-[1.01] active:scale-[0.99]"
               >
                 <AnimatedNumber
                   value={balance}
                   format={eur}
-                  className="font-display text-[13.5px] font-bold tabular-nums text-ink"
+                  className="font-display text-[12px] font-medium tabular-nums text-ink"
                 />
-                <span className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red px-2.5 font-display text-[11px] font-bold text-white">
-                  <Plus className="h-3 w-3" strokeWidth={2.8} />
+                <span className="inline-flex h-6.5 items-center gap-1 rounded-full bg-betclic-red px-2 font-display text-[10.5px] font-medium text-white">
+                  <Plus className="h-3 w-3" strokeWidth={2.6} />
                   Dépôt
                 </span>
               </button>
@@ -325,43 +325,43 @@ export function AppHeader() {
               <Link
                 href="/parametres"
                 className={cn(
-                  "inline-flex h-9.5 items-center gap-2 rounded-full border px-3 font-display text-[12.5px] font-bold text-white transition-colors",
+                  "inline-flex h-8.5 items-center gap-1.5 rounded-full border px-2.5 font-display text-[11.5px] font-medium text-white transition-colors",
                   isCompteActive
                     ? "border-white bg-white/20"
                     : "border-white/40 bg-white/10 hover:bg-white/18"
                 )}
               >
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-white/20 font-display text-[10.5px] font-extrabold text-white">
-                  {user.name ? initials(user.name) : <User className="h-3.5 w-3.5" />}
+                <span className="grid h-5.5 w-5.5 place-items-center rounded-full bg-white/20 font-display text-[9.5px] font-medium text-white">
+                  {user.name ? initials(user.name) : <User className="h-3 w-3" />}
                 </span>
-                <span className="max-w-[110px] truncate">{user.name || "Compte"}</span>
+                <span className="max-w-[104px] truncate">{user.name || "Compte"}</span>
               </Link>
             </>
           ) : !authReady ? (
-            <div className="flex items-center gap-2.5" aria-hidden="true">
-              <div className="flex h-9.5 w-[170px] items-center justify-between rounded-full bg-white pl-3.5 pr-1.5 shadow-xs">
-                <span className="h-3.5 w-16 animate-pulse rounded-full bg-ink/15" />
-                <span className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red px-2.5 font-display text-[11px] font-bold text-white">
-                  <Plus className="h-3 w-3" strokeWidth={2.8} />
+            <div className="flex items-center gap-2" aria-hidden="true">
+              <div className="flex h-8.5 w-[152px] items-center justify-between rounded-full bg-white pl-3 pr-1 shadow-xs">
+                <span className="h-3 w-14 animate-pulse rounded-full bg-ink/15" />
+                <span className="inline-flex h-6.5 items-center gap-1 rounded-full bg-betclic-red px-2 font-display text-[10.5px] font-medium text-white">
+                  <Plus className="h-3 w-3" strokeWidth={2.6} />
                   Dépôt
                 </span>
               </div>
-              <div className="inline-flex h-9.5 w-[112px] items-center gap-2 rounded-full border border-white/40 bg-white/10 px-3">
-                <span className="h-6 w-6 animate-pulse rounded-full bg-white/25" />
-                <span className="h-3 w-12 animate-pulse rounded-full bg-white/25" />
+              <div className="inline-flex h-8.5 w-[104px] items-center gap-1.5 rounded-full border border-white/40 bg-white/10 px-2.5">
+                <span className="h-5.5 w-5.5 animate-pulse rounded-full bg-white/25" />
+                <span className="h-2.5 w-11 animate-pulse rounded-full bg-white/25" />
               </div>
             </div>
           ) : (
             <>
               <Link
                 href="/auth/inscription"
-                className="inline-flex h-9 items-center rounded-full bg-white px-4 font-display text-[13px] font-bold text-ink shadow-xs transition-opacity hover:opacity-95"
+                className="inline-flex h-8.5 items-center rounded-full bg-white px-3.5 font-display text-[11.5px] font-medium text-ink shadow-xs transition-opacity hover:opacity-95"
               >
                 Inscription
               </Link>
               <Link
                 href="/auth/connexion"
-                className="inline-flex h-9 items-center rounded-full border border-white/55 bg-white/10 px-4 font-display text-[13px] font-bold text-white transition-colors hover:bg-white/18"
+                className="inline-flex h-8.5 items-center rounded-full border border-white/55 bg-white/10 px-3.5 font-display text-[11.5px] font-medium text-white transition-colors hover:bg-white/18"
               >
                 Connexion
               </Link>
@@ -381,7 +381,7 @@ function DesktopLiveCountBadge() {
   );
   if (liveMatchesCount <= 0) return null;
   return (
-    <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1.5 font-display text-[10.5px] font-extrabold tabular-nums text-white">
+    <span className="grid h-4.5 min-w-4.5 place-items-center rounded-full bg-ink px-1.5 font-display text-[9.5px] font-medium tabular-nums text-white">
       {liveMatchesCount}
     </span>
   );

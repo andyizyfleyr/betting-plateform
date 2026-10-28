@@ -47,7 +47,7 @@ export function OddsLockControls({
       )}
     >
       {/* Bandeau permanent uniquement sur desktop (lg+) pour ne jamais encombrer le mobile */}
-      <div className="hidden flex-wrap items-center justify-between gap-2 rounded-xl bg-elev/80 px-2.5 py-1.5 text-[11px] lg:flex">
+      <div className="hidden flex-wrap items-center justify-between gap-2 rounded-xl bg-elev/80 px-2.5 py-1.5 text-[10px] lg:flex">
         <div className="flex items-center gap-1.5 text-mist">
           <span
             className={cn(
@@ -81,7 +81,7 @@ export function OddsLockControls({
       {oddsChanged && (
         <div
           className={cn(
-            "flex items-start gap-2 rounded-xl border px-3 py-2.5 text-[12px]",
+            "flex items-start gap-2 rounded-xl border px-3 py-2.5 text-[10.5px]",
             oddsChanged.direction === "up"
               ? "border-emerald-500/35 bg-emerald-500/10 text-ink"
               : "border-amber-500/40 bg-amber-500/10 text-ink"
@@ -93,7 +93,7 @@ export function OddsLockControls({
             <ArrowDownRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           )}
           <div className="min-w-0 flex-1 leading-snug">
-            <p className="font-semibold">
+            <p className="font-medium">
               {oddsChanged.direction === "up"
                 ? "La cote a augmenté"
                 : "La cote a évolué"}{" "}
@@ -102,15 +102,15 @@ export function OddsLockControls({
                 {formatOdds(oddsChanged.previousOdds, oddsFormat)}
               </span>{" "}
               →{" "}
-              <span className="font-bold tabular-nums text-betclic-red">
+              <span className="font-medium tabular-nums text-betclic-red">
                 {formatOdds(oddsChanged.currentOdds, oddsFormat)}
               </span>
             </p>
-            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-mist">
+            <p className="mt-0.5 flex items-center gap-1 text-[10px] text-mist">
               <RefreshCw className="h-3 w-3 shrink-0" />
               Aucun montant débité — confirmez la nouvelle cote.
             </p>
-            <label className="mt-1.5 flex cursor-pointer select-none items-center gap-1.5 text-[11px] font-semibold text-ink/85 lg:hidden">
+            <label className="mt-1.5 flex cursor-pointer select-none items-center gap-1.5 text-[10px] font-medium text-ink/85 lg:hidden">
               <input
                 type="checkbox"
                 checked={acceptHigher}

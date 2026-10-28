@@ -308,12 +308,14 @@ export async function requestJson<T>(
         headers["If-None-Match"] = cachedEtag.etag;
       }
 
+      // Important React Native (`whatwg-fetch`) : ne jamais passer `cache: "no-store"` ou `"no-cache"`
+      // sur `GET`, car `whatwg-fetch` réécrit l'URL en ajoutant `?_=<timestamp>`, ce qui casse le cache
+      // CDN Edge partagé et déclenchait un rejet `400` sur les routes publiques canoniques.
       const sentAtMs = Date.now();
       const res = await Promise.race([
         fetch(url, {
           method,
           headers,
-          cache: isGet ? "no-store" : undefined,
           signal: abortController?.signal,
           body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
         }),

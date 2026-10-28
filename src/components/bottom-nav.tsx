@@ -81,7 +81,7 @@ export function BottomNav() {
                 {badgeCount > 0 && (
                   <span
                     className={cn(
-                      "absolute -right-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 font-display text-[9.5px] font-bold leading-none text-white",
+                      "absolute -right-2.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 font-display text-[9.5px] font-medium leading-none text-white",
                       href === "/betslip" ? "bg-betclic-red" : "bg-ink"
                     )}
                   >
@@ -91,8 +91,8 @@ export function BottomNav() {
               </span>
               <span
                 className={cn(
-                  "max-w-full truncate font-display text-[10px] leading-none",
-                  active ? "font-bold text-betclic-red" : "font-medium text-dim"
+                  "max-w-full truncate font-display text-[9.5px] leading-none",
+                  active ? "font-medium text-betclic-red" : "font-medium text-dim"
                 )}
               >
                 {label}

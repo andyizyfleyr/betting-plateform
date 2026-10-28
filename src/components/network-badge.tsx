@@ -28,7 +28,7 @@ export function NetworkBadge() {
   return (
     <span
       title="Qualité de la connexion"
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 whitespace-nowrap"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-slate-200 whitespace-nowrap"
     >
       <span
         style={{
@@ -59,7 +59,7 @@ export function OfflineBanner() {
         transform: "translateX(-50%)",
         zIndex: 3000,
       }}
-      className="flex w-[92%] max-w-[400px] items-center justify-center gap-2 rounded-xl border border-red-500/40 bg-red-950/90 px-3.5 py-2 text-center text-[12px] font-semibold text-red-200 shadow-lg backdrop-blur-md"
+      className="flex w-[92%] max-w-[400px] items-center justify-center gap-2 rounded-xl border border-red-500/40 bg-red-950/90 px-3.5 py-2 text-center text-[10.5px] font-medium text-red-200 shadow-lg backdrop-blur-md"
     >
       <WifiOff className="h-4 w-4 shrink-0" strokeWidth={2.3} />
       <span>Connexion perdue — reconnexion automatique en cours…</span>

@@ -287,7 +287,7 @@ export default function ParametresScreen() {
                   wallet.summary.withdrawable < user.balance ? (
                     <Text style={styles.withdrawableNote}>
                       Retirable :{" "}
-                      <Text style={{ fontWeight: "700", color: COLORS.win }}>
+                      <Text style={{ fontWeight: "500", color: COLORS.win }}>
                         {eur(wallet.summary.withdrawable)}
                       </Text>
                       {wallet.summary.bonusRemaining != null &&
@@ -581,7 +581,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 32,
   },
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pageTitle: {
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
@@ -607,12 +607,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   profileName: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   profileEmail: {
-    fontSize: 10.5,
+    fontSize: 10,
     color: COLORS.dim,
   },
   avatarBox: {
@@ -623,8 +623,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarInitials: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   tabSwitch: {
@@ -650,8 +650,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   tabBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   sectionStack: {
@@ -677,20 +677,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   walletLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
   walletAmount: {
     marginTop: 2,
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   withdrawableNote: {
     marginTop: 4,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.mist,
   },
@@ -705,8 +705,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   pendingWdText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "#92400e",
   },
   pendingDepPill: {
@@ -716,8 +716,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   pendingDepText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "#075985",
   },
   walletBtnsGrid: {
@@ -736,8 +736,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   depositBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   withdrawBtn: {
@@ -753,8 +753,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   withdrawBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   listCard: {
@@ -780,13 +780,13 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.edge,
   },
   pendingRowTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "700",
     color: COLORS.ink,
   },
   pendingRowSub: {
     marginTop: 2,
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.dim,
   },
   cancelBtn: {
@@ -801,8 +801,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cancelBtnText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   navRowCard: {
@@ -832,13 +832,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   navRowTitle: {
-    fontSize: 13.5,
+    fontSize: 11.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   navRowSub: {
     marginTop: 1,
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: COLORS.dim,
   },
   prefRow: {
@@ -856,8 +856,8 @@ const styles = StyleSheet.create({
   },
   prefLabel: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   oddsFmtSwitch: {
@@ -875,24 +875,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   oddsFmtText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   logoutText: {
-    fontSize: 13.5,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   footerDisclaimer: {
     marginTop: 24,
     textAlign: "center",
-    fontSize: 10.5,
+    fontSize: 10,
     color: COLORS.dim,
     lineHeight: 16,
   },
   guestWrap: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     justifyContent: "center",
   },
   guestCard: {
@@ -913,14 +913,14 @@ const styles = StyleSheet.create({
   },
   guestTitle: {
     marginTop: 12,
-    fontSize: 16,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
     textAlign: "center",
   },
   guestSub: {
     marginTop: 6,
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     textAlign: "center",
     lineHeight: 18,
@@ -936,8 +936,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   guestBtnText: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
 });

@@ -142,9 +142,9 @@ function StrengthBar({ score, label }: { score: number; label: string }) {
 
   return (
     <div className="mt-2 space-y-1.5 px-0.5">
-      <div className="flex items-center justify-between text-[11px]">
+      <div className="flex items-center justify-between text-[10px]">
         <span className="font-medium text-dim">Sécurité du mot de passe</span>
-        <span className={cn("font-display font-bold", toneText)}>{label}</span>
+        <span className={cn("font-display font-medium", toneText)}>{label}</span>
       </div>
       <div className="grid grid-cols-4 gap-1.5">
         {[1, 2, 3, 4].map((idx) => (
@@ -165,7 +165,7 @@ function RuleChip({ ok, text }: { ok: boolean; text: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors",
         ok ? "bg-win/10 text-win" : "bg-elev text-dim"
       )}
     >
@@ -436,7 +436,7 @@ function AuthShellInner({
   return (
     <div className="flex min-h-dvh w-full flex-1 flex-col bg-deep lg:grid lg:grid-cols-[minmax(420px,45%)_1fr] xl:grid-cols-[minmax(480px,44%)_1fr]">
       {/* ─── Panneau éditorial gauche (Desktop lg+) ─── */}
-      <aside className="relative hidden overflow-hidden bg-[#090D16] text-white lg:flex lg:flex-col lg:justify-between lg:p-10 xl:p-12">
+      <aside className="relative hidden overflow-hidden bg-[#090D16] text-white lg:flex lg:flex-col lg:justify-between lg:p-6 xl:p-8">
         {/* Halos subtils rouge Pulse Bet + trame architecturale */}
         <div
           aria-hidden="true"
@@ -468,7 +468,7 @@ function AuthShellInner({
               subtitle="Paris sportifs & Prédictions"
             />
           </Link>
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-1 font-display text-[11px] font-bold tracking-wide text-white/90">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-1 font-display text-[10px] font-medium tracking-wide text-white/90">
             <span className="live-dot h-2 w-2 rounded-full bg-betclic-red" />
             Live 24h/24
           </span>
@@ -476,13 +476,13 @@ function AuthShellInner({
 
         {/* Bloc éditorial central */}
         <div className="relative z-10 my-auto py-8">
-          <p className="font-display text-[11px] font-extrabold uppercase tracking-[0.14em] text-betclic-red">
+          <p className="font-display text-[10px] font-medium uppercase tracking-[0.14em] text-betclic-red">
             {editorial.kicker}
           </p>
-          <h2 className="mt-2.5 max-w-[440px] font-display text-[32px] font-extrabold leading-[1.12] tracking-tight text-white xl:text-[36px]">
+          <h2 className="mt-2.5 max-w-[440px] font-display text-[19px] font-bold leading-[1.12] tracking-tight text-white xl:text-[21px]">
             {editorial.title}
           </h2>
-          <p className="mt-3 max-w-[430px] text-[14px] leading-relaxed text-slate-300/90">
+          <p className="mt-3 max-w-[430px] text-[11.5px] leading-relaxed text-slate-300/90">
             {editorial.subtitle}
           </p>
 
@@ -496,10 +496,10 @@ function AuthShellInner({
                   <Icon className="h-4.5 w-4.5" strokeWidth={2.2} />
                 </span>
                 <div className="min-w-0">
-                  <p className="font-display text-[13.5px] font-bold text-white">
+                  <p className="font-display text-[11.5px] font-medium text-white">
                     {title}
                   </p>
-                  <p className="mt-0.5 text-[12px] leading-snug text-slate-400">
+                  <p className="mt-0.5 text-[10.5px] leading-snug text-slate-400">
                     {desc}
                   </p>
                 </div>
@@ -510,20 +510,20 @@ function AuthShellInner({
 
         {/* Bandeau réglementaire bas */}
         <div className="relative z-10 flex items-center gap-3 border-t border-white/10 pt-5">
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/8 font-display text-[11px] font-black text-white">
+          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/8 font-display text-[10px] font-medium text-white">
             18+
           </span>
-          <p className="text-[11.5px] leading-relaxed text-slate-400">
+          <p className="text-[10.5px] leading-relaxed text-slate-400">
             Jouer comporte des risques : endettement, isolement, dépendance. Pour
             être aidé, appelez le{" "}
-            <span className="font-semibold text-white">09 74 75 13 13</span>{" "}
+            <span className="font-medium text-white">09 74 75 13 13</span>{" "}
             (appel non surtaxé).
           </p>
         </div>
       </aside>
 
       {/* ─── Colonne formulaire (Mobile < lg 1:1 Android & Desktop droite) ─── */}
-      <main className="pt-safe pb-safe flex min-h-dvh w-full flex-col justify-between px-4 py-4 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
+      <main className="pt-safe pb-safe flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6">
         {/* Barre haute navigation */}
         <header className="flex items-center justify-between gap-3">
           <Link
@@ -536,7 +536,7 @@ function AuthShellInner({
           {resolvedView === "forgot" ? (
             <Link
               href={loginHref}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[12.5px] font-bold text-ink shadow-2xs transition-colors hover:bg-elev active:scale-[0.99]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[11px] font-medium text-ink shadow-2xs transition-colors hover:bg-elev active:scale-[0.99]"
             >
               <ArrowLeft className="h-3.5 w-3.5 text-mist" strokeWidth={2.4} />
               <span>Connexion</span>
@@ -544,7 +544,7 @@ function AuthShellInner({
           ) : (
             <Link
               href="/matchs"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[12.5px] font-bold text-ink shadow-2xs transition-colors hover:bg-elev active:scale-[0.99]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[11px] font-medium text-ink shadow-2xs transition-colors hover:bg-elev active:scale-[0.99]"
             >
               <ArrowLeft className="h-3.5 w-3.5 text-mist" strokeWidth={2.4} />
               <span className="lg:hidden">Matchs</span>
@@ -555,7 +555,7 @@ function AuthShellInner({
 
         {/* Carte centrale d'authentification */}
         <div className="my-auto py-4 lg:py-6">
-          <div className="mx-auto w-full rounded-3xl border border-edge bg-white p-5 shadow-[0_2px_12px_rgba(17,24,39,0.04)] sm:p-6 lg:max-w-[468px] lg:p-8 lg:shadow-[0_16px_44px_-16px_rgba(17,24,39,0.09)]">
+          <div className="mx-auto w-full rounded-3xl border border-edge bg-white p-3.5 shadow-[0_2px_12px_rgba(17,24,39,0.04)] sm:p-5 lg:max-w-[468px] lg:p-6 lg:shadow-[0_16px_44px_-16px_rgba(17,24,39,0.09)]">
             {resolvedView !== "forgot" ? (
               <>
                 {/* Sélecteur de page dédiée Connexion / Inscription */}
@@ -568,10 +568,10 @@ function AuthShellInner({
                     replace
                     aria-current={resolvedView === "login" ? "page" : undefined}
                     className={cn(
-                      "flex h-10 items-center justify-center rounded-xl font-display text-[13px] transition-all",
+                      "flex h-10 items-center justify-center rounded-xl font-display text-[11px] transition-all",
                       resolvedView === "login"
-                        ? "bg-white font-bold text-ink shadow-xs"
-                        : "font-semibold text-mist hover:text-ink"
+                        ? "bg-white font-medium text-ink shadow-xs"
+                        : "font-medium text-mist hover:text-ink"
                     )}
                   >
                     Connexion
@@ -581,10 +581,10 @@ function AuthShellInner({
                     replace
                     aria-current={resolvedView === "register" ? "page" : undefined}
                     className={cn(
-                      "flex h-10 items-center justify-center rounded-xl font-display text-[13px] transition-all",
+                      "flex h-10 items-center justify-center rounded-xl font-display text-[11px] transition-all",
                       resolvedView === "register"
-                        ? "bg-white font-bold text-ink shadow-xs"
-                        : "font-semibold text-mist hover:text-ink"
+                        ? "bg-white font-medium text-ink shadow-xs"
+                        : "font-medium text-mist hover:text-ink"
                     )}
                   >
                     Inscription
@@ -592,12 +592,12 @@ function AuthShellInner({
                 </nav>
 
                 <div className="mt-5">
-                  <h1 className="font-display text-[22px] font-extrabold leading-tight tracking-tight text-ink sm:text-[24px]">
+                  <h1 className="font-display text-[16px] font-bold leading-tight tracking-tight text-ink sm:text-[16px]">
                     {resolvedView === "login"
                       ? "Connexion à votre compte"
                       : "Créer un compte joueur"}
                   </h1>
-                  <p className="mt-1 text-[13px] leading-relaxed text-mist">
+                  <p className="mt-1 text-[11px] leading-relaxed text-mist">
                     {resolvedView === "login"
                       ? "Accédez à vos paris en direct, vos prédictions et votre portefeuille."
                       : "Inscription gratuite pour parier sur les matchs officiels et virtuels."}
@@ -611,16 +611,16 @@ function AuthShellInner({
                   <span className="grid h-10 w-10 place-items-center rounded-2xl bg-betclic-red/10 text-betclic-red">
                     <KeyRound className="h-5 w-5" strokeWidth={2.2} />
                   </span>
-                  <span className="rounded-full bg-elev px-2.5 py-1 font-display text-[11px] font-bold text-mist">
+                  <span className="rounded-full bg-elev px-2.5 py-1 font-display text-[10px] font-medium text-mist">
                     {forgotStep === "request" ? "Étape 1 sur 2" : "Étape 2 sur 2"}
                   </span>
                 </div>
-                <h1 className="mt-4 font-display text-[22px] font-extrabold leading-tight tracking-tight text-ink sm:text-[24px]">
+                <h1 className="mt-4 font-display text-[16px] font-bold leading-tight tracking-tight text-ink sm:text-[16px]">
                   {forgotStep === "request"
                     ? "Mot de passe oublié"
                     : "Vérification de sécurité"}
                 </h1>
-                <p className="mt-1 text-[13px] leading-relaxed text-mist">
+                <p className="mt-1 text-[11px] leading-relaxed text-mist">
                   {forgotStep === "request"
                     ? "Saisissez l'adresse e-mail de votre compte pour recevoir un code à 6 chiffres."
                     : "Entrez le code à 6 chiffres reçu puis définissez votre nouveau mot de passe."}
@@ -638,7 +638,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="login-email"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Adresse e-mail
                   </label>
@@ -656,7 +656,7 @@ function AuthShellInner({
                       autoComplete="email"
                       placeholder="vous@exemple.com"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                   </div>
                 </div>
@@ -665,13 +665,13 @@ function AuthShellInner({
                   <div className="flex items-center justify-between gap-2">
                     <label
                       htmlFor="login-password"
-                      className="text-[12px] font-semibold text-ink"
+                      className="text-[10.5px] font-medium text-ink"
                     >
                       Mot de passe
                     </label>
                     <Link
                       href={forgotHref}
-                      className="font-display text-[12px] font-bold text-betclic-red transition-opacity hover:opacity-80"
+                      className="font-display text-[10.5px] font-medium text-betclic-red transition-opacity hover:opacity-80"
                     >
                       Mot de passe oublié ?
                     </Link>
@@ -689,7 +689,7 @@ function AuthShellInner({
                       autoComplete="current-password"
                       placeholder="Votre mot de passe"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                     <button
                       type="button"
@@ -725,7 +725,7 @@ function AuthShellInner({
                   >
                     <Check className="h-3.5 w-3.5" strokeWidth={3} />
                   </span>
-                  <span className="text-[12.5px] font-medium text-mist">
+                  <span className="text-[11px] font-medium text-mist">
                     Rester connecté sur cet appareil (30 jours)
                   </span>
                 </button>
@@ -733,7 +733,7 @@ function AuthShellInner({
                 {error && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[12.5px] font-medium text-betclic-red"
+                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[11px] font-medium text-betclic-red"
                   >
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
                     <span>{error}</span>
@@ -743,7 +743,7 @@ function AuthShellInner({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[14.5px] font-bold text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
+                  className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[12px] font-medium text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
                 >
                   {loading ? (
                     <>
@@ -758,12 +758,12 @@ function AuthShellInner({
                   )}
                 </button>
 
-                <p className="pt-1 text-center text-[12.5px] text-mist">
+                <p className="pt-1 text-center text-[11px] text-mist">
                   Nouveau sur Pulse Bet ?{" "}
                   <Link
                     href={registerHref}
                     replace
-                    className="font-display font-bold text-ink underline decoration-edge underline-offset-4 hover:text-betclic-red"
+                    className="font-display font-medium text-ink underline decoration-edge underline-offset-4 hover:text-betclic-red"
                   >
                     Ouvrir un compte
                   </Link>
@@ -781,7 +781,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="reg-name"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Nom complet ou pseudonyme
                   </label>
@@ -798,7 +798,7 @@ function AuthShellInner({
                       maxLength={40}
                       placeholder="Ex. Karim Mensah"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                   </div>
                 </div>
@@ -806,7 +806,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="reg-email"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Adresse e-mail
                   </label>
@@ -824,7 +824,7 @@ function AuthShellInner({
                       autoComplete="email"
                       placeholder="vous@exemple.com"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                     {isValidAuthEmail(email) && (
                       <CheckCircle2
@@ -838,7 +838,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="reg-password"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Mot de passe
                   </label>
@@ -855,7 +855,7 @@ function AuthShellInner({
                       autoComplete="new-password"
                       placeholder="Minimum 8 caractères"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                     <button
                       type="button"
@@ -893,7 +893,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="reg-confirm-password"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Confirmer le mot de passe
                   </label>
@@ -917,7 +917,7 @@ function AuthShellInner({
                       autoComplete="new-password"
                       placeholder="Répétez le mot de passe"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                     {passwordsMatch && (
                       <CheckCircle2
@@ -970,8 +970,8 @@ function AuthShellInner({
                   >
                     <Check className="h-3.5 w-3.5" strokeWidth={3} />
                   </span>
-                  <span className="text-[12px] leading-snug text-mist">
-                    <strong className="font-display font-bold text-ink">18+</strong> ·
+                  <span className="text-[10.5px] leading-snug text-mist">
+                    <strong className="font-display font-medium text-ink">18+</strong> ·
                     Je certifie être majeur et j&apos;accepte le règlement des paris
                     ainsi que la politique de jeu responsable Pulse Bet.
                   </span>
@@ -980,7 +980,7 @@ function AuthShellInner({
                 {error && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[12.5px] font-medium text-betclic-red"
+                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[11px] font-medium text-betclic-red"
                   >
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
                     <span>{error}</span>
@@ -990,7 +990,7 @@ function AuthShellInner({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="mt-0.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[14.5px] font-bold text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
+                  className="mt-0.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[12px] font-medium text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
                 >
                   {loading ? (
                     <>
@@ -1005,12 +1005,12 @@ function AuthShellInner({
                   )}
                 </button>
 
-                <p className="pt-1 text-center text-[12.5px] text-mist">
+                <p className="pt-1 text-center text-[11px] text-mist">
                   Vous avez déjà un compte ?{" "}
                   <Link
                     href={loginHref}
                     replace
-                    className="font-display font-bold text-ink underline decoration-edge underline-offset-4 hover:text-betclic-red"
+                    className="font-display font-medium text-ink underline decoration-edge underline-offset-4 hover:text-betclic-red"
                   >
                     Se connecter
                   </Link>
@@ -1028,7 +1028,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="forgot-email"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Adresse e-mail du compte
                   </label>
@@ -1046,7 +1046,7 @@ function AuthShellInner({
                       autoComplete="email"
                       placeholder="vous@exemple.com"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                   </div>
                 </div>
@@ -1054,7 +1054,7 @@ function AuthShellInner({
                 {error && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[12.5px] font-medium text-betclic-red"
+                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[11px] font-medium text-betclic-red"
                   >
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
                     <span>{error}</span>
@@ -1064,7 +1064,7 @@ function AuthShellInner({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[14.5px] font-bold text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
+                  className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[12px] font-medium text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
                 >
                   {loading ? (
                     <>
@@ -1089,7 +1089,7 @@ function AuthShellInner({
                       setError("Renseignez d'abord votre adresse e-mail.");
                     }
                   }}
-                  className="text-center font-display text-[12px] font-bold text-mist hover:text-ink"
+                  className="text-center font-display text-[10.5px] font-medium text-mist hover:text-ink"
                 >
                   J&apos;ai déjà un code de vérification
                 </button>
@@ -1105,7 +1105,7 @@ function AuthShellInner({
                 {/* Bandeau récapitulatif e-mail + renvoi */}
                 <div className="rounded-2xl border border-edge bg-elev/65 p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] font-semibold text-ink">
+                    <span className="truncate text-[10.5px] font-medium text-ink">
                       {email.trim().toLowerCase()}
                     </span>
                     <button
@@ -1116,13 +1116,13 @@ function AuthShellInner({
                         setError(null);
                         setInfoMessage(null);
                       }}
-                      className="shrink-0 font-display text-[11.5px] font-bold text-betclic-red hover:underline"
+                      className="shrink-0 font-display text-[10.5px] font-medium text-betclic-red hover:underline"
                     >
                       Modifier
                     </button>
                   </div>
                   {infoMessage && (
-                    <p className="mt-1 text-[11.5px] leading-snug text-mist">
+                    <p className="mt-1 text-[10.5px] leading-snug text-mist">
                       {infoMessage}
                     </p>
                   )}
@@ -1133,7 +1133,7 @@ function AuthShellInner({
                   <div className="flex items-center justify-between gap-2">
                     <label
                       htmlFor="reset-otp-input"
-                      className="text-[12px] font-semibold text-ink"
+                      className="text-[10.5px] font-medium text-ink"
                     >
                       Code à 6 chiffres
                     </label>
@@ -1141,7 +1141,7 @@ function AuthShellInner({
                       type="button"
                       disabled={resendCooldown > 0 || loading}
                       onClick={() => void requestResetCode(true)}
-                      className="inline-flex items-center gap-1 font-display text-[11.5px] font-bold text-betclic-red disabled:text-dim"
+                      className="inline-flex items-center gap-1 font-display text-[10.5px] font-medium text-betclic-red disabled:text-dim"
                     >
                       <RefreshCw className="h-3 w-3" strokeWidth={2.4} />
                       {resendCooldown > 0
@@ -1162,7 +1162,7 @@ function AuthShellInner({
                           <div
                             key={idx}
                             className={cn(
-                              "grid h-12 place-items-center rounded-xl border font-display text-[19px] font-extrabold tabular-nums transition-colors",
+                              "grid h-12 place-items-center rounded-xl border font-display text-[14.5px] font-medium tabular-nums transition-colors",
                               isActiveSlot
                                 ? "border-ink bg-white text-ink ring-2 ring-ink/10"
                                 : ch
@@ -1191,7 +1191,7 @@ function AuthShellInner({
                       autoComplete="one-time-code"
                       maxLength={6}
                       aria-label="Code de sécurité à 6 chiffres"
-                      className="absolute inset-0 h-full w-full cursor-text opacity-0 text-[16px]"
+                      className="absolute inset-0 h-full w-full cursor-text opacity-0 text-[12.5px]"
                     />
                   </div>
                 </div>
@@ -1199,7 +1199,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="reset-new-password"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Nouveau mot de passe
                   </label>
@@ -1216,7 +1216,7 @@ function AuthShellInner({
                       autoComplete="new-password"
                       placeholder="Minimum 8 caractères"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                     <button
                       type="button"
@@ -1245,7 +1245,7 @@ function AuthShellInner({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="reset-confirm-password"
-                    className="block text-[12px] font-semibold text-ink"
+                    className="block text-[10.5px] font-medium text-ink"
                   >
                     Confirmer le nouveau mot de passe
                   </label>
@@ -1269,7 +1269,7 @@ function AuthShellInner({
                       autoComplete="new-password"
                       placeholder="Répétez le mot de passe"
                       required
-                      className="h-full w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-dim"
+                      className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
                     {passwordsMatch && (
                       <CheckCircle2
@@ -1299,7 +1299,7 @@ function AuthShellInner({
                 {error && (
                   <div
                     role="alert"
-                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[12.5px] font-medium text-betclic-red"
+                    className="flex items-start gap-2 rounded-2xl border border-betclic-red/25 bg-betclic-red/8 px-3.5 py-2.5 text-[11px] font-medium text-betclic-red"
                   >
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.2} />
                     <span>{error}</span>
@@ -1309,7 +1309,7 @@ function AuthShellInner({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[14.5px] font-bold text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
+                  className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[12px] font-medium text-white shadow-[0_6px_18px_-4px_rgba(225,0,20,0.42)] transition-all hover:bg-betclic-red-deep active:scale-[0.99] disabled:opacity-60"
                 >
                   {loading ? (
                     <>
@@ -1330,12 +1330,12 @@ function AuthShellInner({
 
         {/* Pied de page sécurité & jeu responsable */}
         <footer className="mx-auto w-full max-w-[468px] space-y-2 pt-3 text-center">
-          <div className="inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-dim">
+          <div className="inline-flex items-center justify-center gap-1.5 text-[10px] font-medium text-dim">
             <ShieldCheck className="h-3.5 w-3.5 text-win" strokeWidth={2.3} />
             <span>Connexion chiffrée TLS · Session protégée Pulse Bet</span>
           </div>
-          <p className="text-[10.5px] leading-relaxed text-dim lg:hidden">
-            <strong className="font-display font-bold text-mist">18+</strong> ·
+          <p className="text-[10px] leading-relaxed text-dim lg:hidden">
+            <strong className="font-display font-medium text-mist">18+</strong> ·
             Jouer comporte des risques : endettement, isolement, dépendance. Aide
             : 09 74 75 13 13.
           </p>

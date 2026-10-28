@@ -97,7 +97,7 @@ function MatchHistoryCard({
         onBeforeNavigate={() => rememberMatchHistory([match])}
       />
       {/* En-tête ligue + heure + statut */}
-      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px] font-medium text-mist">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10px] font-medium text-mist">
         <div className="flex min-w-0 items-center gap-1.5">
           <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
           <span className="truncate">{match.league}</span>
@@ -117,7 +117,7 @@ function MatchHistoryCard({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {isLive ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
+            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-betclic-red">
               <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
               <LiveMatchClock
                 match={match}
@@ -125,12 +125,12 @@ function MatchHistoryCard({
               />
             </span>
           ) : isFinished && match.winnerCode ? (
-            <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-bold text-ink">
+            <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-medium text-ink">
               {match.winnerCode}
               {winningOdds != null ? ` · ${formatOdds(winningOdds, oddsFormat)}` : ""}
             </span>
           ) : (
-            <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[10px] font-semibold text-mist">
+            <span className="rounded-md bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-medium text-mist">
               À venir
             </span>
           )}
@@ -145,8 +145,8 @@ function MatchHistoryCard({
             <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="xs" />
             <span
               className={cn(
-                "truncate font-display text-[13.5px]",
-                hasScore && h > a ? "font-bold text-ink" : "font-semibold text-ink/85"
+                "truncate font-display text-[11.5px]",
+                hasScore && h > a ? "font-medium text-ink" : "font-medium text-ink/85"
               )}
             >
               {match.homeTeam}
@@ -157,8 +157,8 @@ function MatchHistoryCard({
           </div>
           <span
             className={cn(
-              "font-display text-[15px] tabular-nums",
-              hasScore && h > a ? "font-extrabold text-ink" : "font-bold text-mist"
+              "font-display text-[12px] tabular-nums",
+              hasScore && h > a ? "font-medium text-ink" : "font-medium text-mist"
             )}
           >
             {hasScore ? h : "–"}
@@ -170,8 +170,8 @@ function MatchHistoryCard({
             <TeamAvatar name={match.awayTeam} logo={match.awayLogo} size="xs" />
             <span
               className={cn(
-                "truncate font-display text-[13.5px]",
-                hasScore && a > h ? "font-bold text-ink" : "font-semibold text-ink/85"
+                "truncate font-display text-[11.5px]",
+                hasScore && a > h ? "font-medium text-ink" : "font-medium text-ink/85"
               )}
             >
               {match.awayTeam}
@@ -182,8 +182,8 @@ function MatchHistoryCard({
           </div>
           <span
             className={cn(
-              "font-display text-[15px] tabular-nums",
-              hasScore && a > h ? "font-extrabold text-ink" : "font-bold text-mist"
+              "font-display text-[12px] tabular-nums",
+              hasScore && a > h ? "font-medium text-ink" : "font-medium text-mist"
             )}
           >
             {hasScore ? a : "–"}
@@ -193,7 +193,7 @@ function MatchHistoryCard({
 
       {/* Résumé compact sur une ligne */}
       {hasScore && match.htHome != null && match.htAway != null && (
-        <div className="pointer-events-none relative z-[1] mt-2 flex items-center gap-1.5 text-[10.5px] font-semibold text-mist">
+        <div className="pointer-events-none relative z-[1] mt-2 flex items-center gap-1.5 text-[10px] font-medium text-mist">
           <span className="rounded-md bg-elev px-2 py-0.5 tabular-nums">
             MT {match.htHome}-{match.htAway}
           </span>
@@ -428,7 +428,7 @@ function ResultatsContent() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pt-3.5 pb-6 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pt-2.5 pb-6 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <button
@@ -439,7 +439,7 @@ function ResultatsContent() {
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
           </button>
-          <h1 className="font-display text-[20px] font-bold tracking-tight text-ink lg:text-[25px]">
+          <h1 className="font-display text-[14.5px] font-bold tracking-tight text-ink lg:text-[16px]">
             Résultats
           </h1>
         </div>
@@ -473,7 +473,7 @@ function ResultatsContent() {
               setLeagueFilter("all");
             }}
             className={cn(
-              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
               isRealUniverse
                 ? "bg-emerald-600 text-white shadow-xs"
                 : "text-mist hover:bg-elev/60 active:bg-elev"
@@ -484,7 +484,7 @@ function ResultatsContent() {
             {history !== null && (
               <span
                 className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                  "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
                   isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
                 )}
               >
@@ -500,7 +500,7 @@ function ResultatsContent() {
               setLeagueFilter("all");
             }}
             className={cn(
-              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
               !isRealUniverse
                 ? "bg-betclic-red text-white shadow-xs"
                 : "text-mist hover:bg-elev/60 active:bg-elev"
@@ -511,7 +511,7 @@ function ResultatsContent() {
             {history !== null && (
               <span
                 className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                  "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
                   !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
                 )}
               >
@@ -529,7 +529,7 @@ function ResultatsContent() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher une équipe ou compétition…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
           />
           {query && (
             <button
@@ -554,7 +554,7 @@ function ResultatsContent() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher une équipe ou compétition…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
           />
           <button
             type="button"
@@ -574,14 +574,14 @@ function ResultatsContent() {
       {focusedMatch && (
         <section className="mt-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 font-display text-[11.5px] font-bold uppercase tracking-wider text-betclic-red">
+            <span className="inline-flex items-center gap-1.5 font-display text-[10.5px] font-medium uppercase tracking-wider text-betclic-red">
               <History className="h-3.5 w-3.5" strokeWidth={2.3} />
               Match sélectionné
             </span>
             <button
               type="button"
               onClick={() => router.replace(`/resultats?universe=${universe}`)}
-              className="text-[11.5px] font-semibold text-mist hover:text-ink"
+              className="text-[10.5px] font-medium text-mist hover:text-ink"
             >
               Fermer
             </button>
@@ -671,10 +671,10 @@ function ResultatsContent() {
           <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
             <Trophy className="h-5 w-5" strokeWidth={1.9} />
           </div>
-          <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+          <p className="mt-3 font-display text-[12px] font-medium text-ink">
             Aucun match terminé trouvé
           </p>
-          <p className="mt-1 max-w-[260px] text-[12.5px] text-mist">
+          <p className="mt-1 max-w-[260px] text-[11px] text-mist">
             Modifiez vos filtres ou revenez dès la fin du match en direct.
           </p>
         </div>
@@ -682,7 +682,7 @@ function ResultatsContent() {
         <div className="space-y-5">
           {groupedByDay.map((group) => (
             <section key={group.day} className="space-y-2.5">
-              <h2 className="px-0.5 font-display text-[12px] font-bold uppercase tracking-wider text-dim">
+              <h2 className="px-0.5 font-display text-[10.5px] font-bold uppercase tracking-wider text-dim">
                 {group.day}
               </h2>
               <div className="grid grid-cols-1 items-start gap-3">

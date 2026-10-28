@@ -236,7 +236,7 @@ export default function VirtualMatchesPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-      <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
+      <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
         {/* En-tête compact + icône loupe sur mobile */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -251,7 +251,7 @@ export default function VirtualMatchesPage() {
             >
               <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
             </button>
-            <h1 className="truncate font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+            <h1 className="truncate font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
               Matchs virtuels
             </h1>
           </div>
@@ -283,7 +283,7 @@ export default function VirtualMatchesPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Rechercher un club ou une ligue virtuelle…"
-                className="w-full bg-transparent text-[13.5px] text-ink outline-none placeholder:text-dim"
+                className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
               />
               {query && (
                 <button
@@ -309,7 +309,7 @@ export default function VirtualMatchesPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher un club ou une ligue virtuelle…"
-              className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+              className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
             />
             <button
               type="button"
@@ -422,10 +422,10 @@ export default function VirtualMatchesPage() {
             <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
               <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
             </div>
-            <p className="mt-3 font-display text-[15px] font-bold text-ink">
+            <p className="mt-3 font-display text-[12px] font-medium text-ink">
               Connexion au serveur interrompue
             </p>
-            <p className="mt-1 max-w-[330px] text-[12.5px] leading-relaxed text-mist">
+            <p className="mt-1 max-w-[330px] text-[11px] leading-relaxed text-mist">
               {loadError}
             </p>
             <button
@@ -433,7 +433,7 @@ export default function VirtualMatchesPage() {
               onClick={() => {
                 void handlePullRefresh();
               }}
-              className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white shadow-xs active:scale-95"
             >
               <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
               Réessayer
@@ -444,10 +444,10 @@ export default function VirtualMatchesPage() {
             <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
               <Trophy className="h-5 w-5" strokeWidth={1.9} />
             </div>
-            <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+            <p className="mt-3 font-display text-[12px] font-medium text-ink">
               Aucun match virtuel dans ce filtre
             </p>
-            <p className="mt-1 max-w-[280px] text-[12.5px] text-dim">
+            <p className="mt-1 max-w-[280px] text-[11px] text-dim">
               Réinitialisez les filtres pour retrouver le multiplex virtuel en direct 24h/24.
             </p>
           </div>
@@ -458,11 +458,11 @@ export default function VirtualMatchesPage() {
                 <div className="flex items-center justify-between px-0.5">
                   <div className="flex items-center gap-2">
                     <span className="live-dot h-2 w-2 rounded-full bg-betclic-red" />
-                    <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                    <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-ink">
                       Multiplex EN DIRECT
                     </h2>
                   </div>
-                  <span className="rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red">
+                  <span className="rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-betclic-red">
                     {liveOrdered.length}
                   </span>
                 </div>
@@ -477,10 +477,10 @@ export default function VirtualMatchesPage() {
             {visibleUpcomingOrdered.length > 0 && (
               <section className="space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
-                  <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                  <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-ink">
                     Prochains départs
                   </h2>
-                  <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-dim">
+                  <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-dim">
                     {upcomingOrdered.length}
                   </span>
                 </div>
@@ -499,12 +499,12 @@ export default function VirtualMatchesPage() {
             {visibleFinishedOrdered.length > 0 && (
               <section className="space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
-                  <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                  <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-ink">
                     Terminés récemment
                   </h2>
                   <Link
                     href="/resultats?universe=virtual"
-                    className="inline-flex items-center gap-1 font-display text-[11.5px] font-bold text-betclic-red"
+                    className="inline-flex items-center gap-1 font-display text-[10.5px] font-medium text-betclic-red"
                   >
                     <History className="h-3.5 w-3.5" strokeWidth={2.2} />
                     Tout l&apos;historique

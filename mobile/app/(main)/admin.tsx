@@ -451,8 +451,59 @@ export default function AdminScreen() {
       </View>
 
       {/* 3 : Contenu de l'onglet actif */}
-      {loading || !panel ? (
+      {loading || !authReady || sessionRestoring ? (
         <PulseFlashLoader compact />
+      ) : !panel ? (
+        <View
+          style={{
+            marginTop: 16,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: COLORS.edge,
+            backgroundColor: "#ffffff",
+            padding: 16,
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ fontSize: 11.5, fontWeight: "500", color: COLORS.ink }}>
+            Tableau de bord indisponible
+          </Text>
+          <Text
+            style={{
+              marginTop: 4,
+              fontSize: 10.5,
+              fontWeight: "400",
+              color: COLORS.mist,
+              textAlign: "center",
+            }}
+          >
+            {notice?.msg ?? "Impossible de charger les données d'administration."}
+          </Text>
+          <Pressable
+            onPress={() => {
+              setLoading(true);
+              void load(false);
+            }}
+            style={({ pressed }) => [
+              {
+                marginTop: 12,
+                height: 34,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                backgroundColor: COLORS.betclicRed,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+              },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <RefreshCw size={13} color="#ffffff" strokeWidth={2.2} />
+            <Text style={{ fontSize: 10.5, fontWeight: "500", color: "#ffffff" }}>
+              Réessayer
+            </Text>
+          </Pressable>
+        </View>
       ) : tab === "dashboard" ? (
         <View style={styles.stack}>
           <View style={styles.statsGrid}>
@@ -621,7 +672,7 @@ export default function AdminScreen() {
                     keyboardType="number-pad"
                     style={styles.scoreInput}
                   />
-                  <Text style={{ fontWeight: "700", color: COLORS.dim }}>-</Text>
+                  <Text style={{ fontWeight: "500", color: COLORS.dim }}>-</Text>
                   <TextInput
                     value={draft.a}
                     onChangeText={(v) =>
@@ -1313,7 +1364,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 16,
     paddingBottom: 36,
   },
@@ -1324,13 +1375,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   pageTitle: {
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
   },
   pageSub: {
-    fontSize: 12,
+    fontSize: 10.5,
     color: COLORS.mist,
   },
   refreshPill: {
@@ -1345,8 +1396,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   refreshPillText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   noticeBar: {
@@ -1369,11 +1420,11 @@ const styles = StyleSheet.create({
   },
   noticeText: {
     flex: 1,
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "500",
   },
   stickyTabsWrap: {
-    marginHorizontal: -16,
+    marginHorizontal: -8,
     marginTop: 12,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(229,231,235,0.75)",
@@ -1381,7 +1432,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   tabsRow: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     flexDirection: "row",
     gap: 6,
   },
@@ -1401,12 +1452,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.ink,
   },
   tabPillLabel: {
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.mist,
   },
   tabPillLabelActive: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
   },
   redCountBadge: {
@@ -1416,8 +1467,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   redCountBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   loaderBox: {
@@ -1442,14 +1493,14 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   statLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   statValue: {
     marginTop: 4,
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 13.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1458,16 +1509,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 14,
+    padding: 12,
   },
   cardTitle: {
-    fontSize: 13.5,
+    fontSize: 11.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   cardSub: {
     marginTop: 2,
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: COLORS.mist,
     lineHeight: 16,
   },
@@ -1478,8 +1529,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   leagueMeta: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   modeGrid: {
@@ -1503,8 +1554,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.ink,
   },
   modeBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   lockBadge: {
@@ -1522,13 +1573,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   lockBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   matchTeamsTitle: {
     marginTop: 6,
-    fontSize: 14,
+    fontSize: 11.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
@@ -1536,11 +1587,11 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   forecastSummaryLabel: {
-    fontSize: 12,
+    fontSize: 10.5,
     color: COLORS.mist,
   },
   forecastSummaryStrong: {
-    fontWeight: "800",
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1558,8 +1609,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
     backgroundColor: COLORS.elev,
     textAlign: "center",
-    fontSize: 13.5,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
     paddingVertical: 0,
   },
@@ -1574,8 +1625,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   smallRedBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   smallDarkBtn: {
@@ -1589,8 +1640,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   smallDarkBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   iconBtn: {
@@ -1610,8 +1661,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
     backgroundColor: COLORS.elev,
     paddingHorizontal: 10,
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
     paddingVertical: 0,
   },
@@ -1625,8 +1676,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   fullRedBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   adminTeamsRow: {
@@ -1644,8 +1695,8 @@ const styles = StyleSheet.create({
   },
   adminTeamText: {
     flexShrink: 1,
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   adminScoreBadge: {
@@ -1653,8 +1704,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1675,8 +1726,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   grayActionText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   winActionChip: {
@@ -1690,8 +1741,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   winActionText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   resolveWrap: {
@@ -1715,19 +1766,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   userInitialText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   userBalText: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
   sectionCaps: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "500",
     letterSpacing: 0.6,
     color: COLORS.mist,
     paddingHorizontal: 2,

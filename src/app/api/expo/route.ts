@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
         expoClient: {
           name: "Pulse Bet",
           slug: "pulsebets-android",
-          version: "1.1.0",
+          version: "1.2.3",
           sdkVersion: "52.0.0",
           platforms: ["android"],
           orientation: "portrait",
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
           },
           android: {
             package: "app.pulsebets.android",
-            versionCode: 2,
+            versionCode: 6,
             backgroundColor: "#090D16",
             adaptiveIcon: {
               foregroundImage: "./assets/adaptive-icon.png",
@@ -131,6 +131,7 @@ export async function GET(req: NextRequest) {
           },
           extra: {
             apiBaseUrl: origin,
+            partykitHost: "pulse-bet.matiasanauld.workers.dev",
           },
         },
         expoGo: {

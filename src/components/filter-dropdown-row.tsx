@@ -133,9 +133,9 @@ export function FilterDropdownRow({
     <>
       <div
         className={cn(
-          bleedHorizontal ? "-mx-4 px-4 lg:mx-0 lg:px-0" : "",
+          bleedHorizontal ? "-mx-2 px-2 lg:mx-0 lg:px-0" : "",
           "py-3",
-          sticky && "sticky top-[52px] z-30 bg-deep/95 backdrop-blur-md lg:top-[60px]",
+          sticky && "sticky top-[48px] z-30 bg-deep/95 backdrop-blur-md lg:top-[52px]",
           className
         )}
       >
@@ -159,7 +159,7 @@ export function FilterDropdownRow({
                 aria-expanded={isOpen}
                 onClick={() => toggleMenu(filter.id)}
                 className={cn(
-                  "inline-flex h-10 grow shrink-0 items-center justify-center gap-1.5 rounded-full border-0 px-3.5 text-[14px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
+                  "inline-flex h-10 grow shrink-0 items-center justify-center gap-1.5 rounded-full border-0 px-3.5 text-[11.5px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
                   isActive
                     ? "bg-betclic-red text-white shadow-[0_2px_8px_rgba(225,0,20,0.22)]"
                     : "bg-[#e7e9ed] text-[#374151] hover:bg-[#dde0e6]"
@@ -186,7 +186,7 @@ export function FilterDropdownRow({
                 setOpenId(null);
                 onReset();
               }}
-              className="h-10 shrink-0 rounded-full border-0 px-3 text-[13px] font-medium whitespace-nowrap text-betclic-red transition-colors hover:bg-betclic-red/8 active:scale-[0.98]"
+              className="h-10 shrink-0 rounded-full border-0 px-3 text-[11px] font-medium whitespace-nowrap text-betclic-red transition-colors hover:bg-betclic-red/8 active:scale-[0.98]"
             >
               Réinitialiser
             </button>
@@ -195,7 +195,7 @@ export function FilterDropdownRow({
       </div>
 
       {resultCountText != null && (
-        <p className="mb-2.5 text-[12.5px] font-medium tabular-nums text-dim">
+        <p className="mb-2.5 text-[11px] font-medium tabular-nums text-dim">
           {resultCountText}
         </p>
       )}
@@ -231,9 +231,9 @@ export function FilterDropdownRow({
                     setOpenId(null);
                   }}
                   className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] transition-colors",
+                    "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-[11.5px] transition-colors",
                     selected
-                      ? "bg-betclic-red/8 font-semibold text-betclic-red"
+                      ? "bg-betclic-red/8 font-medium text-betclic-red"
                       : "font-medium text-ink hover:bg-elev active:bg-elev"
                   )}
                 >
@@ -242,8 +242,8 @@ export function FilterDropdownRow({
                     {typeof opt.count === "number" && (
                       <span
                         className={cn(
-                          "ml-1.5 tabular-nums text-[13px]",
-                          selected ? "font-semibold text-betclic-red/85" : "font-normal text-dim"
+                          "ml-1.5 tabular-nums text-[11px]",
+                          selected ? "font-medium text-betclic-red/85" : "font-normal text-dim"
                         )}
                       >
                         ({opt.count})

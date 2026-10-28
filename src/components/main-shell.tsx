@@ -48,10 +48,10 @@ export function MainShell({ children }: { children: ReactNode }) {
       {/* Disposition 3 colonnes sur desktop (Ligues | Matchs / Contenu | Betslip), 1 colonne sur mobile */}
       <div
         className={cn(
-          "mx-auto flex w-full max-w-[1480px] flex-1 flex-col lg:grid lg:items-start lg:gap-5 lg:px-5 lg:py-5",
+          "mx-auto flex w-full max-w-[1680px] flex-1 flex-col lg:grid lg:items-start lg:gap-3 lg:px-2.5 lg:py-3",
           isBetslipRoute
-            ? "lg:grid-cols-[264px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)]"
-            : "lg:grid-cols-[264px_minmax(0,1fr)_336px] xl:grid-cols-[280px_minmax(0,1fr)_356px]"
+            ? "lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[252px_minmax(0,1fr)]"
+            : "lg:grid-cols-[240px_minmax(0,1fr)_308px] xl:grid-cols-[252px_minmax(0,1fr)_324px]"
         )}
       >
         <DesktopLeaguesSidebar />

@@ -971,11 +971,11 @@ function Toasts({ toasts }: { toasts: Toast[] }) {
               <span className={cn("h-full w-1 shrink-0 self-stretch", bar)} />
               <Icon className={cn("h-4 w-4 shrink-0", cls)} strokeWidth={2.3} />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-[13px] font-semibold text-ink">
+                <p className="truncate font-display text-[11px] font-medium text-ink">
                   {t.title}
                 </p>
                 {t.description && (
-                  <p className="truncate text-[11.5px] text-mist">{t.description}</p>
+                  <p className="truncate text-[10.5px] text-mist">{t.description}</p>
                 )}
               </div>
             </motion.div>

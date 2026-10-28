@@ -314,7 +314,21 @@ export function isManualRefreshRequest(req: Request): boolean {
 }
 
 /**
- * Vérifie que seuls les paramètres d'URL explicitement autorisés (plus `refresh=1`) sont présents.
+ * Vérifie si la requête transporte un paramètre anti-cache `?_=<timestamp>`
+ * (injecté par `whatwg-fetch` sur React Native lorsque `cache: "no-store"` était utilisé).
+ */
+function hasCacheBusterParam(req: Request): boolean {
+  try {
+    const url = new URL(req.url);
+    return url.searchParams.has("_");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Vérifie que seuls les paramètres d'URL explicitement autorisés (plus `refresh=1`
+ * et le cache-buster numérique `?_=<timestamp>` de `whatwg-fetch` React Native) sont présents.
  */
 export function hasUnexpectedSearchParams(
   searchParams: URLSearchParams,
@@ -323,6 +337,7 @@ export function hasUnexpectedSearchParams(
   const allowed = new Set<string>(allowedKeys);
   for (const [key, value] of searchParams.entries()) {
     if (key === "refresh" && value === "1") continue;
+    if (key === "_" && /^\d{1,16}$/.test(value)) continue;
     if (!allowed.has(key)) return true;
   }
   return false;
@@ -381,18 +396,28 @@ export function publicJsonWithEdgeCache(
   const json = precomputed ? precomputed.json : JSON.stringify(data);
   const etag = precomputed ? precomputed.etag : computeWeakEtag(json);
   const manualRefresh = isManualRefreshRequest(req);
+  const cacheBusted = hasCacheBusterParam(req);
   const ifNoneMatch = manualRefresh ? null : req.headers.get("if-none-match");
 
-  if (manualRefresh) {
+  if (manualRefresh || cacheBusted) {
+    const privateEdgeHeaders: Record<string, string> = {
+      ETag: etag,
+      "Cache-Control": "private, no-store, max-age=0",
+      "CDN-Cache-Control": "private, no-store",
+      "Vercel-CDN-Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    };
+    if (!manualRefresh && ifNoneMatch && ifNoneMatch === etag) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: privateEdgeHeaders,
+      });
+    }
     return new NextResponse(json, {
       status: 200,
       headers: {
         "Content-Type": "application/json; charset=utf-8",
-        ETag: etag,
-        "Cache-Control": "private, no-store, max-age=0",
-        "CDN-Cache-Control": "private, no-store",
-        "Vercel-CDN-Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
+        ...privateEdgeHeaders,
       },
     });
   }

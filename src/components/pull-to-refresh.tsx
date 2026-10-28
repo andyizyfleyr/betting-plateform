@@ -133,7 +133,7 @@ export function PullToRefresh({
     >
       {/* Bandeau ultra-léger uniquement si hors-ligne */}
       {isOffline && (
-        <div className="mb-2 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500/12 px-3 py-1.5 text-[11.5px] font-semibold text-amber-800 lg:hidden">
+        <div className="mb-2 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500/12 px-3 py-1.5 text-[10.5px] font-medium text-amber-800 lg:hidden">
           <WifiOff className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
           <span>Connexion interrompue · Actualisation dès le retour du réseau</span>
         </div>
@@ -162,7 +162,7 @@ export function PullToRefresh({
             )}
             strokeWidth={2.5}
           />
-          <span className="font-display text-[11px] font-bold text-ink">
+          <span className="font-display text-[10px] font-medium text-ink">
             {refreshing
               ? "Actualisation…"
               : progress >= 1
@@ -170,7 +170,7 @@ export function PullToRefresh({
                 : "Tirer pour actualiser"}
           </span>
           {isConstrained && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-bold text-mist">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-medium text-mist">
               <Zap className="h-2.5 w-2.5 text-amber-600" strokeWidth={2.4} />
               Éco 3G
             </span>

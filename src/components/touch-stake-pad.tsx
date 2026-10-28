@@ -148,12 +148,12 @@ export function TouchStakePad({
 
   return (
     <div>
-      <div className="flex items-center justify-between text-[11.5px]">
-        <label htmlFor={id} className="font-semibold text-mist">
+      <div className="flex items-center justify-between text-[10.5px]">
+        <label htmlFor={id} className="font-medium text-mist">
           {label}
         </label>
         <span className="text-dim">
-          Solde : <strong className="font-semibold text-ink">{eur(balance)}</strong>
+          Solde : <strong className="font-medium text-ink">{eur(balance)}</strong>
         </span>
       </div>
 
@@ -185,7 +185,7 @@ export function TouchStakePad({
           }}
           onChange={(e) => handleDesktopTyping(e.target.value)}
           placeholder="0"
-          className="w-full cursor-pointer bg-transparent font-display text-[20px] font-bold tabular-nums text-ink outline-none placeholder:text-dim/50 lg:cursor-text"
+          className="w-full cursor-pointer bg-transparent font-display text-[14.5px] font-medium tabular-nums text-ink outline-none placeholder:text-dim/50 lg:cursor-text"
         />
 
         {stakeText !== "" && (
@@ -196,7 +196,7 @@ export function TouchStakePad({
               triggerHaptic(haptics, 8);
               emitChange("");
             }}
-            className="mr-2 shrink-0 rounded-md bg-elev px-2 py-1 text-[11px] font-semibold text-mist active:bg-edge"
+            className="mr-2 shrink-0 rounded-md bg-elev px-2 py-1 text-[10px] font-medium text-mist active:bg-edge"
           >
             Effacer
           </button>
@@ -220,7 +220,7 @@ export function TouchStakePad({
           </button>
         )}
 
-        <span className="font-display text-[17px] font-bold text-dim">€</span>
+        <span className="font-display text-[13.5px] font-medium text-dim">€</span>
       </div>
 
       {/* ── MOBILE (< lg) : Jetons rapides 5 · 10 · 25 · 50 · MAX + Pavé 0-9 repliable ── */}
@@ -234,7 +234,7 @@ export function TouchStakePad({
                 type="button"
                 onClick={() => pressPreset(amount)}
                 className={cn(
-                  "flex h-8.5 touch-manipulation items-center justify-center rounded-xl border font-display text-[12px] font-bold transition-transform active:scale-95",
+                  "flex h-8.5 touch-manipulation items-center justify-center rounded-xl border font-display text-[10.5px] font-medium transition-transform active:scale-95",
                   active
                     ? "border-ink bg-ink text-white"
                     : "border-edge bg-elev text-ink active:bg-edge"
@@ -247,7 +247,7 @@ export function TouchStakePad({
           <button
             type="button"
             onClick={pressMax}
-            className="flex h-8.5 touch-manipulation items-center justify-center rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[11.5px] font-extrabold text-betclic-red transition-transform active:scale-95"
+            className="flex h-8.5 touch-manipulation items-center justify-center rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red transition-transform active:scale-95"
           >
             MAX
           </button>
@@ -286,7 +286,7 @@ export function TouchStakePad({
                   triggerHaptic(haptics, 8);
                   setPadOpen(false);
                 }}
-                className="flex h-9.5 touch-manipulation items-center justify-center rounded-xl bg-ink font-display text-[12px] font-bold text-white shadow-2xs active:scale-95"
+                className="flex h-9.5 touch-manipulation items-center justify-center rounded-xl bg-ink font-display text-[10.5px] font-medium text-white shadow-2xs active:scale-95"
               >
                 OK
               </button>
@@ -307,7 +307,7 @@ export function TouchStakePad({
                 onChangeStakeText(String(amount));
               }}
               className={cn(
-                "h-8.5 rounded-xl border font-display text-[12px] font-bold transition-colors active:scale-95",
+                "h-8.5 rounded-xl border font-display text-[10.5px] font-medium transition-colors active:scale-95",
                 active
                   ? "border-ink bg-ink text-white"
                   : "border-edge bg-elev text-ink hover:bg-edge/70"
@@ -320,7 +320,7 @@ export function TouchStakePad({
         <button
           type="button"
           onClick={pressMax}
-          className="h-8.5 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red hover:bg-betclic-red/15 active:scale-95"
+          className="h-8.5 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red hover:bg-betclic-red/15 active:scale-95"
         >
           MAX
         </button>
@@ -345,7 +345,7 @@ function NumKey({
       type="button"
       onClick={onPress}
       className={cn(
-        "flex h-9.5 touch-manipulation items-center justify-center rounded-xl border border-edge/80 font-display text-[15px] font-bold shadow-2xs transition-transform active:scale-95",
+        "flex h-9.5 touch-manipulation items-center justify-center rounded-xl border border-edge/80 font-display text-[12px] font-medium shadow-2xs transition-transform active:scale-95",
         subtle
           ? "bg-elev/80 text-mist active:bg-edge active:text-ink"
           : "bg-white text-ink active:bg-elev",

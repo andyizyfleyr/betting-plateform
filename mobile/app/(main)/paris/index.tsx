@@ -630,7 +630,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 32,
   },
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pageTitle: {
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
@@ -678,11 +678,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   summaryMuted: {
-    fontSize: 12,
+    fontSize: 10.5,
     color: COLORS.mist,
   },
   summaryStrong: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 11.5,
     color: COLORS.ink,
     paddingVertical: 0,
   },
@@ -730,14 +730,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     marginTop: 12,
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.ink,
   },
   errorSub: {
     marginTop: 4,
     textAlign: "center",
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     lineHeight: 18,
   },
@@ -752,8 +752,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   retryBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   emptyState: {
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     marginTop: 12,
-    fontSize: 15.5,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
@@ -780,7 +780,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     maxWidth: 240,
     textAlign: "center",
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.dim,
     lineHeight: 18,
   },
@@ -799,8 +799,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyRedBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   emptyWhiteBtn: {
@@ -814,8 +814,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyWhiteBtnText: {
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   ticketStack: {
@@ -824,7 +824,7 @@ const styles = StyleSheet.create({
   dayHeading: {
     marginBottom: 8,
     paddingHorizontal: 2,
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "600",
     textTransform: "capitalize",
     color: COLORS.mist,
@@ -833,7 +833,7 @@ const styles = StyleSheet.create({
     color: COLORS.dim,
   },
   guestCenter: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     justifyContent: "center",
   },
   guestCard: {
@@ -854,14 +854,14 @@ const styles = StyleSheet.create({
   },
   guestTitle: {
     marginTop: 12,
-    fontSize: 16,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
     textAlign: "center",
   },
   guestSub: {
     marginTop: 6,
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     textAlign: "center",
     lineHeight: 18,
@@ -877,8 +877,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   guestBtnText: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
 });

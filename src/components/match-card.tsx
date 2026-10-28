@@ -38,7 +38,7 @@ export function LiveStatusBadge({
 
   if (suspended) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-amber-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-amber-700">
         <Lock className="h-2.5 w-2.5" strokeWidth={2.5} />
         Suspendu · {clockLabel || "LIVE"}
       </span>
@@ -47,14 +47,14 @@ export function LiveStatusBadge({
 
   if (isHalfTime) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10.5px] font-bold text-amber-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10px] font-medium text-amber-700">
         Mi-temps
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-betclic-red/12 px-2.5 py-0.5 font-display text-[10px] font-medium tabular-nums text-betclic-red">
       <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
       {clockLabel || "LIVE"}
     </span>
@@ -93,7 +93,7 @@ function MatchCardInner({
   return (
     <article
       className={cn(
-        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-4 transition-colors hover:bg-elev/20 active:bg-elev/45 lg:p-3.5",
+        "glass-card relative flex cursor-pointer flex-col overflow-hidden rounded-2xl p-3 transition-colors hover:bg-elev/20 active:bg-elev/45 lg:p-3",
         !isFinished && "max-lg:min-h-[194px]",
         className
       )}
@@ -105,15 +105,15 @@ function MatchCardInner({
       />
 
       {/* En-tête : ligue + statut (compact sur mobile, sans bouton Stats mobile) */}
-      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11.5px]">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10.5px]">
         <div className="flex min-w-0 items-center gap-1.5 text-mist">
           {isReal && (
-            <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-emerald-700 lg:inline-block">
+            <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wide text-emerald-700 lg:inline-block">
               Réel
             </span>
           )}
           <SportIcon sport={match.sport} className="h-4 w-4 shrink-0 text-dim lg:h-3.5 lg:w-3.5" />
-          <span className="truncate font-semibold">{match.league}</span>
+          <span className="truncate font-medium">{match.league}</span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -125,7 +125,7 @@ function MatchCardInner({
                     type="button"
                     onClick={() => setShowTracker((s) => !s)}
                     className={cn(
-                      "pointer-events-auto relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
+                      "pointer-events-auto relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium transition-colors lg:inline-flex",
                       showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                     )}
                   >
@@ -138,7 +138,7 @@ function MatchCardInner({
                   type="button"
                   onClick={() => setShowTracker((s) => !s)}
                   className={cn(
-                    "pointer-events-auto relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold transition-colors lg:inline-flex",
+                    "pointer-events-auto relative z-10 hidden items-center gap-1 rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium transition-colors lg:inline-flex",
                     showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                   )}
                 >
@@ -153,23 +153,23 @@ function MatchCardInner({
               />
             </>
           ) : isFinished ? (
-            <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-semibold text-dim">
+            <span className="inline-flex items-center gap-0.5 rounded-md bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium text-dim">
               Terminé
               <ChevronRight className="h-3 w-3" strokeWidth={2.3} />
             </span>
           ) : isReal && match.kickoffReached ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10px] font-bold text-amber-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[9.5px] font-medium text-amber-700">
               <Lock className="h-2.5 w-2.5" strokeWidth={2.4} />
               Coup d&apos;envoi atteint
             </span>
           ) : isReal ? (
-            <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-semibold text-ink">
+            <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium text-ink">
               {formatKickoff(match.startsAt)}
             </span>
           ) : (
             <>
               {nextUp && (
-                <span className="rounded-full bg-ink/8 px-2 py-0.5 font-display text-[10px] font-bold text-ink">
+                <span className="rounded-full bg-ink/8 px-2 py-0.5 font-display text-[9.5px] font-medium text-ink">
                   Suivant
                 </span>
               )}
@@ -178,7 +178,7 @@ function MatchCardInner({
           )}
 
           {!isFinished && marketCount > 1 && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-elev px-1.5 py-0.5 font-display text-[10px] font-bold text-ink lg:hidden">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-medium text-ink lg:hidden">
               +{marketCount - 1}
               <ChevronRight className="h-2.5 w-2.5 text-betclic-red" strokeWidth={2.6} />
             </span>
@@ -233,11 +233,11 @@ function MatchCardInner({
         <div className="pointer-events-none relative z-[1] mt-auto pt-3.5 lg:pt-3">
           <ResultOdds match={match} />
           {marketCount > 1 && (
-            <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[11px] lg:flex">
+            <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[10px] lg:flex">
               <span className="truncate text-dim">
                 Total, Double chance, Handicap, Score exact…
               </span>
-              <span className="inline-flex shrink-0 items-center gap-0.5 font-display font-bold text-ink">
+              <span className="inline-flex shrink-0 items-center gap-0.5 font-display font-medium text-ink">
                 +{marketCount - 1} marchés
                 <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
               </span>
@@ -320,7 +320,7 @@ const TeamRow = memo(function TeamRow({
       <TeamAvatar name={name} logo={logo} size="sm" className="lg:h-7 lg:w-7" />
       <span
         className={cn(
-          "truncate font-display text-[14.5px] font-semibold leading-snug lg:text-[14px]",
+          "truncate font-display text-[12px] font-medium leading-snug lg:text-[11.5px]",
           isFinished && !winner ? "text-mist" : "text-ink"
         )}
       >
@@ -341,7 +341,7 @@ const TeamRow = memo(function TeamRow({
       {score != null && (
         <span
           className={cn(
-            "ml-auto min-w-[24px] rounded-md px-1.5 py-0.5 text-center font-display text-[15px] font-bold leading-none tabular-nums",
+            "ml-auto min-w-[24px] rounded-md px-1.5 py-0.5 text-center font-display text-[12px] font-medium leading-none tabular-nums",
             isLive
               ? "bg-betclic-red/10 text-betclic-red"
               : isFinished && winner
@@ -515,7 +515,7 @@ function OddsCell({
       {!suspended && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
-          "font-display text-[11px] font-bold",
+          "font-display text-[10px] font-medium",
           active ? "text-white/85" : "text-dim"
         )}
       >
@@ -526,7 +526,7 @@ function OddsCell({
       ) : (
         <span
           className={cn(
-            "font-display text-[14px] font-bold tabular-nums transition-colors duration-200 lg:text-[13.5px]",
+            "font-display text-[11.5px] font-medium tabular-nums transition-colors duration-200 lg:text-[11.5px]",
             oddsTrendTextClass(trend, active)
           )}
         >

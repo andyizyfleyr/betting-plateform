@@ -606,7 +606,7 @@ export default function AcceleratorScreen() {
                     y={l.y + 3}
                     fill="#f8fafc"
                     fontSize={8.5}
-                    fontWeight="700"
+                    fontWeight="500"
                     textAnchor="middle"
                   >
                     {l.text}
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f172a",
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.09)",
-    paddingHorizontal: 14,
+    paddingHorizontal: 8,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
@@ -855,8 +855,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logo: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 12.5,
+    fontWeight: "500",
     color: "#ffffff",
     letterSpacing: -0.3,
   },
@@ -880,8 +880,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   amountHl: {
-    fontSize: 12.8,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#22c55e",
     fontVariant: ["tabular-nums"],
   },
@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingVertical: 14,
     gap: 12,
   },
@@ -921,13 +921,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   multPrefix: {
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "500",
     color: "#94a3b8",
   },
   valueText: {
-    fontSize: 42,
-    fontWeight: "800",
+    fontSize: 21,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
@@ -939,14 +939,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   payoutMuted: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#94a3b8",
     fontVariant: ["tabular-nums"],
   },
   payoutGain: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#22c55e",
     fontVariant: ["tabular-nums"],
   },
@@ -959,12 +959,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   crashBadgeText: {
-    fontSize: 13.5,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   hintText: {
-    fontSize: 12.2,
+    fontSize: 10.5,
     color: "#94a3b8",
     textAlign: "center",
     lineHeight: 17,
@@ -973,7 +973,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0f172a",
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.09)",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 14,
     gap: 10,
@@ -990,16 +990,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#070b14",
     paddingHorizontal: 14,
     paddingRight: 38,
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 12.5,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
   currencyBadge: {
     position: "absolute",
     right: 14,
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#94a3b8",
   },
   quickGrid: {
@@ -1020,8 +1020,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(245,158,11,0.35)",
   },
   quickBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#e2e8f0",
   },
   btnPlace: {
@@ -1037,13 +1037,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#22c55e",
   },
   btnPlaceText: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#0b0f19",
   },
   errorMsg: {
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#f87171",
     textAlign: "center",
   },
@@ -1071,20 +1071,20 @@ const styles = StyleSheet.create({
     borderColor: "rgba(239,68,68,0.5)",
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 14.5,
+    fontWeight: "700",
   },
   modalAmount: {
     marginTop: 10,
     marginBottom: 4,
-    fontSize: 27,
-    fontWeight: "800",
+    fontSize: 17.5,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
   multLabel: {
-    fontSize: 13.5,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#94a3b8",
   },
   rulesList: {
@@ -1093,7 +1093,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ruleBullet: {
-    fontSize: 13.5,
+    fontSize: 11.5,
     lineHeight: 20,
     color: "#cbd5e1",
   },
@@ -1109,8 +1109,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   btnCloseModalText: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#ffffff",
   },
 });

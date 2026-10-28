@@ -42,13 +42,13 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
         <div className="flex min-w-0 items-center gap-2">
           <span
             className={cn(
-              "shrink-0 rounded-md px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white",
+              "shrink-0 rounded-md px-2 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wider text-white",
               isReal ? "bg-emerald-600" : "bg-betclic-red"
             )}
           >
             {isReal ? "Match réel" : "Virtuel · Direct"}
           </span>
-          <span className="truncate text-[11.5px] font-semibold text-mist">{match.league}</span>
+          <span className="truncate text-[10.5px] font-medium text-mist">{match.league}</span>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
@@ -57,7 +57,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
               type="button"
               onClick={() => setShowTracker((s) => !s)}
               className={cn(
-                "pointer-events-auto relative z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display text-[10.5px] font-bold transition-colors",
+                "pointer-events-auto relative z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-display text-[10px] font-medium transition-colors",
                 showTracker
                   ? "bg-emerald-700 text-white"
                   : "bg-elev text-mist"
@@ -76,7 +76,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
               )}
             </button>
           )}
-          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-bold text-ink">
+          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-elev px-2.5 py-0.5 font-display text-[10px] font-medium text-ink">
             {marketCount > 0 ? `${marketCount} marchés` : "Marchés"}
             <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
           </span>
@@ -101,11 +101,11 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
               {isLive ? (
                 <>
                   <div className="flex items-center gap-1.5 rounded-2xl bg-elev/80 px-3.5 py-1.5">
-                    <span className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
+                    <span className="font-display text-[17.5px] font-medium leading-none tabular-nums text-ink">
                       {match.homeScore ?? 0}
                     </span>
-                    <span className="font-display text-[18px] font-bold text-dim">:</span>
-                    <span className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
+                    <span className="font-display text-[13.5px] font-medium text-dim">:</span>
+                    <span className="font-display text-[17.5px] font-medium leading-none tabular-nums text-ink">
                       {match.awayScore ?? 0}
                     </span>
                   </div>
@@ -119,26 +119,26 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
                 </>
               ) : isReal && match.kickoffReached ? (
                 <>
-                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[10.5px] font-medium text-dim">
                     VS
                   </span>
-                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-amber-700">
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[9.5px] font-medium text-amber-700">
                     <Lock className="h-2.5 w-2.5" strokeWidth={2.4} />
                     Coup d&apos;envoi atteint
                   </span>
                 </>
               ) : isReal ? (
                 <>
-                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[10.5px] font-medium text-dim">
                     VS
                   </span>
-                  <span className="mt-2 rounded-full bg-elev px-2.5 py-0.5 font-display text-[11px] font-semibold text-ink">
+                  <span className="mt-2 rounded-full bg-elev px-2.5 py-0.5 font-display text-[10px] font-medium text-ink">
                     {formatKickoff(match.startsAt)}
                   </span>
                 </>
               ) : (
                 <>
-                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[12px] font-bold text-dim">
+                  <span className="rounded-lg bg-elev px-2.5 py-1 font-display text-[10.5px] font-medium text-dim">
                     VS
                   </span>
                   <KickoffCountdown startsAt={match.startsAt} className="mt-2" />
@@ -154,7 +154,7 @@ export function FeaturedMatch({ match }: { match: ClientMatch }) {
           </div>
 
           {isLive && hasGoals && (
-            <div className="mb-3 hidden grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10.5px] text-mist lg:grid">
+            <div className="mb-3 hidden grid-cols-2 gap-2 rounded-xl bg-elev/65 px-3 py-2 text-[10px] text-mist lg:grid">
               <div className="min-w-0">
                 {homeGoals.map((g, i) => (
                   <p key={i} className="truncate font-medium text-ink">
@@ -221,7 +221,7 @@ function TeamCol({
     <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
       <TeamAvatar name={name} logo={logo} size="md" />
       <div className="flex max-w-full items-center justify-center gap-1">
-        <span className="line-clamp-2 font-display text-[12.5px] font-bold leading-tight text-ink">
+        <span className="line-clamp-2 font-display text-[11px] font-medium leading-tight text-ink">
           {name}
         </span>
         {redCards > 0 && (

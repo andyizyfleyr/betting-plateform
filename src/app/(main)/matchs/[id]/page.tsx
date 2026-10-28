@@ -239,7 +239,7 @@ export default function MatchDetailPage() {
 
   return (
     <PullToRefresh onRefresh={fetchMatch}>
-    <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne (sans double barre collante) */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -264,7 +264,7 @@ export default function MatchDetailPage() {
               sport={match?.sport ?? "football"}
               className="h-3.5 w-3.5 shrink-0 text-betclic-red"
             />
-            <h1 className="truncate font-display text-[14px] font-extrabold text-ink lg:text-[18px]">
+            <h1 className="truncate font-display text-[11.5px] font-bold text-ink lg:text-[13.5px]">
               {match?.league ?? "Match"}
             </h1>
           </div>
@@ -272,7 +272,7 @@ export default function MatchDetailPage() {
 
         {match && (
           <div className="flex shrink-0 items-center gap-1.5">
-            <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-mist lg:px-2.5 lg:py-1 lg:text-[11px]">
+            <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-mist lg:px-2.5 lg:py-1 lg:text-[10px]">
               {formatMatchDateTime(match.startsAt)}
             </span>
           </div>
@@ -285,24 +285,24 @@ export default function MatchDetailPage() {
         ) : match === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
-            <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
+            <p className="mt-1.5 font-display text-[12px] font-medium text-ink">
               {loadError ? "Connexion interrompue" : "Match introuvable"}
             </p>
-            <p className="mt-0.5 text-[11.5px] text-mist">
+            <p className="mt-0.5 text-[10.5px] text-mist">
               {loadError ?? "Cette affiche n'est plus disponible."}
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => void fetchMatch()}
-                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[11.5px] font-bold text-ink"
+                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[10.5px] font-medium text-ink"
               >
                 <RefreshCw className="h-3 w-3" />
                 Réessayer
               </button>
               <Link
                 href="/matchs"
-                className="btn-red rounded-lg px-3.5 py-1.5 text-[11.5px]"
+                className="btn-red rounded-lg px-3.5 py-1.5 text-[10.5px]"
               >
                 Tous les matchs
               </Link>
@@ -326,11 +326,11 @@ export default function MatchDetailPage() {
                     size="md"
                     className="hidden lg:grid"
                   />
-                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
+                  <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
                     {match.homeTeam}
                   </span>
                   {(match.redHome ?? 0) > 0 && (
-                    <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-bold text-white">
+                    <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-medium text-white">
                       🟥 ×{match.redHome}
                     </span>
                   )}
@@ -346,13 +346,13 @@ export default function MatchDetailPage() {
                       />
                     </div>
                   ) : isFinished ? (
-                    <span className="mb-1.5 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-mist">
+                    <span className="mb-1.5 rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wider text-mist">
                       Terminé
                     </span>
                   ) : null}
 
                   {isLive || isFinished ? (
-                    <div className="flex items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[18px] font-black tabular-nums leading-none text-ink lg:rounded-xl lg:px-4 lg:py-2 lg:text-[24px]">
+                    <div className="flex items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[13.5px] font-medium tabular-nums leading-none text-ink lg:rounded-xl lg:px-4 lg:py-2 lg:text-[16px]">
                       <span
                         className={cn(
                           isFinished &&
@@ -362,7 +362,7 @@ export default function MatchDetailPage() {
                       >
                         {match.homeScore ?? 0}
                       </span>
-                      <span className="text-[12px] text-dim lg:text-[15px]">-</span>
+                      <span className="text-[10.5px] text-dim lg:text-[12px]">-</span>
                       <span
                         className={cn(
                           isFinished &&
@@ -374,13 +374,13 @@ export default function MatchDetailPage() {
                       </span>
                     </div>
                   ) : (
-                    <div className="rounded-lg bg-elev px-2.5 py-1 text-center font-display text-[11.5px] font-extrabold text-mist lg:rounded-xl lg:px-3.5 lg:py-2 lg:text-[13px]">
+                    <div className="rounded-lg bg-elev px-2.5 py-1 text-center font-display text-[10.5px] font-medium text-mist lg:rounded-xl lg:px-3.5 lg:py-2 lg:text-[11px]">
                       VS
                     </div>
                   )}
 
                   {match.htHomeScore != null && match.htAwayScore != null && (
-                    <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim lg:mt-1 lg:text-[10.5px]">
+                    <span className="mt-0.5 text-[9.5px] font-medium tabular-nums text-dim lg:mt-1 lg:text-[10px]">
                       MT {match.htHomeScore}-{match.htAwayScore}
                     </span>
                   )}
@@ -399,11 +399,11 @@ export default function MatchDetailPage() {
                     size="md"
                     className="hidden lg:grid"
                   />
-                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
+                  <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
                     {match.awayTeam}
                   </span>
                   {(match.redAway ?? 0) > 0 && (
-                    <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-bold text-white">
+                    <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-medium text-white">
                       🟥 ×{match.redAway}
                     </span>
                   )}
@@ -418,7 +418,7 @@ export default function MatchDetailPage() {
                       type="button"
                       onClick={() => setShowTracker((v) => !v)}
                       className={cn(
-                        "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-bold transition-colors",
+                        "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10px] font-medium transition-colors",
                         showTracker
                           ? "bg-ink text-white"
                           : "bg-elev text-ink hover:bg-edge"
@@ -442,7 +442,7 @@ export default function MatchDetailPage() {
                   {isFinished && (
                     <Link
                       href={`/resultats/${match.id}`}
-                      className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red/10 px-2.5 font-display text-[10.5px] font-bold text-betclic-red"
+                      className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red/10 px-2.5 font-display text-[10px] font-medium text-betclic-red"
                     >
                       Bilan du résultat
                       <ChevronRight className="h-3 w-3" strokeWidth={2.4} />
@@ -473,7 +473,7 @@ export default function MatchDetailPage() {
             {/* Onglets de catégories compacts + accordéons */}
             {isFinished || groups.length === 0 ? (
               <div className="glass-card rounded-xl p-3.5 text-center">
-                <p className="font-display text-[12.5px] font-bold text-ink">
+                <p className="font-display text-[11px] font-medium text-ink">
                   {isFinished
                     ? "Rencontre terminée — marchés clôturés."
                     : "Aucun marché ouvert pour le moment."}
@@ -481,7 +481,7 @@ export default function MatchDetailPage() {
                 {isFinished && (
                   <Link
                     href={`/resultats/${match.id}`}
-                    className="btn-red mt-2.5 inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[11.5px]"
+                    className="btn-red mt-2.5 inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[10.5px]"
                   >
                     Bilan détaillé
                     <ChevronRight className="h-3.5 w-3.5" />
@@ -490,7 +490,7 @@ export default function MatchDetailPage() {
               </div>
             ) : (
               <section className="space-y-2 lg:space-y-3">
-                <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 py-0.5 lg:mx-0 lg:px-0">
+                <div className="no-scrollbar -mx-2 flex gap-1.5 overflow-x-auto px-2 py-0.5 lg:mx-0 lg:px-0">
                   {CATEGORY_TABS.map((t) => {
                     const count =
                       t.key === "all"
@@ -504,7 +504,7 @@ export default function MatchDetailPage() {
                         type="button"
                         onClick={() => setCategory(t.key)}
                         className={cn(
-                          "inline-flex h-7.5 shrink-0 items-center gap-1 rounded-full px-2.5 font-display text-[11px] font-bold transition-colors lg:h-9 lg:px-3.5 lg:text-[12px]",
+                          "inline-flex h-7.5 shrink-0 items-center gap-1 rounded-full px-2.5 font-display text-[10px] font-medium transition-colors lg:h-9 lg:px-3.5 lg:text-[10.5px]",
                           active
                             ? "bg-betclic-red text-white shadow-xs"
                             : "bg-elev text-mist hover:text-ink"
@@ -513,7 +513,7 @@ export default function MatchDetailPage() {
                         {t.label}
                         <span
                           className={cn(
-                            "text-[10px] font-semibold tabular-nums",
+                            "text-[9.5px] font-medium tabular-nums",
                             active ? "text-white/80" : "text-dim"
                           )}
                         >
@@ -525,7 +525,7 @@ export default function MatchDetailPage() {
                 </div>
 
                 {suspended && (
-                  <div className="rounded-lg border border-amber-500/35 bg-amber-500/12 px-3 py-1.5 text-center font-display text-[11px] font-bold text-amber-800">
+                  <div className="rounded-lg border border-amber-500/35 bg-amber-500/12 px-3 py-1.5 text-center font-display text-[10px] font-medium text-amber-800">
                     Marchés suspendus momentanément…
                   </div>
                 )}
@@ -619,31 +619,31 @@ export default function MatchDetailPage() {
             {/* Chronologie compacte */}
             {cleanEvents.length > 0 && (
               <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-                <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+                <h2 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
                   Chronologie ({cleanEvents.length})
                 </h2>
                 <div className="mt-1.5 divide-y divide-edge/60">
                   {cleanEvents.map((ev, idx) => (
                     <div
                       key={`${ev.minute}-${ev.type}-${idx}`}
-                      className="flex items-center justify-between gap-2 py-1.5 text-[11px]"
+                      className="flex items-center justify-between gap-2 py-1.5 text-[10px]"
                     >
                       <div className="flex min-w-0 items-center gap-1.5">
-                        <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[10px] font-bold tabular-nums text-ink">
+                        <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-ink">
                           {ev.minute}’
                         </span>
-                        <span className="text-[11px]">
+                        <span className="text-[10px]">
                           {ev.type === "goal"
                             ? "⚽"
                             : ev.type === "red"
                               ? "🟥"
                               : "🟨"}
                         </span>
-                        <span className="truncate font-semibold text-ink">
+                        <span className="truncate font-medium text-ink">
                           {ev.player}
                         </span>
                       </div>
-                      <span className="shrink-0 text-[10px] font-medium text-dim">
+                      <span className="shrink-0 text-[9.5px] font-medium text-dim">
                         {ev.team === "home" ? match.homeTeam : match.awayTeam}
                       </span>
                     </div>

@@ -309,13 +309,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 12.5,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   sub: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.dim,
     marginTop: 1,
   },
@@ -346,8 +346,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   chipText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   chipTextActive: {
@@ -360,8 +360,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     paddingHorizontal: 13,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   methodsGrid: {
@@ -386,8 +386,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(225, 0, 20, 0.06)",
   },
   methodLabel: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   submitBtn: {
@@ -398,8 +398,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   submitText: {
-    fontSize: 14.5,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#ffffff",
   },
   fullPageLink: {
@@ -410,8 +410,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   fullPageText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
 });

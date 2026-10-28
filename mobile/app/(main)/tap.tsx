@@ -911,7 +911,7 @@ const styles = StyleSheet.create({
   header: {
     height: 56,
     backgroundColor: "#06152b",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -919,8 +919,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#1f2937",
   },
   logo: {
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "500",
     color: "#ffffff",
     letterSpacing: -0.8,
   },
@@ -944,14 +944,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   amountHl: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#22c55e",
     fontVariant: ["tabular-nums"],
   },
   symText: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#e5e7eb",
   },
   trophyBtn: {
@@ -981,19 +981,19 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   multiplierDisplay: {
-    fontWeight: "800",
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
   gainLabel: {
     marginTop: 4,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "rgba(255,255,255,0.9)",
   },
   gainValue: {
-    fontSize: 19,
-    fontWeight: "700",
+    fontSize: 14.5,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
@@ -1001,7 +1001,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#020617",
     borderTopWidth: 1,
     borderTopColor: "#1f2937",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 12,
     gap: 10,
@@ -1018,16 +1018,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#020617",
     paddingHorizontal: 14,
     paddingRight: 36,
-    fontSize: 19,
-    fontWeight: "800",
+    fontSize: 14.5,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
   currencyBadge: {
     position: "absolute",
     right: 14,
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#9ca3af",
   },
   limitInfo: {
@@ -1037,8 +1037,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   limitText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#9ca3af",
   },
   rangeWrapper: {
@@ -1056,8 +1056,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   rangeValText: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#000000",
   },
   sliderTouchZone: {
@@ -1101,8 +1101,8 @@ const styles = StyleSheet.create({
   },
   tickLabel: {
     marginTop: 2,
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "rgba(156,163,175,0.65)",
   },
   btnPlace: {
@@ -1121,16 +1121,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#1f2937",
   },
   btnPlaceText: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 13.5,
+    fontWeight: "500",
     color: "#000000",
     letterSpacing: 0.4,
   },
   errorMsg: {
     minHeight: 18,
     textAlign: "center",
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ef4444",
   },
   tapPop: {
@@ -1138,8 +1138,8 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   tapPopText: {
-    fontSize: 30,
-    fontWeight: "900",
+    fontSize: 19,
+    fontWeight: "500",
     color: "#f9a602",
   },
   confettiPiece: {
@@ -1171,12 +1171,12 @@ const styles = StyleSheet.create({
     borderColor: "#ef4444",
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "700",
     marginBottom: 6,
   },
   modalMsg: {
-    fontSize: 14,
+    fontSize: 11.5,
     color: "#9ca3af",
     marginBottom: 16,
   },
@@ -1194,19 +1194,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   detailLabel: {
-    fontSize: 14.5,
+    fontSize: 12,
     fontWeight: "500",
     color: "#9ca3af",
   },
   detailValue: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
   modalAmount: {
-    fontSize: 26,
-    fontWeight: "800",
+    fontSize: 17.5,
+    fontWeight: "500",
     color: "#ffffff",
     marginBottom: 20,
     fontVariant: ["tabular-nums"],
@@ -1221,8 +1221,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   btnCloseModalText: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#ffffff",
   },
 });

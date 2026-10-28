@@ -27,7 +27,7 @@ export function KickoffCountdown({
     return (
       <span
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10.5px] font-bold text-betclic-red",
+          "inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-medium text-betclic-red",
           className
         )}
       >
@@ -42,7 +42,7 @@ export function KickoffCountdown({
     return (
       <span
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red",
+          "inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-betclic-red",
           className
         )}
       >
@@ -57,7 +57,7 @@ export function KickoffCountdown({
     return (
       <span
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded-full bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold tabular-nums text-mist",
+          "inline-flex shrink-0 items-center gap-1 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-mist",
           className
         )}
       >
@@ -103,7 +103,7 @@ export function KickoffCountdown({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold tabular-nums text-mist",
+        "inline-flex shrink-0 items-center gap-1 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-mist",
         className
       )}
     >

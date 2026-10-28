@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   pillText: {
-    fontSize: 14,
+    fontSize: 11.5,
     fontWeight: "500",
   },
   pillTextDefault: {
@@ -245,13 +245,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   resetText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "500",
     color: COLORS.betclicRed,
   },
   countText: {
     marginBottom: 10,
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
@@ -295,22 +295,22 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 11.5,
     fontWeight: "500",
     color: COLORS.ink,
   },
   optionLabelSelected: {
-    fontWeight: "600",
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   optionCount: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "400",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
   optionCountSelected: {
-    fontWeight: "600",
+    fontWeight: "500",
     color: "rgba(225, 0, 20, 0.85)",
   },
 });

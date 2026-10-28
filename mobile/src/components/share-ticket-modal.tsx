@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     borderRadius: 22,
     backgroundColor: "#ffffff",
-    padding: 16,
+    padding: 12,
     gap: 14,
   },
   topRow: {
@@ -135,8 +135,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   brandText: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   closeBtn: {
@@ -159,18 +159,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   dateText: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   title: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   pick: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   metrics: {
@@ -182,13 +182,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   metricLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   metricVal: {
-    fontSize: 14.5,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -202,8 +202,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   shareBtnText: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
 });

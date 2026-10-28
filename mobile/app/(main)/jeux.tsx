@@ -113,12 +113,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 16,
     paddingBottom: 32,
   },
   pageTitle: {
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
@@ -162,8 +162,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   darkBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     textTransform: "uppercase",
     letterSpacing: 0.6,
     color: "#ffffff",
@@ -175,8 +175,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   amberBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "#020617",
   },
   bottomRow: {
@@ -188,14 +188,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 14.5,
+    fontWeight: "700",
     color: "#ffffff",
     letterSpacing: -0.3,
   },
   cardSub: {
     marginTop: 2,
-    fontSize: 11.5,
+    fontSize: 10.5,
     lineHeight: 16,
     color: "rgba(255,255,255,0.85)",
   },

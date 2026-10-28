@@ -33,10 +33,39 @@ html {
 
 body {
   font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-weight: 400;
   background: var(--color-deep);
   color: var(--color-ink);
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 700;
+}
+
+.btn-red {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  background: var(--color-betclic-red);
+  color: #ffffff;
+  font-weight: 500;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.btn-red:hover {
+  background: var(--color-betclic-red-deep);
+}
+
+.btn-red:active {
+  transform: scale(0.985);
 }
 
 ::selection {

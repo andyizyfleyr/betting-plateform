@@ -98,8 +98,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   urgentText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -124,8 +124,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   soonText: {
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
     fontVariant: ["tabular-nums"],
   },

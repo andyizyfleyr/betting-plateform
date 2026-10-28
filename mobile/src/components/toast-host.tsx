@@ -94,12 +94,12 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   title: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   desc: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.mist,
   },

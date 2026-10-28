@@ -284,9 +284,9 @@ export default function ParisPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+        <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
           Mes paris
         </h1>
 
@@ -316,7 +316,7 @@ export default function ParisPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher un match, un coupon, un combiné…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
           />
           {query && (
             <button
@@ -333,18 +333,18 @@ export default function ParisPage() {
 
       {/* Synthèse contextuelle uniquement s'il y a des paris */}
       {bets !== null && (staked > 0 || settled > 0) && (
-        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-edge bg-white px-3 py-2 text-[12px] shadow-2xs">
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-edge bg-white px-3 py-2 text-[10.5px] shadow-2xs">
           {staked > 0 && (
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
               <span className="text-mist">
                 En jeu :{" "}
-                <strong className="font-display font-bold tabular-nums text-ink">
+                <strong className="font-display font-medium tabular-nums text-ink">
                   {eur(staked)}
                 </strong>
               </span>
               <span className="text-mist">
                 Gain max :{" "}
-                <strong className="font-display font-bold tabular-nums text-win">
+                <strong className="font-display font-medium tabular-nums text-win">
                   {eur(potential)}
                 </strong>
               </span>
@@ -353,7 +353,7 @@ export default function ParisPage() {
           {settled > 0 && (
             <span className="text-mist">
               Réussite :{" "}
-              <strong className="font-display font-bold tabular-nums text-ink">
+              <strong className="font-display font-medium tabular-nums text-ink">
                 {winRate}%
               </strong>
             </span>
@@ -371,7 +371,7 @@ export default function ParisPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher un match, un coupon, un combiné…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
           />
           <button
             type="button"
@@ -503,10 +503,10 @@ export default function ParisPage() {
           <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
             <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
           </div>
-          <p className="mt-3 font-display text-[15px] font-bold text-ink">
+          <p className="mt-3 font-display text-[12px] font-medium text-ink">
             Connexion au serveur interrompue
           </p>
-          <p className="mt-1 max-w-[330px] text-[12.5px] leading-relaxed text-mist">
+          <p className="mt-1 max-w-[330px] text-[11px] leading-relaxed text-mist">
             {loadError}
           </p>
           <button
@@ -514,7 +514,7 @@ export default function ParisPage() {
             onClick={() => {
               void allBetsQuery.refetch();
             }}
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white shadow-xs active:scale-95"
           >
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
             Réessayer
@@ -525,10 +525,10 @@ export default function ParisPage() {
           <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
             <TicketX className="h-6 w-6" strokeWidth={1.8} />
           </div>
-          <p className="mt-3 font-display text-[15.5px] font-bold text-ink">
+          <p className="mt-3 font-display text-[12.5px] font-medium text-ink">
             {tab === "ongoing" ? "Aucun pari en cours" : "Aucun pari terminé"}
           </p>
-          <p className="mt-1 max-w-[240px] text-[12.5px] text-dim">
+          <p className="mt-1 max-w-[240px] text-[11px] text-dim">
             {tab === "ongoing"
               ? "Choisissez une prédiction ou un match pour placer une mise."
               : "Modifiez vos filtres ou consultez vos coupons en cours."}
@@ -537,14 +537,14 @@ export default function ParisPage() {
             <div className="mt-4 flex gap-2">
               <Link
                 href="/matchs"
-                className="flex h-10 items-center gap-1.5 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white active:opacity-90"
+                className="flex h-10 items-center gap-1.5 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white active:opacity-90"
               >
                 Matchs
                 <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.4} />
               </Link>
               <Link
                 href="/predictions"
-                className="flex h-10 items-center rounded-full border border-edge bg-white px-4 font-display text-[12.5px] font-semibold text-ink active:bg-elev"
+                className="flex h-10 items-center rounded-full border border-edge bg-white px-4 font-display text-[11px] font-medium text-ink active:bg-elev"
               >
                 Prédictions
               </Link>
@@ -562,7 +562,7 @@ export default function ParisPage() {
           ) : (
             finishedGroups.map(([label, group]) => (
               <div key={label} className="mb-5 last:mb-0">
-                <p className="mb-2 px-0.5 text-[11.5px] font-semibold capitalize text-mist">
+                <p className="mb-2 px-0.5 text-[10.5px] font-medium capitalize text-mist">
                   {label}
                   <span className="ml-1.5 text-dim">
                     ({dayTotalCounts.get(label) ?? group.length})

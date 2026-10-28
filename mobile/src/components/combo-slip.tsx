@@ -420,7 +420,7 @@ export function ComboSheet() {
               <Text style={styles.successTitle}>Pari combiné accepté !</Text>
               <Text style={styles.successSub}>
                 Cote totale{" "}
-                <Text style={{ fontWeight: "700", color: COLORS.ink }}>
+                <Text style={{ fontWeight: "500", color: COLORS.ink }}>
                   {formatOdds(placedInfo.totalOdds, oddsFormat)}
                 </Text>
                 {placedInfo.boostPct > 0
@@ -643,18 +643,18 @@ export function ComboSheet() {
 const styles = StyleSheet.create({
   floatWrap: {
     position: "absolute",
-    left: 14,
-    right: 14,
+    left: 8,
+    right: 8,
     bottom: 66,
     zIndex: 40,
   },
   floatCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: COLORS.ink,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -681,8 +681,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   countBadgeText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   floatTitleRow: {
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
   },
   floatTitle: {
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "700",
     color: "#ffffff",
   },
@@ -703,16 +703,16 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   floatBoostText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "#6ee7b7",
   },
   floatSub: {
-    fontSize: 11,
+    fontSize: 10,
     color: "rgba(255,255,255,0.70)",
   },
   floatSubStrong: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
   },
   floatRight: {
@@ -735,8 +735,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(52,211,153,0.4)",
   },
   quickModeText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "rgba(255,255,255,0.75)",
   },
   openBtn: {
@@ -748,8 +748,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   openBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   clearIconBtn: {
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sheetTitle: {
-    fontSize: 16,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
@@ -814,8 +814,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   sheetCountText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#ffffff",
   },
   sheetHeadRight: {
@@ -833,8 +833,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sheetClearText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   sheetCloseBtn: {
@@ -868,13 +868,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   boostTitle: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   boostHint: {
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   boostTrack: {
@@ -894,7 +894,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   needTwoText: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: COLORS.mist,
     lineHeight: 16,
   },
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
   },
   legTitle: {
     flex: 1,
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "700",
     color: COLORS.ink,
   },
@@ -943,13 +943,13 @@ const styles = StyleSheet.create({
   },
   legPickText: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   legOddsText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -960,13 +960,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   rechargeHintText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   errText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   sheetFooter: {
@@ -983,16 +983,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   quoteLabel: {
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
   },
   quoteOddsStrong: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.ink,
   },
   quoteWin: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
@@ -1004,8 +1004,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   submitBtnText: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   successBox: {
@@ -1024,13 +1024,13 @@ const styles = StyleSheet.create({
   },
   successTitle: {
     marginTop: 12,
-    fontSize: 19,
+    fontSize: 14.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   successSub: {
     marginTop: 4,
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
   },
   successPayoutRow: {
@@ -1045,17 +1045,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   successStake: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.dim,
   },
   successGainLabel: {
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   successGainVal: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 14.5,
+    fontWeight: "500",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
@@ -1074,8 +1074,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   successPrimaryText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   successSecondaryBtn: {
@@ -1087,8 +1087,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   successSecondaryText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
 });

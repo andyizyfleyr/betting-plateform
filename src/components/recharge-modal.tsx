@@ -147,10 +147,10 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
               <Check className="h-7 w-7" strokeWidth={2.6} />
             </div>
-            <h3 className="mt-3 font-display text-[18px] font-bold text-ink">
+            <h3 className="mt-3 font-display text-[13.5px] font-bold text-ink">
               Demande de dépôt transmise
             </h3>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-mist">
+            <p className="mt-1 text-[11px] leading-relaxed text-mist">
               Votre dépôt de <strong className="text-ink">{eur(amount)}</strong> (
               {method === "mobile_money" ? "Mobile Money" : "Virement SEPA"}) sera crédité sur votre
               solde dès validation par l&apos;équipe.
@@ -158,7 +158,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               onClick={onClose}
-              className="mt-5 h-11 w-full rounded-2xl bg-betclic-red font-display text-[13.5px] font-bold text-white"
+              className="mt-5 h-11 w-full rounded-2xl bg-betclic-red font-display text-[11.5px] font-medium text-white"
             >
               Parfait
             </button>
@@ -172,10 +172,10 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
 
             <div className="mt-3 flex items-center justify-between">
               <div>
-                <h2 className="font-display text-[17px] font-bold tracking-tight text-ink">
+                <h2 className="font-display text-[13.5px] font-bold tracking-tight text-ink">
                   Recharger mon solde
                 </h2>
-                <p className="text-[11.5px] text-dim">Actuel : {eur(balance)}</p>
+                <p className="text-[10.5px] text-dim">Actuel : {eur(balance)}</p>
               </div>
               <button
                 type="button"
@@ -188,7 +188,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
             </div>
 
             <div className="mt-3.5">
-              <label htmlFor="recharge-amount" className="text-[11.5px] font-semibold text-mist">
+              <label htmlFor="recharge-amount" className="text-[10.5px] font-medium text-mist">
                 Montant du dépôt (5 € à 2 000 €)
               </label>
               <div
@@ -203,10 +203,10 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   inputMode="decimal"
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value.replace(/[^0-9.,]/g, ""))}
-                  className="w-full bg-transparent font-display text-[20px] font-bold tabular-nums text-ink outline-none"
+                  className="w-full bg-transparent font-display text-[14.5px] font-medium tabular-nums text-ink outline-none"
                   aria-label="Montant à recharger"
                 />
-                <span className="font-display text-[17px] font-bold text-dim">€</span>
+                <span className="font-display text-[13.5px] font-medium text-dim">€</span>
               </div>
 
               <div className="mt-2 grid grid-cols-5 gap-1.5">
@@ -216,7 +216,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                     type="button"
                     onClick={() => setAmountText(String(q))}
                     className={cn(
-                      "h-8 rounded-xl border font-display text-[12px] font-bold transition-colors active:scale-95",
+                      "h-8 rounded-xl border font-display text-[10.5px] font-medium transition-colors active:scale-95",
                       amount === q
                         ? "border-ink bg-ink text-white"
                         : "border-edge bg-elev text-ink"
@@ -229,7 +229,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
             </div>
 
             <div className="mt-4">
-              <p className="text-[11.5px] font-semibold text-mist">Moyen de paiement</p>
+              <p className="text-[10.5px] font-medium text-mist">Moyen de paiement</p>
               <div className="mt-1.5 grid grid-cols-2 gap-2">
                 <MethodCard
                   label="Mobile Money"
@@ -288,7 +288,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
 
             {isManual && (
               <div className="mt-3.5">
-                <label className="text-[11.5px] font-semibold text-mist">
+                <label className="text-[10.5px] font-medium text-mist">
                   {method === "mobile_money"
                     ? "Opérateur + numéro / réf. transfert"
                     : "Nom émetteur ou référence du virement"}
@@ -305,13 +305,13 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                       ? "Ex : MTN +229 01 97 00 00 00 · Réf 8492"
                       : "Ex : Virement Alex Martin · Réf PULSE-25"
                   }
-                  className="mt-1.5 h-11 w-full rounded-2xl border border-edge bg-white px-3.5 text-[14.5px] font-medium text-ink outline-none focus:border-ink"
+                  className="mt-1.5 h-11 w-full rounded-2xl border border-edge bg-white px-3.5 text-[12px] font-medium text-ink outline-none focus:border-ink"
                 />
               </div>
             )}
 
             {error && (
-              <p className="mt-3 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+              <p className="mt-3 rounded-xl bg-betclic-red/8 px-3 py-2 text-[10.5px] font-medium text-betclic-red">
                 {error}
               </p>
             )}
@@ -321,7 +321,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
               disabled={!canSubmit}
               onClick={submit}
               className={cn(
-                "mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
+                "mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[12px] font-medium transition-all active:scale-[0.99]",
                 canSubmit ? "bg-betclic-red text-white shadow-sm" : "bg-elev text-dim"
               )}
             >
@@ -334,7 +334,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
               )}
             </button>
 
-            <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[11px] text-dim">
+            <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[10px] text-dim">
               <Lock className="h-3 w-3" strokeWidth={2.2} />
               {isManual
                 ? "Vérification rapide et crédit sécurisé dans votre portefeuille"
@@ -386,13 +386,13 @@ function MethodCard({
           <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
         </span>
         {badge && (
-          <span className="rounded bg-win/12 px-1.5 py-0.5 font-display text-[9px] font-bold uppercase text-win">
+          <span className="rounded bg-win/12 px-1.5 py-0.5 font-display text-[9px] font-medium uppercase text-win">
             {badge}
           </span>
         )}
       </div>
-      <span className="mt-1.5 font-display text-[12.5px] font-bold text-ink">{label}</span>
-      <span className="truncate text-[10.5px] text-dim">{sub}</span>
+      <span className="mt-1.5 font-display text-[11px] font-medium text-ink">{label}</span>
+      <span className="truncate text-[10px] text-dim">{sub}</span>
     </button>
   );
 }

@@ -433,10 +433,10 @@ export function ShareTicketModal({ bet, onClose }: Props) {
         >
           <div className="flex shrink-0 items-center justify-between border-b border-edge px-4 py-3">
             <div>
-              <h2 className="font-display text-[16px] font-bold text-ink">
+              <h2 className="font-display text-[12.5px] font-bold text-ink">
                 Partager mon coupon
               </h2>
-              <p className="text-[11px] text-dim">Carte haute définition prête à partager</p>
+              <p className="text-[10px] text-dim">Carte haute définition prête à partager</p>
             </div>
             <button
               type="button"
@@ -473,13 +473,13 @@ export function ShareTicketModal({ bet, onClose }: Props) {
                 ) : (
                   <Eye className="h-4 w-4 text-ink" strokeWidth={2.1} />
                 )}
-                <span className="text-[12.5px] font-semibold text-ink">
+                <span className="text-[11px] font-medium text-ink">
                   Masquer ma mise et mes montants (€)
                 </span>
               </div>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                  "rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium",
                   hideAmounts ? "bg-betclic-red text-white" : "bg-white text-dim"
                 )}
               >
@@ -492,7 +492,7 @@ export function ShareTicketModal({ bet, onClose }: Props) {
               <button
                 type="button"
                 onClick={shareNative}
-                className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[13.5px] font-bold text-white active:scale-[0.99]"
+                className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[11.5px] font-medium text-white active:scale-[0.99]"
               >
                 <Share2 className="h-4 w-4" strokeWidth={2.3} />
                 Partager l&apos;image du ticket
@@ -501,7 +501,7 @@ export function ShareTicketModal({ bet, onClose }: Props) {
               <button
                 type="button"
                 onClick={shareWhatsApp}
-                className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#25D366]/14 font-display text-[12px] font-bold text-[#128C7E] active:scale-[0.98]"
+                className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#25D366]/14 font-display text-[10.5px] font-medium text-[#128C7E] active:scale-[0.98]"
               >
                 WhatsApp
               </button>
@@ -509,7 +509,7 @@ export function ShareTicketModal({ bet, onClose }: Props) {
               <button
                 type="button"
                 onClick={downloadImage}
-                className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[12px] font-bold text-ink active:scale-[0.98]"
+                className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:scale-[0.98]"
               >
                 <Download className="h-3.5 w-3.5" strokeWidth={2.2} />
                 Télécharger PNG
@@ -519,7 +519,7 @@ export function ShareTicketModal({ bet, onClose }: Props) {
             <button
               type="button"
               onClick={copySummary}
-              className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev font-display text-[11.5px] font-semibold text-mist active:bg-edge"
+              className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev font-display text-[10.5px] font-medium text-mist active:bg-edge"
             >
               {copied ? (
                 <>

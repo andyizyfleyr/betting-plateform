@@ -107,7 +107,7 @@ export function DesktopSidebar() {
         <div className="flex h-[60px] items-center justify-between border-b border-edge px-5">
           <Link href="/admin" className="flex items-center gap-2.5">
             <PulseLogo size="sm" variant="light" subtitle="Console opérateur" />
-            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
+            <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wide text-betclic-red">
               <ShieldCheck className="h-2.5 w-2.5" strokeWidth={2.5} />
               Admin
             </span>
@@ -116,7 +116,7 @@ export function DesktopSidebar() {
 
         {/* Navigation verticale d'administration (strictement isolée de l'espace joueur) */}
         <div className="no-scrollbar flex-1 overflow-y-auto px-3.5 py-4">
-          <p className="px-2.5 font-display text-[10.5px] font-bold uppercase tracking-wider text-dim">
+          <p className="px-2.5 font-display text-[10px] font-medium uppercase tracking-wider text-dim">
             Pilotage plateforme
           </p>
           <nav className="mt-2 flex flex-col gap-1" aria-label="Navigation administration">
@@ -150,8 +150,8 @@ export function DesktopSidebar() {
                     />
                     <span
                       className={cn(
-                        "font-display text-[13px]",
-                        active ? "font-bold" : "font-semibold"
+                        "font-display text-[11px]",
+                        active ? "font-medium" : "font-medium"
                       )}
                     >
                       {label}
@@ -160,7 +160,7 @@ export function DesktopSidebar() {
                   {badge > 0 && (
                     <span
                       className={cn(
-                        "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-display text-[10.5px] font-bold leading-none",
+                        "grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-display text-[10px] font-medium leading-none",
                         active ? "bg-white text-betclic-red" : "bg-betclic-red text-white"
                       )}
                     >
@@ -177,14 +177,14 @@ export function DesktopSidebar() {
         <div className="border-t border-edge p-3.5 space-y-2.5">
           {user && (
             <div className="flex items-center gap-2.5 rounded-xl bg-elev/70 px-3 py-2">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink font-display text-[11.5px] font-bold text-white">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink font-display text-[10.5px] font-medium text-white">
                 {initials(user.name)}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-[12.5px] font-bold text-ink">
+                <p className="truncate font-display text-[11px] font-medium text-ink">
                   {user.name}
                 </p>
-                <p className="truncate text-[10.5px] text-dim">{user.email}</p>
+                <p className="truncate text-[10px] text-dim">{user.email}</p>
               </div>
             </div>
           )}
@@ -192,7 +192,7 @@ export function DesktopSidebar() {
             type="button"
             onClick={handleLogout}
             disabled={loggingOut}
-            className="flex h-9.5 w-full items-center justify-center gap-2 rounded-xl border border-edge bg-white font-display text-[12.5px] font-semibold text-ink transition-colors hover:bg-elev disabled:opacity-60"
+            className="flex h-9.5 w-full items-center justify-center gap-2 rounded-xl border border-edge bg-white font-display text-[11px] font-medium text-ink transition-colors hover:bg-elev disabled:opacity-60"
           >
             {loggingOut ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-dim" />
@@ -231,13 +231,13 @@ export function DesktopSidebar() {
         {user ? (
           <div className="rounded-2xl border border-edge bg-elev/60 p-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-dim">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-dim">
                 <Wallet className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
                 Solde disponible
               </span>
               <Link
                 href="/parametres"
-                className="font-display text-[10.5px] font-bold text-mist hover:text-ink"
+                className="font-display text-[10px] font-medium text-mist hover:text-ink"
               >
                 Portefeuille →
               </Link>
@@ -245,12 +245,12 @@ export function DesktopSidebar() {
             <AnimatedNumber
               value={balance}
               format={eur}
-              className="mt-1 block font-display text-[20px] font-bold leading-tight tabular-nums text-ink"
+              className="mt-1 block font-display text-[14.5px] font-medium leading-tight tabular-nums text-ink"
             />
             <button
               type="button"
               onClick={openRecharge}
-              className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white shadow-2xs transition-opacity hover:opacity-95 active:scale-[0.99]"
+              className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[10.5px] font-medium text-white shadow-2xs transition-opacity hover:opacity-95 active:scale-[0.99]"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
               Déposer des fonds
@@ -263,29 +263,29 @@ export function DesktopSidebar() {
           >
             <div className="h-3 w-20 animate-pulse rounded bg-ink/10" />
             <div className="mt-2 h-6 w-28 animate-pulse rounded bg-ink/15" />
-            <div className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red/90 font-display text-[12px] font-bold text-white">
+            <div className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red/90 font-display text-[10.5px] font-medium text-white">
               <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
               Déposer des fonds
             </div>
           </div>
         ) : (
           <div className="rounded-2xl border border-edge bg-elev/60 p-3">
-            <p className="font-display text-[12.5px] font-bold text-ink">
+            <p className="font-display text-[11px] font-medium text-ink">
               Espace joueur Pulse Bet
             </p>
-            <p className="mt-0.5 text-[11px] leading-snug text-mist">
+            <p className="mt-0.5 text-[10px] leading-snug text-mist">
               Accédez à vos paris en direct, votre portefeuille et le Cash Out instantané.
             </p>
             <div className="mt-2.5 grid grid-cols-2 gap-1.5">
               <Link
                 href="/auth/connexion"
-                className="flex h-9 items-center justify-center rounded-xl border border-edge bg-white font-display text-[12px] font-bold text-ink transition-colors hover:bg-elev"
+                className="flex h-9 items-center justify-center rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink transition-colors hover:bg-elev"
               >
                 Connexion
               </Link>
               <Link
                 href="/auth/inscription"
-                className="flex h-9 items-center justify-center rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white transition-opacity hover:opacity-95"
+                className="flex h-9 items-center justify-center rounded-xl bg-betclic-red font-display text-[10.5px] font-medium text-white transition-opacity hover:opacity-95"
               >
                 Inscription
               </Link>
@@ -297,7 +297,7 @@ export function DesktopSidebar() {
       {/* Navigation principale & secondaire */}
       <div className="no-scrollbar flex-1 overflow-y-auto px-3.5 py-3.5 space-y-5">
         <div>
-          <p className="px-2.5 font-display text-[10.5px] font-bold uppercase tracking-wider text-dim">
+          <p className="px-2.5 font-display text-[10px] font-medium uppercase tracking-wider text-dim">
             Paris &amp; Direct
           </p>
           <nav className="mt-1.5 flex flex-col gap-1" aria-label="Navigation principale">
@@ -333,8 +333,8 @@ export function DesktopSidebar() {
                     />
                     <span
                       className={cn(
-                        "truncate font-display text-[13px]",
-                        active ? "font-bold" : "font-semibold"
+                        "truncate font-display text-[11px]",
+                        active ? "font-medium" : "font-medium"
                       )}
                     >
                       {label}
@@ -345,7 +345,7 @@ export function DesktopSidebar() {
                     <span className="flex shrink-0 items-center gap-1">
                       <span
                         className={cn(
-                          "rounded-md px-1.5 py-0.5 font-display text-[10px] font-bold tabular-nums",
+                          "rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-medium tabular-nums",
                           active ? "bg-white/20 text-white" : "bg-elev text-ink"
                         )}
                       >
@@ -353,7 +353,7 @@ export function DesktopSidebar() {
                       </span>
                       <span
                         className={cn(
-                          "grid h-5 min-w-5 place-items-center rounded-full px-1 font-display text-[10px] font-bold leading-none",
+                          "grid h-5 min-w-5 place-items-center rounded-full px-1 font-display text-[9.5px] font-medium leading-none",
                           active ? "bg-white text-betclic-red" : "bg-betclic-red text-white"
                         )}
                       >
@@ -363,7 +363,7 @@ export function DesktopSidebar() {
                   ) : badgeCount > 0 ? (
                     <span
                       className={cn(
-                        "grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 font-display text-[10.5px] font-bold leading-none",
+                        "grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 font-display text-[10px] font-medium leading-none",
                         active ? "bg-white text-betclic-red" : "bg-ink text-white"
                       )}
                     >
@@ -372,7 +372,7 @@ export function DesktopSidebar() {
                   ) : showLiveDot ? (
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium",
                         active
                           ? "bg-white/20 text-white"
                           : "bg-betclic-red/12 text-betclic-red"
@@ -394,7 +394,7 @@ export function DesktopSidebar() {
         </div>
 
         <div>
-          <p className="px-2.5 font-display text-[10.5px] font-bold uppercase tracking-wider text-dim">
+          <p className="px-2.5 font-display text-[10px] font-medium uppercase tracking-wider text-dim">
             Mini-jeux &amp; Compte
           </p>
           <nav className="mt-1.5 flex flex-col gap-1" aria-label="Navigation secondaire">
@@ -422,8 +422,8 @@ export function DesktopSidebar() {
                     />
                     <span
                       className={cn(
-                        "truncate font-display text-[13px]",
-                        active ? "font-bold" : "font-semibold"
+                        "truncate font-display text-[11px]",
+                        active ? "font-medium" : "font-medium"
                       )}
                     >
                       {label}
@@ -440,11 +440,11 @@ export function DesktopSidebar() {
       <div className="border-t border-edge p-3.5 space-y-2.5">
         <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/50 px-3 py-2">
           <div className="min-w-0">
-            <p className="flex items-center gap-1 font-display text-[11.5px] font-bold text-ink">
+            <p className="flex items-center gap-1 font-display text-[10.5px] font-medium text-ink">
               <Zap className="h-3 w-3 text-betclic-red" strokeWidth={2.5} />
               Combiné 1-clic
             </p>
-            <p className="truncate text-[10px] text-dim">
+            <p className="truncate text-[9.5px] text-dim">
               Clic direct sur une cote = coupon
             </p>
           </div>
@@ -457,7 +457,7 @@ export function DesktopSidebar() {
             className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-elev"
           >
             <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl font-display text-[11.5px] font-bold text-white"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl font-display text-[10.5px] font-medium text-white"
               style={{
                 background: `linear-gradient(140deg, hsl(${userHue} 60% 44%), hsl(${(userHue + 36) % 360} 68% 30%))`,
               }}
@@ -465,10 +465,10 @@ export function DesktopSidebar() {
               {initials(user.name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-display text-[12.5px] font-bold text-ink">
+              <p className="truncate font-display text-[11px] font-medium text-ink">
                 {user.name}
               </p>
-              <p className="truncate text-[10.5px] text-dim">
+              <p className="truncate text-[10px] text-dim">
                 Cotes {oddsFormat === "fractional" ? "fractionnaires" : "décimales"}
               </p>
             </div>

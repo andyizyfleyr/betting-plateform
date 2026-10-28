@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   fallbackText: {
     color: "#ffffff",
-    fontWeight: "700",
+    fontWeight: "500",
     letterSpacing: -0.3,
   },
 });
