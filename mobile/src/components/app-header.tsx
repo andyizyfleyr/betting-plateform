@@ -12,7 +12,17 @@ import { PulseLogo } from "./pulse-logo";
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, balance, applyUser, clearCombo, openRecharge, toast } = useApp();
+  const {
+    authReady,
+    sessionRestoring,
+    user,
+    balance,
+    applyUser,
+    clearCombo,
+    openRecharge,
+    toast,
+  } = useApp();
+  const authPending = !authReady || sessionRestoring;
   const [loggingOut, setLoggingOut] = useState(false);
 
   if (
@@ -113,6 +123,13 @@ export function AppHeader() {
                 <Plus size={14} color="#ffffff" strokeWidth={2.8} />
               </View>
             </Pressable>
+          ) : authPending ? (
+            <View style={[styles.balancePill, { minWidth: 106 }]}>
+              <View style={styles.balanceSkeletonBar} />
+              <View style={styles.plusCircle}>
+                <Plus size={14} color="#ffffff" strokeWidth={2.8} />
+              </View>
+            </View>
           ) : (
             <Pressable
               onPress={() => router.push("/auth")}
@@ -221,6 +238,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
+  },
+  balanceSkeletonBar: {
+    width: 54,
+    height: 11,
+    borderRadius: 999,
+    backgroundColor: "rgba(17, 24, 39, 0.14)",
   },
   plusCircle: {
     width: 24,

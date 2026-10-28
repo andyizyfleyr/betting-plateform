@@ -83,7 +83,7 @@ export default function SingleBetDetailPage() {
   const rawParamId = String(params?.id ?? "");
   const router = useRouter();
   const parsed = useMemo(() => parseSimpleBetSlug(rawParamId), [rawParamId]);
-  const { betsVersion, oddsFormat, setBalance, bumpBets, toast, user } = useApp();
+  const { authReady, betsVersion, oddsFormat, setBalance, bumpBets, toast, user } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
 
@@ -181,19 +181,20 @@ export default function SingleBetDetailPage() {
   }, [parsed, rawParamId, isOffline, setBalance]);
 
   const userId = user?.id ?? null;
+  const canQueryBet = parsed.valid && (Boolean(userId) || !authReady);
   const shouldPoll = bet === undefined || bet?.status === "pending";
 
   useEffect(() => {
-    if (!userId || !parsed.valid) return;
+    if (!canQueryBet) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSingleBet();
-  }, [userId, parsed.valid, fetchSingleBet, betsVersion, reloadNonce]);
+  }, [canQueryBet, fetchSingleBet, betsVersion, reloadNonce]);
 
   useEffect(() => {
-    if (!userId || !parsed.valid || !shouldPoll) return;
+    if (!canQueryBet || !shouldPoll) return;
     const id = setInterval(() => void fetchSingleBet(), pollIntervalMs);
     return () => clearInterval(id);
-  }, [userId, parsed.valid, fetchSingleBet, shouldPoll, pollIntervalMs]);
+  }, [canQueryBet, fetchSingleBet, shouldPoll, pollIntervalMs]);
 
   const effectiveCashOut =
     bet?.cashOut != null
@@ -268,7 +269,11 @@ export default function SingleBetDetailPage() {
     [linkedMatch]
   );
 
-  if (!user) {
+  if (!authReady && !user) {
+    return <PulseFlashLoader />;
+  }
+
+  if (!user && bet == null) {
     return (
       <div className="mx-auto max-w-xl px-3 pt-4 pb-6">
         <div className="glass-card rounded-xl p-4 text-center">
@@ -306,6 +311,10 @@ export default function SingleBetDetailPage() {
   const canToggleTracker = Boolean(
     linkedMatch && ((!isReal && matchStatus === "live") || realStatsAvailable)
   );
+
+  if (!authReady && !user && bet === undefined) {
+    return <PulseFlashLoader />;
+  }
 
   if (bet === undefined && !loadError) {
     return <PulseFlashLoader />;

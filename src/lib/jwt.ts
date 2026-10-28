@@ -4,6 +4,8 @@
  */
 
 export const AUTH_COOKIE = "__pulse_session";
+export const AUTH_UID_COOKIE = "__pulse_uid";
+export const USER_CACHE_STORAGE_KEY = "pulsebet_cached_user_v1";
 export const MOBILE_CLIENT_HEADER = "x-client-platform";
 export const MOBILE_ANDROID_CLIENT = "android-expo";
 

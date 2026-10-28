@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -18,7 +19,8 @@ import {
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { api, type ClientMatch, type ClientUser } from "@/lib/api";
+import { ApiRequestError, api, type ClientMatch, type ClientUser } from "@/lib/api";
+import { AUTH_UID_COOKIE, USER_CACHE_STORAGE_KEY } from "@/lib/jwt";
 import {
   MAX_COMBO_LEGS,
   sortSlipSelectionsChronologically,
@@ -75,6 +77,7 @@ export type SportUniverse = "real" | "virtual";
 export type SportStatusFilter = "all" | "live" | "upcoming" | "finished";
 
 interface AppContextValue {
+  authReady: boolean;
   user: ClientUser | null;
   balance: number;
   oddsFormat: "decimal" | "fractional";
@@ -138,6 +141,142 @@ export function useFeedMatches(): ClientMatch[] | null {
 let toastId = 0;
 const COMBO_STORAGE_KEY = "pulsebet_combo_v1";
 
+interface WebAuthSnapshot {
+  user: ClientUser | null;
+  authReady: boolean;
+}
+
+const SERVER_AUTH_SNAPSHOT: WebAuthSnapshot = {
+  user: null,
+  authReady: false,
+};
+
+function readUidHintFromDocumentCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const parts = document.cookie ? document.cookie.split(";") : [];
+  for (const raw of parts) {
+    const [k, ...rest] = raw.trim().split("=");
+    if (k === AUTH_UID_COOKIE) {
+      const val = decodeURIComponent(rest.join("=")).trim();
+      return val.length > 0 ? val : null;
+    }
+  }
+  return null;
+}
+
+function readStoredWebUser(): ClientUser | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(USER_CACHE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ClientUser;
+    if (parsed && typeof parsed.id === "number" && typeof parsed.balance === "number") {
+      return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function writeStoredWebUser(u: ClientUser | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (u) {
+      window.localStorage.setItem(USER_CACHE_STORAGE_KEY, JSON.stringify(u));
+    } else {
+      window.localStorage.removeItem(USER_CACHE_STORAGE_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+let clientAuthHydrated = false;
+let clientAuthSnapshot: WebAuthSnapshot = SERVER_AUTH_SNAPSHOT;
+const authStoreListeners = new Set<() => void>();
+
+function notifyAuthStore(): void {
+  for (const listener of authStoreListeners) {
+    listener();
+  }
+}
+
+function ensureClientAuthHydrated(): void {
+  if (clientAuthHydrated || typeof window === "undefined") return;
+  clientAuthHydrated = true;
+  const uidCookie = readUidHintFromDocumentCookie();
+  const cachedUser = readStoredWebUser();
+  const isAuthPath =
+    window.location.pathname === "/auth" ||
+    window.location.pathname.startsWith("/auth/");
+
+  if (uidCookie) {
+    if (cachedUser && String(cachedUser.id) === uidCookie) {
+      clientAuthSnapshot = { user: cachedUser, authReady: true };
+    } else {
+      // Session authentifiée confirmée par cookie, en attente du profil `/api/settings`
+      clientAuthSnapshot = { user: null, authReady: false };
+    }
+  } else if (isAuthPath) {
+    clientAuthSnapshot = { user: null, authReady: true };
+  } else if (cachedUser) {
+    // Route protégée `(main)` déjà validée par `proxy.ts` : restaure immédiatement le profil en cache
+    clientAuthSnapshot = { user: cachedUser, authReady: true };
+  } else {
+    clientAuthSnapshot = { user: null, authReady: false };
+  }
+}
+
+function subscribeWebAuthStore(listener: () => void): () => void {
+  authStoreListeners.add(listener);
+  return () => {
+    authStoreListeners.delete(listener);
+  };
+}
+
+function getClientWebAuthSnapshot(): WebAuthSnapshot {
+  ensureClientAuthHydrated();
+  return clientAuthSnapshot;
+}
+
+function getServerWebAuthSnapshot(): WebAuthSnapshot {
+  return SERVER_AUTH_SNAPSHOT;
+}
+
+function setWebAuthUser(nextUser: ClientUser | null, markReady = true): void {
+  ensureClientAuthHydrated();
+  writeStoredWebUser(nextUser);
+  if (!nextUser && typeof document !== "undefined") {
+    document.cookie = `${AUTH_UID_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+  }
+  const nextReady = markReady ? true : clientAuthSnapshot.authReady;
+  if (
+    clientAuthSnapshot.user === nextUser &&
+    clientAuthSnapshot.authReady === nextReady
+  ) {
+    return;
+  }
+  clientAuthSnapshot = {
+    user: nextUser,
+    authReady: nextReady,
+  };
+  notifyAuthStore();
+}
+
+function updateWebAuthBalance(cleanBalance: number): void {
+  ensureClientAuthHydrated();
+  const cur = clientAuthSnapshot.user;
+  if (!cur || Math.abs(cur.balance - cleanBalance) < 0.001) return;
+  const updated: ClientUser = { ...cur, balance: cleanBalance };
+  writeStoredWebUser(updated);
+  clientAuthSnapshot = {
+    user: updated,
+    authReady: true,
+  };
+  notifyAuthStore();
+}
+
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => getBrowserQueryClient());
   return (
@@ -149,7 +288,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
 function ProvidersRealtimeQueries({
   user,
-  setUser,
+  setBalance,
   loggedIn,
   isAuthRoute,
   isAdminMode,
@@ -163,7 +302,7 @@ function ProvidersRealtimeQueries({
   toast,
 }: {
   user: ClientUser | null;
-  setUser: React.Dispatch<React.SetStateAction<ClientUser | null>>;
+  setBalance: (n: number) => void;
   loggedIn: boolean;
   isAuthRoute: boolean;
   isAdminMode: boolean;
@@ -245,7 +384,7 @@ function ProvidersRealtimeQueries({
 
     setPendingCount(r.pendingCount);
     if (typeof r.balance === "number") {
-      setUser((u) => (u && u.balance !== r.balance ? { ...u, balance: r.balance } : u));
+      setBalance(r.balance);
     }
 
     const currentPrefs = userRef.current;
@@ -284,7 +423,7 @@ function ProvidersRealtimeQueries({
     prevBetStatuses.current = new Map(
       r.tickets.map((b) => [`${b.kind}-${b.id}`, b.status])
     );
-  }, [pulseQuery.data, setPendingCount, setUser, toast]);
+  }, [pulseQuery.data, setBalance, setPendingCount, toast]);
 
   return null;
 }
@@ -294,7 +433,14 @@ function ProvidersInner({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const isAuthRoute = pathname === "/auth" || pathname.startsWith("/auth/");
 
-  const [user, setUser] = useState<ClientUser | null>(null);
+  const { user, authReady } = useSyncExternalStore(
+    subscribeWebAuthStore,
+    getClientWebAuthSnapshot,
+    getServerWebAuthSnapshot
+  );
+  const applyUser = useCallback((u: ClientUser | null) => {
+    setWebAuthUser(u, true);
+  }, []);
   const [target, setTarget] = useState<BetTarget | null>(null);
   const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
   const [feedMatches, setFeedMatchesState] = useState<ClientMatch[] | null>(null);
@@ -365,18 +511,55 @@ function ProvidersInner({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isAuthRoute || user) return;
+    if (isAuthRoute) {
+      if (!authReady) {
+        setWebAuthUser(userRef.current, true);
+      }
+      return;
+    }
     let active = true;
-    api
-      .settings()
-      .then((r) => {
-        if (active) setUser(r.user);
-      })
-      .catch(() => undefined);
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const syncSettings = async (attempt = 0) => {
+      try {
+        const r = await api.settings();
+        if (!active) return;
+        setWebAuthUser(r.user, true);
+      } catch (err) {
+        if (!active) return;
+        if (err instanceof ApiRequestError && err.status === 401) {
+          setWebAuthUser(null, true);
+          return;
+        }
+        // En cas de lenteur réseau passagère (hors 401), conserve le profil en cache
+        // ou réessaie automatiquement sans jamais afficher « Connectez-vous » à tort.
+        const delayMs = Math.min(6_000, 1_500 * Math.max(1, attempt + 1));
+        retryTimer = setTimeout(() => {
+          void syncSettings(attempt + 1);
+        }, delayMs);
+      }
+    };
+
+    void syncSettings(0);
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== USER_CACHE_STORAGE_KEY) return;
+      const updated = readStoredWebUser();
+      clientAuthSnapshot = { user: updated, authReady: true };
+      notifyAuthStore();
+    };
+    const onOnline = () => {
+      if (!userRef.current) void syncSettings(0);
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("online", onOnline);
     return () => {
       active = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("online", onOnline);
     };
-  }, [isAuthRoute, user]);
+  }, [authReady, isAuthRoute]);
 
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
   const isAdminMode = isAdminRoute || user?.role === "admin";
@@ -554,11 +737,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
   const setBalance = useCallback((n: number) => {
     if (!Number.isFinite(n)) return;
     const clean = Math.round(n * 100) / 100;
-    setUser((u) => {
-      if (!u) return u;
-      if (Math.abs(u.balance - clean) < 0.001) return u;
-      return { ...u, balance: clean };
-    });
+    updateWebAuthBalance(clean);
   }, []);
 
   const openBet = useCallback(
@@ -624,11 +803,12 @@ function ProvidersInner({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppContextValue>(
     () => ({
+      authReady,
       user,
       balance: user?.balance ?? 0,
       oddsFormat: user?.oddsFormat ?? "decimal",
       setBalance,
-      applyUser: setUser,
+      applyUser,
       target,
       openBet,
       closeBet,
@@ -669,8 +849,10 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       setAdminPendingFinance,
     }),
     [
+      authReady,
       user,
       setBalance,
+      applyUser,
       target,
       openBet,
       closeBet,
@@ -716,7 +898,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
         >
           <ProvidersRealtimeQueries
             user={user}
-            setUser={setUser}
+            setBalance={setBalance}
             loggedIn={loggedIn}
             isAuthRoute={isAuthRoute}
             isAdminMode={isAdminMode}

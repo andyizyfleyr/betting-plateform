@@ -219,7 +219,13 @@ interface AdminPanelData {
 }
 
 export default function AdminScreen() {
-  const { user, authReady, dataSaverMode, setAdminPendingFinance } = useApp();
+  const {
+    user,
+    authReady,
+    sessionRestoring,
+    dataSaverMode,
+    setAdminPendingFinance,
+  } = useApp();
 
   const [panel, setPanel] = useState<AdminPanelData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -298,7 +304,7 @@ export default function AdminScreen() {
     setRefreshing(false);
   }, [load]);
 
-  if (authReady && (!user || user.role !== "admin")) {
+  if (authReady && !sessionRestoring && (!user || user.role !== "admin")) {
     return <Redirect href="/matchs" />;
   }
 

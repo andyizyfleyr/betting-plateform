@@ -18,6 +18,7 @@ import {
   Smartphone,
   Wallet,
 } from "lucide-react-native";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
@@ -61,8 +62,16 @@ const METHODS = [
 
 export default function WithdrawScreen() {
   const router = useRouter();
-  const { balance, setBalance, toast, user, bumpBets, hapticsEnabled } =
-    useApp();
+  const {
+    authReady,
+    sessionRestoring,
+    balance,
+    setBalance,
+    toast,
+    user,
+    bumpBets,
+    hapticsEnabled,
+  } = useApp();
 
   const [method, setMethod] =
     useState<(typeof METHODS)[number]["id"]>("mobile_money");
@@ -87,12 +96,13 @@ export default function WithdrawScreen() {
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!user && !sessionRestoring) return;
     let active = true;
     api
       .wallet()
       .then((w) => {
         if (!active) return;
+        if (typeof w.balance === "number") setBalance(w.balance);
         setEligibility({
           withdrawable: w.summary.withdrawable ?? w.balance,
           bonusLocked: w.summary.bonusLocked ?? 0,
@@ -104,7 +114,15 @@ export default function WithdrawScreen() {
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [sessionRestoring, setBalance, user]);
+
+  if ((!authReady || sessionRestoring) && !user) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
 
   if (!user) {
     return (

@@ -59,8 +59,16 @@ export default function SingleBetDetailScreen() {
   const router = useRouter();
   const parsed = useMemo(() => parseSimpleParam(params.id ?? ""), [params.id]);
 
-  const { user, oddsFormat, setBalance, bumpBets, toast, hapticsEnabled } =
-    useApp();
+  const {
+    authReady,
+    sessionRestoring,
+    user,
+    oddsFormat,
+    setBalance,
+    bumpBets,
+    toast,
+    hapticsEnabled,
+  } = useApp();
 
   const [prevKey, setPrevKey] = useState<string>(params.id ?? "");
   const [bet, setBet] = useState<UnifiedBet | null | undefined>(() =>
@@ -81,9 +89,10 @@ export default function SingleBetDetailScreen() {
   }
 
   const userId = user?.id ?? null;
+  const canQueryBet = Boolean(parsed) && (Boolean(userId) || sessionRestoring);
 
   const fetchSingle = useCallback(async () => {
-    if (!userId || !parsed) return;
+    if (!canQueryBet || !parsed) return;
     try {
       let r = await api.bets.byId(parsed.kind, parsed.id);
       if (!r.bet && !/^(sport|pred)-/i.test(params.id ?? "")) {
@@ -97,7 +106,7 @@ export default function SingleBetDetailScreen() {
     } catch {
       /* garde l'état courant */
     }
-  }, [userId, parsed, params.id, setBalance]);
+  }, [canQueryBet, parsed, params.id, setBalance]);
 
   const hasLive = Boolean(
     bet && bet.status === "pending" && bet.matchStatus === "live"
@@ -105,18 +114,18 @@ export default function SingleBetDetailScreen() {
   const shouldPoll = bet === undefined || bet?.status === "pending";
 
   useEffect(() => {
-    if (!userId || !parsed) return;
+    if (!canQueryBet) return;
     void fetchSingle();
-  }, [userId, parsed, fetchSingle]);
+  }, [canQueryBet, fetchSingle]);
 
   useEffect(() => {
-    if (!userId || !parsed || !shouldPoll) return;
+    if (!canQueryBet || !shouldPoll) return;
     const id = setInterval(
       () => void fetchSingle(),
       hasLive ? POLL_LIVE_MS : POLL_IDLE_MS
     );
     return () => clearInterval(id);
-  }, [userId, parsed, fetchSingle, shouldPoll, hasLive]);
+  }, [canQueryBet, fetchSingle, shouldPoll, hasLive]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -237,7 +246,15 @@ export default function SingleBetDetailScreen() {
     }
   };
 
-  if (!user) {
+  if ((!authReady || sessionRestoring) && !user) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
+
+  if (!user && bet == null) {
     return (
       <View style={[styles.page, styles.centerWrap]}>
         <View style={styles.authCard}>

@@ -73,7 +73,8 @@ function matchesSearch(b: UnifiedBet, qNorm: string): boolean {
 
 export default function ParisScreen() {
   const router = useRouter();
-  const { user, betsVersion, setBalance, dataSaverMode } = useApp();
+  const { authReady, sessionRestoring, user, betsVersion, setBalance, dataSaverMode } =
+    useApp();
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -88,7 +89,7 @@ export default function ParisScreen() {
   const betsQuery = useQuery({
     queryKey: [...mobileQueryKeys.userBets(user?.id, "all"), betsVersion],
     queryFn: () => api.bets.list(),
-    enabled: Boolean(user),
+    enabled: Boolean(user) || sessionRestoring,
     staleTime: 1_500,
     refetchInterval: (q) => {
       const currentBets = q.state.data?.bets;
@@ -272,6 +273,14 @@ export default function ParisScreen() {
       setTimeout(() => searchInputRef.current?.focus(), 40);
     }
   };
+
+  if ((!authReady || sessionRestoring) && !user) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
 
   if (!user) {
     return (

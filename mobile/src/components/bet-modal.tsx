@@ -32,6 +32,8 @@ export function BetModal() {
   const {
     target,
     closeBet,
+    authReady,
+    sessionRestoring,
     user,
     balance,
     setBalance,
@@ -47,6 +49,7 @@ export function BetModal() {
     toast,
     feedMatches,
   } = useApp();
+  const authPending = !authReady || sessionRestoring;
 
   const [stake, setStake] = useState("10");
   const [lockedOdds, setLockedOdds] = useState<number>(1.8);
@@ -176,6 +179,7 @@ export function BetModal() {
   };
 
   const handleConfirm = async () => {
+    if (authPending && !user) return;
     if (!user) {
       closeBet();
       router.push("/auth");
@@ -376,18 +380,20 @@ export function BetModal() {
               </Pressable>
 
               <Pressable
-                disabled={submitting || liveMatch.suspended}
+                disabled={submitting || liveMatch.suspended || (authPending && !user)}
                 onPress={handleConfirm}
                 style={[
                   styles.submitBtn,
-                  (submitting || liveMatch.suspended) && { opacity: 0.65 },
+                  (submitting || liveMatch.suspended || (authPending && !user)) && {
+                    opacity: 0.65,
+                  },
                 ]}
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <Text style={styles.submitText}>
-                    {!user
+                    {!user && !authPending
                       ? "Se connecter pour parier"
                       : oddsChanged
                         ? `Accepter ${formatOdds(lockedOdds, oddsFormat)} · ${eur(numericStake)}`

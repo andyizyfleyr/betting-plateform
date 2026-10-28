@@ -38,6 +38,8 @@ export function PredictionBetModal({
   const {
     predictionTarget: ctxTarget,
     closePredictionBet: ctxClose,
+    authReady,
+    sessionRestoring,
     user,
     balance,
     setBalance,
@@ -52,6 +54,7 @@ export function PredictionBetModal({
     openRecharge,
     toast,
   } = useApp();
+  const authPending = !authReady || sessionRestoring;
 
   const predictionTarget =
     questionProp !== undefined
@@ -131,6 +134,7 @@ export function PredictionBetModal({
   };
 
   const handleConfirm = async () => {
+    if (authPending && !user) return;
     if (!user) {
       closePredictionBet();
       router.push("/auth");
@@ -304,15 +308,18 @@ export function PredictionBetModal({
               </Pressable>
 
               <Pressable
-                disabled={submitting}
+                disabled={submitting || (authPending && !user)}
                 onPress={handleConfirm}
-                style={[styles.submitBtn, submitting && { opacity: 0.65 }]}
+                style={[
+                  styles.submitBtn,
+                  (submitting || (authPending && !user)) && { opacity: 0.65 },
+                ]}
               >
                 {submitting ? (
                   <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
                   <Text style={styles.submitText}>
-                    {!user
+                    {!user && !authPending
                       ? "Se connecter"
                       : oddsChanged
                         ? `Accepter ${formatOdds(lockedOdds, oddsFormat)} · ${eur(numericStake)}`

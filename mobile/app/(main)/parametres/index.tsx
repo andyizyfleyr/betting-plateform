@@ -27,6 +27,7 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
@@ -38,6 +39,8 @@ import { COLORS } from "@/theme/tokens";
 export default function ParametresScreen() {
   const router = useRouter();
   const {
+    authReady,
+    sessionRestoring,
     user,
     applyUser,
     setBalance,
@@ -59,21 +62,22 @@ export default function ParametresScreen() {
   const cancelInFlightRef = useRef(false);
 
   const loadWallet = useCallback(async () => {
-    if (!user) return;
+    if (!user && !sessionRestoring) return;
     try {
       const w = await api.wallet();
       setWallet(w);
+      if (typeof w.balance === "number") setBalance(w.balance);
     } catch {
       /* silencieux */
     }
-  }, [user]);
+  }, [sessionRestoring, setBalance, user]);
 
   useEffect(() => {
     void loadWallet();
-    if (!user) return;
+    if (!user && !sessionRestoring) return;
     const id = setInterval(() => void loadWallet(), 8_000);
     return () => clearInterval(id);
-  }, [loadWallet, betsVersion, user]);
+  }, [loadWallet, betsVersion, sessionRestoring, user]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -137,6 +141,14 @@ export default function ParametresScreen() {
     router.replace("/auth");
     setLoggingOut(false);
   };
+
+  if ((!authReady || sessionRestoring) && !user) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
 
   if (!user) {
     return (

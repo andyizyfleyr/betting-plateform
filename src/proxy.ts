@@ -1,7 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractAuthToken, verifyJwt } from "@/lib/jwt";
+import { AUTH_UID_COOKIE, extractAuthToken, verifyJwt } from "@/lib/jwt";
 
 const STATIC_RE = /\.(?:svg|png|jpg|jpeg|gif|webp|mp3|wav|ogg|woff2?|ttf|otf|hbc|apk|ico|txt|json|css|js)$/i;
+const SESSION_TTL_SECONDS = 7 * 24 * 3600;
+
+function syncUidHintCookie(
+  req: NextRequest,
+  res: NextResponse,
+  uid: number | null
+): NextResponse {
+  const existingUid = req.cookies.get(AUTH_UID_COOKIE)?.value ?? "";
+  if (uid != null && uid > 0) {
+    const expected = String(uid);
+    if (existingUid !== expected) {
+      res.cookies.set(AUTH_UID_COOKIE, expected, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: SESSION_TTL_SECONDS,
+      });
+    }
+  } else if (existingUid) {
+    res.cookies.set(AUTH_UID_COOKIE, "", {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+  }
+  return res;
+}
 
 function withPrivateApiSecurityHeaders(res: NextResponse): NextResponse {
   res.headers.set("CDN-Cache-Control", "private, no-store");
@@ -71,40 +101,53 @@ export async function proxy(req: NextRequest) {
   }
 
   // ---- Pages ----
+  const authedUid = authed && payload?.sub ? Number(payload.sub) : null;
   const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");
   if (isAdminPage) {
     if (!authed) {
       const url = new URL("/auth", req.url);
       url.searchParams.set("from", pathname);
-      return NextResponse.redirect(url);
+      return syncUidHintCookie(req, NextResponse.redirect(url), null);
     }
     if (!isAdmin) {
-      return NextResponse.redirect(new URL("/matchs", req.url));
+      return syncUidHintCookie(
+        req,
+        NextResponse.redirect(new URL("/matchs", req.url)),
+        authedUid
+      );
     }
-    return NextResponse.next();
+    return syncUidHintCookie(req, NextResponse.next(), authedUid);
   }
 
   // ---- Authentification ----
   const isAuthPage = pathname === "/auth" || pathname.startsWith("/auth/");
   if (isAuthPage) {
     if (authed) {
-      return NextResponse.redirect(new URL(isAdmin ? "/admin" : "/matchs", req.url));
+      return syncUidHintCookie(
+        req,
+        NextResponse.redirect(new URL(isAdmin ? "/admin" : "/matchs", req.url)),
+        authedUid
+      );
     }
-    return NextResponse.next();
+    return syncUidHintCookie(req, NextResponse.next(), null);
   }
 
   if (!authed) {
     const url = new URL("/auth", req.url);
     url.searchParams.set("from", pathname);
-    return NextResponse.redirect(url);
+    return syncUidHintCookie(req, NextResponse.redirect(url), null);
   }
 
   // L'administrateur n'accède jamais à l'espace utilisateurs : il reste exclusivement sur son dashboard.
   if (isAdmin) {
-    return NextResponse.redirect(new URL("/admin", req.url));
+    return syncUidHintCookie(
+      req,
+      NextResponse.redirect(new URL("/admin", req.url)),
+      authedUid
+    );
   }
 
-  return NextResponse.next();
+  return syncUidHintCookie(req, NextResponse.next(), authedUid);
 }
 
 export const config = {

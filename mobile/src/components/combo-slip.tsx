@@ -163,6 +163,8 @@ export function ComboSheet() {
     openRecharge,
     oddsFormat,
     toast,
+    authReady,
+    sessionRestoring,
     user,
     hapticsEnabled,
   } = useApp();
@@ -318,6 +320,7 @@ export function ComboSheet() {
     !overBalance;
 
   const submitCombo = async () => {
+    if ((!authReady || sessionRestoring) && !user) return;
     if (!user) {
       closeCombo();
       router.push("/auth");

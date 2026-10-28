@@ -32,7 +32,8 @@ type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits";
 
 export default function TransactionsScreen() {
   const router = useRouter();
-  const { user, setBalance, toast, betsVersion } = useApp();
+  const { authReady, sessionRestoring, user, setBalance, toast, betsVersion } =
+    useApp();
 
   const [wallet, setWallet] = useState<ClientWalletData | null>(() =>
     getCachedWallet()
@@ -45,21 +46,22 @@ export default function TransactionsScreen() {
   const cancelInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user && !sessionRestoring) return;
     try {
       const w = await api.wallet();
       setWallet(w);
+      if (typeof w.balance === "number") setBalance(w.balance);
     } catch {
       /* silencieux */
     }
-  }, [user]);
+  }, [sessionRestoring, setBalance, user]);
 
   useEffect(() => {
     void load();
-    if (!user) return;
+    if (!user && !sessionRestoring) return;
     const id = setInterval(() => void load(), 8_000);
     return () => clearInterval(id);
-  }, [load, betsVersion, user]);
+  }, [load, betsVersion, sessionRestoring, user]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -114,6 +116,14 @@ export default function TransactionsScreen() {
     10,
     kindFilter
   );
+
+  if ((!authReady || sessionRestoring) && !user) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
 
   if (!user) {
     return (

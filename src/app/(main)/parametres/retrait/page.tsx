@@ -19,7 +19,10 @@ import { getCachedWallet } from "@/lib/client-entity-cache";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
-import { triggerRouteLoader } from "@/components/pulse-flash-loader";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { cn, eur } from "@/lib/format";
 
 const QUICK_AMOUNTS = [20, 50, 100, 250];
@@ -57,7 +60,7 @@ const METHODS = [
 
 export default function WithdrawPage() {
   const router = useRouter();
-  const { balance, setBalance, toast, user, bumpBets, betsVersion } = useApp();
+  const { authReady, balance, setBalance, toast, user, bumpBets, betsVersion } = useApp();
   const [method, setMethod] =
     useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
@@ -80,7 +83,7 @@ export default function WithdrawPage() {
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!user && authReady) return;
     let active = true;
     const syncEligibility = () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -88,6 +91,7 @@ export default function WithdrawPage() {
         .wallet()
         .then((w) => {
           if (!active) return;
+          if (typeof w.balance === "number") setBalance(w.balance);
           setEligibility({
             withdrawable: w.summary.withdrawable ?? w.balance,
             bonusLocked: w.summary.bonusLocked ?? 0,
@@ -103,7 +107,11 @@ export default function WithdrawPage() {
       active = false;
       clearInterval(id);
     };
-  }, [betsVersion, balance, user]);
+  }, [authReady, betsVersion, balance, setBalance, user]);
+
+  if (!authReady && !user) {
+    return <PulseFlashLoader />;
+  }
 
   if (!user) {
     return (
