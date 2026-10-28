@@ -92,28 +92,31 @@ export default function PredictionDetailScreen() {
     setTarget(null);
   }
 
-  const fetchQuestion = useCallback(async () => {
-    if (invalidId) return;
-    try {
-      const r = await api.predictionsCatalog();
-      const found = r.questions.find((q) => q.id === questionId) ?? null;
-      setQuestion(found);
-      setNowMs(Date.now());
-      setLoadError(null);
-    } catch (e) {
-      setQuestion((prev) => (prev === undefined ? null : prev));
-      setLoadError(
-        e instanceof Error
-          ? e.message
-          : "Impossible de charger cette prédiction."
-      );
-    }
-  }, [invalidId, questionId]);
+  const fetchQuestion = useCallback(
+    async (forceRefresh = false) => {
+      if (invalidId) return;
+      try {
+        const r = await api.predictionsCatalog({ forceRefresh });
+        const found = r.questions.find((q) => q.id === questionId) ?? null;
+        setQuestion(found);
+        setNowMs(Date.now());
+        setLoadError(null);
+      } catch (e) {
+        setQuestion((prev) => (prev === undefined ? null : prev));
+        setLoadError(
+          e instanceof Error
+            ? e.message
+            : "Impossible de charger cette prédiction."
+        );
+      }
+    },
+    [invalidId, questionId]
+  );
 
   useEffect(() => {
     if (invalidId) return;
-    void fetchQuestion();
-    const id = setInterval(() => void fetchQuestion(), POLL_MS);
+    void fetchQuestion(false);
+    const id = setInterval(() => void fetchQuestion(false), POLL_MS);
     return () => clearInterval(id);
   }, [invalidId, fetchQuestion]);
 
@@ -130,9 +133,17 @@ export default function PredictionDetailScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchQuestion();
+    await Promise.all([
+      fetchQuestion(true),
+      user && !invalidId
+        ? api
+            .predictionsMine({ forceRefresh: true })
+            .then((r) => setMyBet(r.myBets[questionId] ?? null))
+            .catch(() => undefined)
+        : Promise.resolve(),
+    ]);
     setRefreshing(false);
-  }, [fetchQuestion]);
+  }, [fetchQuestion, invalidId, questionId, user]);
 
   const mergedQuestion = useMemo<ClientPrediction | null | undefined>(() => {
     if (!question) return question;

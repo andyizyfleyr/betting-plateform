@@ -343,21 +343,78 @@ export class ApiRequestError extends Error {
   }
 }
 
+function stripRefreshParam(url: string): string {
+  const qIdx = url.indexOf("?");
+  if (qIdx === -1) return url;
+  const base = url.slice(0, qIdx);
+  const sp = new URLSearchParams(url.slice(qIdx + 1));
+  sp.delete("refresh");
+  const rest = sp.toString();
+  return rest ? `${base}?${rest}` : base;
+}
+
+function appendRefreshParam(url: string): string {
+  const clean = stripRefreshParam(url);
+  return clean.includes("?") ? `${clean}&refresh=1` : `${clean}?refresh=1`;
+}
+
+const initialBrowserReloadAtMs: number = (() => {
+  if (typeof window === "undefined" || typeof performance === "undefined") {
+    return 0;
+  }
+  try {
+    const entries = performance.getEntriesByType?.("navigation") as
+      | PerformanceNavigationTiming[]
+      | undefined;
+    if (entries && entries[0]?.type === "reload") {
+      return Date.now();
+    }
+  } catch {
+    /* ignore */
+  }
+  return 0;
+})();
+
+function shouldAutoForceOnBrowserReload(): boolean {
+  return initialBrowserReloadAtMs > 0 && Date.now() - initialBrowserReloadAtMs < 4_500;
+}
+
+export function clearClientApiCaches(): void {
+  clientEtagCache.clear();
+  inFlightGetRequests.clear();
+}
+
 function isPublicEdgeGetUrl(url: string): boolean {
+  const base = stripRefreshParam(url);
   return (
-    url === "/api/matches" ||
-    url === "/api/matches/slim" ||
-    /^\/api\/matches\/[1-9]\d{0,9}$/.test(url) ||
-    url === "/api/matches/history" ||
-    url.startsWith("/api/matches/history?") ||
-    url === "/api/predictions/catalog"
+    base === "/api/matches" ||
+    base === "/api/matches/slim" ||
+    /^\/api\/matches\/[1-9]\d{0,9}$/.test(base) ||
+    base === "/api/matches/history" ||
+    base.startsWith("/api/matches/history?") ||
+    base === "/api/predictions/catalog"
   );
 }
 
-async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
+interface RequestExtraOptions {
+  forceRefresh?: boolean;
+}
+
+async function executeRequest<T>(
+  rawUrl: string,
+  init?: RequestInit,
+  extra?: RequestExtraOptions
+): Promise<T> {
   const isGet = !init?.method || init.method.toUpperCase() === "GET";
-  const isPublicEdge = isGet && isPublicEdgeGetUrl(url);
-  const cached = isGet ? clientEtagCache.get(url) : undefined;
+  const forceRefresh =
+    isGet && (Boolean(extra?.forceRefresh) || shouldAutoForceOnBrowserReload());
+  const baseKeyUrl = stripRefreshParam(rawUrl);
+  const url = forceRefresh ? appendRefreshParam(baseKeyUrl) : baseKeyUrl;
+  const isPublicEdge = isGet && isPublicEdgeGetUrl(baseKeyUrl);
+  if (forceRefresh) {
+    clientEtagCache.delete(baseKeyUrl);
+  }
+  const cached = isGet && !forceRefresh ? clientEtagCache.get(baseKeyUrl) : undefined;
 
   let mergedInit: RequestInit | undefined = isGet
     ? { ...init, cache: "no-store" }
@@ -366,8 +423,12 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
     // Omet strictement les cookies sur les routes publiques afin que le CDN Edge Vercel
     // partage 1 seule réponse en cache entre des milliers de visiteurs connectés ou non.
     mergedInit = { ...mergedInit, credentials: "omit" };
+  } else if (forceRefresh) {
+    const hdrs = new Headers(mergedInit?.headers);
+    hdrs.set("x-pulse-refresh", "1");
+    mergedInit = { ...mergedInit, headers: hdrs };
   }
-  if (isGet && cached?.etag) {
+  if (isGet && !forceRefresh && cached?.etag) {
     const hdrs = new Headers(mergedInit?.headers);
     if (!hdrs.has("If-None-Match")) {
       hdrs.set("If-None-Match", cached.etag);
@@ -378,13 +439,41 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
     clientEtagCache.clear();
   }
 
+  const timeoutMs = isGet ? 12_000 : 18_000;
+  const controller = new AbortController();
+  const externalSignal = mergedInit?.signal;
+  const onExternalAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   const sentAtMs = Date.now();
-  const res = await fetch(url, mergedInit);
+  let res: Response;
+  try {
+    res = await fetch(url, { ...mergedInit, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted && !externalSignal?.aborted) {
+      throw new ApiRequestError(
+        "Délai de connexion dépassé — veuillez réessayer.",
+        504
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", onExternalAbort);
+    }
+  }
   const rttMs = Math.max(0, Date.now() - sentAtMs);
   if (res.status === 304 && cached) {
     const nowIso = new Date().toISOString();
-    if (url === "/api/matches") lastPublicServerTime.matches = nowIso;
-    if (url === "/api/predictions/catalog") lastPublicServerTime.predictions = nowIso;
+    if (baseKeyUrl === "/api/matches") lastPublicServerTime.matches = nowIso;
+    if (baseKeyUrl === "/api/predictions/catalog") {
+      lastPublicServerTime.predictions = nowIso;
+    }
     return cached.data as T;
   }
 
@@ -448,10 +537,10 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   if (isGet) {
-    if (url === "/api/matches" && typeof data.serverTime === "string") {
+    if (baseKeyUrl === "/api/matches" && typeof data.serverTime === "string") {
       lastPublicServerTime.matches = data.serverTime;
     } else if (
-      url === "/api/predictions/catalog" &&
+      baseKeyUrl === "/api/predictions/catalog" &&
       typeof data.serverTime === "string"
     ) {
       lastPublicServerTime.predictions = data.serverTime;
@@ -462,17 +551,21 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
         const oldestKey = clientEtagCache.keys().next().value;
         if (oldestKey !== undefined) clientEtagCache.delete(oldestKey);
       }
-      clientEtagCache.set(url, { etag, data });
+      clientEtagCache.set(baseKeyUrl, { etag, data });
     }
   }
 
   return data as T;
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  url: string,
+  init?: RequestInit,
+  extra?: RequestExtraOptions
+): Promise<T> {
   const isGet = !init?.method || init.method.toUpperCase() === "GET";
-  if (!isGet) {
-    return executeRequest<T>(url, init);
+  if (!isGet || extra?.forceRefresh) {
+    return executeRequest<T>(url, init, extra);
   }
 
   // Déduplique les appels GET simultanés vers la même URL (ex. montage concurrent Providers + page)
@@ -481,7 +574,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     return existing as Promise<T>;
   }
 
-  const p = executeRequest<T>(url, init).finally(() => {
+  const p = executeRequest<T>(url, init, extra).finally(() => {
     inFlightGetRequests.delete(url);
   });
   inFlightGetRequests.set(url, p);
@@ -549,23 +642,31 @@ export interface RealtimeConfigResponse {
 
 export const api = {
   realtime: () => request<RealtimeConfigResponse>("/api/realtime"),
-  matchesSlim: () =>
-    request<{ matches: ClientMatch[]; serverTime?: string }>("/api/matches/slim"),
-  matches: () =>
-    request<{ matches: ClientMatch[]; serverTime?: string }>("/api/matches").then(
-      (res) => {
-        rememberMatches(res.matches);
-        return res;
-      }
+  matchesSlim: (opts?: RequestExtraOptions) =>
+    request<{ matches: ClientMatch[]; serverTime?: string }>(
+      "/api/matches/slim",
+      undefined,
+      opts
     ),
-  matchById: (id: number) =>
-    request<{ match: ClientMatch; serverTime?: string }>(`/api/matches/${id}`).then(
-      (res) => {
-        rememberSingleMatch(res.match);
-        return res;
-      }
-    ),
-  matchHistory: (matchId?: number) =>
+  matches: (opts?: RequestExtraOptions) =>
+    request<{ matches: ClientMatch[]; serverTime?: string }>(
+      "/api/matches",
+      undefined,
+      opts
+    ).then((res) => {
+      rememberMatches(res.matches);
+      return res;
+    }),
+  matchById: (id: number, opts?: RequestExtraOptions) =>
+    request<{ match: ClientMatch; serverTime?: string }>(
+      `/api/matches/${id}`,
+      undefined,
+      opts
+    ).then((res) => {
+      rememberSingleMatch(res.match);
+      return res;
+    }),
+  matchHistory: (matchId?: number, opts?: RequestExtraOptions) =>
     request<{
       matches: ClientMatchHistoryItem[];
       focusedMatch: ClientMatchHistoryItem | null;
@@ -573,28 +674,40 @@ export const api = {
     }>(
       typeof matchId === "number" && Number.isInteger(matchId) && matchId > 0
         ? `/api/matches/history?matchId=${matchId}`
-        : "/api/matches/history"
+        : "/api/matches/history",
+      undefined,
+      opts
     ).then((res) => {
       rememberMatchHistory(res.matches, res.focusedMatch);
       return res;
     }),
-  bets: (filter: "ongoing" | "finished") =>
+  bets: (filter: "ongoing" | "finished", opts?: RequestExtraOptions) =>
     request<{ bets: ClientBet[]; balance: number | null }>(
-      `/api/bets?filter=${filter}`
+      `/api/bets?filter=${filter}`,
+      undefined,
+      opts
     ).then((res) => {
       rememberBets(res.bets);
       return res;
     }),
-  allBets: () =>
-    request<{ bets: ClientBet[]; balance: number | null }>("/api/bets?filter=all").then(
-      (res) => {
-        rememberBets(res.bets);
-        return res;
-      }
-    ),
-  betById: (kind: "sport" | "prediction" | "combo", id: number) =>
+  allBets: (opts?: RequestExtraOptions) =>
     request<{ bets: ClientBet[]; balance: number | null }>(
-      `/api/bets?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(String(id))}`
+      "/api/bets?filter=all",
+      undefined,
+      opts
+    ).then((res) => {
+      rememberBets(res.bets);
+      return res;
+    }),
+  betById: (
+    kind: "sport" | "prediction" | "combo",
+    id: number,
+    opts?: RequestExtraOptions
+  ) =>
+    request<{ bets: ClientBet[]; balance: number | null }>(
+      `/api/bets?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(String(id))}`,
+      undefined,
+      opts
     ).then((res) => {
       rememberBets(res.bets);
       return {
@@ -602,7 +715,7 @@ export const api = {
         balance: res.balance,
       };
     }),
-  pulse: () =>
+  pulse: (opts?: RequestExtraOptions) =>
     request<{
       balance: number;
       pendingCount: number;
@@ -680,8 +793,8 @@ export const api = {
     request<{ code: string; legs: ClientSavedCouponLeg[]; skippedClosedCount: number }>(
       `/api/coupons?code=${encodeURIComponent(code)}`
     ),
-  wallet: () =>
-    request<ClientWalletData>("/api/wallet").then((w) => {
+  wallet: (opts?: RequestExtraOptions) =>
+    request<ClientWalletData>("/api/wallet", undefined, opts).then((w) => {
       rememberWallet(w);
       return w;
     }),
@@ -715,20 +828,22 @@ export const api = {
         return res;
       }
     ),
-  predictionsCatalog: () =>
+  predictionsCatalog: (opts?: RequestExtraOptions) =>
     request<{ questions: ClientPrediction[]; serverTime?: string }>(
-      "/api/predictions/catalog"
+      "/api/predictions/catalog",
+      undefined,
+      opts
     ).then((res) => {
       rememberPredictions(res.questions);
       return res;
     }),
-  myPredictionBets: () =>
+  myPredictionBets: (opts?: RequestExtraOptions) =>
     request<{
       myBets: Record<
         number,
         NonNullable<ClientPrediction["myBet"]> & { questionId: number }
       >;
-    }>("/api/predictions/my-bets"),
+    }>("/api/predictions/my-bets", undefined, opts),
   placePredictionBet: (payload: {
     questionId: number;
     selection: string;

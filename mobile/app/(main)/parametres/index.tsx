@@ -81,9 +81,18 @@ export default function ParametresScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadWallet();
-    setRefreshing(false);
-  }, [loadWallet]);
+    try {
+      if (user || sessionRestoring) {
+        const w = await api.wallet({ forceRefresh: true });
+        setWallet(w);
+        if (typeof w.balance === "number") setBalance(w.balance);
+      }
+    } catch {
+      /* silencieux */
+    } finally {
+      setRefreshing(false);
+    }
+  }, [sessionRestoring, setBalance, user]);
 
   const pendingWithdrawalEntries = useMemo(
     () =>

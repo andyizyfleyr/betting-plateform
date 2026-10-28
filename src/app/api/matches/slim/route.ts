@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hydrateLiveMatchRow } from "@/db/engine";
 import { ensureSeeded } from "@/db/seed";
 import {
   ensureMatchStoreHydrated,
@@ -12,6 +13,8 @@ import {
   computeWeakEtag,
   EDGE_CACHE_TAGS,
   getMatchesSlimPayloadCache,
+  hasUnexpectedSearchParams,
+  isManualRefreshRequest,
   publicJsonWithEdgeCache,
   rejectUnexpectedQueryParams,
   runSingleflight,
@@ -25,38 +28,39 @@ export const maxDuration = 60;
 
 const MATCHES_SLIM_EDGE_POLICY = {
   maxAge: 0,
-  sMaxAge: 2,
-  staleWhileRevalidate: 2,
+  sMaxAge: 1,
+  staleWhileRevalidate: 1,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 
 export async function GET(req: NextRequest) {
   try {
-    recordVisitorActivity();
-    if (req.nextUrl.searchParams.size > 0) {
+    if (hasUnexpectedSearchParams(req.nextUrl.searchParams)) {
       return rejectUnexpectedQueryParams();
     }
+    recordVisitorActivity();
+    const manualRefresh = isManualRefreshRequest(req);
 
     const { entry: stored, catchingUp } = await runSingleflight(
-      "api:matches:slim",
+      manualRefresh ? "api:matches:slim:refresh" : "api:matches:slim",
       async () => {
         await ensureSeeded();
         await ensureMlLoaded();
-        await syncLiveMatchesThrottled();
+        await syncLiveMatchesThrottled(false, { manualRefresh });
 
         const feedInFlight = isRealFeedSyncInFlight();
-        if (!feedInFlight) {
+        if (!manualRefresh && !feedInFlight) {
           const freshCached = getMatchesSlimPayloadCache();
           if (freshCached) {
             return { entry: freshCached, catchingUp: false };
           }
         }
 
-        await ensureMatchStoreHydrated();
+        await ensureMatchStoreHydrated(manualRefresh);
         const now = Date.now();
         const rows = getCachedAllMatchesForFeed();
         const slimMatches = rows.map((rawRow) =>
-          serializeSlimPublicMatch(rawRow, now)
+          serializeSlimPublicMatch(hydrateLiveMatchRow(rawRow, now), now)
         );
 
         const payload = {

@@ -18,6 +18,7 @@ import {
   RealMatchStatsCard,
 } from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import {
   PulseFlashLoader,
   triggerRouteLoader,
@@ -54,39 +55,46 @@ export default function ResultDetailPage() {
     );
   }
 
-  const fetchResult = useCallback(async () => {
-    if (invalidId) return;
-    try {
-      const base = await api.matchHistory();
-      const inBase = base.matches.find((m) => m.id === matchId) ?? null;
-      if (inBase) {
-        setItem(inBase);
+  const fetchResult = useCallback(
+    async (forceRefresh = false) => {
+      if (invalidId) return;
+      try {
+        const base = await api.matchHistory(undefined, { forceRefresh });
+        const inBase = base.matches.find((m) => m.id === matchId) ?? null;
+        if (inBase) {
+          setItem(inBase);
+          setLoadError(null);
+          return;
+        }
+        const focused = await api.matchHistory(matchId, { forceRefresh });
+        setItem(focused.focusedMatch ?? null);
         setLoadError(null);
-        return;
+      } catch (e) {
+        setItem((prev) => (prev === undefined ? null : prev));
+        setLoadError(
+          e instanceof Error
+            ? e.message
+            : "Impossible de charger ce résultat."
+        );
       }
-      const focused = await api.matchHistory(matchId);
-      setItem(focused.focusedMatch ?? null);
-      setLoadError(null);
-    } catch (e) {
-      setItem((prev) => (prev === undefined ? null : prev));
-      setLoadError(
-        e instanceof Error
-          ? e.message
-          : "Impossible de charger ce résultat."
-      );
-    }
-  }, [invalidId, matchId]);
+    },
+    [invalidId, matchId]
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchResult();
+    void fetchResult(false);
     if (item?.status === "finished") return;
     const id = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
-      void fetchResult();
+      void fetchResult(false);
     }, 5_000);
     return () => clearInterval(id);
   }, [fetchResult, item?.status]);
+
+  const handlePullRefresh = useCallback(async () => {
+    await fetchResult(true);
+  }, [fetchResult]);
 
   const cleanEvents = useMemo(
     () => (item ? sanitizeMatchEvents(item.events) : []),
@@ -131,6 +139,7 @@ export default function ResultDetailPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh}>
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
       <div className="flex items-center justify-between gap-2">
@@ -428,5 +437,6 @@ export default function ResultDetailPage() {
         )}
       </div>
     </div>
+    </PullToRefresh>
   );
 }

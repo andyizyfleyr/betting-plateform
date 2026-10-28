@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -124,6 +125,7 @@ export default function BetslipScreen() {
     boostPct: number;
   } | null>(null);
   const [mobileCouponOpen, setMobileCouponOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{
@@ -131,8 +133,20 @@ export default function BetslipScreen() {
     key: string;
   } | null>(null);
 
-  const hasSportLegs = comboLegs.some((l) => l.kind === "sport");
   const hasPredLegs = comboLegs.some((l) => l.kind === "prediction");
+  const sportMatchIdsKey = useMemo(
+    () =>
+      [
+        ...new Set(
+          comboLegs
+            .filter((l) => l.kind === "sport" && l.matchId != null)
+            .map((l) => l.matchId as number)
+        ),
+      ]
+        .sort((a, b) => a - b)
+        .join(","),
+    [comboLegs]
+  );
 
   useEffect(() => {
     if (!feedMatches) return;
@@ -146,26 +160,30 @@ export default function BetslipScreen() {
     });
   }, [feedMatches]);
 
-  useEffect(() => {
-    if (comboLegs.length === 0) return;
-    let cancelled = false;
-
-    const refreshLiveOdds = async () => {
+  const refreshLiveOdds = useCallback(
+    async (forceRefresh = false) => {
+      const matchIds = sportMatchIdsKey
+        ? sportMatchIdsKey.split(",").map(Number)
+        : [];
+      if (matchIds.length === 0 && !hasPredLegs) return;
       try {
-        const [matchesRes, predsRes] = await Promise.all([
-          hasSportLegs
-            ? api.matches().catch(() => null)
-            : Promise.resolve(null),
+        const [detailResults, predsRes] = await Promise.all([
+          Promise.all(
+            matchIds.map((id) =>
+              api.matchById(id, { forceRefresh }).catch(() => null)
+            )
+          ),
           hasPredLegs
-            ? api.predictionsCatalog().catch(() => null)
+            ? api.predictionsCatalog({ forceRefresh }).catch(() => null)
             : Promise.resolve(null),
         ]);
-        if (cancelled) return;
         setNowMs(Date.now());
-        if (matchesRes) {
-          const mMap: Record<number, ClientMatch> = {};
-          for (const m of matchesRes.matches) mMap[m.id] = m;
-          setMatchesMap(mMap);
+        const nextDetails: Record<number, ClientMatch> = {};
+        for (const r of detailResults) {
+          if (r?.match) nextDetails[r.match.id] = r.match;
+        }
+        if (Object.keys(nextDetails).length > 0) {
+          setMatchesMap((prev) => ({ ...prev, ...nextDetails }));
         }
         if (predsRes) {
           const pMap: Record<number, ClientPrediction> = {};
@@ -175,15 +193,33 @@ export default function BetslipScreen() {
       } catch {
         /* silencieux */
       }
-    };
+    },
+    [hasPredLegs, sportMatchIdsKey]
+  );
 
-    void refreshLiveOdds();
-    const id = setInterval(() => void refreshLiveOdds(), LIVE_ODDS_POLL_MS);
+  useEffect(() => {
+    if (comboLegs.length === 0) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshLiveOdds(false);
+    };
+    void tick();
+    const id = setInterval(() => void tick(), LIVE_ODDS_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [comboLegs.length, hasSportLegs, hasPredLegs]);
+  }, [comboLegs.length, refreshLiveOdds]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshLiveOdds(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshLiveOdds]);
 
   const enrichedLegs = useMemo(() => {
     const activeOverrides =
@@ -202,17 +238,29 @@ export default function BetslipScreen() {
           };
         }
         const closed = m.status === "finished";
-        const suspended = Boolean(m.suspended);
+        const suspended = Boolean(m.suspended || m.kickoffReached);
         let liveOdds = leg.odds;
-        if (m.markets && m.markets.length > 0) {
-          const grp = m.markets.find((g) => g.key === leg.market);
-          const out = grp?.outcomes.find((o) => o.key === leg.selection);
-          if (out) liveOdds = out.odds;
-        } else if (leg.market === "result") {
+        const grp = m.markets?.find(
+          (g) =>
+            g.key === leg.market || (leg.market === "result" && g.key === "1x2")
+        );
+        let out = grp?.outcomes.find((o) => o.key === leg.selection);
+        if (!out && grp?.rows) {
+          for (const r of grp.rows) {
+            const hit = r.outcomes.find((o) => o.key === leg.selection);
+            if (hit) {
+              out = hit;
+              break;
+            }
+          }
+        }
+        if (out) {
+          liveOdds = out.odds;
+        } else if (leg.market === "result" || leg.market === "1x2") {
           liveOdds =
-            leg.selection === "home"
+            leg.selection === "home" || leg.selection === "V1"
               ? m.oddsHome
-              : leg.selection === "draw"
+              : leg.selection === "draw" || leg.selection === "X"
                 ? (m.oddsDraw ?? leg.odds)
                 : m.oddsAway;
         }
@@ -580,6 +628,14 @@ export default function BetslipScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.betclicRed}
+            colors={[COLORS.betclicRed]}
+          />
+        }
       >
         {/* En-tête identique à src/app/(main)/betslip/page.tsx */}
         <View style={styles.headerRow}>

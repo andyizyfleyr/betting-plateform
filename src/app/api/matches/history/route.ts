@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { and, desc, eq, getTableColumns, ne } from "drizzle-orm";
 import { db } from "@/db";
+import { hydrateLiveMatchRow } from "@/db/engine";
 import { matches, type MatchRow } from "@/db/schema";
 import { extractMatchTimelineStats, hasVerifiedGoalTimeline } from "@/db/fixtures";
 import { ensureSeeded } from "@/db/seed";
@@ -19,6 +20,8 @@ import { ensureMlLoaded } from "@/lib/ml-engine";
 import {
   EDGE_CACHE_TAGS,
   getHistoryBaseCache,
+  hasUnexpectedSearchParams,
+  isManualRefreshRequest,
   publicJsonWithEdgeCache,
   rejectUnexpectedQueryParams,
   runSingleflight,
@@ -32,8 +35,8 @@ export const dynamic = "force-dynamic";
 
 const HISTORY_EDGE_POLICY = {
   maxAge: 0,
-  sMaxAge: 3,
-  staleWhileRevalidate: 5,
+  sMaxAge: 1,
+  staleWhileRevalidate: 2,
   tags: [EDGE_CACHE_TAGS.history],
 } as const;
 
@@ -154,21 +157,27 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
   };
 }
 
-async function getOrBuildBaseHistory(): Promise<{
+async function getOrBuildBaseHistory(manualRefresh = false): Promise<{
   payload: ReturnType<typeof setHistoryBaseCache>;
   items: ClientMatchHistoryItem[];
   serverTime: string;
 }> {
-  const hit = getHistoryBaseCache<ClientMatchHistoryItem>();
-  if (hit) return hit;
+  if (!manualRefresh) {
+    const hit = getHistoryBaseCache<ClientMatchHistoryItem>();
+    if (hit) return hit;
+  }
 
-  return runSingleflight("api:matches:history:base", async () => {
-    const doubleCheck = getHistoryBaseCache<ClientMatchHistoryItem>();
-    if (doubleCheck) return doubleCheck;
+  return runSingleflight(
+    manualRefresh ? "api:matches:history:base:refresh" : "api:matches:history:base",
+    async () => {
+      if (!manualRefresh) {
+        const doubleCheck = getHistoryBaseCache<ClientMatchHistoryItem>();
+        if (doubleCheck) return doubleCheck;
+      }
 
-    await ensureSeeded();
-    await ensureMlLoaded();
-    await syncLiveMatchesThrottled();
+      await ensureSeeded();
+      await ensureMlLoaded();
+      await syncLiveMatchesThrottled(false, { manualRefresh });
 
     const [manualFinished, virtualFinished] = await Promise.all([
       db
@@ -203,9 +212,10 @@ async function getOrBuildBaseHistory(): Promise<{
 export async function GET(req: NextRequest) {
   try {
     const params = req.nextUrl.searchParams;
-    if (params.size > 1 || (params.size === 1 && !params.has("matchId"))) {
+    if (hasUnexpectedSearchParams(params, ["matchId"])) {
       return rejectUnexpectedQueryParams("Seul le paramètre numérique matchId est autorisé");
     }
+    const manualRefresh = isManualRefreshRequest(req);
 
     const matchIdParam = params.get("matchId");
     let parsedId = NaN;
@@ -220,7 +230,7 @@ export async function GET(req: NextRequest) {
     }
     const hasValidFocusId = Number.isInteger(parsedId) && parsedId > 0;
 
-    const base = await getOrBuildBaseHistory();
+    const base = await getOrBuildBaseHistory(manualRefresh);
 
     // Cas majoritaire (99 %+) : `/api/matches/history` sans `matchId` -> sert directement le tampon pré-sérialisé
     if (!hasValidFocusId) {
@@ -231,10 +241,11 @@ export async function GET(req: NextRequest) {
       base.items.find((m) => m.id === parsedId) ?? null;
 
     if (!focusedMatch) {
-      await ensureMatchStoreHydrated();
+      await ensureMatchStoreHydrated(manualRefresh);
+      const now = Date.now();
       const ramMatch = getCachedMatchById(parsedId);
-      if (ramMatch) {
-        focusedMatch = mapHistoryItem(ramMatch);
+      if (ramMatch && !manualRefresh) {
+        focusedMatch = mapHistoryItem(hydrateLiveMatchRow(ramMatch, now));
       } else {
         const [raw] = await db
           .select(historyMatchColumns)
@@ -242,12 +253,19 @@ export async function GET(req: NextRequest) {
           .where(eq(matches.id, parsedId))
           .limit(1);
         if (raw) {
-          focusedMatch = mapHistoryItem({
-            ...raw,
-            markets: null,
-            scriptedEvents: null,
-            tickHistory: [],
-          } as MatchRow);
+          focusedMatch = mapHistoryItem(
+            hydrateLiveMatchRow(
+              {
+                ...raw,
+                markets: null,
+                scriptedEvents: null,
+                tickHistory: [],
+              } as MatchRow,
+              now
+            )
+          );
+        } else if (ramMatch) {
+          focusedMatch = mapHistoryItem(hydrateLiveMatchRow(ramMatch, now));
         }
       }
     }

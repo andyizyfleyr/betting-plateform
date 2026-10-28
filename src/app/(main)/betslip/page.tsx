@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -46,9 +46,11 @@ import {
   oddsTrendTextClass,
   useOddsTrend,
 } from "@/components/odds-trend-corner";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { TeamAvatar } from "@/components/team-avatar";
 import { TouchStakePad } from "@/components/touch-stake-pad";
-import { useApp } from "@/components/providers";
+import { useApp, useFeedMatches } from "@/components/providers";
+import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
 import { triggerRouteLoader } from "@/components/pulse-flash-loader";
 import { cn, eur, formatKickoff, formatOdds } from "@/lib/format";
 
@@ -99,9 +101,13 @@ export default function BetslipPage() {
     oddsFormat,
     toast,
     user,
+    setFeedMatches,
   } = useApp();
+  const feedMatches = useFeedMatches();
 
-  const [liveMatches, setLiveMatches] = useState<ClientMatch[]>([]);
+  const [detailMatchesById, setDetailMatchesById] = useState<
+    Record<number, ClientMatch>
+  >({});
   const [livePredictions, setLivePredictions] = useState<ClientPrediction[]>([]);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [stakeText, setStakeText] = useState("10");
@@ -118,39 +124,102 @@ export default function BetslipPage() {
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
   const hasPredLegs = comboLegs.some((l) => l.kind === "prediction");
+  const sportMatchIdsKey = useMemo(
+    () =>
+      [
+        ...new Set(
+          comboLegs
+            .filter((l) => l.kind === "sport" && l.matchId != null)
+            .map((l) => l.matchId as number)
+        ),
+      ]
+        .sort((a, b) => a - b)
+        .join(","),
+    [comboLegs]
+  );
 
-  useEffect(() => {
-    if (comboLegs.length === 0) return;
-    let cancelled = false;
-    async function load() {
-      if (typeof document !== "undefined" && document.hidden) return;
+  const loadLiveBetslipState = useCallback(
+    async (forceRefresh = false) => {
+      if (typeof document !== "undefined" && document.hidden && !forceRefresh) {
+        return;
+      }
+      const matchIds = sportMatchIdsKey
+        ? sportMatchIdsKey.split(",").map(Number)
+        : [];
+      if (matchIds.length === 0 && !hasPredLegs) return;
+
       try {
-        const [mRes, pRes] = await Promise.all([
-          api.matches(),
+        const [detailResults, pRes] = await Promise.all([
+          Promise.all(
+            matchIds.map((id) =>
+              api.matchById(id, { forceRefresh }).catch(() => null)
+            )
+          ),
           hasPredLegs
-            ? api.predictionsCatalog().catch(() => ({ questions: [] as ClientPrediction[] }))
+            ? api
+                .predictionsCatalog({ forceRefresh })
+                .catch(() => ({ questions: [] as ClientPrediction[] }))
             : Promise.resolve({ questions: [] as ClientPrediction[] }),
         ]);
-        if (cancelled) return;
-        setLiveMatches(mRes.matches);
+
+        const nextDetails: Record<number, ClientMatch> = {};
+        const freshList: ClientMatch[] = [];
+        for (const r of detailResults) {
+          if (r?.match) {
+            nextDetails[r.match.id] = r.match;
+            freshList.push(r.match);
+          }
+        }
+        if (Object.keys(nextDetails).length > 0) {
+          setDetailMatchesById((prev) => ({ ...prev, ...nextDetails }));
+        }
+        if (forceRefresh && freshList.length > 0 && feedMatches) {
+          const byFresh = new Map(freshList.map((m) => [m.id, m]));
+          setFeedMatches(feedMatches.map((m) => byFresh.get(m.id) ?? m));
+        }
         if (hasPredLegs) setLivePredictions(pRes.questions);
         setNowMs(Date.now());
       } catch {
         /* silencieux */
       }
-    }
-    void load();
-    const id = setInterval(() => void load(), 6000);
+    },
+    [feedMatches, hasPredLegs, setFeedMatches, sportMatchIdsKey]
+  );
+
+  useEffect(() => {
+    if (comboLegs.length === 0) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await loadLiveBetslipState(false);
+    };
+    void tick();
+    const id = setInterval(() => void tick(), 3_000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [comboLegs.length, hasPredLegs]);
+  }, [comboLegs.length, loadLiveBetslipState]);
 
-  const matchMap = useMemo(
-    () => new Map(liveMatches.map((m) => [m.id, m])),
-    [liveMatches]
-  );
+  const handlePullRefresh = useCallback(async () => {
+    await loadLiveBetslipState(true);
+  }, [loadLiveBetslipState]);
+
+  const matchMap = useMemo(() => {
+    const map = new Map<number, ClientMatch>();
+    for (const [idStr, m] of Object.entries(detailMatchesById)) {
+      map.set(Number(idStr), m);
+    }
+    for (const slimOrFull of feedMatches ?? []) {
+      const prev = map.get(slimOrFull.id);
+      map.set(
+        slimOrFull.id,
+        prev ? mergeSingleSlimIntoFullMatch(prev, slimOrFull) : slimOrFull
+      );
+    }
+    return map;
+  }, [detailMatchesById, feedMatches]);
+
   const predMap = useMemo(
     () => new Map(livePredictions.map((q) => [q.id, q])),
     [livePredictions]
@@ -188,11 +257,22 @@ export default function BetslipPage() {
             matchObj: m,
           };
         }
-        const grp = m.markets?.find((g) => g.key === leg.market);
-        const out = grp?.outcomes.find((o) => o.key === leg.selection);
+        const grp = m.markets?.find(
+          (g) => g.key === leg.market || (leg.market === "result" && g.key === "1x2")
+        );
+        let out = grp?.outcomes.find((o) => o.key === leg.selection);
+        if (!out && grp?.rows) {
+          for (const r of grp.rows) {
+            const inRow = r.outcomes.find((o) => o.key === leg.selection);
+            if (inRow) {
+              out = inRow;
+              break;
+            }
+          }
+        }
         const liveOdds =
           out?.odds ??
-          (leg.market === "result"
+          (leg.market === "result" || leg.market === "1x2"
             ? leg.selection === "home"
               ? m.oddsHome
               : leg.selection === "draw"
@@ -200,12 +280,19 @@ export default function BetslipPage() {
                 : m.oddsAway
             : null);
 
+        const isSlimSnapshot =
+          (m.markets?.length ?? 0) <= 1 && (m.marketCount ?? 2) > 1;
+        const isClosed =
+          grp != null
+            ? !out
+            : leg.market !== "result" && leg.market !== "1x2" && !isSlimSnapshot;
+
         return {
           ...leg,
           resolvedSource: m.source,
           liveOdds: roundOdds2(overrideOdds ?? liveOdds ?? leg.odds),
           isLive: m.status === "live",
-          closed: grp != null && !out,
+          closed: isClosed,
           suspended: Boolean(m.suspended || m.kickoffReached),
           startsAt: m.startsAt,
           matchObj: m,
@@ -516,6 +603,7 @@ export default function BetslipPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh}>
     <div className="mx-auto w-full max-w-[1360px] px-4 pt-3.5 pb-2 lg:px-0 lg:py-0">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
@@ -908,5 +996,6 @@ export default function BetslipPage() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }

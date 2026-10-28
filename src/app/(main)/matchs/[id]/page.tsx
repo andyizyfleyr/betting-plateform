@@ -11,10 +11,14 @@ import {
   Radio,
   RefreshCw,
 } from "lucide-react";
-import { ApiRequestError, api, type ClientMatch } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { ApiRequestError, type ClientMatch } from "@/lib/api";
 import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
-import { useMatchDetailQuery } from "@/lib/party-realtime";
+import {
+  forceRefreshMatchDetail,
+  useMatchDetailQuery,
+} from "@/lib/party-realtime";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import {
   AccordionItem,
@@ -25,6 +29,7 @@ import {
   type SheetCategory,
 } from "@/components/market-sheet";
 import { LiveStatusBadge } from "@/components/match-card";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import {
   PulseFlashLoader,
   triggerRouteLoader,
@@ -64,6 +69,7 @@ function defaultOpenMarkets(match: ClientMatch | null | undefined): Record<strin
 export default function MatchDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const rawParamId = params?.id;
   const paramPending = rawParamId === undefined;
   const matchId = Number(rawParamId);
@@ -97,6 +103,18 @@ export default function MatchDetailPage() {
   const [showTracker, setShowTracker] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 1024
   );
+  const [initializedMatchId, setInitializedMatchId] = useState<number | null>(
+    () => {
+      const c = paramPending || invalidId ? null : getCachedClientMatch(matchId);
+      return c && (c.markets?.length ?? 0) > 0 ? matchId : null;
+    }
+  );
+  const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
+    () => {
+      const c = paramPending || invalidId ? null : getCachedClientMatch(matchId);
+      return c && (c.markets?.length ?? 0) > 1 ? matchId : null;
+    }
+  );
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(() =>
     defaultOpenMarkets(
       paramPending || invalidId ? null : getCachedClientMatch(matchId)
@@ -110,6 +128,12 @@ export default function MatchDetailPage() {
         ? null
         : (getCachedClientMatch(matchId) ?? undefined);
     setCategory("all");
+    setInitializedMatchId(
+      cached && (cached.markets?.length ?? 0) > 0 ? matchId : null
+    );
+    setFullMarketsOpenedId(
+      cached && (cached.markets?.length ?? 0) > 1 ? matchId : null
+    );
     setOpenMap(defaultOpenMarkets(cached));
   }
 
@@ -171,34 +195,28 @@ export default function MatchDetailPage() {
     return fallbackMatch;
   }, [paramPending, fetchedMatch, invalidId, fallbackMatch]);
 
-  const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
-    () =>
-      !invalidId && (cachedInitialMatch?.markets?.length ?? 0) > 1
-        ? matchId
-        : null
-  );
+  const groups = useMemo(() => sanitizeMatchMarkets(match?.markets), [match]);
 
-  const hasAnyOpen = Object.keys(openMap).length > 0;
-  if (match && !hasAnyOpen && (match.markets?.length ?? 0) > 0) {
-    setOpenMap(defaultOpenMarkets(match));
-    if ((match.markets?.length ?? 0) > 1) {
+  if (match && groups.length > 0 && initializedMatchId !== match.id) {
+    setInitializedMatchId(match.id);
+    if (groups.length > 1) {
       setFullMarketsOpenedId(match.id);
     }
-  } else if (
-    match &&
-    (match.markets?.length ?? 0) > 1 &&
-    fullMarketsOpenedId !== match.id
-  ) {
+    setOpenMap(defaultOpenMarkets(match));
+  } else if (match && groups.length > 1 && fullMarketsOpenedId !== match.id) {
     setFullMarketsOpenedId(match.id);
     setOpenMap((prev) => ({ ...defaultOpenMarkets(match), ...prev }));
   }
 
   const fetchMatch = useCallback(async () => {
     if (invalidId) return;
-    await detailQuery.refetch();
-  }, [detailQuery, invalidId]);
+    try {
+      await forceRefreshMatchDetail(queryClient, matchId);
+    } catch {
+      await detailQuery.refetch();
+    }
+  }, [detailQuery, invalidId, matchId, queryClient]);
 
-  const groups = useMemo(() => sanitizeMatchMarkets(match?.markets), [match]);
   const filteredGroups = useMemo(() => {
     if (category === "all") return groups;
     return groups.filter((g) => inferCategory(g) === category);
@@ -220,6 +238,7 @@ export default function MatchDetailPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={fetchMatch}>
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne (sans double barre collante) */}
       <div className="flex items-center justify-between gap-2">
@@ -636,5 +655,6 @@ export default function MatchDetailPage() {
         )}
       </div>
     </div>
+    </PullToRefresh>
   );
 }

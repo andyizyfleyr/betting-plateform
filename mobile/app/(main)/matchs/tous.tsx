@@ -26,9 +26,13 @@ import {
 } from "@/components/infinite-scroll-loader";
 import { MatchCard } from "@/components/match-card";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
+import { useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/context/app-context";
 import { api, type ClientMatch } from "@/lib/api";
-import { useMobileMatchesSlimQuery } from "@/lib/party-realtime";
+import {
+  forceRefreshMobileMatchesFeed,
+  useMobileMatchesSlimQuery,
+} from "@/lib/party-realtime";
 import {
   matchesSearchAndOdds,
   type OddsProfile,
@@ -43,6 +47,7 @@ const POLL_INTERVAL = 12_000;
 
 export default function AllMatchesScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const { setFeedMatches, dataSaverMode } = useApp();
 
@@ -92,12 +97,14 @@ export default function AllMatchesScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const r = await matchesQuery.refetch();
-      if (r.data?.matches) setFeedMatches(r.data.matches);
+      const r = await forceRefreshMobileMatchesFeed(queryClient);
+      setFeedMatches(r.matches);
+    } catch {
+      /* conserve l'affichage en cours */
     } finally {
       setRefreshing(false);
     }
-  }, [matchesQuery, setFeedMatches]);
+  }, [queryClient, setFeedMatches]);
 
   const realMatchesAll = useMemo(
     () => (matches ?? []).filter((m) => m.source === "manual"),
@@ -431,7 +438,7 @@ export default function AllMatchesScreen() {
           <Text style={styles.errorSub}>{loadError}</Text>
           <Pressable
             onPress={() => {
-              void matchesQuery.refetch();
+              void onRefresh();
             }}
             style={styles.retryBtn}
           >

@@ -35,6 +35,7 @@ import {
   onUnauthorizedResponse,
 } from "@/lib/http";
 import {
+  forceRefreshMobileMatchesFeed,
   MobilePartyRealtimeBridge,
   useMobileMatchesSlimQuery,
 } from "@/lib/party-realtime";
@@ -107,7 +108,7 @@ interface AppContextValue {
   bumpBets: () => void;
   feedMatches: ClientMatch[] | null;
   setFeedMatches: (list: ClientMatch[]) => void;
-  refreshFeedMatches: () => Promise<void>;
+  refreshFeedMatches: (force?: boolean) => Promise<void>;
   refreshPulseNow: () => Promise<void>;
   comboLegs: ComboSelection[];
   comboOpen: boolean;
@@ -375,12 +376,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           }
         }
-        if (liveOdds == null && leg.market === "result") {
-          if (leg.selection === "V1" && m.oddsHome > 1) {
+        if (liveOdds == null && (leg.market === "result" || leg.market === "1x2")) {
+          if (
+            (leg.selection === "V1" || leg.selection === "home") &&
+            m.oddsHome > 1
+          ) {
             liveOdds = roundOdds2(m.oddsHome);
-          } else if (leg.selection === "X" && m.oddsDraw != null && m.oddsDraw > 1) {
+          } else if (
+            (leg.selection === "X" || leg.selection === "draw") &&
+            m.oddsDraw != null &&
+            m.oddsDraw > 1
+          ) {
             liveOdds = roundOdds2(m.oddsDraw);
-          } else if (leg.selection === "V2" && m.oddsAway > 1) {
+          } else if (
+            (leg.selection === "V2" || leg.selection === "away") &&
+            m.oddsAway > 1
+          ) {
             liveOdds = roundOdds2(m.oddsAway);
           }
         }
@@ -527,29 +538,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [applyUser, queryClient]);
 
-  const refreshFeedMatches = useCallback(async () => {
-    try {
-      const res = await queryClient.fetchQuery({
-        queryKey: mobileQueryKeys.matchesSlim,
-        queryFn: () => api.matchesSlim(),
-        staleTime: 0,
-      });
-      setFeedMatchesState(res.matches);
-    } catch {
-      /* conserve l'affichage */
-    }
-  }, [queryClient]);
+  const refreshFeedMatches = useCallback(
+    async (force = false) => {
+      try {
+        if (force) {
+          const res = await forceRefreshMobileMatchesFeed(queryClient);
+          setFeedMatches(res.matches);
+          return;
+        }
+        const res = await queryClient.fetchQuery({
+          queryKey: mobileQueryKeys.matchesSlim,
+          queryFn: () => api.matchesSlim(),
+          staleTime: 0,
+        });
+        setFeedMatches(res.matches);
+      } catch {
+        /* conserve l'affichage */
+      }
+    },
+    [queryClient, setFeedMatches]
+  );
 
   const refreshPulseNow = useCallback(async () => {
     if (!user) return;
     try {
-      await queryClient.invalidateQueries({
-        queryKey: mobileQueryKeys.userPulse(user.id),
-      });
+      const fresh = await api.pulse({ forceRefresh: true });
+      queryClient.setQueryData(
+        [...mobileQueryKeys.userPulse(user.id), betsVersion],
+        fresh
+      );
+      if (typeof fresh.balance === "number") setBalance(fresh.balance);
+      setPendingCount(fresh.pendingCount ?? 0);
     } catch {
       /* silencieux */
     }
-  }, [queryClient, user]);
+  }, [betsVersion, queryClient, setBalance, user]);
 
   const persistCombo = useCallback((next: ComboSelection[]) => {
     setComboLegs(next);

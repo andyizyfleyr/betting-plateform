@@ -121,18 +121,35 @@ function setEtagEntry(cacheKey: string, etag: string, body: unknown) {
   etagStore.set(cacheKey, { etag, body, at: Date.now() });
 }
 
+function stripRefreshParam(path: string): string {
+  const qIdx = path.indexOf("?");
+  if (qIdx === -1) return path;
+  const base = path.slice(0, qIdx);
+  const parts = path
+    .slice(qIdx + 1)
+    .split("&")
+    .filter((p) => p && !p.startsWith("refresh="));
+  return parts.length > 0 ? `${base}?${parts.join("&")}` : base;
+}
+
+function appendRefreshParam(path: string): string {
+  const clean = stripRefreshParam(path);
+  return clean.includes("?") ? `${clean}&refresh=1` : `${clean}?refresh=1`;
+}
+
 /**
  * Routes publiques mises en cache au CDN Edge Vercel :
  * Omet strictement l'en-tête `Authorization` pour bénéficier à 100 % du cache partagé Edge + `304 Not Modified`.
  */
 function isPublicEdgeGetPath(path: string): boolean {
+  const clean = stripRefreshParam(path);
   return (
-    path === "/api/matches/slim" ||
-    path === "/api/matches" ||
-    /^\/api\/matches\/[1-9]\d{0,9}$/.test(path) ||
-    path === "/api/matches/history" ||
-    path.startsWith("/api/matches/history?") ||
-    path === "/api/predictions/catalog"
+    clean === "/api/matches/slim" ||
+    clean === "/api/matches" ||
+    /^\/api\/matches\/[1-9]\d{0,9}$/.test(clean) ||
+    clean === "/api/matches/history" ||
+    clean.startsWith("/api/matches/history?") ||
+    clean === "/api/predictions/catalog"
   );
 }
 
@@ -196,6 +213,7 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   timeoutMs?: number;
   bypassEtag?: boolean;
+  forceRefresh?: boolean;
   ignoreUnauthorizedRedirect?: boolean;
 }
 
@@ -205,18 +223,27 @@ export async function requestJson<T>(
 ): Promise<T> {
   const method = options.method ?? "GET";
   const isGet = method === "GET";
-  const isPublicEdge = isGet && isPublicEdgeGetPath(path);
-  const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+  const forceRefresh = Boolean(isGet && options.forceRefresh);
+  const bypassCache = Boolean(options.bypassEtag || forceRefresh);
+  const canonicalPath = stripRefreshParam(path);
+  const effectivePath = forceRefresh ? appendRefreshParam(path) : path;
+  const isPublicEdge = isGet && isPublicEdgeGetPath(canonicalPath);
+  const canonicalUrl = canonicalPath.startsWith("http")
+    ? canonicalPath
+    : `${API_BASE_URL}${canonicalPath}`;
+  const url = effectivePath.startsWith("http")
+    ? effectivePath
+    : `${API_BASE_URL}${effectivePath}`;
   const token = isPublicEdge
     ? null
     : tokenHydrated
       ? memoryAuthToken
       : await hydrateAuthToken();
   const cacheKey = isPublicEdge
-    ? `public:${url}`
-    : `${token ? token.slice(-12) : "anon"}:${url}`;
+    ? `public:${canonicalUrl}`
+    : `${token ? token.slice(-12) : "anon"}:${canonicalUrl}`;
 
-  if (isGet && !options.bypassEtag) {
+  if (isGet && !bypassCache) {
     const existing = inflightGets.get(cacheKey);
     if (existing) {
       return existing as Promise<T>;
@@ -228,10 +255,13 @@ export async function requestJson<T>(
 
   const execute = async (): Promise<T> => {
     const timeoutMs = options.timeoutMs ?? (isGet ? 12_000 : 18_000);
+    const abortController =
+      typeof AbortController !== "undefined" ? new AbortController() : null;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {
+        abortController?.abort();
         reject(
           new ApiHttpError(
             "Le serveur met trop de temps à répondre — veuillez réessayer.",
@@ -249,6 +279,9 @@ export async function requestJson<T>(
 
       if (!isPublicEdge) {
         headers["X-Client-Platform"] = "android-expo";
+        if (forceRefresh) {
+          headers["x-pulse-refresh"] = "1";
+        }
       }
 
       if (token && !isPublicEdge) {
@@ -260,7 +293,7 @@ export async function requestJson<T>(
       }
 
       const cachedEtag =
-        isGet && !options.bypassEtag ? etagStore.get(cacheKey) : undefined;
+        isGet && !bypassCache ? etagStore.get(cacheKey) : undefined;
       if (cachedEtag?.etag) {
         headers["If-None-Match"] = cachedEtag.etag;
       }
@@ -271,6 +304,7 @@ export async function requestJson<T>(
           method,
           headers,
           cache: isGet ? "no-store" : undefined,
+          signal: abortController?.signal,
           body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
         }),
         timeoutPromise,
@@ -369,7 +403,7 @@ export async function requestJson<T>(
     }
   };
 
-  if (isGet && !options.bypassEtag) {
+  if (isGet && !bypassCache) {
     const p = execute().finally(() => {
       inflightGets.delete(cacheKey);
     });

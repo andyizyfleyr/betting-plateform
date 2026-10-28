@@ -39,6 +39,7 @@ import {
 } from "@/lib/combo-math";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { cn, eur, formatOdds } from "@/lib/format";
+import { mergeSingleSlimIntoFullMatch } from "@/lib/query-client";
 import {
   generateBetIdempotencyKey,
   ODDS_CHANGED_CODE,
@@ -120,8 +121,19 @@ function resolveLiveMatchSelectionOdds(
   if (match.suspended || match.kickoffReached) {
     return { odds: null, closed: false, suspended: true };
   }
-  const grp = match.markets?.find((m) => m.key === market);
-  const out = grp?.outcomes.find((o) => o.key === selection);
+  const grp = match.markets?.find(
+    (m) => m.key === market || (market === "result" && m.key === "1x2")
+  );
+  let out = grp?.outcomes.find((o) => o.key === selection);
+  if (!out && grp?.rows) {
+    for (const r of grp.rows) {
+      const inRow = r.outcomes.find((o) => o.key === selection);
+      if (inRow) {
+        out = inRow;
+        break;
+      }
+    }
+  }
   if (out) {
     return { odds: out.odds, closed: false, suspended: false };
   }
@@ -269,6 +281,9 @@ export function DesktopBetslipSidebar() {
   const [livePredMap, setLivePredMap] = useState<Map<number, ClientPrediction>>(
     new Map()
   );
+  const [detailMatchesById, setDetailMatchesById] = useState<
+    Record<number, ClientMatch>
+  >({});
   const [placedReceipt, setPlacedReceipt] = useState<{
     mode: "single" | "combo";
     legsCount: number;
@@ -280,36 +295,82 @@ export function DesktopBetslipSidebar() {
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
   const hasPredLegs = comboLegs.some((l) => l.kind === "prediction");
+  const secondarySportIdsKey = useMemo(
+    () =>
+      [
+        ...new Set(
+          comboLegs
+            .filter(
+              (l) =>
+                l.kind === "sport" &&
+                l.matchId != null &&
+                l.market !== "result" &&
+                l.market !== "1x2"
+            )
+            .map((l) => l.matchId as number)
+        ),
+      ]
+        .sort((a, b) => a - b)
+        .join(","),
+    [comboLegs]
+  );
 
   useEffect(() => {
-    if (!hasPredLegs) return;
+    if (!hasPredLegs && !secondarySportIdsKey) return;
     let active = true;
+    const secondaryIds = secondarySportIdsKey
+      ? secondarySportIdsKey.split(",").map(Number)
+      : [];
 
-    const refreshPredictions = () => {
+    const refreshSidebarLive = () => {
       if (typeof document !== "undefined" && document.hidden) return;
       if (typeof window !== "undefined" && window.innerWidth < 1024) return;
-      api
-        .predictionsCatalog()
-        .then((pRes) => {
+      if (hasPredLegs) {
+        api
+          .predictionsCatalog()
+          .then((pRes) => {
+            if (!active) return;
+            setLivePredMap(new Map(pRes.questions.map((q) => [q.id, q])));
+            setNowMs(Date.now());
+          })
+          .catch(() => undefined);
+      }
+      if (secondaryIds.length > 0) {
+        void Promise.all(
+          secondaryIds.map((id) => api.matchById(id).catch(() => null))
+        ).then((results) => {
           if (!active) return;
-          setLivePredMap(new Map(pRes.questions.map((q) => [q.id, q])));
-          setNowMs(Date.now());
-        })
-        .catch(() => undefined);
+          const next: Record<number, ClientMatch> = {};
+          for (const r of results) {
+            if (r?.match) next[r.match.id] = r.match;
+          }
+          if (Object.keys(next).length > 0) {
+            setDetailMatchesById((prev) => ({ ...prev, ...next }));
+            setNowMs(Date.now());
+          }
+        });
+      }
     };
 
-    refreshPredictions();
-    const id = setInterval(refreshPredictions, 12_000);
+    refreshSidebarLive();
+    const id = setInterval(refreshSidebarLive, 3_500);
     return () => {
       active = false;
       clearInterval(id);
     };
-  }, [hasPredLegs]);
+  }, [hasPredLegs, secondarySportIdsKey]);
 
-  const liveMatchMap = useMemo(
-    () => new Map((feedMatches ?? []).map((m) => [m.id, m])),
-    [feedMatches]
-  );
+  const liveMatchMap = useMemo(() => {
+    const map = new Map<number, ClientMatch>();
+    for (const [idStr, m] of Object.entries(detailMatchesById)) {
+      map.set(Number(idStr), m);
+    }
+    for (const m of feedMatches ?? []) {
+      const prev = map.get(m.id);
+      map.set(m.id, prev ? mergeSingleSlimIntoFullMatch(prev, m) : m);
+    }
+    return map;
+  }, [detailMatchesById, feedMatches]);
 
   const enrichedLegs = useMemo(() => {
     const activeOverrides =

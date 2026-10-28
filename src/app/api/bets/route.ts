@@ -18,6 +18,7 @@ import {
   type PredictionQuestionRow,
 } from "@/db/schema";
 import {
+  ensureMatchStoreHydrated,
   getCachedMatchById,
   getCachedUserBetsResponse,
   notifyNewBetPlaced,
@@ -65,7 +66,7 @@ import {
 } from "@/lib/idempotency";
 import { requireUserId } from "@/lib/session";
 import { formatServerErrorResponse } from "@/lib/db-error";
-import { jsonWithEtag } from "@/lib/response-cache";
+import { isManualRefreshRequest, jsonWithEtag } from "@/lib/response-cache";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 
@@ -85,7 +86,9 @@ export async function GET(req: NextRequest) {
     if (typeof auth !== "number") return auth;
     const uid = auth;
 
-    await syncLiveMatchesThrottled();
+    const manualRefresh = isManualRefreshRequest(req);
+    await syncLiveMatchesThrottled(false, { manualRefresh });
+    await ensureMatchStoreHydrated(manualRefresh);
 
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
   const targetKindParam = req.nextUrl.searchParams.get("kind");
@@ -98,7 +101,7 @@ export async function GET(req: NextRequest) {
     Number.isInteger(targetId) &&
     targetId > 0;
 
-  if (!hasTarget) {
+  if (!hasTarget && !manualRefresh) {
     const cachedResp = getCachedUserBetsResponse(uid, filter);
     if (cachedResp) {
       return jsonWithEtag(req, null, cachedResp);

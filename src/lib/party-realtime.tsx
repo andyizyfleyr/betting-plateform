@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import PartySocket from "partysocket";
 import {
   ApiRequestError,
@@ -170,9 +170,6 @@ export function PartyRealtimeBridge({
           const { merged, hasNewMatch, needsFullMarkets, newlyFinishedIds } =
             mergeSlimIntoFullMatches(prevData?.matches, msg.matches);
 
-          // Ne pré-remplit `pulseQueryKeys.matches` avec un snapshot slim que si le cache
-          // complet existe déjà ou qu'une vue active observe `matches` (évite tout appel
-          // `/api/matches` de ~250 Ko en tâche de fond sur `/paris`, `/predictions`, `/resultats` mobile).
           if (prevData || hasActiveMatchesObserver) {
             queryClient.setQueryData<{
               matches: ClientMatch[];
@@ -181,22 +178,69 @@ export function PartyRealtimeBridge({
               matches: merged,
               serverTime: msg.serverTime ?? prevData?.serverTime,
             });
-            onMatchesUpdatedRef.current?.(merged);
           }
 
+          // Synchronise toujours `feedMatches` (mobile `< lg` et desktop `>= lg`) pour les modales,
+          // le panier `/betslip`, le tiroir combiné et la feuille de marchés.
+          onMatchesUpdatedRef.current?.(merged);
           rememberMatches(merged);
 
+          let anyLiveSignalChanged = newlyFinishedIds.length > 0;
+
           // Met aussi à jour instantanément toute fiche détail `/matchs/[id]` en cache
+          // et relance immédiatement `/api/matches/[id]` si une cote/score bouge pendant qu'elle est ouverte
           for (const slim of msg.matches) {
+            const detailKey = pulseQueryKeys.matchDetail(slim.id);
+            const prevDetail = queryClient.getQueryData<{
+              match: ClientMatch;
+              serverTime?: string;
+            }>(detailKey);
+
+            if (!prevDetail) continue;
+            const prevM = prevDetail.match;
+            const detailChanged =
+              prevM.status !== slim.status ||
+              prevM.homeScore !== slim.homeScore ||
+              prevM.awayScore !== slim.awayScore ||
+              prevM.redHome !== slim.redHome ||
+              prevM.redAway !== slim.redAway ||
+              prevM.suspended !== slim.suspended ||
+              prevM.oddsHome !== slim.oddsHome ||
+              prevM.oddsDraw !== slim.oddsDraw ||
+              prevM.oddsAway !== slim.oddsAway;
+
+            if (
+              prevM.status !== slim.status ||
+              prevM.homeScore !== slim.homeScore ||
+              prevM.awayScore !== slim.awayScore ||
+              prevM.suspended !== slim.suspended
+            ) {
+              anyLiveSignalChanged = true;
+            }
+
             queryClient.setQueryData<{
               match: ClientMatch;
               serverTime?: string;
-            }>(pulseQueryKeys.matchDetail(slim.id), (prevDetail) => {
-              if (!prevDetail) return prevDetail;
-              return {
-                match: mergeSingleSlimIntoFullMatch(prevDetail.match, slim),
-                serverTime: msg.serverTime ?? prevDetail.serverTime,
-              };
+            }>(detailKey, {
+              match: mergeSingleSlimIntoFullMatch(prevM, slim),
+              serverTime: msg.serverTime ?? prevDetail.serverTime,
+            });
+
+            if (detailChanged) {
+              const hasDetailObserver =
+                (queryClient
+                  .getQueryCache()
+                  .find({ queryKey: detailKey })
+                  ?.getObserversCount() ?? 0) > 0;
+              if (hasDetailObserver) {
+                void queryClient.invalidateQueries({ queryKey: detailKey });
+              }
+            }
+          }
+
+          if (anyLiveSignalChanged && userId) {
+            void queryClient.invalidateQueries({
+              queryKey: ["bets", userId],
             });
           }
 
@@ -210,7 +254,7 @@ export function PartyRealtimeBridge({
             const now = Date.now();
             if (
               !hydratingFullRef.current &&
-              now - lastFullHydrateAtRef.current >= 5_000
+              now - lastFullHydrateAtRef.current >= 4_000
             ) {
               hydratingFullRef.current = true;
               lastFullHydrateAtRef.current = now;
@@ -218,7 +262,7 @@ export function PartyRealtimeBridge({
                 .fetchQuery({
                   queryKey: pulseQueryKeys.matches,
                   queryFn: () => api.matches(),
-                  staleTime: 2_500,
+                  staleTime: 2_000,
                 })
                 .then((fullRes) => {
                   if (fullRes?.matches) {
@@ -243,6 +287,9 @@ export function PartyRealtimeBridge({
         if (msg.type === "MATCHES_INVALIDATE") {
           void queryClient.invalidateQueries({
             queryKey: pulseQueryKeys.matches,
+          });
+          void queryClient.invalidateQueries({
+            queryKey: pulseQueryKeys.matchesSlim,
           });
           if (Array.isArray(msg.matchIds)) {
             for (const mid of msg.matchIds) {
@@ -387,6 +434,58 @@ export function PartyRealtimeBridge({
  *  HOOKS TANSTACK QUERY PARTAGÉS (AVEC BASCULE AUTOMATIQUE WEBSOCKET / POLLING)
  * ============================================================================ */
 
+export async function forceRefreshMatchesFeed(
+  queryClient: QueryClient
+): Promise<{ matches: ClientMatch[]; serverTime?: string }> {
+  const res = await api.matches({ forceRefresh: true });
+  queryClient.setQueryData(pulseQueryKeys.matches, res);
+  queryClient.setQueryData(pulseQueryKeys.matchesSlim, res);
+  return res;
+}
+
+export async function forceRefreshMatchDetail(
+  queryClient: QueryClient,
+  matchId: number
+): Promise<{ match: ClientMatch; serverTime?: string }> {
+  const res = await api.matchById(matchId, { forceRefresh: true });
+  queryClient.setQueryData(pulseQueryKeys.matchDetail(matchId), res);
+  return res;
+}
+
+export async function forceRefreshMatchHistory(
+  queryClient: QueryClient,
+  focusedMatchId?: number
+): Promise<{
+  matches: ClientMatchHistoryItem[];
+  focusedMatch: ClientMatchHistoryItem | null;
+  serverTime?: string;
+}> {
+  const base = await api.matchHistory(undefined, { forceRefresh: true });
+  queryClient.setQueryData(pulseQueryKeys.matchHistory, base);
+  if (focusedMatchId && focusedMatchId > 0) {
+    const inBase = base.matches.find((m) => m.id === focusedMatchId) ?? null;
+    if (!inBase) {
+      const focused = await api.matchHistory(focusedMatchId, {
+        forceRefresh: true,
+      });
+      queryClient.setQueryData(
+        pulseQueryKeys.matchHistoryFocused(focusedMatchId),
+        focused
+      );
+      return focused;
+    }
+  }
+  return base;
+}
+
+export async function forceRefreshPredictionsCatalog(
+  queryClient: QueryClient
+): Promise<{ questions: ClientPrediction[]; serverTime?: string }> {
+  const res = await api.predictionsCatalog({ forceRefresh: true });
+  queryClient.setQueryData(pulseQueryKeys.predictionsCatalog, res);
+  return res;
+}
+
 export function useMatchesFeedQuery(options?: {
   enabled?: boolean;
   baseFallbackIntervalMs?: number;
@@ -394,9 +493,9 @@ export function useMatchesFeedQuery(options?: {
 }) {
   const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const baseMs = options?.baseFallbackIntervalMs ?? 3_500;
+  const baseMs = options?.baseFallbackIntervalMs ?? 3_000;
   const fallbackMs = getAdaptiveIntervalMs(baseMs, isConstrained);
-  const wsFullSyncMs = getAdaptiveIntervalMs(12_000, isConstrained);
+  const wsFullSyncMs = getAdaptiveIntervalMs(5_000, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.matches,
@@ -411,7 +510,7 @@ export function useMatchesFeedQuery(options?: {
         ? () => Date.now() - 2_000
         : undefined,
     // Même quand le flux WebSocket slim (1X2/score/minute) est actif, resynchronise
-    // les 18 marchés secondaires toutes les 12 s (et bascule à 3.5 s hors WS).
+    // les 18 marchés secondaires toutes les 5 s (et bascule à 3 s hors WS).
     refetchInterval: wsConnected ? wsFullSyncMs : fallbackMs,
     refetchIntervalInBackground: false,
   });
@@ -426,7 +525,7 @@ export function useMatchDetailQuery(
   }
 ) {
   const { isConstrained, isOffline } = useNetworkQuality();
-  const detailIntervalMs = getAdaptiveIntervalMs(3_500, isConstrained);
+  const detailIntervalMs = getAdaptiveIntervalMs(3_000, isConstrained);
   const initialIsSlim =
     Boolean(options?.initialMatch) &&
     options?.initialMatch?.status !== "finished" &&

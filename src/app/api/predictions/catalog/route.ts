@@ -7,6 +7,8 @@ import { formatServerErrorResponse } from "@/lib/db-error";
 import {
   EDGE_CACHE_TAGS,
   getPredictionsCatalogCache,
+  hasUnexpectedSearchParams,
+  isManualRefreshRequest,
   publicJsonWithEdgeCache,
   rejectUnexpectedQueryParams,
   runSingleflight,
@@ -19,8 +21,8 @@ export const maxDuration = 60;
 
 const CATALOG_EDGE_POLICY = {
   maxAge: 0,
-  sMaxAge: 4,
-  staleWhileRevalidate: 6,
+  sMaxAge: 1,
+  staleWhileRevalidate: 2,
   tags: [EDGE_CACHE_TAGS.predictionsCatalog],
 } as const;
 
@@ -33,18 +35,23 @@ void _omitSeedValue;
 export async function GET(req: NextRequest) {
   try {
     // Défense en profondeur derrière la règle Vercel Firewall : rejette tout paramètre aléatoire
-    if (req.nextUrl.searchParams.size > 0) {
+    if (hasUnexpectedSearchParams(req.nextUrl.searchParams)) {
       return rejectUnexpectedQueryParams();
     }
+    const manualRefresh = isManualRefreshRequest(req);
 
-    const stored = await runSingleflight("api:predictions:catalog", async () => {
-      await ensureSeeded();
-      await syncAllSettlementsThrottled();
+    const stored = await runSingleflight(
+      manualRefresh ? "api:predictions:catalog:refresh" : "api:predictions:catalog",
+      async () => {
+        await ensureSeeded();
+        await syncAllSettlementsThrottled(false, { manualRefresh });
 
-      const freshCached = getPredictionsCatalogCache();
-      if (freshCached) {
-        return freshCached;
-      }
+        if (!manualRefresh) {
+          const freshCached = getPredictionsCatalogCache();
+          if (freshCached) {
+            return freshCached;
+          }
+        }
 
       const rows = await db
         .select(publicQuestionColumns)

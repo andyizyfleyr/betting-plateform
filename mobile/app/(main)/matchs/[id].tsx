@@ -16,10 +16,14 @@ import {
   Radio,
   RefreshCw,
 } from "lucide-react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { LiveMatchTracker } from "@/components/live-match-tracker";
 import { LiveStatusBadge } from "@/components/match-card";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { useMobileMatchDetailQuery } from "@/lib/party-realtime";
+import {
+  forceRefreshMobileMatchDetail,
+  useMobileMatchDetailQuery,
+} from "@/lib/party-realtime";
 import {
   AccordionItem,
   CATEGORY_TABS,
@@ -47,6 +51,7 @@ const POLL_IDLE_MS = 15_000;
 export default function MatchDetailScreen() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const matchId = Number(params.id);
   const invalidId = !Number.isInteger(matchId) || matchId <= 0;
 
@@ -143,8 +148,12 @@ export default function MatchDetailScreen() {
 
   const fetchMatch = useCallback(async () => {
     if (invalidId) return;
-    await detailQuery.refetch();
-  }, [detailQuery, invalidId]);
+    try {
+      await forceRefreshMobileMatchDetail(queryClient, matchId);
+    } catch {
+      await detailQuery.refetch();
+    }
+  }, [detailQuery, invalidId, matchId, queryClient]);
 
   const isFinished = match?.status === "finished";
   const isLive = match?.status === "live";

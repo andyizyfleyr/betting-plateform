@@ -32,7 +32,11 @@ import {
   PulseFlashLoader,
   triggerRouteLoader,
 } from "@/components/pulse-flash-loader";
-import { useMatchesFeedQuery } from "@/lib/party-realtime";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  forceRefreshMatchesFeed,
+  useMatchesFeedQuery,
+} from "@/lib/party-realtime";
 import {
   deduplicateLeagueNames,
   isClearFavoriteMatch,
@@ -52,6 +56,7 @@ const RETRY_DELAY = 1_000;
 
 export default function VirtualMatchesPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, setFeedMatches } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
 
@@ -88,14 +93,12 @@ export default function VirtualMatchesPage() {
 
   const handlePullRefresh = useCallback(async () => {
     try {
-      const res = await matchesQuery.refetch();
-      if (res.data?.matches) {
-        setFeedMatches(res.data.matches);
-      }
+      const res = await forceRefreshMatchesFeed(queryClient);
+      setFeedMatches(res.matches);
     } catch {
       /* conserve l'affichage en cours */
     }
-  }, [matchesQuery, setFeedMatches]);
+  }, [queryClient, setFeedMatches]);
 
   const virtualMatchesAll = useMemo(
     () => (matches ?? []).filter((m) => m.source !== "manual"),
@@ -428,7 +431,7 @@ export default function VirtualMatchesPage() {
             <button
               type="button"
               onClick={() => {
-                void matchesQuery.refetch();
+                void handlePullRefresh();
               }}
               className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
             >

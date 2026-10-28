@@ -39,8 +39,12 @@ import {
   PulseFlashLoader,
   triggerRouteLoader,
 } from "@/components/pulse-flash-loader";
+import { useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
-import { useMatchesFeedQuery } from "@/lib/party-realtime";
+import {
+  forceRefreshMatchesFeed,
+  useMatchesFeedQuery,
+} from "@/lib/party-realtime";
 import {
   matchesSearchAndOdds,
   sortByKickoffAsc,
@@ -85,6 +89,7 @@ function getServerFalse(): boolean {
 
 export default function MatchsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     user,
     openRecharge,
@@ -132,14 +137,12 @@ export default function MatchsPage() {
 
   const handlePullRefresh = useCallback(async () => {
     try {
-      const res = await matchesQuery.refetch();
-      if (res.data?.matches) {
-        setFeedMatches(res.data.matches);
-      }
+      const res = await forceRefreshMatchesFeed(queryClient);
+      setFeedMatches(res.matches);
     } catch {
       /* conserve l'affichage en cours si le réseau mobile est instable */
     }
-  }, [matchesQuery, setFeedMatches]);
+  }, [queryClient, setFeedMatches]);
 
   const handleHeroAction = useCallback(
     (action: HeroPromoAction) => {
@@ -498,7 +501,7 @@ export default function MatchsPage() {
             <button
               type="button"
               onClick={() => {
-                void matchesQuery.refetch();
+                void handlePullRefresh();
               }}
               className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
             >

@@ -45,27 +45,30 @@ export default function TransactionsScreen() {
   const cancelSlotRef = useRef<Map<number, string>>(new Map());
   const cancelInFlightRef = useRef(false);
 
-  const load = useCallback(async () => {
-    if (!user && !sessionRestoring) return;
-    try {
-      const w = await api.wallet();
-      setWallet(w);
-      if (typeof w.balance === "number") setBalance(w.balance);
-    } catch {
-      /* silencieux */
-    }
-  }, [sessionRestoring, setBalance, user]);
+  const load = useCallback(
+    async (forceRefresh = false) => {
+      if (!user && !sessionRestoring) return;
+      try {
+        const w = await api.wallet({ forceRefresh });
+        setWallet(w);
+        if (typeof w.balance === "number") setBalance(w.balance);
+      } catch {
+        /* silencieux */
+      }
+    },
+    [sessionRestoring, setBalance, user]
+  );
 
   useEffect(() => {
-    void load();
+    void load(false);
     if (!user && !sessionRestoring) return;
-    const id = setInterval(() => void load(), 8_000);
+    const id = setInterval(() => void load(false), 6_000);
     return () => clearInterval(id);
   }, [load, betsVersion, sessionRestoring, user]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await load();
+    await load(true);
     setRefreshing(false);
   }, [load]);
 

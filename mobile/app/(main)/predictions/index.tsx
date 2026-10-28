@@ -20,10 +20,13 @@ import {
   TrendingUp,
   X,
 } from "lucide-react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { useMobilePredictionsCatalogQuery } from "@/lib/party-realtime";
+import {
+  forceRefreshMobilePredictionsCatalog,
+  useMobilePredictionsCatalogQuery,
+} from "@/lib/party-realtime";
 import { mobileQueryKeys } from "@/lib/query-client";
 import {
   InfiniteScrollLoader,
@@ -69,6 +72,7 @@ function formatResolves(iso: string, nowMs: number) {
 }
 
 export default function PredictionsScreen() {
+  const queryClient = useQueryClient();
   const {
     user,
     betsVersion,
@@ -134,14 +138,26 @@ export default function PredictionsScreen() {
     setRefreshing(true);
     try {
       await Promise.all([
-        catalogQuery.refetch(),
-        user ? myBetsQuery.refetch() : Promise.resolve(),
+        forceRefreshMobilePredictionsCatalog(queryClient).catch(() =>
+          catalogQuery.refetch()
+        ),
+        user
+          ? api.predictions
+              .mine({ forceRefresh: true })
+              .then((fresh) => {
+                queryClient.setQueryData(
+                  [...mobileQueryKeys.myPredictionBets(user.id), betsVersion],
+                  fresh
+                );
+              })
+              .catch(() => myBetsQuery.refetch())
+          : Promise.resolve(),
       ]);
       setNowMs(Date.now());
     } finally {
       setRefreshing(false);
     }
-  }, [catalogQuery, myBetsQuery, user]);
+  }, [betsVersion, catalogQuery, myBetsQuery, queryClient, user]);
 
   const questions = useMemo(() => {
     if (!catalogQuestions) return null;
@@ -426,8 +442,7 @@ export default function PredictionsScreen() {
             <Text style={styles.errorSub}>{loadError}</Text>
             <Pressable
               onPress={() => {
-                void catalogQuery.refetch();
-                if (user) void myBetsQuery.refetch();
+                void onRefresh();
               }}
               style={styles.retryBtn}
             >

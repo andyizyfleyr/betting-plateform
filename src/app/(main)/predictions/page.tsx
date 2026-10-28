@@ -19,9 +19,12 @@ import {
   oddsTrendTextClass,
   useOddsTrend,
 } from "@/components/odds-trend-corner";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
-import { usePredictionsCatalogQuery } from "@/lib/party-realtime";
+import {
+  forceRefreshPredictionsCatalog,
+  usePredictionsCatalogQuery,
+} from "@/lib/party-realtime";
 import { pulseQueryKeys } from "@/lib/query-client";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { useLongPressOdds } from "@/lib/use-long-press-odds";
@@ -54,6 +57,7 @@ function formatResolves(iso: string, nowMs: number) {
 }
 
 export default function PredictionsPage() {
+  const queryClient = useQueryClient();
   const { user, betsVersion, comboQuickMode, toggleComboLeg, toast } = useApp();
   const { isOffline } = useNetworkQuality();
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -104,11 +108,23 @@ export default function PredictionsPage() {
 
   const handlePullRefresh = useCallback(async () => {
     await Promise.all([
-      catalogQuery.refetch(),
-      user ? myBetsQuery.refetch() : Promise.resolve(),
+      forceRefreshPredictionsCatalog(queryClient).catch(() =>
+        catalogQuery.refetch()
+      ),
+      user
+        ? api
+            .myPredictionBets({ forceRefresh: true })
+            .then((fresh) => {
+              queryClient.setQueryData(
+                [...pulseQueryKeys.myPredictionBets(user.id), betsVersion],
+                fresh
+              );
+            })
+            .catch(() => myBetsQuery.refetch())
+        : Promise.resolve(),
     ]);
     setNowMs(Date.now());
-  }, [catalogQuery, myBetsQuery, user]);
+  }, [betsVersion, catalogQuery, myBetsQuery, queryClient, user]);
 
   const questions = useMemo(() => {
     if (!catalogQuestions) return null;

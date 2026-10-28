@@ -39,7 +39,7 @@ import { PullToRefresh } from "@/components/pull-to-refresh";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
 import { SportIcon } from "@/components/sport-icon";
-import { useApp } from "@/components/providers";
+import { useApp, useFeedMatches } from "@/components/providers";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import {
@@ -155,21 +155,56 @@ export default function ComboDetailPage() {
     return () => window.clearTimeout(t);
   }, [serverOverrideCashout]);
 
-  const fetchCombo = useCallback(async () => {
-    const r = await api.betById("combo", comboId);
-    if (typeof r.balance === "number") setBalance(r.balance);
-    setFetchedBet(r.bet);
-  }, [comboId, setBalance]);
+  const feedMatches = useFeedMatches();
+  const betLegs = bet?.legs;
+  const comboLiveSig = useMemo(() => {
+    if (!betLegs || !feedMatches) return "";
+    const byId = new Map(feedMatches.map((m) => [m.id, m]));
+    return betLegs
+      .map((l) => {
+        if (!l.matchId) return "";
+        const m = byId.get(l.matchId);
+        if (!m) return "";
+        return `${m.id}:${m.status}:${m.homeScore}:${m.awayScore}:${m.suspended ? 1 : 0}:${m.oddsHome}:${m.oddsAway}`;
+      })
+      .filter(Boolean)
+      .join("|");
+  }, [betLegs, feedMatches]);
+
+  const fetchCombo = useCallback(
+    async (forceRefresh = false) => {
+      const r = await api.betById("combo", comboId, { forceRefresh });
+      if (typeof r.balance === "number") setBalance(r.balance);
+      setFetchedBet(r.bet);
+    },
+    [comboId, setBalance]
+  );
 
   const handlePullRefresh = useCallback(async () => {
     if (invalidId) return;
     try {
-      await fetchCombo();
+      await fetchCombo(true);
       setLoadError(null);
     } catch {
       /* conserve l'affichage actuel si la connexion coupe brièvement */
     }
   }, [invalidId, fetchCombo]);
+
+  useEffect(() => {
+    if (invalidId || !comboLiveSig || bet?.status !== "pending") return;
+    let cancelled = false;
+    api
+      .betById("combo", comboId)
+      .then((r) => {
+        if (cancelled) return;
+        if (typeof r.balance === "number") setBalance(r.balance);
+        setFetchedBet(r.bet);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [bet?.status, comboId, comboLiveSig, invalidId, setBalance]);
 
   useEffect(() => {
     if (invalidId) return;

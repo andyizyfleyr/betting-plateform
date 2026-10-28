@@ -13,15 +13,21 @@ import {
   RefreshCw,
   TrendingUp,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, type ClientPrediction } from "@/lib/api";
 import { getCachedPrediction } from "@/lib/client-entity-cache";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import {
   PulseFlashLoader,
   triggerRouteLoader,
 } from "@/components/pulse-flash-loader";
 import { useApp } from "@/components/providers";
+import {
+  forceRefreshPredictionsCatalog,
+  usePredictionsCatalogQuery,
+} from "@/lib/party-realtime";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
 const POLL_MS = 6_000;
@@ -29,6 +35,7 @@ const POLL_MS = 6_000;
 export default function PredictionDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const paramPending = params?.id === undefined;
   const questionId = Number(params?.id);
   const invalidId =
@@ -45,7 +52,9 @@ export default function PredictionDetailPage() {
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_MS, isConstrained);
 
   const [prevId, setPrevId] = useState(questionId);
-  const [question, setQuestion] = useState<ClientPrediction | null | undefined>(() =>
+  const [fetchedQuestion, setFetchedQuestion] = useState<
+    ClientPrediction | null | undefined
+  >(() =>
     paramPending
       ? undefined
       : invalidId
@@ -57,7 +66,7 @@ export default function PredictionDetailPage() {
 
   if (questionId !== prevId) {
     setPrevId(questionId);
-    setQuestion(
+    setFetchedQuestion(
       paramPending
         ? undefined
         : invalidId
@@ -67,34 +76,54 @@ export default function PredictionDetailPage() {
     setActiveSelection(null);
   }
 
-  const fetchPrediction = useCallback(async () => {
-    if (invalidId || isOffline) return;
-    if (typeof document !== "undefined" && document.hidden) return;
-    try {
-      const cat = await api.predictionsCatalog();
-      const found = cat.questions.find((q) => q.id === questionId) ?? null;
-      setQuestion(found);
-      setLoadError(null);
-    } catch (e) {
-      setQuestion((prev) => (prev === undefined ? null : prev));
-      setLoadError(
-        e instanceof Error
-          ? e.message
-          : "Impossible de charger ce marché."
-      );
-    }
-  }, [invalidId, isOffline, questionId]);
+  const catalogQuery = usePredictionsCatalogQuery();
+  const catalogQuestions = catalogQuery.data?.questions;
+  const fromCatalog = useMemo(
+    () =>
+      !invalidId && catalogQuestions
+        ? (catalogQuestions.find((q) => q.id === questionId) ?? null)
+        : undefined,
+    [catalogQuestions, invalidId, questionId]
+  );
 
+  const fetchPrediction = useCallback(
+    async (forceRefresh = false) => {
+      if (invalidId || (isOffline && !forceRefresh)) return;
+      if (typeof document !== "undefined" && document.hidden && !forceRefresh) {
+        return;
+      }
+      try {
+        const cat = forceRefresh
+          ? await forceRefreshPredictionsCatalog(queryClient)
+          : await api.predictionsCatalog();
+        const found = cat.questions.find((q) => q.id === questionId) ?? null;
+        setFetchedQuestion(found);
+        setLoadError(null);
+      } catch (e) {
+        setFetchedQuestion((prev) => (prev === undefined ? null : prev));
+        setLoadError(
+          e instanceof Error ? e.message : "Impossible de charger ce marché."
+        );
+      }
+    },
+    [invalidId, isOffline, queryClient, questionId]
+  );
+
+  const question = fromCatalog !== undefined ? fromCatalog : fetchedQuestion;
   const isOpen = question?.status === "open";
 
   useEffect(() => {
     if (invalidId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchPrediction();
+    void fetchPrediction(false);
     if (question && !isOpen) return;
-    const id = setInterval(() => void fetchPrediction(), pollIntervalMs);
+    const id = setInterval(() => void fetchPrediction(false), pollIntervalMs);
     return () => clearInterval(id);
   }, [invalidId, fetchPrediction, question, isOpen, pollIntervalMs]);
+
+  const handlePullRefresh = useCallback(async () => {
+    await fetchPrediction(true);
+  }, [fetchPrediction]);
 
   const sortedOptions = useMemo(() => {
     if (!question) return [];
@@ -150,6 +179,7 @@ export default function PredictionDetailPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh}>
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
       <div className="flex items-center justify-between gap-2">
@@ -216,7 +246,7 @@ export default function PredictionDetailPage() {
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
-                onClick={() => void fetchPrediction()}
+                onClick={() => void fetchPrediction(true)}
                 className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[11.5px] font-bold text-ink"
               >
                 <RefreshCw className="h-3 w-3" />
@@ -356,5 +386,6 @@ export default function PredictionDetailPage() {
         onClose={() => setActiveSelection(null)}
       />
     </div>
+    </PullToRefresh>
   );
 }

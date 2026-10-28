@@ -71,6 +71,8 @@ export default function ComboDetailScreen() {
     authReady,
     sessionRestoring,
     user,
+    betsVersion,
+    feedMatches,
     oddsFormat,
     setBalance,
     bumpBets,
@@ -99,16 +101,33 @@ export default function ComboDetailScreen() {
   const userId = user?.id ?? null;
   const canQueryCombo = !invalidId && (Boolean(userId) || sessionRestoring);
 
-  const fetchCombo = useCallback(async () => {
-    if (!canQueryCombo) return;
-    try {
-      const r = await api.bets.byId("combo", comboId);
-      if (r.balance != null) setBalance(r.balance);
-      setBet(r.bet);
-    } catch {
-      /* garde l'état courant */
-    }
-  }, [canQueryCombo, comboId, setBalance]);
+  const comboLiveSig = useMemo(() => {
+    if (!bet?.legs || !feedMatches) return "";
+    const byId = new Map(feedMatches.map((m) => [m.id, m]));
+    return bet.legs
+      .map((l) => {
+        if (!l.matchId) return "";
+        const m = byId.get(l.matchId);
+        if (!m) return "";
+        return `${m.id}:${m.status}:${m.homeScore}:${m.awayScore}:${m.suspended ? 1 : 0}:${m.oddsHome}:${m.oddsAway}`;
+      })
+      .filter(Boolean)
+      .join("|");
+  }, [bet?.legs, feedMatches]);
+
+  const fetchCombo = useCallback(
+    async (forceRefresh = false) => {
+      if (!canQueryCombo) return;
+      try {
+        const r = await api.bets.byId("combo", comboId, { forceRefresh });
+        if (r.balance != null) setBalance(r.balance);
+        setBet(r.bet);
+      } catch {
+        /* garde l'état courant */
+      }
+    },
+    [canQueryCombo, comboId, setBalance]
+  );
 
   const hasLiveLeg = useMemo(
     () =>
@@ -123,13 +142,13 @@ export default function ComboDetailScreen() {
 
   useEffect(() => {
     if (!canQueryCombo) return;
-    void fetchCombo();
-  }, [canQueryCombo, fetchCombo]);
+    void fetchCombo(false);
+  }, [canQueryCombo, fetchCombo, betsVersion, comboLiveSig]);
 
   useEffect(() => {
     if (!canQueryCombo || !shouldPoll) return;
     const id = setInterval(
-      () => void fetchCombo(),
+      () => void fetchCombo(false),
       hasLiveLeg ? POLL_LIVE_MS : POLL_IDLE_MS
     );
     return () => clearInterval(id);
@@ -137,7 +156,7 @@ export default function ComboDetailScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchCombo();
+    await fetchCombo(true);
     setRefreshing(false);
   }, [fetchCombo]);
 

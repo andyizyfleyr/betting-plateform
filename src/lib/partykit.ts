@@ -128,7 +128,11 @@ export type PartyServerEvent =
 
 const pendingRoomPayloads = new Map<
   string,
-  { timer: ReturnType<typeof setTimeout>; payload: PartyServerEvent }
+  {
+    timer: ReturnType<typeof setTimeout>;
+    payload: PartyServerEvent;
+    cancelWait: () => void;
+  }
 >();
 
 async function postToPartyRoom(
@@ -161,7 +165,8 @@ async function postToPartyRoom(
 
 /**
  * Publie un événement vers un salon PartyKit avec coalescence courte (100 ms) et `waitUntil`
- * afin de ne jamais ralentir la réponse HTTP du joueur.
+ * enregistré immédiatement dans le contexte de requête actif afin que Vercel Serverless
+ * ne gèle jamais le conteneur avant l'envoi effectif vers le Durable Object.
  */
 export function publishPartyRoomEvent(
   roomId: string,
@@ -175,6 +180,7 @@ export function publishPartyRoomEvent(
     const existing = pendingRoomPayloads.get(roomId);
     if (existing) {
       clearTimeout(existing.timer);
+      existing.cancelWait();
       pendingRoomPayloads.delete(roomId);
     }
     const p = postToPartyRoom(cfg, roomId, event);
@@ -192,21 +198,34 @@ export function publishPartyRoomEvent(
     return;
   }
 
-  const entry = {
+  let resolveBackground!: () => void;
+  const backgroundPromise = new Promise<void>((resolve) => {
+    resolveBackground = resolve;
+  });
+
+  const timer = setTimeout(() => {
+    const latest = pendingRoomPayloads.get(roomId);
+    pendingRoomPayloads.delete(roomId);
+    if (!latest) {
+      resolveBackground();
+      return;
+    }
+    void postToPartyRoom(cfg, roomId, latest.payload).finally(() => {
+      resolveBackground();
+    });
+  }, PUBLISH_COALESCE_MS);
+
+  pendingRoomPayloads.set(roomId, {
     payload: event,
-    timer: setTimeout(() => {
-      const latest = pendingRoomPayloads.get(roomId);
-      pendingRoomPayloads.delete(roomId);
-      if (!latest) return;
-      const p = postToPartyRoom(cfg, roomId, latest.payload);
-      try {
-        waitUntil(p);
-      } catch {
-        void p;
-      }
-    }, PUBLISH_COALESCE_MS),
-  };
-  pendingRoomPayloads.set(roomId, entry);
+    timer,
+    cancelWait: resolveBackground,
+  });
+
+  try {
+    waitUntil(backgroundPromise);
+  } catch {
+    void backgroundPromise;
+  }
 }
 
 export function publishUserRealtimeInvalidation(

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hydrateLiveMatchRow } from "@/db/engine";
 import { ensureSeeded } from "@/db/seed";
 import {
   ensureMatchStoreHydrated,
@@ -12,6 +13,8 @@ import {
   computeWeakEtag,
   EDGE_CACHE_TAGS,
   getMatchesPayloadCache,
+  hasUnexpectedSearchParams,
+  isManualRefreshRequest,
   publicJsonWithEdgeCache,
   rejectUnexpectedQueryParams,
   runSingleflight,
@@ -24,36 +27,39 @@ export const maxDuration = 60;
 
 const MATCHES_EDGE_POLICY = {
   maxAge: 0,
-  sMaxAge: 2,
-  staleWhileRevalidate: 2,
+  sMaxAge: 1,
+  staleWhileRevalidate: 1,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 
 export async function GET(req: NextRequest) {
   try {
-    if (req.nextUrl.searchParams.size > 0) {
+    if (hasUnexpectedSearchParams(req.nextUrl.searchParams)) {
       return rejectUnexpectedQueryParams();
     }
+    const manualRefresh = isManualRefreshRequest(req);
 
     const { entry: stored, catchingUp } = await runSingleflight(
-      "api:matches",
+      manualRefresh ? "api:matches:refresh" : "api:matches",
       async () => {
         await ensureSeeded();
         await ensureMlLoaded();
-        await syncLiveMatchesThrottled();
+        await syncLiveMatchesThrottled(false, { manualRefresh });
 
         const feedInFlight = isRealFeedSyncInFlight();
-        if (!feedInFlight) {
+        if (!manualRefresh && !feedInFlight) {
           const freshCached = getMatchesPayloadCache();
           if (freshCached) {
             return { entry: freshCached, catchingUp: false };
           }
         }
 
-        await ensureMatchStoreHydrated();
+        await ensureMatchStoreHydrated(manualRefresh);
         const now = Date.now();
         const rows = getCachedAllMatchesForFeed();
-        const withMarkets = rows.map((rawRow) => serializePublicMatch(rawRow, now));
+        const withMarkets = rows.map((rawRow) =>
+          serializePublicMatch(hydrateLiveMatchRow(rawRow, now), now)
+        );
 
         const payload = {
           matches: withMarkets,

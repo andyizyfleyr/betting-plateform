@@ -182,7 +182,7 @@ export default function MatchsHomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshFeedMatches();
+    await refreshFeedMatches(true);
     setRefreshing(false);
   }, [refreshFeedMatches]);
 

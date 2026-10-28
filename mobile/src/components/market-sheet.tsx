@@ -408,6 +408,9 @@ export function MarketSheet() {
   const [category, setCategory] = useState<SheetCategory>("all");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
+  const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
+    null
+  );
   const [showTracker, setShowTracker] = useState(false);
 
   const sharedFromFeed = useMemo(
@@ -439,12 +442,16 @@ export function MarketSheet() {
     return sharedFromFeed ?? marketMatch;
   }, [detailQuery.data?.match, marketMatch, sharedFromFeed]);
 
-  const hasFullMarketsOpen = Boolean(openMap.total_ou);
+  const groups = useMemo(
+    () => sanitizeMatchMarkets(effectiveSource?.markets),
+    [effectiveSource]
+  );
+
   if (effectiveSource && effectiveSource.id !== prevMatchId) {
     setPrevMatchId(effectiveSource.id);
+    setFullMarketsOpenedId(groups.length > 1 ? effectiveSource.id : null);
     setCategory("all");
     setShowTracker(false);
-    const groups = effectiveSource.markets ?? [];
     const initialOpen: Record<string, boolean> = {};
     for (const key of ["result", "total_ou"]) {
       if (groups.some((g) => g.key === key)) initialOpen[key] = true;
@@ -455,20 +462,23 @@ export function MarketSheet() {
     setOpenMap(initialOpen);
   } else if (
     effectiveSource &&
-    !hasFullMarketsOpen &&
-    (effectiveSource.markets?.length ?? 0) > 1 &&
-    effectiveSource.markets?.some((g) => g.key === "total_ou")
+    groups.length > 1 &&
+    fullMarketsOpenedId !== effectiveSource.id
   ) {
-    setOpenMap((prev) => ({ total_ou: true, ...prev }));
+    setFullMarketsOpenedId(effectiveSource.id);
+    const initialOpen: Record<string, boolean> = {};
+    for (const key of ["result", "total_ou"]) {
+      if (groups.some((g) => g.key === key)) initialOpen[key] = true;
+    }
+    if (Object.keys(initialOpen).length === 0) {
+      for (const g of groups.slice(0, 2)) initialOpen[g.key] = true;
+    }
+    setOpenMap((prev) => ({ ...initialOpen, ...prev }));
   } else if (!effectiveSource && prevMatchId !== null) {
     setPrevMatchId(null);
+    setFullMarketsOpenedId(null);
     setOpenMap({});
   }
-
-  const groups = useMemo(
-    () => sanitizeMatchMarkets(effectiveSource?.markets),
-    [effectiveSource]
-  );
 
   const filteredGroups = useMemo(() => {
     if (category === "all") return groups;

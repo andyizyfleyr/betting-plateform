@@ -63,6 +63,8 @@ export default function SingleBetDetailScreen() {
     authReady,
     sessionRestoring,
     user,
+    betsVersion,
+    feedMatches,
     oddsFormat,
     setBalance,
     bumpBets,
@@ -91,22 +93,33 @@ export default function SingleBetDetailScreen() {
   const userId = user?.id ?? null;
   const canQueryBet = Boolean(parsed) && (Boolean(userId) || sessionRestoring);
 
-  const fetchSingle = useCallback(async () => {
-    if (!canQueryBet || !parsed) return;
-    try {
-      let r = await api.bets.byId(parsed.kind, parsed.id);
-      if (!r.bet && !/^(sport|pred)-/i.test(params.id ?? "")) {
-        r = await api.bets.byId(
-          parsed.kind === "sport" ? "prediction" : "sport",
-          parsed.id
-        );
+  const liveMatchSig = useMemo(() => {
+    if (!bet?.matchId || !feedMatches) return "";
+    const m = feedMatches.find((x) => x.id === bet.matchId);
+    if (!m) return "";
+    return `${m.status}:${m.homeScore}:${m.awayScore}:${m.suspended ? 1 : 0}:${m.oddsHome}:${m.oddsAway}`;
+  }, [bet?.matchId, feedMatches]);
+
+  const fetchSingle = useCallback(
+    async (forceRefresh = false) => {
+      if (!canQueryBet || !parsed) return;
+      try {
+        let r = await api.bets.byId(parsed.kind, parsed.id, { forceRefresh });
+        if (!r.bet && !/^(sport|pred)-/i.test(params.id ?? "")) {
+          r = await api.bets.byId(
+            parsed.kind === "sport" ? "prediction" : "sport",
+            parsed.id,
+            { forceRefresh }
+          );
+        }
+        if (r.balance != null) setBalance(r.balance);
+        setBet(r.bet);
+      } catch {
+        /* garde l'état courant */
       }
-      if (r.balance != null) setBalance(r.balance);
-      setBet(r.bet);
-    } catch {
-      /* garde l'état courant */
-    }
-  }, [canQueryBet, parsed, params.id, setBalance]);
+    },
+    [canQueryBet, parsed, params.id, setBalance]
+  );
 
   const hasLive = Boolean(
     bet && bet.status === "pending" && bet.matchStatus === "live"
@@ -115,13 +128,13 @@ export default function SingleBetDetailScreen() {
 
   useEffect(() => {
     if (!canQueryBet) return;
-    void fetchSingle();
-  }, [canQueryBet, fetchSingle]);
+    void fetchSingle(false);
+  }, [canQueryBet, fetchSingle, betsVersion, liveMatchSig]);
 
   useEffect(() => {
     if (!canQueryBet || !shouldPoll) return;
     const id = setInterval(
-      () => void fetchSingle(),
+      () => void fetchSingle(false),
       hasLive ? POLL_LIVE_MS : POLL_IDLE_MS
     );
     return () => clearInterval(id);
@@ -129,7 +142,7 @@ export default function SingleBetDetailScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchSingle();
+    await fetchSingle(true);
     setRefreshing(false);
   }, [fetchSingle]);
 
