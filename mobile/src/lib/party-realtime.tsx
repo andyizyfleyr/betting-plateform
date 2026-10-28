@@ -1,3 +1,4 @@
+import "@/lib/rn-polyfills";
 import React, {
   createContext,
   useContext,
@@ -148,11 +149,18 @@ export function MobilePartyRealtimeBridge({
       return;
     }
 
-    const socket = new PartySocket({
-      host: partyHost,
-      room: cfg?.publicRoom || "live-matches",
-      protocol: partyProtocol,
-    });
+    let socket: PartySocket;
+    try {
+      socket = new PartySocket({
+        host: partyHost,
+        room: cfg?.publicRoom || "live-matches",
+        protocol: partyProtocol,
+      });
+      socket.binaryType = "arraybuffer";
+    } catch {
+      setWsConnected(false);
+      return;
+    }
 
     const WS_SNAPSHOT_LIVENESS_MS = 9_000;
     let lastSnapshotAt = 0;
@@ -360,12 +368,19 @@ export function MobilePartyRealtimeBridge({
       return;
     }
 
-    const userSocket = new PartySocket({
-      host: partyHost,
-      room: cfg.userRoom,
-      protocol: partyProtocol,
-      query: { token: cfg.userToken },
-    });
+    let userSocket: PartySocket;
+    try {
+      userSocket = new PartySocket({
+        host: partyHost,
+        room: cfg.userRoom,
+        protocol: partyProtocol,
+        query: { token: cfg.userToken },
+      });
+      userSocket.binaryType = "arraybuffer";
+    } catch {
+      setUserWsConnected(false);
+      return;
+    }
 
     const handleOpen = () => setUserWsConnected(true);
     const handleClose = () => setUserWsConnected(false);

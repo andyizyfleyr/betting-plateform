@@ -418,46 +418,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       let cachedUserFromDisk: ClientUser | null = null;
+      const withStorageTimeout = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<T>((resolve) => setTimeout(() => resolve(fallback), 2_500)),
+        ]);
+
       const [token] = await Promise.all([
-        hydrateAuthToken(),
-        hydrateEntityCacheFromDisk(),
-        (async () => {
-          try {
-            const [rawCombo, rawPolicy, rawSaver, rawUser] = await Promise.all([
-              AsyncStorage.getItem(COMBO_STORAGE_KEY),
-              AsyncStorage.getItem(POLICY_STORAGE_KEY),
-              AsyncStorage.getItem(DATASAVER_STORAGE_KEY),
-              AsyncStorage.getItem(USER_STORAGE_KEY),
-            ]);
-            if (rawUser) {
-              const parsedU = JSON.parse(rawUser) as ClientUser;
+        withStorageTimeout(hydrateAuthToken(), null),
+        withStorageTimeout(hydrateEntityCacheFromDisk(), undefined),
+        withStorageTimeout(
+          (async () => {
+            try {
+              const [rawCombo, rawPolicy, rawSaver, rawUser] = await Promise.all([
+                AsyncStorage.getItem(COMBO_STORAGE_KEY),
+                AsyncStorage.getItem(POLICY_STORAGE_KEY),
+                AsyncStorage.getItem(DATASAVER_STORAGE_KEY),
+                AsyncStorage.getItem(USER_STORAGE_KEY),
+              ]);
+              if (rawUser) {
+                const parsedU = JSON.parse(rawUser) as ClientUser;
+                if (
+                  parsedU &&
+                  typeof parsedU.id === "number" &&
+                  typeof parsedU.balance === "number"
+                ) {
+                  cachedUserFromDisk = parsedU;
+                }
+              }
+              if (mounted && rawCombo) {
+                const parsed = JSON.parse(rawCombo) as ComboSelection[];
+                if (Array.isArray(parsed)) {
+                  setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+                }
+              }
               if (
-                parsedU &&
-                typeof parsedU.id === "number" &&
-                typeof parsedU.balance === "number"
+                mounted &&
+                (rawPolicy === "confirm_all" || rawPolicy === "accept_higher")
               ) {
-                cachedUserFromDisk = parsedU;
+                setOddsPolicyState(rawPolicy);
               }
-            }
-            if (mounted && rawCombo) {
-              const parsed = JSON.parse(rawCombo) as ComboSelection[];
-              if (Array.isArray(parsed)) {
-                setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+              if (mounted && rawSaver === "1") {
+                setDataSaverState(true);
               }
+            } catch {
+              /* ignore */
             }
-            if (
-              mounted &&
-              (rawPolicy === "confirm_all" || rawPolicy === "accept_higher")
-            ) {
-              setOddsPolicyState(rawPolicy);
-            }
-            if (mounted && rawSaver === "1") {
-              setDataSaverState(true);
-            }
-          } catch {
-            /* ignore */
-          }
-        })(),
+          })(),
+          undefined
+        ),
       ]);
 
       if (mounted) {
@@ -475,54 +484,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // zéro bouton « Connexion » ni message « Connectez-vous » pendant le bootstrap réseau.
         if (mounted && cachedUserFromDisk) {
           applyUser(cachedUserFromDisk);
+          setAuthReady(true);
         } else if (mounted) {
           setSessionRestoring(true);
         }
 
-        try {
-          const boot = await api.mobileBootstrap();
-          if (mounted) {
-            applyUser(boot.user);
-            setPendingCount(boot.pendingCount ?? 0);
-            if (Array.isArray(boot.providers)) {
-              setPaymentProviders(boot.providers);
-            }
-            const existingPreds = getCachedPredictionsList();
-            if (existingPreds && boot.myPredictionBets) {
-              seedPredictionsSnapshot(
-                existingPreds.map((q) => ({
-                  ...q,
-                  myBet: boot.myPredictionBets[q.id] ?? q.myBet ?? null,
-                })),
-                false
-              );
-            }
-          }
-        } catch {
+        const runNetworkBootstrap = async () => {
           try {
-            const me = await api.auth.me();
-            if (mounted) applyUser(me.user);
+            const boot = await api.mobileBootstrap();
+            if (mounted) {
+              applyUser(boot.user);
+              setPendingCount(boot.pendingCount ?? 0);
+              if (Array.isArray(boot.providers)) {
+                setPaymentProviders(boot.providers);
+              }
+              const existingPreds = getCachedPredictionsList();
+              if (existingPreds && boot.myPredictionBets) {
+                seedPredictionsSnapshot(
+                  existingPreds.map((q) => ({
+                    ...q,
+                    myBet: boot.myPredictionBets[q.id] ?? q.myBet ?? null,
+                  })),
+                  false
+                );
+              }
+            }
           } catch {
-            if (mounted && !cachedUserFromDisk && getMemoryAuthToken()) {
-              const retryAuth = async () => {
-                if (!mounted || !getMemoryAuthToken()) {
-                  if (mounted) setSessionRestoring(false);
-                  return;
-                }
-                try {
-                  const me = await api.auth.me();
-                  if (mounted) applyUser(me.user);
-                } catch {
-                  if (mounted && getMemoryAuthToken()) {
-                    restoreRetryTimer = setTimeout(() => void retryAuth(), 2_000);
-                  } else if (mounted) {
-                    setSessionRestoring(false);
+            try {
+              const me = await api.auth.me();
+              if (mounted) applyUser(me.user);
+            } catch {
+              if (mounted && !cachedUserFromDisk && getMemoryAuthToken()) {
+                const retryAuth = async () => {
+                  if (!mounted || !getMemoryAuthToken()) {
+                    if (mounted) setSessionRestoring(false);
+                    return;
                   }
-                }
-              };
-              restoreRetryTimer = setTimeout(() => void retryAuth(), 1_500);
+                  try {
+                    const me = await api.auth.me();
+                    if (mounted) applyUser(me.user);
+                  } catch {
+                    if (mounted && getMemoryAuthToken()) {
+                      restoreRetryTimer = setTimeout(
+                        () => void retryAuth(),
+                        2_000
+                      );
+                    } else if (mounted) {
+                      setSessionRestoring(false);
+                    }
+                  }
+                };
+                restoreRetryTimer = setTimeout(() => void retryAuth(), 1_500);
+              }
             }
           }
+        };
+
+        if (cachedUserFromDisk) {
+          void runNetworkBootstrap();
+        } else {
+          await Promise.race([
+            runNetworkBootstrap(),
+            new Promise<void>((resolve) => setTimeout(resolve, 2_800)),
+          ]);
         }
       } else if (cachedUserFromDisk) {
         void AsyncStorage.removeItem(USER_STORAGE_KEY).catch(() => {});
