@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { appUser } from "@/db/schema";
 import {
   AUTH_COOKIE,
+  AUTH_UID_COOKIE,
   extractAuthToken,
   MOBILE_ANDROID_CLIENT,
   MOBILE_CLIENT_HEADER,
@@ -14,6 +15,7 @@ import {
 
 export {
   AUTH_COOKIE,
+  AUTH_UID_COOKIE,
   extractAuthToken,
   MOBILE_ANDROID_CLIENT,
   MOBILE_CLIENT_HEADER,
@@ -56,6 +58,13 @@ const cookieOpts = {
   path: "/",
 };
 
+const uidHintCookieOpts = {
+  httpOnly: false,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+};
+
 export interface SessionPayload extends JwtPayload {
   sub: number;
   role?: string;
@@ -71,10 +80,18 @@ export async function signSession(payload: SessionPayload): Promise<string> {
 
 export async function setAuthCookie(res: NextResponse, token: string) {
   res.cookies.set(AUTH_COOKIE, token, { ...cookieOpts, maxAge: TTL_SECONDS });
+  const decoded = await verifyJwt(token);
+  if (decoded?.sub) {
+    res.cookies.set(AUTH_UID_COOKIE, String(decoded.sub), {
+      ...uidHintCookieOpts,
+      maxAge: TTL_SECONDS,
+    });
+  }
 }
 
 export function clearAuthCookie(res: NextResponse) {
   res.cookies.set(AUTH_COOKIE, "", { ...cookieOpts, maxAge: 0 });
+  res.cookies.set(AUTH_UID_COOKIE, "", { ...uidHintCookieOpts, maxAge: 0 });
 }
 
 /**

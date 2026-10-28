@@ -29,7 +29,7 @@ type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits";
 
 export default function TransactionsPage() {
   const router = useRouter();
-  const { user, setBalance, toast, betsVersion } = useApp();
+  const { authReady, user, setBalance, toast, betsVersion } = useApp();
   const [wallet, setWallet] = useState<ClientWalletData | null>(() =>
     getCachedWallet()
   );
@@ -39,14 +39,15 @@ export default function TransactionsPage() {
   const cancelInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user && authReady) return;
     try {
       const w = await api.wallet();
       setWallet(w);
+      if (typeof w.balance === "number") setBalance(w.balance);
     } catch {
       /* silencieux */
     }
-  }, [user]);
+  }, [authReady, setBalance, user]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -111,6 +112,10 @@ export default function TransactionsPage() {
     () => filteredTx.slice(0, batch.visibleCount),
     [filteredTx, batch.visibleCount]
   );
+
+  if (!authReady && !user) {
+    return <PulseFlashLoader />;
+  }
 
   if (!user) {
     return (

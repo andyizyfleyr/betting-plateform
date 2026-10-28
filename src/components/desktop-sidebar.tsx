@@ -62,6 +62,7 @@ export function DesktopSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const {
+    authReady,
     user,
     balance,
     oddsFormat,
@@ -254,6 +255,18 @@ export function DesktopSidebar() {
               <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
               Déposer des fonds
             </button>
+          </div>
+        ) : !authReady ? (
+          <div
+            aria-hidden="true"
+            className="rounded-2xl border border-edge bg-elev/50 p-3"
+          >
+            <div className="h-3 w-20 animate-pulse rounded bg-ink/10" />
+            <div className="mt-2 h-6 w-28 animate-pulse rounded bg-ink/15" />
+            <div className="mt-2.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red/90 font-display text-[12px] font-bold text-white">
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
+              Déposer des fonds
+            </div>
           </div>
         ) : (
           <div className="rounded-2xl border border-edge bg-elev/60 p-3">

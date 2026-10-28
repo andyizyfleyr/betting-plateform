@@ -80,6 +80,8 @@ function LegLiveOddsBadge({
 export default function BetslipScreen() {
   const router = useRouter();
   const {
+    authReady,
+    sessionRestoring,
     user,
     balance,
     setBalance,
@@ -336,6 +338,7 @@ export default function BetslipScreen() {
 
   const submitSlip = async () => {
     if (!canSubmit || inFlightRef.current) return;
+    if ((!authReady || sessionRestoring) && !user) return;
     if (!user) {
       toast({
         kind: "info",

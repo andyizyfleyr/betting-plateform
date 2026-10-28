@@ -19,6 +19,7 @@ import {
   Smartphone,
   Wallet,
 } from "lucide-react-native";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, type PaymentProvider } from "@/lib/api";
 import { eur } from "@/lib/format";
@@ -31,7 +32,8 @@ type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
 
 export default function DepositScreen() {
   const router = useRouter();
-  const { toast, user, bumpBets, hapticsEnabled } = useApp();
+  const { authReady, sessionRestoring, toast, user, bumpBets, hapticsEnabled } =
+    useApp();
 
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
   const [amountText, setAmountText] = useState("25");
@@ -61,6 +63,14 @@ export default function DepositScreen() {
       active = false;
     };
   }, []);
+
+  if ((!authReady || sessionRestoring) && !user) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
 
   if (!user) {
     return (

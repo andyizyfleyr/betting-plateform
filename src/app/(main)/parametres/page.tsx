@@ -22,7 +22,10 @@ import {
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/client-entity-cache";
 import { useApp } from "@/components/providers";
-import { triggerRouteLoader } from "@/components/pulse-flash-loader";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { AnimatedNumber } from "@/components/animated-number";
 import { Toggle } from "@/components/toggle";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
@@ -30,7 +33,7 @@ import { useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 export default function ParametresPage() {
-  const { user, applyUser, setBalance, toast, betsVersion } = useApp();
+  const { authReady, user, applyUser, setBalance, toast, betsVersion } = useApp();
   const { manualDataSaver, autoConstrained, setManualDataSaver } = useNetworkQuality();
   const router = useRouter();
   const [wallet, setWallet] = useState<ClientWalletData | null>(() => getCachedWallet());
@@ -201,6 +204,10 @@ export default function ParametresPage() {
   };
 
   const hue = teamHue(user?.name ?? "Pulse");
+
+  if (!authReady && !user) {
+    return <PulseFlashLoader />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1380px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">

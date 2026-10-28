@@ -407,6 +407,11 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
     ) {
       redirectingToAuth = true;
       clientEtagCache.clear();
+      try {
+        window.localStorage.removeItem("pulsebet_cached_user_v1");
+      } catch {
+        /* ignore */
+      }
       void fetch("/api/auth/logout", { method: "POST" })
         .catch(() => undefined)
         .finally(() => {

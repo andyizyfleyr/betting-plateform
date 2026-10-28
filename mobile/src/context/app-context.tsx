@@ -29,7 +29,11 @@ import {
   seedPredictionsSnapshot,
 } from "@/lib/entity-cache";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { hydrateAuthToken, onUnauthorizedResponse } from "@/lib/http";
+import {
+  getMemoryAuthToken,
+  hydrateAuthToken,
+  onUnauthorizedResponse,
+} from "@/lib/http";
 import {
   MobilePartyRealtimeBridge,
   useMobileMatchesSlimQuery,
@@ -92,6 +96,7 @@ export interface ToastItem {
 
 interface AppContextValue {
   authReady: boolean;
+  sessionRestoring: boolean;
   user: ClientUser | null;
   balance: number;
   setBalance: (b: number) => void;
@@ -151,6 +156,7 @@ interface AppContextValue {
 const COMBO_STORAGE_KEY = "pulse_android_combo_v2";
 const POLICY_STORAGE_KEY = "pulse_odds_change_policy_v1";
 const DATASAVER_STORAGE_KEY = "pulse_android_datasaver_v1";
+const USER_STORAGE_KEY = "pulse_cached_user_v1";
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -240,6 +246,7 @@ function MobileBackgroundQueries({
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [authReady, setAuthReady] = useState(false);
+  const [sessionRestoring, setSessionRestoring] = useState(false);
   const [user, setUser] = useState<ClientUser | null>(null);
   const [balance, setBalanceState] = useState<number>(0);
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -299,7 +306,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUser((prev) => {
         if (!prev) return prev;
         if (Math.abs(prev.balance - clean) < 0.001) return prev;
-        return { ...prev, balance: clean };
+        const updated = { ...prev, balance: clean };
+        void AsyncStorage.setItem(
+          USER_STORAGE_KEY,
+          JSON.stringify(updated)
+        ).catch(() => {});
+        return updated;
       });
     }
   }, []);
@@ -314,12 +326,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const applyUser = useCallback((u: ClientUser | null) => {
     setUser(u);
     if (u) {
+      setSessionRestoring(false);
       setBalanceState(Math.round(u.balance * 100) / 100);
+      void AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(u)).catch(
+        () => {}
+      );
     } else {
+      setSessionRestoring(false);
       setBalanceState(0);
       setPendingCount(0);
       clearPrivateEntityCaches();
       seenSettledTicketIds.current.clear();
+      void AsyncStorage.removeItem(USER_STORAGE_KEY).catch(() => {});
     }
   }, []);
 
@@ -382,20 +400,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let restoreRetryTimer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribeUnauth = onUnauthorizedResponse(() => {
       if (mounted) applyUser(null);
     });
 
     (async () => {
-      await Promise.all([
+      let cachedUserFromDisk: ClientUser | null = null;
+      const [token] = await Promise.all([
+        hydrateAuthToken(),
         hydrateEntityCacheFromDisk(),
         (async () => {
           try {
-            const [rawCombo, rawPolicy, rawSaver] = await Promise.all([
+            const [rawCombo, rawPolicy, rawSaver, rawUser] = await Promise.all([
               AsyncStorage.getItem(COMBO_STORAGE_KEY),
               AsyncStorage.getItem(POLICY_STORAGE_KEY),
               AsyncStorage.getItem(DATASAVER_STORAGE_KEY),
+              AsyncStorage.getItem(USER_STORAGE_KEY),
             ]);
+            if (rawUser) {
+              const parsedU = JSON.parse(rawUser) as ClientUser;
+              if (
+                parsedU &&
+                typeof parsedU.id === "number" &&
+                typeof parsedU.balance === "number"
+              ) {
+                cachedUserFromDisk = parsedU;
+              }
+            }
             if (mounted && rawCombo) {
               const parsed = JSON.parse(rawCombo) as ComboSelection[];
               if (Array.isArray(parsed)) {
@@ -427,8 +459,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const token = await hydrateAuthToken();
       if (token) {
+        // Hydrate immédiatement le profil en cache disque dès qu'un jeton valide existe :
+        // zéro bouton « Connexion » ni message « Connectez-vous » pendant le bootstrap réseau.
+        if (mounted && cachedUserFromDisk) {
+          applyUser(cachedUserFromDisk);
+        } else if (mounted) {
+          setSessionRestoring(true);
+        }
+
         try {
           const boot = await api.mobileBootstrap();
           if (mounted) {
@@ -453,9 +492,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const me = await api.auth.me();
             if (mounted) applyUser(me.user);
           } catch {
-            /* hors-ligne */
+            if (mounted && !cachedUserFromDisk && getMemoryAuthToken()) {
+              const retryAuth = async () => {
+                if (!mounted || !getMemoryAuthToken()) {
+                  if (mounted) setSessionRestoring(false);
+                  return;
+                }
+                try {
+                  const me = await api.auth.me();
+                  if (mounted) applyUser(me.user);
+                } catch {
+                  if (mounted && getMemoryAuthToken()) {
+                    restoreRetryTimer = setTimeout(() => void retryAuth(), 2_000);
+                  } else if (mounted) {
+                    setSessionRestoring(false);
+                  }
+                }
+              };
+              restoreRetryTimer = setTimeout(() => void retryAuth(), 1_500);
+            }
           }
         }
+      } else if (cachedUserFromDisk) {
+        void AsyncStorage.removeItem(USER_STORAGE_KEY).catch(() => {});
       }
 
       if (mounted) setAuthReady(true);
@@ -463,9 +522,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      if (restoreRetryTimer) clearTimeout(restoreRetryTimer);
       unsubscribeUnauth();
     };
-  }, [applyUser]);
+  }, [applyUser, queryClient]);
 
   const refreshFeedMatches = useCallback(async () => {
     try {
@@ -668,6 +728,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => ({
       authReady,
+      sessionRestoring,
       user,
       balance,
       setBalance,
@@ -727,6 +788,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       applyComboOddsUpdates,
       applyUser,
       authReady,
+      sessionRestoring,
       balance,
       betsVersion,
       bumpBets,

@@ -240,6 +240,7 @@ function EmptyBetslipIllustration() {
 export function DesktopBetslipSidebar() {
   const router = useRouter();
   const {
+    authReady,
     user,
     balance,
     oddsFormat,
@@ -423,6 +424,7 @@ export function DesktopBetslipSidebar() {
 
   const submit = async () => {
     if (enrichedLegs.length === 0) return;
+    if (!authReady && !user) return;
     if (!user) {
       toast({
         kind: "info",
@@ -1015,11 +1017,11 @@ export function DesktopBetslipSidebar() {
 
               <button
                 type="button"
-                disabled={user ? !canSubmit : loading}
+                disabled={user ? !canSubmit : !authReady || loading}
                 onClick={submit}
                 className={cn(
                   "mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl font-display text-[13.5px] font-bold text-white transition-all",
-                  !user || canSubmit
+                  (authReady && !user) || canSubmit
                     ? "bg-betclic-red shadow-xs hover:bg-betclic-red-deep active:scale-[0.99]"
                     : "cursor-not-allowed bg-betclic-red/35"
                 )}

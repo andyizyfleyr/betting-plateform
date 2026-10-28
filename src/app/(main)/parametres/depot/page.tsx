@@ -18,7 +18,10 @@ import { ApiRequestError, api, type PaymentProvider } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
-import { triggerRouteLoader } from "@/components/pulse-flash-loader";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { cn, eur } from "@/lib/format";
 
 const QUICK = [10, 25, 50, 100, 250];
@@ -26,7 +29,7 @@ type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
 
 export default function DepositPage() {
   const router = useRouter();
-  const { toast, user, bumpBets } = useApp();
+  const { authReady, toast, user, bumpBets } = useApp();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
   const [amountText, setAmountText] = useState("25");
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
@@ -54,6 +57,10 @@ export default function DepositPage() {
       active = false;
     };
   }, []);
+
+  if (!authReady && !user) {
+    return <PulseFlashLoader />;
+  }
 
   if (!user) {
     return (

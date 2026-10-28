@@ -25,6 +25,7 @@ export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const {
+    authReady,
     balance,
     user,
     applyUser,
@@ -178,6 +179,16 @@ export function AppHeader() {
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.8} />
               </span>
             </button>
+          ) : !authReady ? (
+            <div
+              aria-hidden="true"
+              className="flex h-9 w-[108px] items-center justify-between rounded-full border border-edge bg-elev pl-3 pr-1.5"
+            >
+              <span className="h-3 w-14 animate-pulse rounded-full bg-ink/15" />
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-betclic-red text-white">
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.8} />
+              </span>
+            </div>
           ) : (
             <Link
               href="/auth"
@@ -326,6 +337,20 @@ export function AppHeader() {
                 <span className="max-w-[110px] truncate">{user.name || "Compte"}</span>
               </Link>
             </>
+          ) : !authReady ? (
+            <div className="flex items-center gap-2.5" aria-hidden="true">
+              <div className="flex h-9.5 w-[170px] items-center justify-between rounded-full bg-white pl-3.5 pr-1.5 shadow-xs">
+                <span className="h-3.5 w-16 animate-pulse rounded-full bg-ink/15" />
+                <span className="inline-flex h-7 items-center gap-1 rounded-full bg-betclic-red px-2.5 font-display text-[11px] font-bold text-white">
+                  <Plus className="h-3 w-3" strokeWidth={2.8} />
+                  Dépôt
+                </span>
+              </div>
+              <div className="inline-flex h-9.5 w-[112px] items-center gap-2 rounded-full border border-white/40 bg-white/10 px-3">
+                <span className="h-6 w-6 animate-pulse rounded-full bg-white/25" />
+                <span className="h-3 w-12 animate-pulse rounded-full bg-white/25" />
+              </div>
+            </div>
           ) : (
             <>
               <Link

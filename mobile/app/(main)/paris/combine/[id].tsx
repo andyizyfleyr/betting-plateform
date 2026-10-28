@@ -67,8 +67,16 @@ export default function ComboDetailScreen() {
   const comboId = Number(params.id);
   const invalidId = !Number.isInteger(comboId) || comboId <= 0;
 
-  const { user, oddsFormat, setBalance, bumpBets, toast, hapticsEnabled } =
-    useApp();
+  const {
+    authReady,
+    sessionRestoring,
+    user,
+    oddsFormat,
+    setBalance,
+    bumpBets,
+    toast,
+    hapticsEnabled,
+  } = useApp();
 
   const [prevId, setPrevId] = useState<number>(comboId);
   const [bet, setBet] = useState<UnifiedBet | null | undefined>(() =>
@@ -89,9 +97,10 @@ export default function ComboDetailScreen() {
   }
 
   const userId = user?.id ?? null;
+  const canQueryCombo = !invalidId && (Boolean(userId) || sessionRestoring);
 
   const fetchCombo = useCallback(async () => {
-    if (!userId || invalidId) return;
+    if (!canQueryCombo) return;
     try {
       const r = await api.bets.byId("combo", comboId);
       if (r.balance != null) setBalance(r.balance);
@@ -99,7 +108,7 @@ export default function ComboDetailScreen() {
     } catch {
       /* garde l'état courant */
     }
-  }, [userId, invalidId, comboId, setBalance]);
+  }, [canQueryCombo, comboId, setBalance]);
 
   const hasLiveLeg = useMemo(
     () =>
@@ -113,18 +122,18 @@ export default function ComboDetailScreen() {
   const shouldPoll = bet === undefined || bet?.status === "pending";
 
   useEffect(() => {
-    if (!userId || invalidId) return;
+    if (!canQueryCombo) return;
     void fetchCombo();
-  }, [userId, invalidId, fetchCombo]);
+  }, [canQueryCombo, fetchCombo]);
 
   useEffect(() => {
-    if (!userId || invalidId || !shouldPoll) return;
+    if (!canQueryCombo || !shouldPoll) return;
     const id = setInterval(
       () => void fetchCombo(),
       hasLiveLeg ? POLL_LIVE_MS : POLL_IDLE_MS
     );
     return () => clearInterval(id);
-  }, [userId, invalidId, fetchCombo, shouldPoll, hasLiveLeg]);
+  }, [canQueryCombo, fetchCombo, shouldPoll, hasLiveLeg]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -216,7 +225,15 @@ export default function ComboDetailScreen() {
     }
   };
 
-  if (!user) {
+  if ((!authReady || sessionRestoring) && !user) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
+
+  if (!user && bet == null) {
     return (
       <View style={[styles.page, styles.centerWrap]}>
         <View style={styles.authCard}>
