@@ -29,8 +29,10 @@ const POLL_MS = 6_000;
 export default function PredictionDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const paramPending = params?.id === undefined;
   const questionId = Number(params?.id);
-  const invalidId = !Number.isInteger(questionId) || questionId <= 0;
+  const invalidId =
+    !paramPending && (!Number.isInteger(questionId) || questionId <= 0);
 
   const {
     oddsFormat,
@@ -44,14 +46,24 @@ export default function PredictionDetailPage() {
 
   const [prevId, setPrevId] = useState(questionId);
   const [question, setQuestion] = useState<ClientPrediction | null | undefined>(() =>
-    invalidId ? null : (getCachedPrediction(questionId) ?? undefined)
+    paramPending
+      ? undefined
+      : invalidId
+        ? null
+        : (getCachedPrediction(questionId) ?? undefined)
   );
   const [activeSelection, setActiveSelection] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   if (questionId !== prevId) {
     setPrevId(questionId);
-    setQuestion(invalidId ? null : (getCachedPrediction(questionId) ?? undefined));
+    setQuestion(
+      paramPending
+        ? undefined
+        : invalidId
+          ? null
+          : (getCachedPrediction(questionId) ?? undefined)
+    );
     setActiveSelection(null);
   }
 
@@ -196,7 +208,7 @@ export default function PredictionDetailPage() {
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
             <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
-              Prédiction introuvable
+              {loadError ? "Connexion interrompue" : "Prédiction introuvable"}
             </p>
             <p className="mt-0.5 text-[11.5px] text-mist">
               {loadError ?? "Ce marché n'est plus disponible."}

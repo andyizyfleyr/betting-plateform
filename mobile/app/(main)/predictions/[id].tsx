@@ -276,7 +276,9 @@ export default function PredictionDetailScreen() {
                 color={COLORS.betclicRed}
                 strokeWidth={2.2}
               />
-              <Text style={styles.notFoundTitle}>Prédiction introuvable</Text>
+              <Text style={styles.notFoundTitle}>
+                {loadError ? "Connexion interrompue" : "Prédiction introuvable"}
+              </Text>
               <Text style={styles.notFoundSub}>
                 {loadError ?? "Cette question n'existe plus."}
               </Text>

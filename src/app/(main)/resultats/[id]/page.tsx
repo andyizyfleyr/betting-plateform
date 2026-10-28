@@ -28,19 +28,30 @@ import { cn, formatKickoff, formatOdds } from "@/lib/format";
 export default function ResultDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const paramPending = params?.id === undefined;
   const matchId = Number(params?.id);
-  const invalidId = !Number.isInteger(matchId) || matchId <= 0;
+  const invalidId = !paramPending && (!Number.isInteger(matchId) || matchId <= 0);
   const { oddsFormat } = useApp();
 
   const [prevId, setPrevId] = useState(matchId);
   const [item, setItem] = useState<ClientMatchHistoryItem | null | undefined>(() =>
-    invalidId ? null : (getCachedMatchHistoryItem(matchId) ?? undefined)
+    paramPending
+      ? undefined
+      : invalidId
+        ? null
+        : (getCachedMatchHistoryItem(matchId) ?? undefined)
   );
   const [loadError, setLoadError] = useState<string | null>(null);
 
   if (matchId !== prevId) {
     setPrevId(matchId);
-    setItem(invalidId ? null : (getCachedMatchHistoryItem(matchId) ?? undefined));
+    setItem(
+      paramPending
+        ? undefined
+        : invalidId
+          ? null
+          : (getCachedMatchHistoryItem(matchId) ?? undefined)
+    );
   }
 
   const fetchResult = useCallback(async () => {
@@ -170,7 +181,7 @@ export default function ResultDetailPage() {
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
             <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
-              Résultat introuvable
+              {loadError ? "Connexion interrompue" : "Résultat introuvable"}
             </p>
             <p className="mt-0.5 text-[11.5px] text-mist">
               {loadError ?? "Ce match n'est pas encore terminé ou n'existe plus."}

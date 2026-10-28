@@ -11,7 +11,7 @@ import {
   Radio,
   RefreshCw,
 } from "lucide-react";
-import { api, type ClientMatch } from "@/lib/api";
+import { ApiRequestError, api, type ClientMatch } from "@/lib/api";
 import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { useMatchDetailQuery } from "@/lib/party-realtime";
@@ -64,8 +64,11 @@ function defaultOpenMarkets(match: ClientMatch | null | undefined): Record<strin
 export default function MatchDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const matchId = Number(params?.id);
-  const invalidId = !Number.isInteger(matchId) || matchId <= 0;
+  const rawParamId = params?.id;
+  const paramPending = rawParamId === undefined;
+  const matchId = Number(rawParamId);
+  const invalidId =
+    !paramPending && (!Number.isInteger(matchId) || matchId <= 0);
 
   const {
     openBet,
@@ -78,12 +81,15 @@ export default function MatchDetailPage() {
   } = useApp();
   const feedMatches = useFeedMatches();
 
-  const sharedFromFeed = useMemo(
+  // IMPORTANT : renvoie `undefined` (et jamais `null`) tant que le flux global ou
+  // `/api/matches/[id]` n'a pas résolu la rencontre, afin d'éviter que `undefined ?? null`
+  // n'affiche brièvement « Match introuvable » avant l'arrivée des données.
+  const sharedFromFeed = useMemo<ClientMatch | undefined>(
     () =>
-      !invalidId && feedMatches
-        ? (feedMatches.find((m) => m.id === matchId) ?? null)
-        : null,
-    [invalidId, feedMatches, matchId]
+      !paramPending && !invalidId && feedMatches
+        ? feedMatches.find((m) => m.id === matchId)
+        : undefined,
+    [paramPending, invalidId, feedMatches, matchId]
   );
 
   const [prevId, setPrevId] = useState(matchId);
@@ -92,26 +98,36 @@ export default function MatchDetailPage() {
     () => typeof window !== "undefined" && window.innerWidth >= 1024
   );
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(() =>
-    defaultOpenMarkets(invalidId ? null : getCachedClientMatch(matchId))
+    defaultOpenMarkets(
+      paramPending || invalidId ? null : getCachedClientMatch(matchId)
+    )
   );
 
   if (matchId !== prevId) {
     setPrevId(matchId);
-    const cached = invalidId ? null : (getCachedClientMatch(matchId) ?? undefined);
+    const cached =
+      paramPending || invalidId
+        ? null
+        : (getCachedClientMatch(matchId) ?? undefined);
     setCategory("all");
     setOpenMap(defaultOpenMarkets(cached));
   }
 
-  const cachedInitialMatch = useMemo(
-    () => (invalidId ? null : getCachedClientMatch(matchId)),
-    [invalidId, matchId]
+  const cachedInitialMatch = useMemo<ClientMatch | undefined>(
+    () =>
+      paramPending || invalidId
+        ? undefined
+        : (getCachedClientMatch(matchId) ?? undefined),
+    [paramPending, invalidId, matchId]
   );
+
+  const fallbackMatch = cachedInitialMatch ?? sharedFromFeed;
 
   // Maintient toujours `useMatchDetailQuery` actif sur `/matchs/[id]` jusqu'à la fin du match :
   // - Reçoit instantanément (< 50 ms) les frames WebSocket PartyKit fusionnées dans `pulseQueryKeys.matchDetail(matchId)`
   // - Polle `/api/matches/[id]` (~3 Ko) toutes les 3.5 s pour actualiser les 19 marchés, les stats réelles et le terrain 2D.
   const detailQuery = useMatchDetailQuery(matchId, {
-    enabled: !invalidId,
+    enabled: !paramPending && !invalidId,
     initialMatch:
       cachedInitialMatch &&
       (cachedInitialMatch.status === "finished" ||
@@ -122,22 +138,38 @@ export default function MatchDetailPage() {
       detailQueryStatusFinished(cachedInitialMatch, sharedFromFeed),
   });
 
-  const fetchedMatch = invalidId
-    ? null
-    : detailQuery.data?.match ??
-      (detailQuery.isError ? null : undefined);
+  const isNotFoundError =
+    invalidId ||
+    (detailQuery.error instanceof ApiRequestError &&
+      (detailQuery.error.status === 404 || detailQuery.error.status === 400));
+
+  const fetchedMatch: ClientMatch | null | undefined = paramPending
+    ? undefined
+    : invalidId
+      ? null
+      : detailQuery.data !== undefined
+        ? (detailQuery.data.match ?? null)
+        : detailQuery.isError
+          ? null
+          : undefined;
 
   const loadError =
-    !detailQuery.data && detailQuery.error instanceof Error
+    !isNotFoundError &&
+    !detailQuery.data &&
+    detailQuery.error instanceof Error
       ? detailQuery.error.message
-      : detailQuery.isError && !detailQuery.data
+      : !isNotFoundError && detailQuery.isError && !detailQuery.data
         ? "Impossible de charger ce match."
         : null;
 
-  const match = useMemo(() => {
+  const match = useMemo<ClientMatch | null | undefined>(() => {
+    if (paramPending) return undefined;
     if (invalidId) return null;
-    return fetchedMatch ?? sharedFromFeed;
-  }, [fetchedMatch, invalidId, sharedFromFeed]);
+    if (fetchedMatch !== undefined) {
+      return fetchedMatch ?? fallbackMatch ?? null;
+    }
+    return fallbackMatch;
+  }, [paramPending, fetchedMatch, invalidId, fallbackMatch]);
 
   const [fullMarketsOpenedId, setFullMarketsOpenedId] = useState<number | null>(
     () =>
@@ -246,7 +278,7 @@ export default function MatchDetailPage() {
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
             <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
-              Match introuvable
+              {loadError ? "Connexion interrompue" : "Match introuvable"}
             </p>
             <p className="mt-0.5 text-[11.5px] text-mist">
               {loadError ?? "Cette affiche n'est plus disponible."}

@@ -12,6 +12,7 @@ import Constants from "expo-constants";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PartySocket from "partysocket";
 import {
+  ApiHttpError,
   api,
   type ClientMatch,
   type ClientMatchHistoryItem,
@@ -416,6 +417,15 @@ export function useMobileMatchDetailQuery(
         ? 0
         : () => Date.now() - 2_000
       : undefined,
+    retry: (failureCount, err) => {
+      if (
+        err instanceof ApiHttpError &&
+        (err.status === 404 || err.status === 400)
+      ) {
+        return false;
+      }
+      return failureCount < 2;
+    },
     // Rafraîchit toujours `/api/matches/[id]` toutes les 3.5 s pour maintenir les 19 marchés,
     // les stats réelles et la télémétrie 2D en direct.
     refetchInterval: options?.isFinished ? false : detailMs,
