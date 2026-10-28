@@ -10,6 +10,7 @@ import {
 } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "@/context/app-context";
 import { PulseSplashScreen } from "@/components/pulse-splash-screen";
+import { AutoOtaUpdateCoordinator } from "@/lib/ota-updates";
 import {
   ensureMobileFocusManagerBound,
   mobileQueryClient,
@@ -152,6 +153,7 @@ function RootBootCoordinator() {
   return (
     <View style={styles.root} onLayout={hideNativeSplash}>
       <ActiveScreenSwitch />
+      {!splashMounted ? <AutoOtaUpdateCoordinator /> : null}
       {splashMounted ? (
         <PulseSplashScreen
           exiting={splashReadyToExit}

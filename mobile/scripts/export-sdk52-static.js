@@ -126,11 +126,24 @@ async function main() {
       color: { dark: "#111827", light: "#ffffff" },
     });
 
+    const appJson = JSON.parse(
+      fs.readFileSync(path.join(MOBILE_ROOT, "app.json"), "utf8")
+    );
+    const appExpo = appJson.expo || {};
+    const appVersion = String(appExpo.version || "1.2.4");
+    const versionCode = Number(appExpo.android?.versionCode || 7);
+    const standaloneRuntimeVersion = String(
+      appExpo.runtimeVersion || "pulse-sdk52-v1"
+    );
+
     const createdAt = new Date().toISOString();
     const outMeta = {
       id: md5ToUuidV4(bundleMd5),
       createdAt,
-      runtimeVersion: "exposdk:52.0.0",
+      appVersion,
+      versionCode,
+      runtimeVersion: standaloneRuntimeVersion,
+      expoGoRuntimeVersion: "exposdk:52.0.0",
       sdkVersion: "52.0.0",
       launchAsset: {
         hash: bundleSha256B64Url,

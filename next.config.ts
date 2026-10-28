@@ -28,6 +28,28 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/expo-sdk52/:file*.hbc",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/javascript",
+          },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/expo-sdk52/assets/:asset*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
     ];
   },
 };

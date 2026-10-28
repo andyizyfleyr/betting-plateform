@@ -23,12 +23,25 @@ module.exports = ({ config }) => {
       ? candidateId
       : null;
 
+  const resolvedApiBaseUrl = (
+    process.env.EXPO_PUBLIC_API_URL ||
+    config?.extra?.apiBaseUrl ||
+    "https://be-plateform.vercel.app"
+  ).replace(/\/$/, "");
+
+  const resolvedUpdatesUrl =
+    process.env.EXPO_PUBLIC_UPDATES_URL ||
+    config?.updates?.url ||
+    `${resolvedApiBaseUrl}/api/expo`;
+
+  const resolvedUpdatesChannel =
+    process.env.EXPO_PUBLIC_UPDATES_CHANNEL ||
+    config?.updates?.requestHeaders?.["expo-channel-name"] ||
+    "production";
+
   const nextExtra = {
     ...(config.extra || {}),
-    apiBaseUrl:
-      process.env.EXPO_PUBLIC_API_URL ||
-      config?.extra?.apiBaseUrl ||
-      "https://be-plateform.vercel.app",
+    apiBaseUrl: resolvedApiBaseUrl,
     partykitHost:
       process.env.EXPO_PUBLIC_PARTYKIT_HOST ||
       config?.extra?.partykitHost ||
@@ -48,6 +61,18 @@ module.exports = ({ config }) => {
     slug: config.slug || "pulsebets-android",
     platforms: ["android"],
     jsEngine: "hermes",
+    runtimeVersion: config.runtimeVersion || "pulse-sdk52-v1",
+    updates: {
+      enabled: true,
+      checkAutomatically: "ALWAYS",
+      fallbackToCacheTimeout: 0,
+      ...(config.updates || {}),
+      url: resolvedUpdatesUrl,
+      requestHeaders: {
+        ...(config?.updates?.requestHeaders || {}),
+        "expo-channel-name": resolvedUpdatesChannel,
+      },
+    },
     extra: nextExtra,
   };
 };
