@@ -13,6 +13,7 @@ import {
 import { computeComboQuote } from "@/lib/combo-math";
 import { notifyBetsSettledOrMutated } from "@/lib/active-state-cache";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
+import { normalizeRealLiveMinuteLabel } from "@/lib/live-clock";
 import {
   isKnownMarket,
   isRealMatchPostIncidentSuspended,
@@ -58,10 +59,12 @@ export function resolveComboLegStatus(
       const realMode = opts?.realSettlementMode ?? "auto";
       if (isManual && realMode !== "auto") return "pending";
 
+      const nowMs = opts?.nowMs ?? Date.now();
+      const effMinLabel = isManual ? normalizeRealLiveMinuteLabel(m, nowMs) : m.minute;
       const early = tryEarlyLiveSettle(leg.market, leg.selection, {
         source: isManual ? "manual" : "virtual",
         status: m.status,
-        minute: m.minute,
+        minute: effMinLabel,
         homeScore: m.homeScore ?? 0,
         awayScore: m.awayScore ?? 0,
         htHomeScore: m.htHomeScore ?? m.realStats?.htHomeScore ?? null,
@@ -71,8 +74,7 @@ export function resolveComboLegStatus(
       });
       if (!early) return "pending";
 
-      const nowMs = opts?.nowMs ?? Date.now();
-      const isSecondHalfInPlay = minuteNumber(m.minute) >= 46;
+      const isSecondHalfInPlay = minuteNumber(effMinLabel) >= 46;
       const isPureFirstHalfMarket =
         leg.market === "ht_result" || leg.market === "ht_total_ou" || leg.market === "ht_ft";
 
@@ -401,13 +403,15 @@ export function computeComboCashOut(
         ) {
           return null;
         }
-        const min = minuteNumber(m.minute);
+        const effMinLabel =
+          m.source === "manual" ? normalizeRealLiveMinuteLabel(m) : m.minute;
+        const min = minuteNumber(effMinLabel);
         if (min >= (m.source === "manual" ? 88 : 85)) return null;
         if (
           tryEarlyLiveSettle(leg.market, leg.selection, {
             source: m.source === "manual" ? "manual" : "virtual",
             status: m.status,
-            minute: m.minute,
+            minute: effMinLabel,
             homeScore: m.homeScore ?? 0,
             awayScore: m.awayScore ?? 0,
             htHomeScore: m.htHomeScore ?? m.realStats?.htHomeScore ?? null,

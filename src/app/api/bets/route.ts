@@ -23,11 +23,15 @@ import {
   notifyNewBetPlaced,
   setCachedUserBetsResponse,
 } from "@/lib/active-state-cache";
-import { buildServerClockAnchor } from "@/lib/live-clock";
+import {
+  buildServerClockAnchor,
+  normalizeRealLiveMinuteLabel,
+} from "@/lib/live-clock";
 import { computeCashOut, computePredictionCashOut } from "@/lib/cashout";
 import { computeComboCashOut, resolveComboLegStatus } from "@/lib/combo";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import {
+  effectiveMatchMinuteNumber,
   isKnownMarket,
   isRealMatchKickoffReached,
   isRealMatchPostIncidentSuspended,
@@ -367,7 +371,10 @@ export async function GET(req: NextRequest) {
         : null,
       matchHomeScore: match?.homeScore ?? null,
       matchAwayScore: match?.awayScore ?? null,
-      matchMinute: match?.minute ?? null,
+      matchMinute:
+        match?.source === "manual" && match.status === "live"
+          ? normalizeRealLiveMinuteLabel(match)
+          : (match?.minute ?? null),
       matchStartsAt: match?.startsAt
         ? match.startsAt instanceof Date
           ? match.startsAt.toISOString()
@@ -536,7 +543,10 @@ export async function GET(req: NextRequest) {
             : null,
         matchHomeScore: m?.homeScore ?? null,
         matchAwayScore: m?.awayScore ?? null,
-        matchMinute: m?.minute ?? null,
+        matchMinute:
+          m?.source === "manual" && m.status === "live"
+            ? normalizeRealLiveMinuteLabel(m)
+            : (m?.minute ?? null),
         matchStartsAt: startsAtIso,
         matchSource: m ? (m.source === "manual" ? "manual" : "virtual") : null,
         matchClockAnchor: m ? buildServerClockAnchor(m) : null,
@@ -582,7 +592,10 @@ export async function GET(req: NextRequest) {
       matchStatus: liveMatch ? ("live" as const) : null,
       matchHomeScore: null,
       matchAwayScore: null,
-      matchMinute: liveMatch?.minute ?? null,
+      matchMinute:
+        liveMatch?.source === "manual" && liveMatch.status === "live"
+          ? normalizeRealLiveMinuteLabel(liveMatch)
+          : (liveMatch?.minute ?? null),
       matchStartsAt: firstActiveStartsAt,
       liveMatchId: liveMatch?.id ?? null,
       liveMatchStartsAt: liveMatch?.startsAt
@@ -858,7 +871,7 @@ export async function POST(req: NextRequest) {
     if (
       match.suspended ||
       (match.source === "virtual" && minuteNumber(match.minute) >= 85) ||
-      (match.source === "manual" && minuteNumber(match.minute) >= 88)
+      (match.source === "manual" && effectiveMatchMinuteNumber(match) >= 88)
     ) {
       return NextResponse.json(
         { error: "Marché verrouillé (fin de match ou action en cours)" },
@@ -925,7 +938,7 @@ export async function POST(req: NextRequest) {
 
   // Anti-triche : interdiction de parier sur une issue déjà décidée (gagnée ou
   // devenue impossible) — ex. « Plus de 2,5 » avec 3 buts inscrits, « 0-0 » à 1-0, etc.
-  const minute = minuteNumber(pricedMatch.minute);
+  const minute = effectiveMatchMinuteNumber(pricedMatch);
   if (
     pricedMatch.status === "live" &&
     isKnownMarket(market) &&
@@ -994,7 +1007,7 @@ export async function POST(req: NextRequest) {
 
   const riskFlag =
     pricedMatch.status === "live" &&
-    isNearDecided(market, selection, homeScore, awayScore, minuteNumber(pricedMatch.minute), liveProb)
+    isNearDecided(market, selection, homeScore, awayScore, minute, liveProb)
       ? "stale_near_decided"
       : null;
 
@@ -1109,7 +1122,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const txMinute = minuteNumber(lockedMatch.minute);
+    const txMinute = effectiveMatchMinuteNumber(lockedMatch);
     const txHomeScore = lockedMatch.homeScore ?? 0;
     const txAwayScore = lockedMatch.awayScore ?? 0;
 

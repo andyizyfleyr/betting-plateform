@@ -41,6 +41,14 @@ export interface LiveClockSource {
   startsAt?: string | Date | null;
   source?: "virtual" | "manual" | string | null;
   clockAnchor?: LiveClockAnchor | null;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
+  realStats?: {
+    clockSeconds?: number | null;
+    clockPeriod?: number | null;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
+  } | null;
 }
 
 export interface LiveClockSnapshot {
@@ -76,26 +84,40 @@ export function stepMsForVirtualMatch(matchId: number): number {
 
 /**
  * Normalise tout libellé de temps de match en affichant uniquement la minute (`88’`, `45+2’`, `MT`)
- * et jamais les secondes (`88:34` -> `88’`).
+ * et jamais les secondes (`88:34` -> `88’`), en tenant compte de la 2e mi-temps (`periodHint === 2` :
+ * `0:15` / `0'` / `1'` -> `46’`..`90+’`).
  */
-export function formatMinuteOnlyLabel(raw: string | null | undefined): string {
+export function formatMinuteOnlyLabel(
+  raw: string | null | undefined,
+  periodHint?: 1 | 2 | null
+): string {
   const trimmed = (raw ?? "").trim();
-  if (!trimmed) return "LIVE";
+  if (!trimmed) return periodHint === 2 ? "46’" : "LIVE";
   if (isHalfTimeLabel(trimmed)) return "MT";
   if (isStaticStatusLabel(trimmed)) return trimmed;
 
-  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?::\d{1,2})?\s*['’]?$/.exec(
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?:[:.]\d{1,2})?\s*['’"]?$/.exec(
     trimmed
   );
   if (stopMatch) {
-    const base = Number(stopMatch[1]);
+    const baseRaw = Number(stopMatch[1]);
+    const base = periodHint === 2 && baseRaw <= 45 ? 90 : baseRaw;
     const added = Math.max(1, Number(stopMatch[2]));
     return `${base}+${added}’`;
   }
 
-  const regMatch = /^(\d{1,3})(?::\d{1,2})?\s*['’]?$/.exec(trimmed);
+  const regMatch = /^(\d{1,3})(?:([:.])(\d{1,2}))?\s*['’"]?$/.exec(trimmed);
   if (regMatch) {
-    const min = Math.max(1, Number(regMatch[1]));
+    const rawMin = Number(regMatch[1]);
+    const sep = regMatch[2];
+    if (periodHint === 2 && rawMin <= 45) {
+      if (rawMin < 45) {
+        const eff = sep === ":" ? 45 + rawMin + 1 : rawMin === 0 ? 46 : 45 + rawMin;
+        return `${Math.min(90, eff)}’`;
+      }
+      return "46’";
+    }
+    const min = Math.max(1, sep === ":" ? rawMin + 1 : rawMin);
     return `${min}’`;
   }
 
@@ -131,17 +153,20 @@ interface ParsedMinuteInfo {
 }
 
 export function parseMatchMinuteLabel(
-  minute: string | null | undefined
+  minute: string | null | undefined,
+  periodHint?: 1 | 2 | null
 ): ParsedMinuteInfo | null {
   if (!minute) return null;
   const trimmed = minute.trim();
   if (!trimmed || isStaticStatusLabel(trimmed)) return null;
 
-  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})\s*['’]?$/.exec(trimmed);
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?:[:.]\d{1,2})?\s*['’"]?$/.exec(
+    trimmed
+  );
   if (stopMatch) {
     const baseMin = Number(stopMatch[1]);
     const addedMin = Math.max(1, Number(stopMatch[2]));
-    if (baseMin <= 45) {
+    if (baseMin <= 45 && periodHint !== 2) {
       return {
         baseMin: 45,
         addedMin,
@@ -159,21 +184,60 @@ export function parseMatchMinuteLabel(
     };
   }
 
-  const regMatch = /^(\d{1,3})(?::(\d{1,2}))?\s*['’]?$/.exec(trimmed);
+  const regMatch = /^(\d{1,3})(?:([:.])(\d{1,2}))?\s*['’"]?$/.exec(trimmed);
   if (regMatch) {
-    const minInt = Math.max(1, Number(regMatch[1]));
-    const secInt = regMatch[2] != null ? Math.min(59, Number(regMatch[2])) : null;
-    if (secInt != null) {
-      const exactSec = minInt * 60 + secInt;
-      const half: 1 | 2 = minInt >= 45 ? 2 : 1;
+    const rawMin = Number(regMatch[1]);
+    const sep = regMatch[2];
+    const secInt =
+      sep === ":" && regMatch[3] != null
+        ? Math.min(59, Number(regMatch[3]))
+        : null;
+
+    // En 2e mi-temps (`periodHint === 2`), toute valeur 0..45 issue d'un flux périodique
+    // correspond au temps écoulé depuis la reprise (45:00 = 2700 s -> 46’..90’).
+    if (periodHint === 2 && rawMin <= 45) {
+      if (rawMin < 45) {
+        if (secInt != null) {
+          const exactSec = 2700 + rawMin * 60 + secInt;
+          return {
+            baseMin: Math.min(90, 46 + rawMin),
+            addedMin: null,
+            half: 2,
+            phase: "2H",
+            expectedFloorSeconds: exactSec,
+          };
+        }
+        const effMin = Math.min(90, rawMin === 0 ? 46 : 45 + rawMin);
+        return {
+          baseMin: effMin,
+          addedMin: null,
+          half: 2,
+          phase: "2H",
+          expectedFloorSeconds: (effMin - 1) * 60,
+        };
+      }
+      const exactAt45 = 2700 + (secInt ?? 0);
       return {
-        baseMin: Math.min(90, minInt + 1),
+        baseMin: 46,
+        addedMin: null,
+        half: 2,
+        phase: "2H",
+        expectedFloorSeconds: exactAt45,
+      };
+    }
+
+    if (secInt != null) {
+      const exactSec = rawMin * 60 + secInt;
+      const half: 1 | 2 = rawMin >= 45 ? 2 : 1;
+      return {
+        baseMin: Math.min(90, Math.max(1, rawMin + 1)),
         addedMin: null,
         half,
         phase: half === 1 ? "1H" : "2H",
         expectedFloorSeconds: exactSec,
       };
     }
+    const minInt = Math.max(1, rawMin);
     const half: 1 | 2 = minInt > 45 ? 2 : 1;
     return {
       baseMin: Math.min(90, minInt),
@@ -194,38 +258,159 @@ export function parseMatchMinuteLabel(
 
 /**
  * Convertit l'horloge brute ESPN (`status.clock` en secondes + `period` + `displayClock`)
- * en secondes cumulées exactes de match (0..6000+).
+ * en secondes cumulées exactes de match (0..6000+), en garantissant >= 2700 s (46’+) en 2e MT.
  */
 export function normalizeEspnLiveClockSeconds(
   rawClockSeconds: number | null | undefined,
   period: number | null | undefined,
   displayMinute: string | null | undefined
 ): number | null {
-  const parsed = parseMatchMinuteLabel(displayMinute);
-  if (!parsed) return null;
+  const isSecondHalf = (period ?? 1) >= 2;
+  const periodHint: 1 | 2 = isSecondHalf ? 2 : 1;
+  const parsed = parseMatchMinuteLabel(displayMinute, periodHint);
 
-  const expected = parsed.expectedFloorSeconds;
-  if (rawClockSeconds == null || !Number.isFinite(rawClockSeconds) || rawClockSeconds < 0) {
+  const hasValidRaw =
+    rawClockSeconds != null &&
+    Number.isFinite(rawClockSeconds) &&
+    rawClockSeconds >= 0;
+  const rawFloor = hasValidRaw ? Math.floor(rawClockSeconds!) : null;
+
+  if (!parsed) {
+    if (rawFloor == null) return isSecondHalf ? 2700 : null;
+    if (isSecondHalf && rawFloor < 2700) return 2700 + rawFloor;
+    return rawFloor;
+  }
+
+  const expected = isSecondHalf
+    ? Math.max(2700, parsed.expectedFloorSeconds)
+    : parsed.expectedFloorSeconds;
+  if (rawFloor == null) {
     return expected;
   }
 
-  const rawFloor = Math.floor(rawClockSeconds);
-  const candidates = [rawFloor];
-  if ((period ?? 1) >= 2 && rawFloor < 2700) {
-    candidates.push(2700 + rawFloor);
-  }
+  const candidates = isSecondHalf
+    ? [rawFloor < 2700 ? 2700 + rawFloor : rawFloor]
+    : [rawFloor];
 
   let best: number | null = null;
   let bestDiff = Infinity;
   for (const c of candidates) {
     const diff = Math.abs(c - expected);
-    if (diff <= 135 && diff < bestDiff) {
+    if (diff <= 180 && diff < bestDiff) {
       best = c;
       bestDiff = diff;
     }
   }
 
   return best ?? expected;
+}
+
+function inferRowSecondHalf(row: {
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
+  events?: ReadonlyArray<{ minute?: number }> | null;
+  realStats?: {
+    clockSeconds?: number | null;
+    clockPeriod?: number | null;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
+    updatedAt?: string | null;
+  } | null;
+}): boolean {
+  if ((row.realStats?.clockPeriod ?? 1) >= 2) return true;
+  if ((row.realStats?.clockSeconds ?? 0) >= 2700) return true;
+  if (row.htHomeScore != null || row.htAwayScore != null) return true;
+  if (row.realStats?.htHomeScore != null || row.realStats?.htAwayScore != null) {
+    return true;
+  }
+  if (
+    Array.isArray(row.events) &&
+    row.events.some((e) => (e.minute ?? 0) > 45)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Normalise le libellé `minute` d'une ligne réelle live pour garantir qu'en 2e mi-temps
+ * aucun flux ni ancienne ligne en base n'affiche `0`..`45` ou `LIVE` au lieu de `46’`..`90+’`.
+ */
+export function normalizeRealLiveMinuteLabel(
+  row: {
+    status: string;
+    source?: string | null;
+    minute?: string | null;
+    startsAt?: Date | string | null;
+    feedSyncedAt?: Date | string | null;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
+    events?: ReadonlyArray<{ minute?: number }> | null;
+    realStats?: {
+      clockSeconds?: number | null;
+      clockPeriod?: number | null;
+      htHomeScore?: number | null;
+      htAwayScore?: number | null;
+      updatedAt?: string | null;
+    } | null;
+  },
+  nowMs = Date.now()
+): string | null {
+  if (row.source !== "manual" || row.status !== "live") {
+    return row.minute ?? null;
+  }
+  const minTrim = (row.minute ?? "").trim();
+  if (isHalfTimeLabel(minTrim)) return "MT";
+  if (isStaticStatusLabel(minTrim)) return minTrim;
+
+  const secondHalf = inferRowSecondHalf(row);
+  const periodHint: 1 | 2 = secondHalf ? 2 : 1;
+  const parsed = parseMatchMinuteLabel(minTrim, periodHint);
+
+  if (parsed) {
+    if (parsed.phase === "1H_STOPPAGE") {
+      return `45+${parsed.addedMin ?? 1}’`;
+    }
+    if (parsed.phase === "2H_STOPPAGE") {
+      return `90+${parsed.addedMin ?? 1}’`;
+    }
+    const minVal = secondHalf ? Math.max(46, parsed.baseMin) : parsed.baseMin;
+    return `${minVal}’`;
+  }
+
+  const startsAtMs = row.startsAt
+    ? Date.parse(
+        row.startsAt instanceof Date
+          ? row.startsAt.toISOString()
+          : String(row.startsAt)
+      )
+    : NaN;
+  const rawStatsSec = row.realStats?.clockSeconds;
+  if (rawStatsSec != null && Number.isFinite(rawStatsSec) && rawStatsSec >= 0) {
+    const sec = secondHalf && rawStatsSec < 2700 ? 2700 + rawStatsSec : rawStatsSec;
+    if (secondHalf && sec >= 5400) {
+      return `90+${Math.max(1, Math.floor((sec - 5400) / 60) + 1)}’`;
+    }
+    if (!secondHalf && sec >= 2700) {
+      return `45+${Math.max(1, Math.floor((sec - 2700) / 60) + 1)}’`;
+    }
+    const gMin = secondHalf
+      ? Math.min(90, Math.max(46, Math.floor(sec / 60) + 1))
+      : Math.min(45, Math.max(1, Math.floor(sec / 60) + 1));
+    return `${gMin}’`;
+  }
+
+  if (Number.isFinite(startsAtMs)) {
+    const wallSec = Math.max(0, Math.floor((nowMs - startsAtMs) / 1000));
+    if (secondHalf) {
+      const estSec = Math.min(5400, Math.max(2700, wallSec - 900));
+      return `${Math.min(90, Math.max(46, Math.floor(estSec / 60) + 1))}’`;
+    }
+    const estSec = Math.min(2699, wallSec);
+    return `${Math.min(45, Math.max(1, Math.floor(estSec / 60) + 1))}’`;
+  }
+
+  return secondHalf ? "46’" : "1’";
 }
 
 /**
@@ -238,10 +423,15 @@ export function buildServerClockAnchor(
     source?: string | null;
     minute?: string | null;
     startsAt: Date | string;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
+    events?: ReadonlyArray<{ minute: number }> | null;
     feedSyncedAt?: Date | string | null;
     realStats?: {
       clockSeconds?: number | null;
       clockPeriod?: number | null;
+      htHomeScore?: number | null;
+      htAwayScore?: number | null;
       updatedAt?: string | null;
     } | null;
   },
@@ -297,25 +487,48 @@ export function buildServerClockAnchor(
     };
   }
 
-  const parsed = parseMatchMinuteLabel(minTrim);
+  const secondHalf = inferRowSecondHalf(row);
+  const periodHint: 1 | 2 = secondHalf ? 2 : 1;
+  const parsed = parseMatchMinuteLabel(minTrim, periodHint);
   if (!parsed) {
+    const rawStatsSec = row.realStats?.clockSeconds;
+    const fallbackSec =
+      rawStatsSec != null && Number.isFinite(rawStatsSec) && rawStatsSec >= 0
+        ? secondHalf && rawStatsSec < 2700
+          ? 2700 + Math.floor(rawStatsSec)
+          : Math.floor(rawStatsSec)
+        : Number.isFinite(startsAtMs)
+          ? secondHalf
+            ? Math.min(5400, Math.max(2700, Math.floor((nowMs - startsAtMs) / 1000) - 900))
+            : Math.min(2699, Math.max(0, Math.floor((nowMs - startsAtMs) / 1000)))
+          : secondHalf
+            ? 2700
+            : 0;
     return {
       mode: "real",
       startsAt: startsAtIso,
       stepMs: 60_000,
-      anchorSeconds: 0,
+      anchorSeconds: fallbackSec,
       syncedAtMs: nowMs,
       exactSync: false,
-      phase: "1H",
+      phase: secondHalf ? "2H" : "1H",
     };
   }
 
+  const effectivePeriod = secondHalf || parsed.half === 2 ? 2 : 1;
   const statsSec = row.realStats?.clockSeconds;
-  const anchorSeconds = normalizeEspnLiveClockSeconds(
-    statsSec,
-    row.realStats?.clockPeriod ?? (parsed.half === 2 ? 2 : 1),
-    minTrim
-  ) ?? parsed.expectedFloorSeconds;
+  const rawAnchorSec =
+    normalizeEspnLiveClockSeconds(statsSec, effectivePeriod, minTrim) ??
+    parsed.expectedFloorSeconds;
+  const anchorSeconds =
+    effectivePeriod === 2 ? Math.max(2700, rawAnchorSec) : rawAnchorSec;
+  const effectivePhase: LiveClockPhase =
+    effectivePeriod === 2 &&
+    (parsed.phase === "1H" || parsed.phase === "1H_STOPPAGE")
+      ? parsed.phase === "1H_STOPPAGE"
+        ? "2H_STOPPAGE"
+        : "2H"
+      : parsed.phase;
 
   const statsUpdatedMs = row.realStats?.updatedAt
     ? Date.parse(row.realStats.updatedAt)
@@ -342,7 +555,7 @@ export function buildServerClockAnchor(
     anchorSeconds,
     syncedAtMs,
     exactSync: hasExactSync,
-    phase: parsed.phase,
+    phase: effectivePhase,
     stoppageAdded: parsed.addedMin,
   };
 }
@@ -586,6 +799,7 @@ function computeRealLiveSnapshot(
   matchId: number,
   minute: string | null,
   anchor: LiveClockAnchor | null,
+  secondHalfHint = false,
   nowMs = getAlignedServerNow()
 ): LiveClockSnapshot {
   const rawMin = (minute ?? "").trim();
@@ -602,8 +816,15 @@ function computeRealLiveSnapshot(
     };
   }
 
+  const is2HAnchor =
+    secondHalfHint ||
+    anchor?.phase === "2H" ||
+    anchor?.phase === "2H_STOPPAGE" ||
+    (anchor?.anchorSeconds ?? 0) >= 2700;
+  const periodHint: 1 | 2 = is2HAnchor ? 2 : 1;
+
   if (anchor?.phase === "PAUSED" || isStaticStatusLabel(rawMin)) {
-    const label = formatMinuteOnlyLabel(rawMin);
+    const label = formatMinuteOnlyLabel(rawMin, periodHint);
     return {
       display: label,
       badgeLabel: label,
@@ -614,32 +835,37 @@ function computeRealLiveSnapshot(
     };
   }
 
-  const parsed = parseMatchMinuteLabel(rawMin);
+  const parsed = parseMatchMinuteLabel(rawMin, periodHint);
   const half: 1 | 2 =
-    anchor?.phase === "2H" || anchor?.phase === "2H_STOPPAGE"
+    is2HAnchor || parsed?.half === 2
       ? 2
-      : anchor?.phase === "1H" || anchor?.phase === "1H_STOPPAGE"
-        ? 1
-        : (parsed?.half ?? 1);
+      : 1;
 
   let serverTargetSec: number;
   if (anchor?.anchorSeconds != null && Number.isFinite(anchor.anchorSeconds)) {
+    const baseAnchorSec =
+      half === 2 && anchor.anchorSeconds < 2700
+        ? 2700 + anchor.anchorSeconds
+        : anchor.anchorSeconds;
     const elapsedSec =
       anchor.syncedAtMs != null && Number.isFinite(anchor.syncedAtMs)
         ? Math.min(180, Math.max(0, Math.floor((nowMs - anchor.syncedAtMs) / 1000)))
         : 0;
-    serverTargetSec = anchor.anchorSeconds + elapsedSec;
+    serverTargetSec = baseAnchorSec + elapsedSec;
   } else if (parsed) {
-    serverTargetSec = parsed.expectedFloorSeconds;
+    serverTargetSec =
+      half === 2
+        ? Math.max(2700, parsed.expectedFloorSeconds)
+        : parsed.expectedFloorSeconds;
   } else {
-    const label = formatMinuteOnlyLabel(rawMin);
+    const label = formatMinuteOnlyLabel(rawMin, periodHint);
     return {
-      display: label,
-      badgeLabel: label,
+      display: label === "LIVE" && half === 2 ? "46’" : label,
+      badgeLabel: label === "LIVE" && half === 2 ? "46’" : label,
       isHalfTime: false,
       isPaused: true,
-      progressPct: 2,
-      gameMinute: 1,
+      progressPct: half === 2 ? 52 : 2,
+      gameMinute: half === 2 ? 46 : 1,
     };
   }
 
@@ -786,8 +1012,16 @@ export function computeLiveClockSnapshot(
     );
   }
 
+  const secondHalfHint =
+    (input?.realStats?.clockPeriod ?? 1) >= 2 ||
+    (input?.realStats?.clockSeconds ?? 0) >= 2700 ||
+    input?.htHomeScore != null ||
+    input?.htAwayScore != null ||
+    input?.realStats?.htHomeScore != null ||
+    input?.realStats?.htAwayScore != null;
+
   if (source === "manual" || !startsAt || id <= 0) {
-    return computeRealLiveSnapshot(id, minute, anchor, nowMs);
+    return computeRealLiveSnapshot(id, minute, anchor, secondHalfHint, nowMs);
   }
 
   return computeVirtualLiveSnapshot(id, startsAt, minute, anchor?.stepMs ?? null, nowMs);

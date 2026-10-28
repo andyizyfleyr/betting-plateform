@@ -16,6 +16,7 @@ import {
   type RealMatchLiveStatsInput,
 } from "@/db/fixtures";
 import { getCachedMarketCalibratorMultiplier } from "./ml-weights";
+import { normalizeRealLiveMinuteLabel } from "./live-clock";
 import { marginOverround, type BetLike } from "./risk";
 
 export type MarketCategory = "main" | "halftime" | "goals" | "teams" | "scores";
@@ -1355,6 +1356,57 @@ export function isRealMatchKickoffReached(
   return Number.isFinite(startMs) && now >= startMs;
 }
 
+function effectiveRealMinuteLabel(
+  m: RealMatchInput,
+  now = Date.now()
+): string | null {
+  if (m.status !== "live") return m.minute ?? null;
+  return normalizeRealLiveMinuteLabel(
+    {
+      source: "manual",
+      status: "live",
+      minute: m.minute ?? null,
+      startsAt: m.startsAt,
+      htHomeScore: m.htHomeScore ?? null,
+      htAwayScore: m.htAwayScore ?? null,
+      events: m.events ?? null,
+      realStats: m.realStats
+        ? {
+            clockSeconds: m.realStats.clockSeconds ?? null,
+            clockPeriod: m.realStats.clockPeriod ?? null,
+          }
+        : null,
+    },
+    now
+  );
+}
+
+export function effectiveMatchMinuteNumber(
+  m: {
+    source?: string | null;
+    status: string;
+    minute?: string | null;
+    startsAt?: Date | string | null;
+    feedSyncedAt?: Date | string | null;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
+    events?: Array<{ minute?: number }> | null;
+    realStats?: {
+      clockSeconds?: number | null;
+      clockPeriod?: number | null;
+      htHomeScore?: number | null;
+      htAwayScore?: number | null;
+      updatedAt?: string | null;
+    } | null;
+  },
+  now = Date.now()
+): number {
+  if (m.source === "manual" && m.status === "live") {
+    return minuteNumber(normalizeRealLiveMinuteLabel(m, now));
+  }
+  return minuteNumber(m.minute ?? null);
+}
+
 /**
  * Calcule les cotes d'affichage 1X2 en direct d'un match réel (`1.01 .. 45.00`) à partir
  * du modèle live complet, même lorsqu'une issue devient quasi acquise (`prob > 0.985` ou `< 0.006`)
@@ -1375,7 +1427,8 @@ export function computeRealLiveHeadline1x2Odds(m: RealMatchInput): {
 
   const homeScore = m.homeScore ?? 0;
   const awayScore = m.awayScore ?? 0;
-  const minute = minuteNumber(m.minute);
+  const effMinuteLabel = effectiveRealMinuteLabel(m);
+  const minute = minuteNumber(effMinuteLabel);
   const model = realMatchScoreModel({
     oddsHome: m.oddsHome,
     oddsDraw: m.oddsDraw,
@@ -1383,7 +1436,7 @@ export function computeRealLiveHeadline1x2Odds(m: RealMatchInput): {
     homeScore,
     awayScore,
     minute,
-    minuteLabel: m.minute ?? null,
+    minuteLabel: effMinuteLabel,
     isLive: true,
     redHome: m.redHome ?? 0,
     redAway: m.redAway ?? 0,
@@ -1425,7 +1478,8 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
   const isLive = m.status === "live";
   const homeScore = m.homeScore ?? 0;
   const awayScore = m.awayScore ?? 0;
-  const minute = isLive ? minuteNumber(m.minute) : 0;
+  const effMinuteLabel = isLive ? effectiveRealMinuteLabel(m, now) : (m.minute ?? null);
+  const minute = isLive ? minuteNumber(effMinuteLabel) : 0;
   if (isLive && minute >= 88) return [];
 
   const opts: MarketModelOpts = {
@@ -1443,7 +1497,7 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
     homeScore,
     awayScore,
     minute,
-    minuteLabel: m.minute ?? null,
+    minuteLabel: effMinuteLabel,
     isLive,
     redHome: m.redHome ?? 0,
     redAway: m.redAway ?? 0,
@@ -1521,7 +1575,7 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
         homeScore,
         awayScore,
         minute,
-        minuteLabel: m.minute ?? null,
+        minuteLabel: effMinuteLabel,
         isLive,
         redHome: m.redHome ?? 0,
         redAway: m.redAway ?? 0,
@@ -1620,7 +1674,8 @@ export function realMatchLiveProbability(
   const isLive = m.status === "live";
   const homeScore = m.homeScore ?? 0;
   const awayScore = m.awayScore ?? 0;
-  const minute = isLive ? minuteNumber(m.minute) : 0;
+  const effMinuteLabel = isLive ? effectiveRealMinuteLabel(m) : (m.minute ?? null);
+  const minute = isLive ? minuteNumber(effMinuteLabel) : 0;
 
   const model = realMatchScoreModel({
     oddsHome: m.oddsHome,
@@ -1629,7 +1684,7 @@ export function realMatchLiveProbability(
     homeScore,
     awayScore,
     minute,
-    minuteLabel: m.minute ?? null,
+    minuteLabel: effMinuteLabel,
     isLive,
     redHome: m.redHome ?? 0,
     redAway: m.redAway ?? 0,
@@ -1652,7 +1707,7 @@ export function realMatchLiveProbability(
             homeScore,
             awayScore,
             minute,
-            minuteLabel: m.minute ?? null,
+            minuteLabel: effMinuteLabel,
             isLive,
             redHome: m.redHome ?? 0,
             redAway: m.redAway ?? 0,

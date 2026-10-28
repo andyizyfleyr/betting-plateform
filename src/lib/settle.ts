@@ -16,6 +16,7 @@ import {
   type SettledBetMlInput,
 } from "@/lib/ml-engine";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
+import { normalizeRealLiveMinuteLabel } from "@/lib/live-clock";
 import {
   ensurePendingBetFlags,
   notifyBetsSettledOrMutated,
@@ -80,10 +81,11 @@ export function resolveEarlyLiveMatchBet(
   const away = match.awayScore ?? 0;
   const cleanEvents = sanitizeMatchEvents(match.events, home, away);
 
+  const effMinLabel = isManual ? normalizeRealLiveMinuteLabel(match, nowMs) : match.minute;
   const decision = tryEarlyLiveSettle(bet.market, bet.selection, {
     source: isManual ? "manual" : "virtual",
     status: match.status,
-    minute: match.minute,
+    minute: effMinLabel,
     homeScore: home,
     awayScore: away,
     htHomeScore: match.htHomeScore ?? match.realStats?.htHomeScore ?? null,
@@ -98,7 +100,7 @@ export function resolveEarlyLiveMatchBet(
   // - en 2e période (`>= 46'`), les marchés purement 1ère MT (`ht_result`, `ht_total_ou`, `ht_ft`)
   //   sont déjà figés par le coup de sifflet de la pause (insensibles à la VAR de 2e période) ;
   // - pour tout autre règlement anticipé lié à un but récent, on exige 90 s de stabilité anti-VAR.
-  const isSecondHalfInPlay = minuteNumber(match.minute) >= 46;
+  const isSecondHalfInPlay = minuteNumber(effMinLabel) >= 46;
   const isPureFirstHalfMarket =
     bet.market === "ht_result" || bet.market === "ht_total_ou" || bet.market === "ht_ft";
 

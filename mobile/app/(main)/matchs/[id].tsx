@@ -251,17 +251,6 @@ export default function MatchDetailScreen() {
 
         {match ? (
           <View style={styles.headerRight}>
-            {isLive ? (
-              <LiveStatusBadge
-                match={match}
-                minute={match.minute}
-                suspended={suspended}
-              />
-            ) : isFinished ? (
-              <View style={styles.finBadge}>
-                <Text style={styles.finBadgeText}>TERMINÉ</Text>
-              </View>
-            ) : null}
             <View style={styles.datePill}>
               <Text style={styles.datePillText}>
                 {formatMatchDateTime(match.startsAt)}
@@ -323,6 +312,20 @@ export default function MatchDetailScreen() {
                 </View>
 
                 <View style={styles.scoreCenter}>
+                  {isLive ? (
+                    <View style={{ marginBottom: 6 }}>
+                      <LiveStatusBadge
+                        match={match}
+                        minute={match.minute}
+                        suspended={suspended}
+                      />
+                    </View>
+                  ) : isFinished ? (
+                    <View style={[styles.finBadge, { marginBottom: 6 }]}>
+                      <Text style={styles.finBadgeText}>TERMINÉ</Text>
+                    </View>
+                  ) : null}
+
                   {isLive || isFinished ? (
                     <>
                       <View style={styles.scorePill}>

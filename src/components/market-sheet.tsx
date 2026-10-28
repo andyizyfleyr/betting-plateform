@@ -308,17 +308,7 @@ export function MarketSheet() {
                   <div className="flex flex-col items-center px-1">
                     {isLive || isFinished ? (
                       <>
-                        <span className="font-display text-[19px] font-bold leading-none tabular-nums text-ink">
-                          {match.homeScore ?? 0} – {match.awayScore ?? 0}
-                        </span>
-                        {isReal &&
-                          match.htHomeScore != null &&
-                          match.htAwayScore != null && (
-                            <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim">
-                              MT {match.htHomeScore} - {match.htAwayScore}
-                            </span>
-                          )}
-                        <div className="mt-1">
+                        <div className="mb-1">
                           {isFinished ? (
                             <span className="text-[10px] font-bold text-dim">Terminé</span>
                           ) : (
@@ -329,6 +319,16 @@ export function MarketSheet() {
                             />
                           )}
                         </div>
+                        <span className="font-display text-[19px] font-bold leading-none tabular-nums text-ink">
+                          {match.homeScore ?? 0} – {match.awayScore ?? 0}
+                        </span>
+                        {isReal &&
+                          match.htHomeScore != null &&
+                          match.htAwayScore != null && (
+                            <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim">
+                              MT {match.htHomeScore} - {match.htAwayScore}
+                            </span>
+                          )}
                       </>
                     ) : (
                       <span className="font-display text-[11px] font-bold uppercase tracking-wide text-dim">

@@ -27,6 +27,14 @@ export interface LiveClockSource {
   startsAt?: string | Date | null;
   source?: "virtual" | "manual" | string | null;
   clockAnchor?: LiveClockAnchor | null;
+  htHomeScore?: number | null;
+  htAwayScore?: number | null;
+  realStats?: {
+    clockSeconds?: number | null;
+    clockPeriod?: number | null;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
+  } | null;
 }
 
 export interface LiveClockSnapshot {
@@ -55,24 +63,37 @@ export function stepMsForVirtualMatch(matchId: number): number {
   return VIRTUAL_STEP_MIN_MS + (h % (span + 1));
 }
 
-export function formatMinuteOnlyLabel(raw: string | null | undefined): string {
+export function formatMinuteOnlyLabel(
+  raw: string | null | undefined,
+  periodHint?: 1 | 2 | null
+): string {
   const trimmed = (raw ?? "").trim();
-  if (!trimmed) return "LIVE";
+  if (!trimmed) return periodHint === 2 ? "46’" : "LIVE";
   if (isHalfTimeLabel(trimmed)) return "MT";
   if (isStaticStatusLabel(trimmed)) return trimmed;
 
-  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?::\d{1,2})?\s*['’]?$/.exec(
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?:[:.]\d{1,2})?\s*['’"]?$/.exec(
     trimmed
   );
   if (stopMatch) {
-    const base = Number(stopMatch[1]);
+    const baseRaw = Number(stopMatch[1]);
+    const base = periodHint === 2 && baseRaw <= 45 ? 90 : baseRaw;
     const added = Math.max(1, Number(stopMatch[2]));
     return `${base}+${added}’`;
   }
 
-  const regMatch = /^(\d{1,3})(?::\d{1,2})?\s*['’]?$/.exec(trimmed);
+  const regMatch = /^(\d{1,3})(?:([:.])(\d{1,2}))?\s*['’"]?$/.exec(trimmed);
   if (regMatch) {
-    const min = Math.max(1, Number(regMatch[1]));
+    const rawMin = Number(regMatch[1]);
+    const sep = regMatch[2];
+    if (periodHint === 2 && rawMin <= 45) {
+      if (rawMin < 45) {
+        const eff = sep === ":" ? 45 + rawMin + 1 : rawMin === 0 ? 46 : 45 + rawMin;
+        return `${Math.min(90, eff)}’`;
+      }
+      return "46’";
+    }
+    const min = Math.max(1, sep === ":" ? rawMin + 1 : rawMin);
     return `${min}’`;
   }
 
@@ -108,17 +129,20 @@ interface ParsedMinuteInfo {
 }
 
 export function parseMatchMinuteLabel(
-  minute: string | null | undefined
+  minute: string | null | undefined,
+  periodHint?: 1 | 2 | null
 ): ParsedMinuteInfo | null {
   if (!minute) return null;
   const trimmed = minute.trim();
   if (!trimmed || isStaticStatusLabel(trimmed)) return null;
 
-  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})\s*['’]?$/.exec(trimmed);
+  const stopMatch = /^(\d{1,3})\s*['’]?\s*\+\s*(\d{1,2})(?:[:.]\d{1,2})?\s*['’"]?$/.exec(
+    trimmed
+  );
   if (stopMatch) {
     const baseMin = Number(stopMatch[1]);
     const addedMin = Math.max(1, Number(stopMatch[2]));
-    if (baseMin <= 45) {
+    if (baseMin <= 45 && periodHint !== 2) {
       return {
         baseMin: 45,
         addedMin,
@@ -136,21 +160,58 @@ export function parseMatchMinuteLabel(
     };
   }
 
-  const regMatch = /^(\d{1,3})(?::(\d{1,2}))?\s*['’]?$/.exec(trimmed);
+  const regMatch = /^(\d{1,3})(?:([:.])(\d{1,2}))?\s*['’"]?$/.exec(trimmed);
   if (regMatch) {
-    const minInt = Math.max(1, Number(regMatch[1]));
-    const secInt = regMatch[2] != null ? Math.min(59, Number(regMatch[2])) : null;
-    if (secInt != null) {
-      const exactSec = minInt * 60 + secInt;
-      const half: 1 | 2 = minInt >= 45 ? 2 : 1;
+    const rawMin = Number(regMatch[1]);
+    const sep = regMatch[2];
+    const secInt =
+      sep === ":" && regMatch[3] != null
+        ? Math.min(59, Number(regMatch[3]))
+        : null;
+
+    if (periodHint === 2 && rawMin <= 45) {
+      if (rawMin < 45) {
+        if (secInt != null) {
+          const exactSec = 2700 + rawMin * 60 + secInt;
+          return {
+            baseMin: Math.min(90, 46 + rawMin),
+            addedMin: null,
+            half: 2,
+            phase: "2H",
+            expectedFloorSeconds: exactSec,
+          };
+        }
+        const effMin = Math.min(90, rawMin === 0 ? 46 : 45 + rawMin);
+        return {
+          baseMin: effMin,
+          addedMin: null,
+          half: 2,
+          phase: "2H",
+          expectedFloorSeconds: (effMin - 1) * 60,
+        };
+      }
+      const exactAt45 = 2700 + (secInt ?? 0);
       return {
-        baseMin: Math.min(90, minInt + 1),
+        baseMin: 46,
+        addedMin: null,
+        half: 2,
+        phase: "2H",
+        expectedFloorSeconds: exactAt45,
+      };
+    }
+
+    if (secInt != null) {
+      const exactSec = rawMin * 60 + secInt;
+      const half: 1 | 2 = rawMin >= 45 ? 2 : 1;
+      return {
+        baseMin: Math.min(90, Math.max(1, rawMin + 1)),
         addedMin: null,
         half,
         phase: half === 1 ? "1H" : "2H",
         expectedFloorSeconds: exactSec,
       };
     }
+    const minInt = Math.max(1, rawMin);
     const half: 1 | 2 = minInt > 45 ? 2 : 1;
     return {
       baseMin: Math.min(90, minInt),
@@ -399,6 +460,7 @@ function computeRealLiveSnapshot(
   matchId: number,
   minute: string | null,
   anchor: LiveClockAnchor | null,
+  secondHalfHint = false,
   nowMs = getAlignedServerNow()
 ): LiveClockSnapshot {
   const rawMin = (minute ?? "").trim();
@@ -415,8 +477,15 @@ function computeRealLiveSnapshot(
     };
   }
 
+  const is2HAnchor =
+    secondHalfHint ||
+    anchor?.phase === "2H" ||
+    anchor?.phase === "2H_STOPPAGE" ||
+    (anchor?.anchorSeconds ?? 0) >= 2700;
+  const periodHint: 1 | 2 = is2HAnchor ? 2 : 1;
+
   if (anchor?.phase === "PAUSED" || isStaticStatusLabel(rawMin)) {
-    const label = formatMinuteOnlyLabel(rawMin);
+    const label = formatMinuteOnlyLabel(rawMin, periodHint);
     return {
       display: label,
       badgeLabel: label,
@@ -427,16 +496,15 @@ function computeRealLiveSnapshot(
     };
   }
 
-  const parsed = parseMatchMinuteLabel(rawMin);
-  const half: 1 | 2 =
-    anchor?.phase === "2H" || anchor?.phase === "2H_STOPPAGE"
-      ? 2
-      : anchor?.phase === "1H" || anchor?.phase === "1H_STOPPAGE"
-        ? 1
-        : (parsed?.half ?? 1);
+  const parsed = parseMatchMinuteLabel(rawMin, periodHint);
+  const half: 1 | 2 = is2HAnchor || parsed?.half === 2 ? 2 : 1;
 
   let serverTargetSec: number;
   if (anchor?.anchorSeconds != null && Number.isFinite(anchor.anchorSeconds)) {
+    const baseAnchorSec =
+      half === 2 && anchor.anchorSeconds < 2700
+        ? 2700 + anchor.anchorSeconds
+        : anchor.anchorSeconds;
     const elapsedSec =
       anchor.syncedAtMs != null && Number.isFinite(anchor.syncedAtMs)
         ? Math.min(
@@ -444,18 +512,21 @@ function computeRealLiveSnapshot(
             Math.max(0, Math.floor((nowMs - anchor.syncedAtMs) / 1000))
           )
         : 0;
-    serverTargetSec = anchor.anchorSeconds + elapsedSec;
+    serverTargetSec = baseAnchorSec + elapsedSec;
   } else if (parsed) {
-    serverTargetSec = parsed.expectedFloorSeconds;
+    serverTargetSec =
+      half === 2
+        ? Math.max(2700, parsed.expectedFloorSeconds)
+        : parsed.expectedFloorSeconds;
   } else {
-    const label = formatMinuteOnlyLabel(rawMin);
+    const label = formatMinuteOnlyLabel(rawMin, periodHint);
     return {
-      display: label,
-      badgeLabel: label,
+      display: label === "LIVE" && half === 2 ? "46’" : label,
+      badgeLabel: label === "LIVE" && half === 2 ? "46’" : label,
       isHalfTime: false,
       isPaused: true,
-      progressPct: 2,
-      gameMinute: 1,
+      progressPct: half === 2 ? 52 : 2,
+      gameMinute: half === 2 ? 46 : 1,
     };
   }
 
@@ -603,8 +674,16 @@ export function computeLiveClockSnapshot(
     );
   }
 
+  const secondHalfHint =
+    (input?.realStats?.clockPeriod ?? 1) >= 2 ||
+    (input?.realStats?.clockSeconds ?? 0) >= 2700 ||
+    input?.htHomeScore != null ||
+    input?.htAwayScore != null ||
+    input?.realStats?.htHomeScore != null ||
+    input?.realStats?.htAwayScore != null;
+
   if (source === "manual" || !startsAt || id <= 0) {
-    return computeRealLiveSnapshot(id, minute, anchor, nowMs);
+    return computeRealLiveSnapshot(id, minute, anchor, secondHalfHint, nowMs);
   }
 
   return computeVirtualLiveSnapshot(

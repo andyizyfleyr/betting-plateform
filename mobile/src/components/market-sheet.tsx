@@ -592,6 +592,17 @@ export function MarketSheet() {
                 <View style={styles.centerScore}>
                   {isLive || isFinished ? (
                     <>
+                      <View style={{ marginBottom: 4 }}>
+                        {isFinished ? (
+                          <Text style={styles.finSmall}>Terminé</Text>
+                        ) : (
+                          <LiveStatusBadge
+                            match={effectiveSource}
+                            minute={effectiveSource.minute}
+                            suspended={suspended}
+                          />
+                        )}
+                      </View>
                       <Text style={styles.scoreDigits}>
                         {effectiveSource.homeScore ?? 0} –{" "}
                         {effectiveSource.awayScore ?? 0}
@@ -604,17 +615,6 @@ export function MarketSheet() {
                           {effectiveSource.htAwayScore}
                         </Text>
                       ) : null}
-                      <View style={{ marginTop: 4 }}>
-                        {isFinished ? (
-                          <Text style={styles.finSmall}>Terminé</Text>
-                        ) : (
-                          <LiveStatusBadge
-                            match={effectiveSource}
-                            minute={effectiveSource.minute}
-                            suspended={suspended}
-                          />
-                        )}
-                      </View>
                     </>
                   ) : (
                     <Text style={styles.vsText}>VS</Text>

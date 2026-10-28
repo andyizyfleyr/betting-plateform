@@ -253,17 +253,6 @@ export default function MatchDetailPage() {
 
         {match && (
           <div className="flex shrink-0 items-center gap-1.5">
-            {isLive ? (
-              <LiveStatusBadge
-                match={match}
-                minute={match.minute}
-                suspended={match.suspended}
-              />
-            ) : isFinished ? (
-              <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-mist">
-                Terminé
-              </span>
-            ) : null}
             <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-mist lg:px-2.5 lg:py-1 lg:text-[11px]">
               {formatMatchDateTime(match.startsAt)}
             </span>
@@ -329,6 +318,20 @@ export default function MatchDetailPage() {
                 </div>
 
                 <div className="flex flex-col items-center">
+                  {isLive ? (
+                    <div className="mb-1.5">
+                      <LiveStatusBadge
+                        match={match}
+                        minute={match.minute}
+                        suspended={match.suspended}
+                      />
+                    </div>
+                  ) : isFinished ? (
+                    <span className="mb-1.5 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-mist">
+                      Terminé
+                    </span>
+                  ) : null}
+
                   {isLive || isFinished ? (
                     <div className="flex items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[18px] font-black tabular-nums leading-none text-ink lg:rounded-xl lg:px-4 lg:py-2 lg:text-[24px]">
                       <span

@@ -1,4 +1,5 @@
 import { livePricingMinute, type RealMatchLiveStatsInput } from "@/db/fixtures";
+import { normalizeRealLiveMinuteLabel } from "@/lib/live-clock";
 import {
   isFirstHalfCompleted,
   isKnownMarket,
@@ -37,8 +38,19 @@ export function checkLiveMatchCashOutGuard(
     awayTeam: string;
     homeScore?: number | null;
     awayScore?: number | null;
+    htHomeScore?: number | null;
+    htAwayScore?: number | null;
     redHome?: number | null;
     redAway?: number | null;
+    startsAt?: Date | string | null;
+    events?: Array<{ minute?: number }> | null;
+    realStats?: {
+      clockSeconds?: number | null;
+      clockPeriod?: number | null;
+      htHomeScore?: number | null;
+      htAwayScore?: number | null;
+      updatedAt?: string | null;
+    } | null;
   },
   nowMs: number,
   initialSnap?: LiveIncidentSnapshot
@@ -91,7 +103,24 @@ export function checkLiveMatchCashOutGuard(
     }
   }
 
-  const min = minuteNumber(effectiveMatch.minute ?? null);
+  const effectiveMinute = isManual
+    ? normalizeRealLiveMinuteLabel(
+        {
+          source: "manual",
+          status: "live",
+          minute: effectiveMatch.minute ?? null,
+          startsAt: effectiveMatch.startsAt ?? null,
+          feedSyncedAt: effectiveMatch.feedSyncedAt ?? null,
+          htHomeScore: effectiveMatch.htHomeScore ?? null,
+          htAwayScore: effectiveMatch.htAwayScore ?? null,
+          events: effectiveMatch.events ?? null,
+          realStats: effectiveMatch.realStats ?? null,
+        },
+        nowMs
+      )
+    : (effectiveMatch.minute ?? null);
+
+  const min = minuteNumber(effectiveMinute);
   if (min >= (isManual ? 88 : 85)) {
     return {
       ok: false,
@@ -187,12 +216,28 @@ export function computeCashOut(params: {
   const { stake, odds, selection } = params;
   const market = params.market ?? "result";
   const potential = stake * odds;
-  const min = minuteNumber(params.minute);
   const isManual = params.source === "manual";
+  const effectiveMinute = isManual
+    ? normalizeRealLiveMinuteLabel({
+        source: "manual",
+        status: "live",
+        minute: params.minute,
+        htHomeScore: params.htHomeScore ?? null,
+        htAwayScore: params.htAwayScore ?? null,
+        events: params.events ?? null,
+        realStats: params.realStats
+          ? {
+              clockSeconds: params.realStats.clockSeconds ?? null,
+              clockPeriod: params.realStats.clockPeriod ?? null,
+            }
+          : null,
+      })
+    : params.minute;
+  const min = minuteNumber(effectiveMinute);
   if (min >= (isManual ? 88 : 85)) return null;
   if (
     (market === "ht_result" || market === "ht_total_ou") &&
-    isFirstHalfCompleted(params.minute, "live")
+    isFirstHalfCompleted(effectiveMinute, "live")
   ) {
     return null;
   }
@@ -212,7 +257,7 @@ export function computeCashOut(params: {
     tryEarlyLiveSettle(market, selection, {
       source: isManual ? "manual" : "virtual",
       status: "live",
-      minute: params.minute,
+      minute: effectiveMinute,
       homeScore: h,
       awayScore: a,
       htHomeScore: params.htHomeScore ?? null,
@@ -239,7 +284,7 @@ export function computeCashOut(params: {
             homeTeam: params.homeTeam,
             awayTeam: params.awayTeam,
             status: "live",
-            minute: params.minute,
+            minute: effectiveMinute,
             startsAt: new Date(0),
             homeScore: h,
             awayScore: a,
@@ -300,7 +345,7 @@ export function computeCashOut(params: {
 
   // Repli si marché personnalisé admin
   if (market !== "result") return null;
-  const progress = matchProgress(params.sport, params.minute, isManual);
+  const progress = matchProgress(params.sport, effectiveMinute, isManual);
   const leader = h > a ? "home" : a > h ? "away" : "draw";
   const aligned = selection === leader;
   const estProb = aligned
