@@ -201,7 +201,8 @@ export default function AuthScreen() {
         c.currency.toLowerCase().includes(q) ||
         cur.symbol.toLowerCase().includes(q) ||
         cur.name.toLowerCase().includes(q) ||
-        c.region.toLowerCase().includes(q)
+        c.region.toLowerCase().includes(q) ||
+        ((c.currency === "XOF" || c.currency === "XAF") && "fcfa".includes(q))
       );
     });
   }, [countrySearch]);
