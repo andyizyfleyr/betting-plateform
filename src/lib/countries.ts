@@ -111,7 +111,7 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   XOF: {
     code: "XOF",
     name: "Franc CFA (BCEAO)",
-    symbol: "FCFA",
+    symbol: "₣",
     decimals: 0,
     rateFromEur: 655.957,
     stakePresets: [200, 500, 1000, 5000],
@@ -137,7 +137,7 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   XAF: {
     code: "XAF",
     name: "Franc CFA (BEAC)",
-    symbol: "FCFA",
+    symbol: "₣",
     decimals: 0,
     rateFromEur: 655.957,
     stakePresets: [200, 500, 1000, 5000],
@@ -1129,7 +1129,7 @@ export function formatEurAsCurrency(
   return formatLocalAmount(local, cfg.code, opts);
 }
 
-/** Formate une pastille de mise rapide (ex: « 500 FCFA », « 1 000 FCFA », « 10 € »). */
+/** Formate une pastille de mise rapide (ex: « 500 ₣ », « 1 000 ₣ », « 10 € »). */
 export function formatPresetChip(localAmount: number, currency: unknown): string {
   return formatLocalAmount(localAmount, currency, {
     forceNoDecimalsIfInt: true,
