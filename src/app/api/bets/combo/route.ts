@@ -34,7 +34,7 @@ import {
   minuteNumber,
   realMatchOddsFor,
 } from "@/lib/markets";
-import { maxStakeFor, playerRiskProfile } from "@/lib/risk";
+import { getBettingLimits } from "@/lib/betting-limits";
 import {
   checkOddsChange,
   extractIdempotencyKey,
@@ -51,11 +51,10 @@ import {
   saveIdempotencyRecord,
 } from "@/lib/idempotency";
 import { formatServerErrorResponse } from "@/lib/db-error";
-import { ensureMlLoaded, predictBatchUserMlRisk } from "@/lib/ml-engine";
+import { ensureMlLoaded } from "@/lib/ml-engine";
 import { verifyLiveRealMatchesBeforeBet } from "@/lib/real-sports-feed";
 import {
   formatEurAsCurrency,
-  formatLocalAmount,
   getCurrencyConfig,
   localToEur,
   roundEurPivot,
@@ -66,7 +65,6 @@ import { teamLogo } from "@/lib/team-logos";
 
 export const dynamic = "force-dynamic";
 
-const MAX_COMBO_STAKE = 200;
 const BET_COOLDOWN_MS = 700;
 const LIVE_VALIDATION_MS = 300;
 
@@ -122,9 +120,11 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (rawLegs.length > MAX_COMBO_LEGS) {
+  const bettingLimits = await getBettingLimits();
+  const comboLimit = Math.min(MAX_COMBO_LEGS, bettingLimits.maxComboLegs);
+  if (rawLegs.length > comboLimit) {
     return NextResponse.json(
-      { error: `Maximum ${MAX_COMBO_LEGS} sélections par combiné` },
+      { error: `Maximum ${comboLimit} sélections par combiné` },
       { status: 400 }
     );
   }
@@ -134,11 +134,12 @@ export async function POST(req: NextRequest) {
     .where(eq(appUser.id, uid))
     .limit(1);
   const userCurrency = getCurrencyConfig(currencyUser?.currency);
-  const minStakeEur = localToEur(userCurrency.minStakeLocal, userCurrency.code);
-  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-4) {
+  const minStakeEur = localToEur(bettingLimits.minStakeXof, "XOF");
+  const maxStakeEur = localToEur(bettingLimits.maxStakeXof, "XOF");
+  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-6 || stake > maxStakeEur + 1e-6) {
     return NextResponse.json(
       {
-        error: `Mise minimale : ${formatLocalAmount(userCurrency.minStakeLocal, userCurrency.code)}`,
+        error: `Mise hors limites : ${formatEurAsCurrency(minStakeEur, userCurrency.code)} – ${formatEurAsCurrency(maxStakeEur, userCurrency.code)}`,
       },
       { status: 400 }
     );
@@ -265,39 +266,6 @@ export async function POST(req: NextRequest) {
       balance: u?.balance ?? 0,
       deduplicated: true,
     });
-  }
-
-  // Limite de mise dynamique selon le profil de risque du joueur
-  const recentRows = await db
-    .select({
-      odds: bets.odds,
-      stake: bets.stake,
-      closingOdds: bets.closingOdds,
-      status: bets.status,
-    })
-    .from(bets)
-    .where(eq(bets.userId, uid))
-    .orderBy(desc(bets.placedAt))
-    .limit(30);
-
-  const profile = playerRiskProfile(
-    recentRows.map((b) => ({
-      odds: b.odds,
-      stake: b.stake,
-      payout: b.status === "won" ? roundEurPivot(b.stake * b.odds) : 0,
-      closingOdds: b.closingOdds ?? null,
-    }))
-  );
-  const mlRiskMap = await predictBatchUserMlRisk([uid]);
-  const mlCeiling = mlRiskMap.get(uid)?.maxStake ?? 500;
-  const maxAllowed = Math.min(MAX_COMBO_STAKE, maxStakeFor(profile), mlCeiling);
-  if (stake > maxAllowed + 1e-4) {
-    return NextResponse.json(
-      {
-        error: `Mise maximale autorisée sur ce combiné : ${formatEurAsCurrency(maxAllowed, userCurrency.code)}`,
-      },
-      { status: 400 }
-    );
   }
 
   const initialMatchRows =
@@ -779,7 +747,8 @@ export async function POST(req: NextRequest) {
     // Cote totale calculée EXCLUSIVEMENT à partir des cotes serveur verrouillées
     const serverQuote = computeComboQuote(
       pricedLegs.map((l) => l.odds),
-      roundedStake
+      roundedStake,
+      localToEur(bettingLimits.maxPayoutXof, "XOF")
     );
 
     const totalCheck = checkOddsChange({

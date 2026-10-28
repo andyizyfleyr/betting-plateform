@@ -280,7 +280,7 @@ export async function settlePendingCombos(): Promise<void> {
 
       const wonOdds = nextLegs.filter((l) => l.status === "won").map((l) => l.odds);
       const allVoid = wonOdds.length === 0;
-      const quote = allVoid ? null : computeComboQuote(wonOdds, cb.stake);
+      const quote = allVoid ? null : computeComboQuote(wonOdds, cb.stake, cb.potentialWin);
       const payout =
         quote == null
           ? Math.round(cb.stake * 1_000_000) / 1_000_000

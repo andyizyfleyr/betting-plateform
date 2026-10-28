@@ -219,6 +219,7 @@ interface AdminWithdrawal {
 }
 
 interface PanelData {
+  bettingLimits?: { minStakeXof: number; maxStakeXof: number; maxPayoutXof: number; maxComboLegs: number };
   stats: {
     totalUsers: number;
     totalBets: number;
@@ -718,7 +719,10 @@ export default function AdminPage() {
         <PulseFlashLoader compact />
       ) : (
         <div className="mt-3">
-          {tab === "dashboard" && <Dashboard stats={panel.stats} />}
+          {tab === "dashboard" && <>
+            <Dashboard stats={panel.stats} />
+            {panel.bettingLimits && <BettingLimitsForm key={JSON.stringify(panel.bettingLimits)} limits={panel.bettingLimits} busy={Boolean(busy.bettingLimits)} act={act} />}
+          </>}
           {tab === "forecasts" && (
             <ScoresPrevusTab
               matches={panel.matches}
@@ -786,6 +790,32 @@ export default function AdminPage() {
 }
 
 /* ---------------- Dashboard ---------------- */
+
+function BettingLimitsForm({ limits, busy, act }: {
+  limits: NonNullable<PanelData["bettingLimits"]>;
+  busy: boolean;
+  act: (payload: Record<string, unknown>, key: string, okMsg: string) => Promise<boolean>;
+}) {
+  const [values, setValues] = useState(() => ({ ...limits }));
+  const fields = [
+    ["minStakeXof", "Mise minimale (₣)"],
+    ["maxStakeXof", "Mise maximale (₣)"],
+    ["maxPayoutXof", "Gain maximum (₣)"],
+    ["maxComboLegs", "Sélections combinées maximum"],
+  ] as const;
+  return <section className="glass-card mt-4 rounded-xl p-4">
+    <h2 className="font-display text-[13px] font-bold text-ink">Limites de paris</h2>
+    <p className="mt-1 text-[11px] text-mist">Montants en ₣, convertis pour les autres devises.</p>
+    <div className="mt-3 grid grid-cols-2 gap-3">
+      {fields.map(([key, label]) => <label key={key} className="text-[11px] text-mist">{label}
+        <input type="number" min="1" value={values[key]} onChange={(e) => {
+          setValues((v) => ({ ...v, [key]: Number(e.target.value) }));
+        }} className="mt-1 block h-10 w-full rounded-lg border border-edge bg-white px-3 text-ink" />
+      </label>)}
+    </div>
+    <button type="button" disabled={busy} onClick={() => void act({ action: "setBettingLimits", limits: values }, "bettingLimits", "Limites enregistrées")} className="mt-3 rounded-lg bg-betclic-red px-4 py-2 text-[11px] text-white disabled:opacity-50">Enregistrer</button>
+  </section>;
+}
 
 function Dashboard({ stats }: { stats: PanelData["stats"] }) {
   const revenue = stats.stake - stats.payouts;

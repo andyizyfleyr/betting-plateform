@@ -53,7 +53,7 @@ export interface ComboQuote {
 }
 
 /** Calcule la cote combinée fixe, le Bonus Combiné sur le bénéfice net et le plafond bookmaker. */
-export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
+export function computeComboQuote(oddsList: number[], stake = 10, payoutLimit = MAX_COMBO_PAYOUT): ComboQuote {
   if (oddsList.length === 0) {
     return {
       baseOdds: 1,
@@ -83,7 +83,7 @@ export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
   const cleanStake = Math.max(0, stake);
   const basePayout = roundPivot(cleanStake * baseOdds);
   const uncappedWin = roundPivot(cleanStake * totalOdds);
-  const potentialWin = roundPivot(Math.min(MAX_COMBO_PAYOUT, uncappedWin));
+  const potentialWin = roundPivot(Math.min(payoutLimit, uncappedWin));
   const boostAmount = roundPivot(Math.max(0, potentialWin - basePayout));
 
   return {
@@ -94,7 +94,7 @@ export function computeComboQuote(oddsList: number[], stake = 10): ComboQuote {
     basePayout,
     boostAmount,
     potentialWin,
-    capped: uncappedWin > MAX_COMBO_PAYOUT,
+    capped: uncappedWin > payoutLimit,
   };
 }
 

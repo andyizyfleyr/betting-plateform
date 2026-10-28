@@ -27,6 +27,7 @@ import {
   type RealMatchStats,
 } from "@/db/schema";
 import { publicUser } from "@/lib/auth";
+import { getBettingLimits, saveBettingLimits, validateBettingLimits } from "@/lib/betting-limits";
 import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { settlePendingCombos } from "@/lib/combo";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
@@ -198,7 +199,9 @@ export async function GET(req: NextRequest) {
     getRealMatchSettlementMode(),
   ]);
 
+  const bettingLimits = await getBettingLimits();
   return NextResponse.json({
+    bettingLimits,
     ml,
     scenarioMode: scenarioInfo.mode,
     realSettlementMode,
@@ -324,6 +327,12 @@ async function handleAdminPost(
 ): Promise<NextResponse> {
   try {
     resetSyncThrottle();
+    if (action === "setBettingLimits") {
+      const limits = validateBettingLimits(body.limits);
+      if (!limits) return NextResponse.json({ error: "Limites de paris invalides" }, { status: 400 });
+      await saveBettingLimits(limits);
+      return NextResponse.json({ ok: true, limits });
+    }
     if (action === "setBalance") {
       const userId = Number(body.userId);
       const rawNum = Number(body.amount);
