@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -25,6 +24,7 @@ import {
   localToEur,
 } from "@/lib/countries";
 import { eur } from "@/lib/format";
+import { openInAppUrl } from "@/lib/external-url";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
@@ -102,8 +102,13 @@ export function RechargeModal() {
       if (method === "stripe" || method === "paypal") {
         const res = await api.payments.create(method, numAmount, idem);
         if (res.url) {
-          await Linking.openURL(res.url);
           closeRecharge();
+          openInAppUrl(res.url, {
+            title:
+              method === "paypal" ? "Paiement PayPal" : "Paiement sécurisé",
+            provider: method,
+            providerRef: res.providerRef,
+          });
           return;
         }
       } else {

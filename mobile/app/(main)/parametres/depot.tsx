@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,6 +27,7 @@ import {
   localToEur,
 } from "@/lib/countries";
 import { eur } from "@/lib/format";
+import { openInAppUrl } from "@/lib/external-url";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
@@ -176,7 +176,11 @@ export default function DepositScreen() {
       }
       const r = await api.payments.create(method, amount, idempotencyKey);
       idempotencySlotRef.current = null;
-      await Linking.openURL(r.url);
+      openInAppUrl(r.url, {
+        title: method === "paypal" ? "Paiement PayPal" : "Paiement sécurisé",
+        provider: method,
+        providerRef: r.providerRef,
+      });
       inFlightRef.current = false;
       setLoading(false);
     } catch (e) {

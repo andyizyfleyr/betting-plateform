@@ -894,7 +894,7 @@ export const api = {
     providers: () =>
       request<{ providers: PaymentProvider[] }>("/api/payments"),
     create: (provider: "stripe" | "paypal", amount: number, idempotencyKey: string) =>
-      request<{ url: string; deduplicated?: boolean }>(`/api/payments/${provider}`, {
+      request<{ url: string; providerRef?: string; deduplicated?: boolean }>(`/api/payments/${provider}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount, idempotencyKey }),

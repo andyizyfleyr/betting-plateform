@@ -17,6 +17,7 @@ let latestPredictionsList: ClientPrediction[] | null = null;
 let latestFinishedList: ClientMatchHistoryItem[] | null = null;
 let latestBetsList: ClientBet[] | null = null;
 let walletSnapshot: ClientWalletData | null = null;
+let walletSnapshotAt = 0;
 
 const DISK_SNAPSHOT_KEY = "pulse_android_swr_snapshot_v2";
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -187,10 +188,15 @@ export function getCachedPredictionsList(): ClientPrediction[] | null {
 
 export function setCachedWalletSnapshot(w: ClientWalletData | null) {
   walletSnapshot = w;
+  walletSnapshotAt = w ? Date.now() : 0;
 }
 
 export function getCachedWalletSnapshot(): ClientWalletData | null {
   return walletSnapshot;
+}
+
+export function getCachedWalletUpdatedAt(): number {
+  return walletSnapshotAt;
 }
 
 export const getCachedClientMatch = getCachedMatchSnapshot;
@@ -236,4 +242,5 @@ export function clearPrivateEntityCaches() {
   betCache.clear();
   latestBetsList = null;
   walletSnapshot = null;
+  walletSnapshotAt = 0;
 }

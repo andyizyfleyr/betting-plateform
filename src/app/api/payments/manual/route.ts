@@ -24,10 +24,6 @@ export const dynamic = "force-dynamic";
 const ALLOWED_METHODS = new Set(["mobile_money", "sepa"]);
 const MAX_PENDING_DEPOSITS = 3;
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
 export async function POST(req: NextRequest) {
   try {
     await ensureSeeded();
@@ -167,7 +163,7 @@ export async function POST(req: NextRequest) {
         if (
           existingByCol.provider !== method ||
           existingByCol.providerRef !== reference ||
-          Math.round(existingByCol.amount * 100) !== Math.round(amount * 100)
+          Math.abs(existingByCol.amount - amount) > 1e-5
         ) {
           return { kind: "idempotency_conflict" };
         }

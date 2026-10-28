@@ -1017,7 +1017,7 @@ export const api = {
       amount: number,
       idempotencyKey: string
     ) =>
-      requestJson<{ url: string; deduplicated?: boolean }>(
+      requestJson<{ url: string; providerRef?: string; deduplicated?: boolean }>(
         `/api/payments/${provider}`,
         {
           method: "POST",

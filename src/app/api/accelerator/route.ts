@@ -22,8 +22,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
 }

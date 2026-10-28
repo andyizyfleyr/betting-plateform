@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { BackHandler } from "react-native";
+import { openInAppUrl } from "@/lib/external-url";
 
 export interface RouteEntry {
   pathname: string;
@@ -99,7 +100,12 @@ export function RouterProvider({
   }, [isNavigating, current.pathname, current.params]);
 
   const push = useCallback((href: string) => {
-    const next = parseHref(href);
+    const trimmed = String(href ?? "").trim();
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      openInAppUrl(trimmed);
+      return;
+    }
+    const next = parseHref(trimmed);
     setRouterState((prev) => {
       const top = prev.stack[prev.stack.length - 1];
       if (
@@ -109,18 +115,20 @@ export function RouterProvider({
       ) {
         return prev;
       }
-      const showLoader =
-        !next.pathname.startsWith("/tap") &&
-        !next.pathname.startsWith("/accelerator");
       return {
         stack: [...prev.stack.slice(-24), next],
-        isNavigating: showLoader,
+        isNavigating: false,
       };
     });
   }, []);
 
   const replace = useCallback((href: string) => {
-    const next = parseHref(href);
+    const trimmed = String(href ?? "").trim();
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      openInAppUrl(trimmed);
+      return;
+    }
+    const next = parseHref(trimmed);
     setRouterState((prev) => {
       const top = prev.stack[prev.stack.length - 1];
       if (
@@ -130,12 +138,9 @@ export function RouterProvider({
       ) {
         return prev;
       }
-      const showLoader =
-        !next.pathname.startsWith("/tap") &&
-        !next.pathname.startsWith("/accelerator");
       return {
         stack: prev.stack.length === 0 ? [next] : [...prev.stack.slice(0, -1), next],
-        isNavigating: showLoader,
+        isNavigating: false,
       };
     });
   }, []);
@@ -145,7 +150,7 @@ export function RouterProvider({
       if (prev.stack.length <= 1) {
         const fb = fallbackHref || "/matchs";
         if (prev.stack[0]?.pathname !== fb) {
-          return { stack: [parseHref(fb)], isNavigating: true };
+          return { stack: [parseHref(fb)], isNavigating: false };
         }
         return prev;
       }
@@ -166,7 +171,7 @@ export function RouterProvider({
       if (current.pathname !== "/matchs" && current.pathname !== "/admin") {
         setRouterState({
           stack: [{ pathname: "/matchs", params: {} }],
-          isNavigating: true,
+          isNavigating: false,
         });
         return true;
       }

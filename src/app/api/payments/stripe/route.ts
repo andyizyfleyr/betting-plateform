@@ -85,11 +85,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const stripeChargeEur = Math.max(0.5, Math.round(amount * 100) / 100);
-
     const requestHash = computeIdempotencyHash({
       provider: "stripe",
       amount,
+      userCurrency: userCurrency.code,
     });
 
     const claim = await claimExternalIdempotency({
@@ -111,8 +110,9 @@ export async function POST(req: NextRequest) {
     try {
       session = await createStripeCheckout({
         userId: uid,
-        amount: stripeChargeEur,
+        amount,
         currency: "EUR",
+        userCurrency: userCurrency.code,
         successUrl: `${origin}/parametres?deposit=stripe&ref={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/parametres?deposit=cancelled`,
         idempotencyKey: gatewayKey,
@@ -158,11 +158,11 @@ export async function POST(req: NextRequest) {
         idempotencyKey,
         requestHash,
         statusCode: 200,
-        responseBody: { url: session.url },
+        responseBody: { url: session.url, providerRef: session.id },
       });
     });
 
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url: session.url, providerRef: session.id });
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/payments/stripe");
   }

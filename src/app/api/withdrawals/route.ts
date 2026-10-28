@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
         if (
           existingByCol.method !== method ||
           existingByCol.destination !== destination ||
-          Math.round(existingByCol.amount * 100) !== Math.round(amount * 100)
+          Math.abs(existingByCol.amount - amount) > 1e-5
         ) {
           return { kind: "idempotency_conflict" };
         }

@@ -3,6 +3,12 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, deposits, webhookEvents } from "@/db/schema";
 import { invalidateUserCaches } from "@/lib/active-state-cache";
+import {
+  eurToLocal,
+  getCurrencyConfig,
+  roundEurPivot,
+  type CurrencyCode,
+} from "@/lib/countries";
 
 export type PaymentProviderId = "stripe" | "paypal";
 export type DepositStatus = "pending" | "paid" | "credited" | "failed" | "expired";
@@ -76,35 +82,104 @@ export interface VerifiedStripeWebhookEvent {
   paymentStatus?: string;
 }
 
-/** Crée une session Stripe Checkout hébergée (avec propagation de `Idempotency-Key`). */
+/** Devises officiellement sans décimales côté API Stripe (`unit_amount` en unités entières). */
+const STRIPE_ZERO_DECIMAL_CURRENCIES = new Set<string>([
+  "XOF",
+  "XAF",
+  "GNF",
+  "RWF",
+  "MGA",
+]);
+
+/** Devises 3 décimales non prises en charge en standard par Stripe Checkout -> repli EUR pivot. */
+const STRIPE_EUR_FALLBACK_ONLY_CURRENCIES = new Set<string>(["TND"]);
+
+async function postStripeCheckoutSession(params: {
+  userId: number;
+  currency: string;
+  unitAmount: number;
+  successUrl: string;
+  cancelUrl: string;
+  idempotencyKey?: string;
+}): Promise<Response> {
+  const form = new URLSearchParams();
+  form.append("mode", "payment");
+  form.append("client_reference_id", String(params.userId));
+  form.append("success_url", params.successUrl);
+  form.append("cancel_url", params.cancelUrl);
+  form.append("line_items[0][quantity]", "1");
+  form.append(
+    "line_items[0][price_data][product_data][name]",
+    "Recharge de solde PULSE"
+  );
+  form.append("line_items[0][price_data][currency]", params.currency.toLowerCase());
+  form.append(
+    "line_items[0][price_data][unit_amount]",
+    String(Math.max(1, Math.round(params.unitAmount)))
+  );
+  return fetch(`${STRIPE_BASE}/v1/checkout/sessions`, {
+    method: "POST",
+    headers: stripeHeaders(params.idempotencyKey),
+    body: form,
+  });
+}
+
+/**
+ * Crée une session Stripe Checkout hébergée :
+ * - Tente d'abord la devise officielle du joueur (ex. `5 000 XOF` -> `unit_amount = 5000`, `currency = "xof"`)
+ *   afin d'afficher le montant local exact sur la page Stripe ;
+ * - Replie automatiquement sur `EUR` (`unit_amount` en centimes) si le compte marchand Stripe
+ *   refuse la devise locale (4xx), tout en conservant le montant pivot 6 décimales exact en base.
+ */
 export async function createStripeCheckout(opts: {
   userId: number;
-  amount: number; // en euros
+  amount: number; // pivot EUR (6 décimales)
   currency: string;
+  userCurrency?: CurrencyCode;
   successUrl: string;
   cancelUrl: string;
   idempotencyKey?: string;
 }): Promise<StripeCheckout> {
-  const params = new URLSearchParams();
-  params.append("mode", "payment");
-  params.append("client_reference_id", String(opts.userId));
-  params.append("success_url", opts.successUrl);
-  params.append("cancel_url", opts.cancelUrl);
-  params.append("line_items[0][quantity]", "1");
-  params.append(
-    "line_items[0][price_data][product_data][name]",
-    "Recharge de solde PULSE"
-  );
-  params.append("line_items[0][price_data][currency]", opts.currency);
-  params.append(
-    "line_items[0][price_data][unit_amount]",
-    String(Math.round(opts.amount * 100))
-  );
+  const targetCurrency = getCurrencyConfig(opts.userCurrency ?? opts.currency).code;
 
-  const res = await fetch(`${STRIPE_BASE}/v1/checkout/sessions`, {
-    method: "POST",
-    headers: stripeHeaders(opts.idempotencyKey),
-    body: params,
+  if (
+    targetCurrency !== "EUR" &&
+    !STRIPE_EUR_FALLBACK_ONLY_CURRENCIES.has(targetCurrency)
+  ) {
+    const localAmount = eurToLocal(opts.amount, targetCurrency);
+    const nativeUnitAmount = STRIPE_ZERO_DECIMAL_CURRENCIES.has(targetCurrency)
+      ? Math.max(1, Math.round(localAmount))
+      : Math.max(50, Math.round(localAmount * 100));
+
+    const nativeRes = await postStripeCheckoutSession({
+      userId: opts.userId,
+      currency: targetCurrency,
+      unitAmount: nativeUnitAmount,
+      successUrl: opts.successUrl,
+      cancelUrl: opts.cancelUrl,
+      idempotencyKey: opts.idempotencyKey,
+    });
+    if (nativeRes.ok) {
+      const body = (await nativeRes.json()) as { id: string; url: string | null };
+      return { id: body.id, url: body.url };
+    }
+    if (nativeRes.status >= 500) {
+      throw new Error(`Stripe ${nativeRes.status}`);
+    }
+  }
+
+  const eurCents = Math.max(50, Math.round(opts.amount * 100));
+  const fallbackKey =
+    opts.idempotencyKey && targetCurrency !== "EUR"
+      ? `${opts.idempotencyKey}_eur`.slice(0, 120)
+      : opts.idempotencyKey;
+  const res = await postStripeCheckoutSession({
+    userId: opts.userId,
+    currency: "EUR",
+    unitAmount: eurCents,
+    successUrl: opts.successUrl,
+    cancelUrl: opts.cancelUrl,
+    idempotencyKey: fallbackKey,
   });
   if (!res.ok) throw new Error(`Stripe ${res.status}`);
   const body = (await res.json()) as { id: string; url: string | null };
@@ -346,7 +421,7 @@ export async function creditDepositInTx(
   }
 
   const uid = lockedDep?.userId ?? fallbackUserId;
-  const amount = lockedDep ? Math.round(lockedDep.amount * 100) / 100 : 0;
+  const amount = lockedDep ? roundEurPivot(lockedDep.amount) : 0;
 
   await tx
     .select({ id: appUser.id })
@@ -468,6 +543,35 @@ export async function getDepositStatus(providerRef: string) {
     .where(eq(deposits.providerRef, providerRef))
     .limit(1);
   if (!dep) return { status: "unknown" as DepositStatus, credited: false };
+
+  if (
+    dep.status === "pending" &&
+    dep.provider === "stripe" &&
+    (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_")
+  ) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4_000);
+      const res = await fetch(
+        `${STRIPE_BASE}/v1/checkout/sessions/${encodeURIComponent(providerRef)}`,
+        {
+          method: "GET",
+          headers: stripeHeaders(),
+          signal: ctrl.signal,
+        }
+      ).finally(() => clearTimeout(timer));
+      if (res.ok) {
+        const session = (await res.json()) as { payment_status?: string };
+        if (session.payment_status === "paid") {
+          await creditDeposit("stripe", providerRef, dep.userId);
+          return { status: "credited" as DepositStatus, credited: true };
+        }
+      }
+    } catch {
+      /* le webhook ou le prochain poll finalisera le crédit */
+    }
+  }
+
   return { status: dep.status as DepositStatus, credited: dep.status === "credited" };
 }
 

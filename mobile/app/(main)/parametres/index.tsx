@@ -42,6 +42,21 @@ import {
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
+function walletSignature(w: ClientWalletData | null): string {
+  if (!w) return "";
+  const s = w.summary;
+  const first = w.entries[0];
+  return [
+    w.balance.toFixed(6),
+    (s.withdrawable ?? 0).toFixed(6),
+    (s.bonusRemaining ?? 0).toFixed(6),
+    s.pendingWithdrawals.toFixed(6),
+    (s.pendingDeposits ?? 0).toFixed(6),
+    w.entries.length,
+    first ? `${first.id}:${first.status}:${first.amount.toFixed(6)}` : "",
+  ].join("|");
+}
+
 export default function ParametresScreen() {
   const router = useRouter();
   const {
@@ -58,6 +73,13 @@ export default function ParametresScreen() {
     setDataSaverEnabled,
   } = useApp();
 
+  const userId = user?.id ?? null;
+  const userBalance = user?.balance ?? 0;
+  const userBalanceRef = useRef(userBalance);
+  useEffect(() => {
+    userBalanceRef.current = userBalance;
+  }, [userBalance]);
+
   const [wallet, setWallet] = useState<ClientWalletData | null>(() =>
     getCachedWallet()
   );
@@ -71,38 +93,51 @@ export default function ParametresScreen() {
   const cancelSlotRef = useRef<Map<number, string>>(new Map());
   const cancelInFlightRef = useRef(false);
 
+  const applyWalletSnapshot = useCallback(
+    (w: ClientWalletData) => {
+      setWallet((prev) =>
+        walletSignature(prev) === walletSignature(w) ? prev : w
+      );
+      if (
+        typeof w.balance === "number" &&
+        Math.abs(userBalanceRef.current - w.balance) > 1e-5
+      ) {
+        setBalance(w.balance);
+      }
+    },
+    [setBalance]
+  );
+
   const loadWallet = useCallback(async () => {
-    if (!user && !sessionRestoring) return;
+    if (userId == null && !sessionRestoring) return;
     try {
       const w = await api.wallet();
-      setWallet(w);
-      if (typeof w.balance === "number") setBalance(w.balance);
+      applyWalletSnapshot(w);
     } catch {
       /* silencieux */
     }
-  }, [sessionRestoring, setBalance, user]);
+  }, [applyWalletSnapshot, sessionRestoring, userId]);
 
   useEffect(() => {
     void loadWallet();
-    if (!user && !sessionRestoring) return;
+    if (userId == null && !sessionRestoring) return;
     const id = setInterval(() => void loadWallet(), 8_000);
     return () => clearInterval(id);
-  }, [loadWallet, betsVersion, sessionRestoring, user]);
+  }, [loadWallet, betsVersion, sessionRestoring, userId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (user || sessionRestoring) {
+      if (userId != null || sessionRestoring) {
         const w = await api.wallet({ forceRefresh: true });
-        setWallet(w);
-        if (typeof w.balance === "number") setBalance(w.balance);
+        applyWalletSnapshot(w);
       }
     } catch {
       /* silencieux */
     } finally {
       setRefreshing(false);
     }
-  }, [sessionRestoring, setBalance, user]);
+  }, [applyWalletSnapshot, sessionRestoring, userId]);
 
   const pendingWithdrawalEntries = useMemo(
     () =>
@@ -235,6 +270,7 @@ export default function ParametresScreen() {
       style={styles.page}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      overScrollMode="never"
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -329,7 +365,8 @@ export default function ParametresScreen() {
                   <Text style={styles.walletAmount}>{eur(user.balance)}</Text>
                   {wallet &&
                   wallet.summary.withdrawable != null &&
-                  wallet.summary.withdrawable < user.balance ? (
+                  (wallet.summary.bonusRemaining ?? 0) > 1e-4 &&
+                  wallet.summary.withdrawable < user.balance - 1e-4 ? (
                     <Text style={styles.withdrawableNote}>
                       Retirable :{" "}
                       <Text style={{ fontWeight: "500", color: COLORS.win }}>

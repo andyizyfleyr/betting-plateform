@@ -24,8 +24,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 async function getUserBalance(uid: number): Promise<number> {
   const [u] = await db
     .select({ balance: appUser.balance })
@@ -116,7 +114,7 @@ export async function POST(req: NextRequest) {
       status: "success",
       multiplier: TAP_CONFIG.INITIAL_MULTIPLIER,
       factor: TAP_CONFIG.GROWTH_FACTOR,
-      new_balance: round2(balance - betUsd),
+      new_balance: roundEurPivot(Math.max(0, balance - effectiveBet)),
     });
   }
 
