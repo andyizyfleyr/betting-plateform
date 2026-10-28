@@ -53,7 +53,7 @@ import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format
 import { LiveMatchClock } from "@/components/live-match-clock";
 import type { LiveClockSource } from "@/lib/live-clock";
 
-const POLL_INTERVAL = 5_000;
+const POLL_INTERVAL = 3_500;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1_000;
 

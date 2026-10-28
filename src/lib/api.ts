@@ -346,6 +346,7 @@ export class ApiRequestError extends Error {
 function isPublicEdgeGetUrl(url: string): boolean {
   return (
     url === "/api/matches" ||
+    url === "/api/matches/slim" ||
     /^\/api\/matches\/[1-9]\d{0,9}$/.test(url) ||
     url === "/api/matches/history" ||
     url.startsWith("/api/matches/history?") ||
@@ -358,7 +359,9 @@ async function executeRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const isPublicEdge = isGet && isPublicEdgeGetUrl(url);
   const cached = isGet ? clientEtagCache.get(url) : undefined;
 
-  let mergedInit: RequestInit | undefined = init;
+  let mergedInit: RequestInit | undefined = isGet
+    ? { ...init, cache: "no-store" }
+    : init;
   if (isPublicEdge) {
     // Omet strictement les cookies sur les routes publiques afin que le CDN Edge Vercel
     // partage 1 seule réponse en cache entre des milliers de visiteurs connectés ou non.

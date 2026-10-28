@@ -88,13 +88,14 @@ export default function PredictionsPage() {
     }
   }, [catalogQuery.dataUpdatedAt]);
 
-  // 2) Calque privé joueur via TanStack Query (invalidé instantanément par PartyKit `user-<id>`)
+  // 2) Calque privé joueur via TanStack Query (invalidé par PartyKit `user-<id>` + veille 10 s)
   const myBetsQuery = useQuery({
     queryKey: [...pulseQueryKeys.myPredictionBets(user?.id), betsVersion],
     queryFn: () => api.myPredictionBets(),
     enabled: Boolean(user) && !isOffline,
-    staleTime: 5_000,
-    refetchInterval: false,
+    staleTime: 3_000,
+    refetchInterval: Boolean(user) && !isOffline ? 10_000 : false,
+    refetchIntervalInBackground: false,
   });
   const myBetsMap = useMemo(
     () => myBetsQuery.data?.myBets ?? {},

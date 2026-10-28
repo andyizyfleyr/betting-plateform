@@ -10,13 +10,12 @@ import {
 import { BarChart3, ChevronDown, Lock, Radio, X } from "lucide-react-native";
 import { useApp, type ComboSelection } from "@/context/app-context";
 import {
-  api,
   type ClientMatch,
   type MarketGroup,
   type MarketOutcome,
 } from "@/lib/api";
 import { formatOdds } from "@/lib/format";
-import { mergeSlimIntoMobileMatch } from "@/lib/query-client";
+import { useMobileMatchDetailQuery } from "@/lib/party-realtime";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 import { LiveMatchTracker } from "./live-match-tracker";
 import { formatGoalSummary, LiveStatusBadge } from "./match-card";
@@ -28,8 +27,6 @@ import {
 import { hasAnyRealStats, RealMatchStatsCard } from "./real-match-stats-card";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
-
-const POLL_INTERVAL = 4_000;
 
 export type SheetCategory =
   | "all"
@@ -405,12 +402,12 @@ export function MarketSheet() {
     comboQuickMode,
     toggleComboLeg,
     toast,
+    dataSaverMode,
   } = useApp();
 
   const [category, setCategory] = useState<SheetCategory>("all");
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({});
   const [prevMatchId, setPrevMatchId] = useState<number | null>(null);
-  const [liveMatch, setLiveMatch] = useState<ClientMatch | null>(null);
   const [showTracker, setShowTracker] = useState(false);
 
   const sharedFromFeed = useMemo(
@@ -421,35 +418,26 @@ export function MarketSheet() {
     [marketMatch, feedMatches]
   );
 
-  useEffect(() => {
-    if (!marketMatch) return;
-    let active = true;
-    const poll = async () => {
-      try {
-        const r = await api.matchById(marketMatch.id);
-        if (!active) return;
-        if (r.match) setLiveMatch(r.match);
-      } catch {
-        /* silencieux */
-      }
-    };
-    void poll();
-    const id = setInterval(() => void poll(), POLL_INTERVAL);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [marketMatch]);
+  const detailQuery = useMobileMatchDetailQuery(marketMatch?.id ?? 0, {
+    enabled: Boolean(marketMatch),
+    dataSaver: dataSaverMode,
+    initialMatch:
+      marketMatch &&
+      (marketMatch.status === "finished" ||
+        (marketMatch.markets?.length ?? 0) > 1)
+        ? marketMatch
+        : null,
+    isFinished:
+      marketMatch?.status === "finished" ||
+      sharedFromFeed?.status === "finished",
+  });
 
   const effectiveSource = useMemo(() => {
     if (!marketMatch) return null;
-    const detailCandidate =
-      liveMatch && liveMatch.id === marketMatch.id ? liveMatch : marketMatch;
-    if (sharedFromFeed) {
-      return mergeSlimIntoMobileMatch(detailCandidate, sharedFromFeed);
-    }
-    return detailCandidate;
-  }, [liveMatch, marketMatch, sharedFromFeed]);
+    const fetched = detailQuery.data?.match;
+    if (fetched && fetched.id === marketMatch.id) return fetched;
+    return sharedFromFeed ?? marketMatch;
+  }, [detailQuery.data?.match, marketMatch, sharedFromFeed]);
 
   const hasFullMarketsOpen = Boolean(openMap.total_ou);
   if (effectiveSource && effectiveSource.id !== prevMatchId) {

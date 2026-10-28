@@ -5,7 +5,10 @@ import {
   runLiveEngine,
 } from "@/db/engine";
 import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
-import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
+import {
+  hasLiveActiveMatches,
+  invalidateAllActiveCaches,
+} from "@/lib/active-state-cache";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
 import { ensureOpenPredictions, settleResolvedQuestions } from "@/lib/predictions";
 import {
@@ -13,6 +16,7 @@ import {
   syncRealMatchesThrottled,
   type RealSyncSummary,
 } from "@/lib/real-sports-feed";
+import { invalidatePublicApiCaches } from "@/lib/response-cache";
 import { settleFinishedBets } from "@/lib/settle";
 import { recordVisitorActivity } from "@/lib/visitor-activity";
 
@@ -23,8 +27,8 @@ import { recordVisitorActivity } from "@/lib/visitor-activity";
  * - N'exécute le règlement des paris que sur jalon réel ou balayage de sécurité espacé.
  * - Espace les tâches de maintenance de fond (prédictions, dépôts expirés, purge) à 5–10 min.
  */
-const SYNC_THROTTLE_MS = 3_000;
-const SETTLE_SWEEP_THROTTLE_MS = 35_000;
+const SYNC_THROTTLE_MS = 2_000;
+const SETTLE_SWEEP_THROTTLE_MS = 15_000;
 const HOUSEKEEPING_THROTTLE_MS = 5 * 60_000;
 const PRUNE_THROTTLE_MS = 10 * 60_000;
 const USER_READ_FEED_BUDGET_MS = 2_500;
@@ -110,6 +114,10 @@ export async function syncPlatformStateThrottled(
       const realChanged =
         Boolean(realFeedResult) &&
         ((realFeedResult?.settledCount ?? 0) > 0 || (realFeedResult?.syncedCount ?? 0) > 0);
+      if (hasLiveActiveMatches()) {
+        // Rafraîchit les snapshots JSON en RAM à chaque cycle live (minutes continues + cotes 30s/1m).
+        invalidatePublicApiCaches(false);
+      }
       const settleNow = Date.now();
 
       if (

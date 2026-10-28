@@ -24,7 +24,7 @@ import {
 import { useApp } from "@/components/providers";
 import { cn, formatKickoff, formatOdds } from "@/lib/format";
 
-const POLL_MS = 10_000;
+const POLL_MS = 6_000;
 
 export default function PredictionDetailPage() {
   const params = useParams<{ id: string }>();

@@ -43,10 +43,10 @@ export interface EdgeCachePolicy {
   tags?: readonly string[];
 }
 
-const MATCHES_CACHE_TTL_MS = 4_500;
-const HISTORY_CACHE_TTL_MS = 12_000;
-const PREDICTIONS_CATALOG_TTL_MS = 15_000;
-const TAG_PURGE_COOLDOWN_MS = 2_500;
+const MATCHES_CACHE_TTL_MS = 1_800;
+const HISTORY_CACHE_TTL_MS = 3_500;
+const PREDICTIONS_CATALOG_TTL_MS = 5_000;
+const TAG_PURGE_COOLDOWN_MS = 2_000;
 
 interface GlobalResponseCacheStore {
   matchesPayload: CachedJsonPayload | null;
@@ -350,12 +350,15 @@ export function publicJsonWithEdgeCache(
   const etag = precomputed ? precomputed.etag : computeWeakEtag(json);
   const ifNoneMatch = req.headers.get("if-none-match");
 
-  const maxAge = Math.max(0, Math.floor(policy.maxAge ?? 1));
+  const maxAge = Math.max(0, Math.floor(policy.maxAge ?? 0));
   const sMaxAge = Math.max(1, Math.floor(policy.sMaxAge));
   const swr = Math.max(1, Math.floor(policy.staleWhileRevalidate));
 
   const cdnDirective = `public, s-maxage=${sMaxAge}, stale-while-revalidate=${swr}`;
-  const browserDirective = `public, max-age=${maxAge}, s-maxage=${sMaxAge}, stale-while-revalidate=${swr}`;
+  const browserDirective =
+    maxAge > 0
+      ? `public, max-age=${maxAge}, stale-while-revalidate=${Math.min(2, swr)}`
+      : "public, max-age=0, must-revalidate";
 
   const edgeHeaders: Record<string, string> = {
     ETag: etag,

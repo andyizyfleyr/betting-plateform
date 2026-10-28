@@ -57,7 +57,7 @@ const METHODS = [
 
 export default function WithdrawPage() {
   const router = useRouter();
-  const { balance, setBalance, toast, user, bumpBets } = useApp();
+  const { balance, setBalance, toast, user, bumpBets, betsVersion } = useApp();
   const [method, setMethod] =
     useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
@@ -82,22 +82,28 @@ export default function WithdrawPage() {
   useEffect(() => {
     if (!user) return;
     let active = true;
-    api
-      .wallet()
-      .then((w) => {
-        if (!active) return;
-        setEligibility({
-          withdrawable: w.summary.withdrawable ?? w.balance,
-          bonusLocked: w.summary.bonusLocked ?? 0,
-          qualifiedWagered: w.summary.qualifiedWagered ?? 0,
-          bonusRemaining: w.summary.bonusRemaining ?? 0,
-        });
-      })
-      .catch(() => {});
+    const syncEligibility = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      api
+        .wallet()
+        .then((w) => {
+          if (!active) return;
+          setEligibility({
+            withdrawable: w.summary.withdrawable ?? w.balance,
+            bonusLocked: w.summary.bonusLocked ?? 0,
+            qualifiedWagered: w.summary.qualifiedWagered ?? 0,
+            bonusRemaining: w.summary.bonusRemaining ?? 0,
+          });
+        })
+        .catch(() => {});
+    };
+    syncEligibility();
+    const id = setInterval(syncEligibility, 8_000);
     return () => {
       active = false;
+      clearInterval(id);
     };
-  }, [user]);
+  }, [betsVersion, balance, user]);
 
   if (!user) {
     return (

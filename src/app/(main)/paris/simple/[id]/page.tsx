@@ -53,7 +53,7 @@ import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { cn, eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 
-const POLL_INTERVAL = 4_000;
+const POLL_INTERVAL = 3_500;
 
 function parseSimpleBetSlug(raw: string | undefined): {
   kind: BetKind;

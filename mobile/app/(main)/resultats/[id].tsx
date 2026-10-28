@@ -77,7 +77,10 @@ export default function ResultDetailScreen() {
 
   useEffect(() => {
     void fetchResult();
-  }, [fetchResult]);
+    if (item?.status === "finished") return;
+    const id = setInterval(() => void fetchResult(), 5_000);
+    return () => clearInterval(id);
+  }, [fetchResult, item?.status]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

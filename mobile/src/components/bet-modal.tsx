@@ -55,23 +55,72 @@ export function BetModal() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [polledMatch, setPolledMatch] = useState<typeof target extends null ? never : NonNullable<typeof target>["match"] | null>(null);
   const idempotencyRef = useRef<string>(generateBetIdempotencyKey());
 
   const liveMatch = useMemo(() => {
     if (!target) return null;
+    if (polledMatch && polledMatch.id === target.match.id) return polledMatch;
     return (
       feedMatches?.find((m) => m.id === target.match.id) ?? target.match
     );
-  }, [feedMatches, target]);
+  }, [feedMatches, polledMatch, target]);
 
   useEffect(() => {
-    if (!target) return;
+    if (!target) {
+      setPolledMatch(null);
+      return;
+    }
     setStake("10");
     setLockedOdds(roundOdds2(target.odds));
     setOddsChanged(null);
     setErrorMsg(null);
     setSubmitting(false);
+    setPolledMatch(null);
     idempotencyRef.current = generateBetIdempotencyKey();
+  }, [target]);
+
+  useEffect(() => {
+    if (!target || target.match.status === "finished") return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await api.matchById(target.match.id);
+        if (!active || !r.match) return;
+        setPolledMatch(r.match);
+        const groups = r.match.markets ?? [];
+        const grp = groups.find(
+          (g) =>
+            g.key === target.market ||
+            (target.market === "result" && g.key === "1x2")
+        );
+        let nextOdds: number | null =
+          grp?.outcomes.find((o) => o.key === target.selection)?.odds ?? null;
+        if (nextOdds == null && grp?.rows) {
+          for (const row of grp.rows) {
+            const hit = row.outcomes.find((o) => o.key === target.selection);
+            if (hit) {
+              nextOdds = hit.odds;
+              break;
+            }
+          }
+        }
+        if (nextOdds != null && Number.isFinite(nextOdds) && nextOdds > 1) {
+          const rounded = roundOdds2(nextOdds);
+          setLockedOdds((prev) =>
+            Math.abs(prev - rounded) >= 0.005 ? rounded : prev
+          );
+        }
+      } catch {
+        /* silencieux */
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 3_500);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [target]);
 
   if (!target || !liveMatch) return null;

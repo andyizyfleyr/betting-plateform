@@ -113,13 +113,24 @@ export function PartyRealtimeBridge({
       protocol: partyProtocol,
     });
 
+    const WS_SNAPSHOT_LIVENESS_MS = 9_000;
+    let lastSnapshotAt = 0;
+
     const handleOpen = () => {
-      setWsConnected(true);
+      // N'active `wsConnected` qu'à réception effective d'un frame `MATCHES_SNAPSHOT`
+      // afin de ne jamais couper le polling HTTP si le Worker est silencieux.
     };
 
     const handleClose = () => {
+      lastSnapshotAt = 0;
       setWsConnected(false);
     };
+
+    const livenessTimer = setInterval(() => {
+      if (lastSnapshotAt === 0 || Date.now() - lastSnapshotAt > WS_SNAPSHOT_LIVENESS_MS) {
+        setWsConnected(false);
+      }
+    }, 3_000);
 
     const handleMessage = (ev: MessageEvent) => {
       if (typeof ev.data !== "string") return;
@@ -132,6 +143,8 @@ export function PartyRealtimeBridge({
         };
 
         if (msg.type === "MATCHES_SNAPSHOT" && Array.isArray(msg.matches)) {
+          lastSnapshotAt = Date.now();
+          setWsConnected(true);
           if (msg.serverTime) {
             calibrateServerClockOffset({ serverTimeIso: msg.serverTime });
           }
@@ -270,6 +283,7 @@ export function PartyRealtimeBridge({
     socket.addEventListener("message", handleMessage);
 
     return () => {
+      clearInterval(livenessTimer);
       setWsConnected(false);
       socket.removeEventListener("open", handleOpen);
       socket.removeEventListener("close", handleClose);
@@ -379,8 +393,9 @@ export function useMatchesFeedQuery(options?: {
 }) {
   const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const baseMs = options?.baseFallbackIntervalMs ?? 5_000;
+  const baseMs = options?.baseFallbackIntervalMs ?? 3_500;
   const fallbackMs = getAdaptiveIntervalMs(baseMs, isConstrained);
+  const wsFullSyncMs = getAdaptiveIntervalMs(12_000, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.matches,
@@ -392,10 +407,11 @@ export function useMatchesFeedQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialMatches && options.initialMatches.length > 0
-        ? () => Date.now() - 4_000
+        ? () => Date.now() - 2_000
         : undefined,
-    // Lorsque le WebSocket PartyKit est actif, simple réconciliation de sécurité à 60 s
-    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    // Même quand le flux WebSocket slim (1X2/score/minute) est actif, resynchronise
+    // les 18 marchés secondaires toutes les 12 s (et bascule à 3.5 s hors WS).
+    refetchInterval: wsConnected ? wsFullSyncMs : fallbackMs,
     refetchIntervalInBackground: false,
   });
 }
@@ -408,9 +424,8 @@ export function useMatchDetailQuery(
     isFinished?: boolean;
   }
 ) {
-  const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const fallbackMs = getAdaptiveIntervalMs(5_000, isConstrained);
+  const detailIntervalMs = getAdaptiveIntervalMs(3_500, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.matchDetail(matchId),
@@ -424,13 +439,11 @@ export function useMatchDetailQuery(
       ? { match: options.initialMatch }
       : undefined,
     initialDataUpdatedAt: options?.initialMatch
-      ? () => Date.now() - 4_000
+      ? () => Date.now() - 2_000
       : undefined,
-    refetchInterval: options?.isFinished
-      ? false
-      : wsConnected
-        ? 45_000
-        : fallbackMs,
+    // Rafraîchit toujours `/api/matches/[id]` (~3 Ko) toutes les 3.5 s pour maintenir
+    // les 19 marchés complets, les stats réelles et la télémétrie 2D en direct.
+    refetchInterval: options?.isFinished ? false : detailIntervalMs,
     refetchIntervalInBackground: false,
   });
 }
@@ -439,9 +452,8 @@ export function usePredictionsCatalogQuery(options?: {
   enabled?: boolean;
   initialQuestions?: ClientPrediction[];
 }) {
-  const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const fallbackMs = getAdaptiveIntervalMs(15_000, isConstrained);
+  const intervalMs = getAdaptiveIntervalMs(8_000, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.predictionsCatalog,
@@ -453,9 +465,9 @@ export function usePredictionsCatalogQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialQuestions && options.initialQuestions.length > 0
-        ? () => Date.now() - 5_000
+        ? () => Date.now() - 3_000
         : undefined,
-    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchInterval: intervalMs,
     refetchIntervalInBackground: false,
   });
 }
@@ -464,9 +476,8 @@ export function useMatchHistoryQuery(options?: {
   enabled?: boolean;
   initialHistory?: ClientMatchHistoryItem[];
 }) {
-  const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const fallbackMs = getAdaptiveIntervalMs(10_000, isConstrained);
+  const intervalMs = getAdaptiveIntervalMs(5_000, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.matchHistory,
@@ -478,9 +489,9 @@ export function useMatchHistoryQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialHistory && options.initialHistory.length > 0
-        ? () => Date.now() - 5_000
+        ? () => Date.now() - 3_000
         : undefined,
-    refetchInterval: wsConnected ? 60_000 : fallbackMs,
+    refetchInterval: intervalMs,
     refetchIntervalInBackground: false,
   });
 }

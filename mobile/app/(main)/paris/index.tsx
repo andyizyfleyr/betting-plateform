@@ -30,13 +30,13 @@ import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { useApp } from "@/context/app-context";
 import { api, type UnifiedBet } from "@/lib/api";
 import { eur, formatDayHeading } from "@/lib/format";
-import { useMobileRealtimeStatus } from "@/lib/party-realtime";
 import { mobileQueryKeys } from "@/lib/query-client";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
-const POLL_LIVE = 4_000;
-const POLL_IDLE = 15_000;
+const POLL_LIVE = 3_500;
+const POLL_PENDING = 6_000;
+const POLL_IDLE = 18_000;
 
 type Tab = "ongoing" | "finished";
 type KindFilter = "all" | "sport" | "prediction" | "combo";
@@ -74,7 +74,6 @@ function matchesSearch(b: UnifiedBet, qNorm: string): boolean {
 export default function ParisScreen() {
   const router = useRouter();
   const { user, betsVersion, setBalance, dataSaverMode } = useApp();
-  const { wsConnected, userWsConnected } = useMobileRealtimeStatus();
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -90,7 +89,7 @@ export default function ParisScreen() {
     queryKey: [...mobileQueryKeys.userBets(user?.id, "all"), betsVersion],
     queryFn: () => api.bets.list(),
     enabled: Boolean(user),
-    staleTime: 2_500,
+    staleTime: 1_500,
     refetchInterval: (q) => {
       const currentBets = q.state.data?.bets;
       const livePending = Boolean(
@@ -104,12 +103,12 @@ export default function ParisScreen() {
       const anyPending = Boolean(
         currentBets?.some((b) => b.status === "pending")
       );
-      if (!anyPending) return false;
-      if (wsConnected && userWsConnected) {
-        return livePending ? 15_000 : false;
-      }
-      const base = livePending ? POLL_LIVE : POLL_IDLE;
-      return Math.round(base * (dataSaverMode ? 2.4 : 1));
+      const base = livePending
+        ? POLL_LIVE
+        : anyPending
+          ? POLL_PENDING
+          : POLL_IDLE;
+      return Math.round(base * (dataSaverMode ? 2.2 : 1));
     },
     refetchIntervalInBackground: false,
   });

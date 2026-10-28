@@ -70,12 +70,12 @@ interface PlatformMemoryState {
 
 const MAX_FINISHED_VIRTUAL_RAM = 12;
 const MAX_FINISHED_MANUAL_RAM = 20;
-const MANUAL_MULTI_INSTANCE_SYNC_MS = 90_000;
-const PENDING_FLAGS_SAFETY_TTL_MS = 60_000;
-const PENDING_BOOK_TTL_MS = 45_000;
-const QUESTION_SCHEDULE_MAX_TTL_MS = 90_000;
-const USER_PULSE_CACHE_TTL_MS = 12_000;
-const USER_BETS_CACHE_TTL_MS = 4_000;
+const MANUAL_MULTI_INSTANCE_SYNC_MS = 10_000;
+const PENDING_FLAGS_SAFETY_TTL_MS = 25_000;
+const PENDING_BOOK_TTL_MS = 25_000;
+const QUESTION_SCHEDULE_MAX_TTL_MS = 60_000;
+const USER_PULSE_CACHE_TTL_MS = 2_500;
+const USER_BETS_CACHE_TTL_MS = 2_000;
 
 const globalStore = globalThis as typeof globalThis & {
   __pulseMemoryStateV1?: PlatformMemoryState;
@@ -241,6 +241,17 @@ export function getCachedActiveVirtualMatches(): MatchRow[] {
 
 export function getCachedOpenManualMatches(): MatchRow[] {
   return [...getState().openManual.values()];
+}
+
+export function hasLiveActiveMatches(): boolean {
+  const st = getState();
+  for (const m of st.openVirtual.values()) {
+    if (m.status === "live") return true;
+  }
+  for (const m of st.openManual.values()) {
+    if (m.status === "live") return true;
+  }
+  return false;
 }
 
 export function getCachedMatchById(id: number): MatchRow | null {
