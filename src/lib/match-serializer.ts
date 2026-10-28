@@ -1,6 +1,9 @@
 import type { MatchRow } from "@/db/schema";
 import type { ClientMatch } from "@/lib/api";
-import { buildServerClockAnchor } from "@/lib/live-clock";
+import {
+  buildServerClockAnchor,
+  normalizeRealLiveMinuteLabel,
+} from "@/lib/live-clock";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
 import {
   buildLiveMarkets,
@@ -43,6 +46,10 @@ export function serializePublicMatch(rawRow: MatchRow, now = Date.now()): Client
   );
   const m: MatchRow = {
     ...rawRow,
+    minute:
+      rawRow.source === "manual" && rawRow.status === "live"
+        ? normalizeRealLiveMinuteLabel(rawRow, now)
+        : rawRow.minute,
     events: cleanEvents,
     redHome: cleanRedHome,
     redAway: cleanRedAway,

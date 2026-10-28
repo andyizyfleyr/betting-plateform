@@ -1,14 +1,14 @@
 {
-  "id": "5538daa6-a1eb-4d4b-a65b-a8189721e216",
-  "createdAt": "2026-10-28T08:20:25.814Z",
+  "id": "c022a5fe-6f47-4b6b-a93d-bb0d1fce744c",
+  "createdAt": "2026-10-28T08:53:03.933Z",
   "runtimeVersion": "exposdk:52.0.0",
   "sdkVersion": "52.0.0",
   "launchAsset": {
-    "hash": "y5FH2NXIftxGe14zjJ2KMiNjW6VS59fbIhl3ey7crUM",
-    "key": "5538daa6a1ebad4b965ba8189721e216",
+    "hash": "Zc9VZ4ZhYCl_i5CF8M-4QJVKPmSVMtu-DPRBQFw7e7U",
+    "key": "c022a5fe6f474b6bc93dbb0d1fce744c",
     "contentType": "application/javascript",
     "fileExtension": ".hbc",
-    "relativePath": "/expo-sdk52/AppEntry-5538daa6a1eb.hbc"
+    "relativePath": "/expo-sdk52/AppEntry-c022a5fe6f47.hbc"
   },
   "assets": [
     {

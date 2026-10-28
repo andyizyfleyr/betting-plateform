@@ -314,23 +314,102 @@ export function clubsMatchCanonical(
   return false;
 }
 
-function normalizeDisplayMinute(rawClock: string): string {
-  const cleaned = rawClock.replace(/\s+/g, "").replace(/['’]\+/g, "+");
-  if (!cleaned) return "LIVE";
-  if (/^(MT|HT)$/i.test(cleaned)) return "MT";
-  const stopMatch = /^(\d{1,3})\+(\d{1,2})(?::\d{1,2})?['’]?$/.exec(cleaned);
-  if (stopMatch) {
-    return `${Number(stopMatch[1])}+${Math.max(1, Number(stopMatch[2]))}’`;
+function normalizeDisplayMinute(
+  rawClock: string,
+  statusDetail = "",
+  rawClockSeconds: number | null = null,
+  isSecondHalf = false
+): string {
+  const tryParseToken = (tokenRaw: string): string | null => {
+    const cleaned = tokenRaw.replace(/\s+/g, "").replace(/['’]\+/g, "+");
+    if (!cleaned) return null;
+    if (/^(MT|HT|HALFTIME|MI-TEMPS)$/i.test(cleaned)) return "MT";
+
+    const stopMatch = /^(\d{1,3})\+(\d{1,2})(?:[:.]\d{1,2})?['’"]?$/.exec(
+      cleaned
+    );
+    if (stopMatch) {
+      const baseRaw = Number(stopMatch[1]);
+      const added = Math.max(1, Number(stopMatch[2]));
+      const base = isSecondHalf && baseRaw <= 45 ? 90 : baseRaw;
+      return `${base}+${added}’`;
+    }
+
+    const regMatch = /^(\d{1,3})(?:([:.])(\d{1,2}))?['’"]?$/.exec(cleaned);
+    if (regMatch) {
+      const rawMin = Number(regMatch[1]);
+      const sep = regMatch[2];
+      if (isSecondHalf && rawMin <= 45) {
+        if (rawMin < 45) {
+          const eff =
+            sep === ":" ? 45 + rawMin + 1 : rawMin === 0 ? 46 : 45 + rawMin;
+          return `${Math.min(90, eff)}’`;
+        }
+        return rawClockSeconds != null && rawClockSeconds >= 5100
+          ? "90’"
+          : "46’";
+      }
+      const eff = Math.max(1, sep === ":" ? rawMin + 1 : rawMin);
+      return `${eff}’`;
+    }
+    return null;
+  };
+
+  // Si `displayClock` est un placeholder nul ("0:00", "0.0", "0'") alors que `statusDetail`
+  // ou `rawClockSeconds` porte la minute réelle du match, privilégie la mesure réelle.
+  const isZeroPlaceholder = /^(0(?:[:.]0+)?['’"]?|00:00)$/.test(
+    rawClock.trim()
+  );
+  if (isZeroPlaceholder && statusDetail.trim()) {
+    const fromDetail = tryParseToken(statusDetail);
+    if (fromDetail && fromDetail !== "1’" && fromDetail !== "46’") {
+      return fromDetail;
+    }
   }
-  const regMatch = /^(\d{1,3})(?::\d{1,2})?['’]?$/.exec(cleaned);
-  if (regMatch) {
-    return `${Math.max(1, Number(regMatch[1]))}’`;
+  if (
+    isZeroPlaceholder &&
+    rawClockSeconds != null &&
+    Number.isFinite(rawClockSeconds) &&
+    rawClockSeconds >= 60
+  ) {
+    const sec =
+      isSecondHalf && rawClockSeconds < 2700
+        ? 2700 + rawClockSeconds
+        : rawClockSeconds;
+    if (isSecondHalf && sec >= 5400) {
+      return `90+${Math.max(1, Math.floor((sec - 5400) / 60) + 1)}’`;
+    }
+    const gMin = isSecondHalf
+      ? Math.min(90, Math.max(46, Math.floor(sec / 60) + 1))
+      : Math.min(45, Math.max(1, Math.floor(sec / 60) + 1));
+    return `${gMin}’`;
   }
-  return cleaned.endsWith("’")
-    ? cleaned
-    : cleaned.endsWith("'")
-      ? `${cleaned.slice(0, -1)}’`
-      : `${cleaned}’`;
+
+  const primary = tryParseToken(rawClock);
+  if (primary) return primary;
+
+  const secondary = tryParseToken(statusDetail);
+  if (secondary) return secondary;
+
+  if (
+    rawClockSeconds != null &&
+    Number.isFinite(rawClockSeconds) &&
+    rawClockSeconds >= 0
+  ) {
+    const sec =
+      isSecondHalf && rawClockSeconds < 2700
+        ? 2700 + rawClockSeconds
+        : rawClockSeconds;
+    if (isSecondHalf && sec >= 5400) {
+      return `90+${Math.max(1, Math.floor((sec - 5400) / 60) + 1)}’`;
+    }
+    const gMin = isSecondHalf
+      ? Math.min(90, Math.max(46, Math.floor(sec / 60) + 1))
+      : Math.min(45, Math.max(1, Math.floor(sec / 60) + 1));
+    return `${gMin}’`;
+  }
+
+  return isSecondHalf ? "46’" : "LIVE";
 }
 
 function isExtraTimeDetail(
@@ -362,7 +441,7 @@ function parseClockMinuteInt(
   const mPlus = /(\d+)\s*['’]?\s*\+\s*(\d+)/.exec(rawClock);
   if (mPlus) {
     const base = Number(mPlus[1]);
-    if (base <= 45) return 45;
+    if (base <= 45) return periodNum === 2 ? 90 : 45;
     if (base <= 90) return 90;
     return clamp(base + Number(mPlus[2]), 91, 120);
   }
@@ -370,11 +449,15 @@ function parseClockMinuteInt(
   if (mSimple) {
     const m = Number(mSimple[1]);
     if (periodNum === 1) return clamp(m, 1, 45);
-    if (periodNum === 2) return clamp(Math.max(46, m), 46, 90);
+    if (periodNum === 2) {
+      const shifted = m < 45 ? (m === 0 ? 46 : 45 + m) : m === 45 ? 46 : m;
+      return clamp(shifted, 46, 90);
+    }
     return clamp(m, 1, 90);
   }
   if (secVal != null && secVal >= 0) {
-    const m = Math.max(1, Math.round(secVal / 60));
+    const adjSec = periodNum === 2 && secVal < 2700 ? 2700 + secVal : secVal;
+    const m = Math.max(1, Math.floor(adjSec / 60) + 1);
     if (periodNum === 1) return clamp(m, 1, 45);
     if (periodNum === 2) return clamp(Math.max(46, m), 46, 90);
     return clamp(m, 1, 90);
@@ -1345,8 +1428,15 @@ export function parseEspnScoreboardEvent(
   const statusType = asRec(statusObj?.type);
   const state = asStr(statusType?.state).toLowerCase(); // "pre" | "in" | "post"
   const statusName = asStr(statusType?.name).toUpperCase();
+  const statusDetail = asStr(statusType?.shortDetail || statusType?.detail);
   const completed = statusType?.completed === true;
-  const period = asNum(statusObj?.period) ?? 1;
+  const rawPeriod = asNum(statusObj?.period) ?? 1;
+  const period =
+    rawPeriod < 2 &&
+    statusName !== "STATUS_HALFTIME" &&
+    (statusName.includes("SECOND_HALF") || /\b2nd\b/i.test(statusDetail))
+      ? 2
+      : rawPeriod;
   const displayClock = asStr(statusObj?.displayClock);
   const rawClockSeconds = asNum(statusObj?.clock);
 
@@ -1428,20 +1518,38 @@ export function parseEspnScoreboardEvent(
   const statRedH = asNum(homeStatMap.get("redcards")) ?? 0;
   const statRedA = asNum(awayStatMap.get("redcards")) ?? 0;
 
+  const isHalfTimeNow =
+    statusName === "STATUS_HALFTIME" ||
+    /^(HT|MT|HALFTIME)$/i.test(statusDetail.trim());
+  const isSecondHalfLive =
+    status === "live" &&
+    !isHalfTimeNow &&
+    (period >= 2 || htHomeScore != null || htAwayScore != null);
+  const effectiveLivePeriod = isSecondHalfLive ? Math.max(2, period) : period;
+
   const minute =
     status === "finished"
       ? "Terminé"
       : status === "postponed"
         ? "Reporté"
         : status === "live"
-          ? statusName === "STATUS_HALFTIME"
+          ? isHalfTimeNow
             ? "MT"
-            : normalizeDisplayMinute(displayClock)
+            : normalizeDisplayMinute(
+                displayClock,
+                statusDetail,
+                rawClockSeconds,
+                isSecondHalfLive
+              )
           : null;
 
   const liveClockSeconds =
     status === "live" && minute && minute !== "MT"
-      ? normalizeEspnLiveClockSeconds(rawClockSeconds, period, minute)
+      ? normalizeEspnLiveClockSeconds(
+          rawClockSeconds,
+          effectiveLivePeriod,
+          minute
+        )
       : null;
 
   const homeAliases = Array.from(
@@ -1481,7 +1589,7 @@ export function parseEspnScoreboardEvent(
           htAwayScore,
           nowIso,
           liveClockSeconds,
-          status === "live" ? period : null
+          status === "live" ? effectiveLivePeriod : null
         );
 
   const realStats: RealMatchStats | null =
@@ -1512,7 +1620,7 @@ export function parseEspnScoreboardEvent(
             htHomeScore,
             htAwayScore,
             clockSeconds: liveClockSeconds,
-            clockPeriod: period,
+            clockPeriod: effectiveLivePeriod,
             liveFeedProbs,
             feedTotalGoalsExpected: suggestedOdds.expectedTotalGoals,
             updatedAt: nowIso,
@@ -2101,7 +2209,31 @@ export async function applyFeedUpdateToRealMatch(
 
   // Match en direct
   if (feed.status === "live") {
-    const nextMinute = feed.minute ?? m.minute ?? "1’";
+    const wasAlreadySecondHalf =
+      nextHtHome != null ||
+      nextHtAway != null ||
+      (mergedStats?.clockPeriod ?? 1) >= 2 ||
+      (mergedStats?.clockSeconds ?? 0) >= 2700 ||
+      m.minute === "MT" ||
+      (m.minute != null &&
+        m.minute !== "LIVE" &&
+        parseClockMinuteInt(m.minute, null, null) >= 46);
+
+    let nextMinute = feed.minute ?? m.minute ?? (wasAlreadySecondHalf ? "46’" : "1’");
+    if (nextMinute !== "MT" && wasAlreadySecondHalf) {
+      nextMinute = normalizeDisplayMinute(
+        nextMinute === "LIVE" ? "" : nextMinute,
+        "",
+        mergedStats?.clockSeconds ?? null,
+        true
+      );
+      if (mergedStats) {
+        mergedStats.clockPeriod = Math.max(2, mergedStats.clockPeriod ?? 2);
+        if (mergedStats.clockSeconds != null && mergedStats.clockSeconds < 2700) {
+          mergedStats.clockSeconds = 2700 + mergedStats.clockSeconds;
+        }
+      }
+    }
     const prevLiveHeadline =
       m.status === "live"
         ? computeRealLiveHeadline1x2Odds(m)
@@ -2574,6 +2706,27 @@ export async function syncRealMatchesThrottled(force = false): Promise<RealSyncS
             rich.liveFeedProbs = sbBefore.liveFeedProbs;
             if (rich.realStats) {
               rich.realStats.liveFeedProbs = sbBefore.liveFeedProbs;
+            }
+          }
+          // Le endpoint `/summary` d'ESPN omet fréquemment `status.clock` ou remet `displayClock`
+          // à "0:00" / "" en 2e mi-temps alors que `/scoreboard` fournit l'horloge live exacte :
+          // on préserve systématiquement l'horloge la plus avancée de `/scoreboard`.
+          if (sbBefore?.status === "live" && rich.status === "live") {
+            const sbSec = sbBefore.realStats?.clockSeconds ?? null;
+            const richSec = rich.realStats?.clockSeconds ?? null;
+            const sbPeriod = sbBefore.realStats?.clockPeriod ?? 1;
+            const richPeriod = rich.realStats?.clockPeriod ?? 1;
+            if (
+              sbBefore.minute === "MT" ||
+              rich.minute === "LIVE" ||
+              (sbPeriod > richPeriod) ||
+              (sbSec != null && (richSec == null || sbSec > richSec + 20))
+            ) {
+              rich.minute = sbBefore.minute;
+              if (rich.realStats) {
+                rich.realStats.clockSeconds = sbSec ?? rich.realStats.clockSeconds;
+                rich.realStats.clockPeriod = Math.max(sbPeriod, richPeriod);
+              }
             }
           }
           entry.feedMatch = rich;

@@ -34,7 +34,18 @@ export function useLiveMatchClock(
   };
 
   const getServerSnapshot = () => {
-    const raw = formatMinuteOnlyLabel(source?.minute ?? fallbackMinute);
+    const periodHint =
+      source?.clockAnchor?.phase === "2H" ||
+      source?.clockAnchor?.phase === "2H_STOPPAGE" ||
+      (source?.clockAnchor?.anchorSeconds ?? 0) >= 2700 ||
+      source?.htHomeScore != null ||
+      source?.htAwayScore != null
+        ? 2
+        : 1;
+    const raw = formatMinuteOnlyLabel(
+      source?.minute ?? fallbackMinute,
+      periodHint
+    );
     if (variant === "badge" && raw === "MT") {
       return "Mi-temps";
     }
@@ -85,7 +96,18 @@ export function useLiveMatchClockSnapshot(
   };
 
   const getServerSnapshot = (): LiveClockSnapshot => {
-    const norm = formatMinuteOnlyLabel(source?.minute ?? fallbackMinute);
+    const periodHint =
+      source?.clockAnchor?.phase === "2H" ||
+      source?.clockAnchor?.phase === "2H_STOPPAGE" ||
+      (source?.clockAnchor?.anchorSeconds ?? 0) >= 2700 ||
+      source?.htHomeScore != null ||
+      source?.htAwayScore != null
+        ? 2
+        : 1;
+    const norm = formatMinuteOnlyLabel(
+      source?.minute ?? fallbackMinute,
+      periodHint
+    );
     const isHt = norm === "MT";
     const fallbackSnap: LiveClockSnapshot = {
       display: isHt ? "MT" : norm,

@@ -10,7 +10,10 @@ import {
 } from "@/lib/active-state-cache";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { computeMatchTelemetry } from "@/lib/live-telemetry";
-import { buildServerClockAnchor } from "@/lib/live-clock";
+import {
+  buildServerClockAnchor,
+  normalizeRealLiveMinuteLabel,
+} from "@/lib/live-clock";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
 import { ensureMlLoaded } from "@/lib/ml-engine";
 import {
@@ -129,7 +132,10 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
     htHome,
     htAway,
     status: m.status === "live" || m.status === "finished" ? m.status : "upcoming",
-    minute: m.minute,
+    minute:
+      isReal && m.status === "live"
+        ? normalizeRealLiveMinuteLabel(m)
+        : m.minute,
     startsAt: toIso(m.startsAt) ?? new Date().toISOString(),
     finishedAt: toIso(m.finishedAt),
     oddsHome: m.oddsHome,

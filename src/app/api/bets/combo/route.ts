@@ -24,6 +24,7 @@ import {
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { invalidatePredictionsCatalogCache } from "@/lib/response-cache";
 import {
+  effectiveMatchMinuteNumber,
   isKnownMarket,
   isRealMatchKickoffReached,
   liveMarketOddsFor,
@@ -331,7 +332,7 @@ export async function POST(req: NextRequest) {
       if (
         m.suspended ||
         (m.source === "virtual" && minuteNumber(m.minute) >= 85) ||
-        (m.source === "manual" && minuteNumber(m.minute) >= 88)
+        (m.source === "manual" && effectiveMatchMinuteNumber(m) >= 88)
       ) {
         return NextResponse.json(
           { error: `Marché verrouillé sur ${m.homeTeam} – ${m.awayTeam}` },
@@ -495,7 +496,7 @@ export async function POST(req: NextRequest) {
         fm.status === "finished" ||
         fm.suspended ||
         (fm.source === "virtual" && minuteNumber(fm.minute) >= 85) ||
-        (fm.source === "manual" && minuteNumber(fm.minute) >= 88)
+        (fm.source === "manual" && effectiveMatchMinuteNumber(fm) >= 88)
       ) {
         return {
           kind: "error",
@@ -555,7 +556,7 @@ export async function POST(req: NextRequest) {
 
         const h = m.homeScore ?? 0;
         const a = m.awayScore ?? 0;
-        const min = minuteNumber(m.minute);
+        const min = effectiveMatchMinuteNumber(m);
         const formOpts = {
           homeForm: m.homeForm ?? 1,
           awayForm: m.awayForm ?? 1,
