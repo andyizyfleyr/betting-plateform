@@ -464,58 +464,95 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     [comboLegs, persistCombo]
   );
 
+  const hapticsRef = useRef<boolean | undefined>(user?.haptics);
+  useEffect(() => {
+    hapticsRef.current = user?.haptics;
+  }, [user?.haptics]);
+
+  const setBalance = useCallback((n: number) => {
+    if (!Number.isFinite(n)) return;
+    const clean = Math.round(n * 100) / 100;
+    setUser((u) => {
+      if (!u) return u;
+      if (Math.abs(u.balance - clean) < 0.001) return u;
+      return { ...u, balance: clean };
+    });
+  }, []);
+
+  const openBet = useCallback(
+    (t: BetTarget) => {
+      triggerHaptic(hapticsRef.current, 10);
+      if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+        const comboSel: ComboSelection = {
+          uid: `sport-${t.match.id}`,
+          kind: "sport",
+          matchId: t.match.id,
+          matchSource: t.match.source,
+          title: `${t.match.homeTeam} – ${t.match.awayTeam}`,
+          homeTeam: t.match.homeTeam,
+          awayTeam: t.match.awayTeam,
+          homeLogo: t.match.homeLogo,
+          awayLogo: t.match.awayLogo,
+          league: t.match.league,
+          market: t.market,
+          selection: t.selection,
+          selectionLabel: t.label,
+          odds: t.odds,
+          startsAt: t.match.startsAt,
+          isLive: t.match.status === "live",
+        };
+        const res = toggleComboLeg(comboSel);
+        if (res === "full") {
+          toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
+        } else if (res === "source_conflict") {
+          toast({
+            kind: "error",
+            title: "Mélange interdit",
+            description:
+              "Impossible de mélanger un match réel et un match virtuel dans le même coupon.",
+          });
+        }
+        setMarketMatch(null);
+        return;
+      }
+      setTarget(t);
+    },
+    [toggleComboLeg, toast]
+  );
+
+  const closeBet = useCallback(() => setTarget(null), []);
+
+  const openMarkets = useCallback((m: ClientMatch) => {
+    triggerHaptic(hapticsRef.current, 10);
+    setMarketMatch(m);
+  }, []);
+
+  const closeMarkets = useCallback(() => setMarketMatch(null), []);
+  const openRecharge = useCallback(() => setRechargeOpen(true), []);
+  const closeRecharge = useCallback(() => setRechargeOpen(false), []);
+  const openCombo = useCallback(() => setComboOpen(true), []);
+  const closeCombo = useCallback(() => setComboOpen(false), []);
+
+  const bumpBets = useCallback(() => {
+    setBetsVersion((v) => v + 1);
+    void queryClient.invalidateQueries({ queryKey: ["pulse"] });
+    void queryClient.invalidateQueries({ queryKey: ["bets"] });
+    void queryClient.invalidateQueries({ queryKey: ["predictions", "my-bets"] });
+  }, [queryClient]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       user,
       balance: user?.balance ?? 0,
       oddsFormat: user?.oddsFormat ?? "decimal",
-      setBalance: (n) => setUser((u) => (u ? { ...u, balance: n } : u)),
+      setBalance,
       applyUser: setUser,
       target,
-      openBet: (t) => {
-        triggerHaptic(user?.haptics, 10);
-        if (typeof window !== "undefined" && window.innerWidth >= 1024) {
-          const comboSel: ComboSelection = {
-            uid: `sport-${t.match.id}`,
-            kind: "sport",
-            matchId: t.match.id,
-            matchSource: t.match.source,
-            title: `${t.match.homeTeam} – ${t.match.awayTeam}`,
-            homeTeam: t.match.homeTeam,
-            awayTeam: t.match.awayTeam,
-            homeLogo: t.match.homeLogo,
-            awayLogo: t.match.awayLogo,
-            league: t.match.league,
-            market: t.market,
-            selection: t.selection,
-            selectionLabel: t.label,
-            odds: t.odds,
-            startsAt: t.match.startsAt,
-            isLive: t.match.status === "live",
-          };
-          const res = toggleComboLeg(comboSel);
-          if (res === "full") {
-            toast({ kind: "error", title: "Coupon complet (8 sélections max)" });
-          } else if (res === "source_conflict") {
-            toast({
-              kind: "error",
-              title: "Mélange interdit",
-              description:
-                "Impossible de mélanger un match réel et un match virtuel dans le même coupon.",
-            });
-          }
-          setMarketMatch(null);
-          return;
-        }
-        setTarget(t);
-      },
-      closeBet: () => setTarget(null),
+      openBet,
+      closeBet,
       marketMatch,
-      openMarkets: (m) => {
-        triggerHaptic(user?.haptics, 10);
-        setMarketMatch(m);
-      },
-      closeMarkets: () => setMarketMatch(null),
+      openMarkets,
+      closeMarkets,
       setFeedMatches,
       sportUniverse,
       setSportUniverse,
@@ -524,14 +561,14 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       sportStatusFilter,
       setSportStatusFilter,
       rechargeOpen,
-      openRecharge: () => setRechargeOpen(true),
-      closeRecharge: () => setRechargeOpen(false),
+      openRecharge,
+      closeRecharge,
       comboLegs,
       comboOpen,
       comboQuickMode,
       setComboQuickMode,
-      openCombo: () => setComboOpen(true),
-      closeCombo: () => setComboOpen(false),
+      openCombo,
+      closeCombo,
       toggleComboLeg,
       isInCombo,
       removeComboLeg,
@@ -542,12 +579,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       setOddsPolicy,
       toast,
       betsVersion,
-      bumpBets: () => {
-        setBetsVersion((v) => v + 1);
-        void queryClient.invalidateQueries({ queryKey: ["pulse"] });
-        void queryClient.invalidateQueries({ queryKey: ["bets"] });
-        void queryClient.invalidateQueries({ queryKey: ["predictions", "my-bets"] });
-      },
+      bumpBets,
       pendingCount,
       adminTab,
       setAdminTab,
@@ -556,15 +588,25 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     }),
     [
       user,
+      setBalance,
       target,
+      openBet,
+      closeBet,
       marketMatch,
+      openMarkets,
+      closeMarkets,
+      setFeedMatches,
       sportUniverse,
       sportLeagueFilter,
       sportStatusFilter,
       rechargeOpen,
+      openRecharge,
+      closeRecharge,
       comboLegs,
       comboOpen,
       comboQuickMode,
+      openCombo,
+      closeCombo,
       toggleComboLeg,
       isInCombo,
       removeComboLeg,
@@ -575,7 +617,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       setOddsPolicy,
       toast,
       betsVersion,
-      queryClient,
+      bumpBets,
       pendingCount,
       adminTab,
       adminPendingFinance,

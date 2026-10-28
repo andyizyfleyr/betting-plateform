@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { DesktopBetslipSidebar } from "@/components/desktop-betslip-sidebar";
 import { DesktopLeaguesSidebar } from "@/components/desktop-leagues-sidebar";
 import { DesktopSidebar } from "@/components/desktop-sidebar";
+import { NavigationTransitionLayer } from "@/components/pulse-flash-loader";
 import { RouteWarmup } from "@/components/route-warmup";
 import { useApp } from "@/components/providers";
 import { cn } from "@/lib/format";
@@ -23,7 +24,9 @@ export function MainShell({ children }: { children: ReactNode }) {
         <DesktopSidebar />
         <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
           <AppHeader />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1">
+            <NavigationTransitionLayer>{children}</NavigationTransitionLayer>
+          </main>
         </div>
       </div>
     );
@@ -59,7 +62,7 @@ export function MainShell({ children }: { children: ReactNode }) {
               "pb-[calc(68px+env(safe-area-inset-bottom,0px))] lg:pb-0"
           )}
         >
-          {children}
+          <NavigationTransitionLayer>{children}</NavigationTransitionLayer>
         </main>
         {!isBetslipRoute && <DesktopBetslipSidebar />}
       </div>

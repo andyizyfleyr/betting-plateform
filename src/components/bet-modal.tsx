@@ -13,6 +13,7 @@ import {
   type OddsChangedDetails,
 } from "@/lib/odds-lock";
 import { useApp, useFeedMatches, type BetTarget } from "./providers";
+import { triggerRouteLoader } from "./pulse-flash-loader";
 import { OddsLockControls } from "./odds-lock-controls";
 import { LiveMatchClock } from "./live-match-clock";
 import { TeamAvatar } from "./team-avatar";
@@ -313,6 +314,7 @@ function BetModalSheet({
 
   const goToBets = () => {
     onClose();
+    triggerRouteLoader("/paris");
     router.push("/paris");
   };
 

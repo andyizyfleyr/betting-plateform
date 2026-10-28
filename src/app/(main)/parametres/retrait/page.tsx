@@ -19,6 +19,7 @@ import { getCachedWallet } from "@/lib/client-entity-cache";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
+import { triggerRouteLoader } from "@/components/pulse-flash-loader";
 import { cn, eur } from "@/lib/format";
 
 const QUICK_AMOUNTS = [20, 50, 100, 250];
@@ -200,6 +201,7 @@ export default function WithdrawPage() {
               if (typeof window !== "undefined" && window.history.length > 1) {
                 router.back();
               } else {
+                triggerRouteLoader("/parametres");
                 router.push("/parametres");
               }
             }}

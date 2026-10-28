@@ -102,6 +102,7 @@ export function PartyRealtimeBridge({
   // 1) Salon public `live-matches`
   useEffect(() => {
     if (!partyEnabled || !partyHost) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setWsConnected(false);
       return;
     }
@@ -294,6 +295,7 @@ export function PartyRealtimeBridge({
       !cfg?.userRoom ||
       !cfg?.userToken
     ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUserWsConnected(false);
       return;
     }
@@ -390,7 +392,7 @@ export function useMatchesFeedQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialMatches && options.initialMatches.length > 0
-        ? Date.now() - 4_000
+        ? () => Date.now() - 4_000
         : undefined,
     // Lorsque le WebSocket PartyKit est actif, simple réconciliation de sécurité à 60 s
     refetchInterval: wsConnected ? 60_000 : fallbackMs,
@@ -421,7 +423,9 @@ export function useMatchDetailQuery(
     initialData: options?.initialMatch
       ? { match: options.initialMatch }
       : undefined,
-    initialDataUpdatedAt: options?.initialMatch ? Date.now() - 4_000 : undefined,
+    initialDataUpdatedAt: options?.initialMatch
+      ? () => Date.now() - 4_000
+      : undefined,
     refetchInterval: options?.isFinished
       ? false
       : wsConnected
@@ -449,7 +453,7 @@ export function usePredictionsCatalogQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialQuestions && options.initialQuestions.length > 0
-        ? Date.now() - 5_000
+        ? () => Date.now() - 5_000
         : undefined,
     refetchInterval: wsConnected ? 60_000 : fallbackMs,
     refetchIntervalInBackground: false,
@@ -474,7 +478,7 @@ export function useMatchHistoryQuery(options?: {
         : undefined,
     initialDataUpdatedAt:
       options?.initialHistory && options.initialHistory.length > 0
-        ? Date.now() - 5_000
+        ? () => Date.now() - 5_000
         : undefined,
     refetchInterval: wsConnected ? 60_000 : fallbackMs,
     refetchIntervalInBackground: false,

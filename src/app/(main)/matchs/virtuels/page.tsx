@@ -28,6 +28,10 @@ import {
 import { MatchCard } from "@/components/match-card";
 import { useApp } from "@/components/providers";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { useMatchesFeedQuery } from "@/lib/party-realtime";
 import {
   deduplicateLeagueNames,
@@ -223,6 +227,10 @@ export default function VirtualMatchesPage() {
     }
   };
 
+  if (matches === null && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
       <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
@@ -231,7 +239,10 @@ export default function VirtualMatchesPage() {
           <div className="flex min-w-0 items-center gap-2.5">
             <button
               type="button"
-              onClick={() => router.push("/matchs")}
+              onClick={() => {
+                triggerRouteLoader("/matchs");
+                router.push("/matchs");
+              }}
               aria-label="Retour à l'accueil Matchs"
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95"
             >
@@ -402,11 +413,7 @@ export default function VirtualMatchesPage() {
 
         {/* Liste verticale fluide au pouce */}
         {matches === null ? (
-          <div className="grid grid-cols-1 gap-3">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="shimmer h-[168px] rounded-2xl" />
-            ))}
-          </div>
+          <PulseFlashLoader compact />
         ) : loadError && (matches?.length ?? 0) === 0 ? (
           <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
             <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">

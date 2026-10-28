@@ -20,6 +20,7 @@ import {
 } from "lucide-react-native";
 import { BetTicket } from "@/components/bet-ticket";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import {
   InfiniteScrollLoader,
   useInfiniteBatch,
@@ -508,9 +509,7 @@ export default function ParisScreen() {
 
         {/* 4 : Liste des tickets */}
         {bets === null ? (
-          <View style={styles.loaderBox}>
-            <ActivityIndicator size="small" color={COLORS.betclicRed} />
-          </View>
+          <PulseFlashLoader compact />
         ) : loadError && bets.length === 0 ? (
           <View style={styles.errorCard}>
             <View style={styles.errorIconCircle}>

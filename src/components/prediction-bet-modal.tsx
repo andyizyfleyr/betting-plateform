@@ -13,6 +13,7 @@ import {
   type OddsChangedDetails,
 } from "@/lib/odds-lock";
 import { useApp } from "./providers";
+import { triggerRouteLoader } from "./pulse-flash-loader";
 import { AnimatedNumber } from "./animated-number";
 import { OddsLockControls } from "./odds-lock-controls";
 import { TouchStakePad } from "./touch-stake-pad";
@@ -244,6 +245,7 @@ function PredictionBetSheet({
 
   const goToBets = () => {
     onClose();
+    triggerRouteLoader("/paris");
     router.push("/paris");
   };
 

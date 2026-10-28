@@ -35,6 +35,10 @@ import {
   type HeroPromoAction,
 } from "@/components/mobile-hero-carousel";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { useApp } from "@/components/providers";
 import { useMatchesFeedQuery } from "@/lib/party-realtime";
 import {
@@ -155,26 +159,33 @@ export default function MatchsPage() {
           );
           const resolvedLabel =
             activeRealMatch?.league ?? anyRealMatch?.league ?? action.defaultLabel;
-          router.push(`/matchs/tous?league=${encodeURIComponent(resolvedLabel)}`);
+          const dest = `/matchs/tous?league=${encodeURIComponent(resolvedLabel)}`;
+          triggerRouteLoader(dest);
+          router.push(dest);
           break;
         }
         case "virtual":
+          triggerRouteLoader("/matchs/virtuels");
           router.push("/matchs/virtuels");
           break;
         case "live": {
           const hasRealLive = allLoaded.some(
             (m) => m.source === "manual" && m.status === "live"
           );
-          router.push(hasRealLive ? "/matchs/tous?status=live" : "/matchs/virtuels");
+          const dest = hasRealLive ? "/matchs/tous?status=live" : "/matchs/virtuels";
+          triggerRouteLoader(dest);
+          router.push(dest);
           break;
         }
         case "combo":
+          triggerRouteLoader("/betslip");
           router.push("/betslip");
           break;
         case "recharge":
           if (user) {
             openRecharge();
           } else {
+            triggerRouteLoader("/auth");
             router.push("/auth");
           }
           break;
@@ -354,6 +365,10 @@ export default function MatchsPage() {
     setLeagueFilter("all");
   };
 
+  if (matches === null && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
       <div className="mx-auto w-full max-w-[1440px] px-4 pb-6 pt-2.5 lg:px-0 lg:py-0">
@@ -468,37 +483,7 @@ export default function MatchsPage() {
 
         {/* Contenu */}
         {matches === null ? (
-          <>
-            {/* Squelette mobile constant sur 2 lignes carrousel (zéro saut de mise en page CLS) */}
-            <div className="mt-1 flex flex-col gap-5 lg:hidden">
-              {[0, 1].map((rowIdx) => (
-                <div key={rowIdx} className="space-y-2.5">
-                  <div className="shimmer h-4 w-44 rounded-md" />
-                  <div className="-mx-4 flex gap-3 overflow-hidden px-4">
-                    <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
-                    <div className="shimmer h-[194px] w-[86vw] max-w-[336px] shrink-0 rounded-2xl" />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Squelette desktop (>= lg) */}
-            {isRealUniverse ? (
-              <div className="hidden grid-cols-1 gap-3 lg:grid">
-                <div className="shimmer h-[156px] rounded-2xl" />
-                <div className="shimmer h-[156px] rounded-2xl" />
-                <div className="shimmer h-[156px] rounded-2xl" />
-              </div>
-            ) : (
-              <div className="hidden flex-col gap-3 lg:flex">
-                <div className="shimmer h-[196px] rounded-2xl" />
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="shimmer h-[136px] rounded-2xl" />
-                  <div className="shimmer h-[136px] rounded-2xl" />
-                </div>
-              </div>
-            )}
-          </>
+          <PulseFlashLoader compact />
         ) : loadError && (matches?.length ?? 0) === 0 ? (
           <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
             <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">

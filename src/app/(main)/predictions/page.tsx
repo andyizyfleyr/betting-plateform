@@ -12,6 +12,7 @@ import {
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import type { ComboSelection } from "@/components/combo-slip";
 import {
   OddsTrendCorner,
@@ -82,6 +83,7 @@ export default function PredictionsPage() {
 
   useEffect(() => {
     if (catalogQuery.dataUpdatedAt > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNowMs(Date.now());
     }
   }, [catalogQuery.dataUpdatedAt]);
@@ -243,6 +245,10 @@ export default function PredictionsPage() {
     }
   };
 
+  if (questions === null && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
     <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
@@ -392,11 +398,7 @@ export default function PredictionsPage() {
 
       {/* Liste des questions */}
       {questions === null ? (
-        <div className="grid grid-cols-1 gap-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="shimmer h-[168px] rounded-2xl" />
-          ))}
-        </div>
+        <PulseFlashLoader compact />
       ) : loadError && (questions?.length ?? 0) === 0 ? (
         <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">

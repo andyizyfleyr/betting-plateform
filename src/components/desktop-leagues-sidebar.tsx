@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { SportIcon } from "@/components/sport-icon";
 import { useApp, useFeedMatches } from "@/components/providers";
+import { triggerRouteLoader } from "@/components/pulse-flash-loader";
 import {
   OFFICIAL_SOCCER_LEAGUES,
   resolveEspnSlugForLeague,
@@ -355,6 +356,7 @@ export function DesktopLeaguesSidebar() {
       setSportStatusFilter("all");
     }
     if (pathname !== "/matchs" && pathname !== "/matchs/tous") {
+      triggerRouteLoader("/matchs");
       router.push("/matchs");
     }
   };
@@ -364,8 +366,10 @@ export function DesktopLeaguesSidebar() {
     setSportLeagueFilter("all");
     setSportStatusFilter("all");
     if (pathname === "/matchs/tous") {
+      triggerRouteLoader("/matchs/virtuels");
       router.push("/matchs/virtuels");
     } else if (!isOnMatchs) {
+      triggerRouteLoader("/matchs");
       router.push("/matchs");
     }
   };

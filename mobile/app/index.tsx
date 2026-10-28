@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { useRouter } from "@/lib/router";
 
@@ -16,12 +16,5 @@ export default function IndexRedirectScreen() {
     }
   }, [authReady, router, user?.role]);
 
-  return <View style={styles.bootBackdrop} />;
+  return <PulseFlashLoader fullScreen />;
 }
-
-const styles = StyleSheet.create({
-  bootBackdrop: {
-    flex: 1,
-    backgroundColor: "#090D16",
-  },
-});

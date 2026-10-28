@@ -27,6 +27,10 @@ import {
   type SheetCategory,
 } from "@/components/market-sheet";
 import { LiveStatusBadge } from "@/components/match-card";
+import {
+  PulseFlashLoader,
+  triggerRouteLoader,
+} from "@/components/pulse-flash-loader";
 import { useApp, useFeedMatches } from "@/components/providers";
 import {
   hasAnyRealStats,
@@ -195,6 +199,10 @@ export default function MatchDetailPage() {
   const realStatsAvailable = Boolean(isReal && hasAnyRealStats(match?.realStats));
   const suspended = Boolean(match?.suspended);
 
+  if (match === undefined && !loadError) {
+    return <PulseFlashLoader />;
+  }
+
   return (
     <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne (sans double barre collante) */}
@@ -206,6 +214,7 @@ export default function MatchDetailPage() {
               if (typeof window !== "undefined" && window.history.length > 1) {
                 router.back();
               } else {
+                triggerRouteLoader("/matchs");
                 router.push("/matchs");
               }
             }}
@@ -248,11 +257,7 @@ export default function MatchDetailPage() {
 
       <div className="mt-2.5 lg:mt-4">
         {match === undefined ? (
-          <div className="space-y-2.5">
-            <div className="skeleton h-[96px] rounded-xl" />
-            <div className="skeleton h-[34px] rounded-full" />
-            <div className="skeleton h-[160px] rounded-xl" />
-          </div>
+          <PulseFlashLoader compact />
         ) : match === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />

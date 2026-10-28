@@ -22,6 +22,7 @@ import {
 } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
+import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useMobilePredictionsCatalogQuery } from "@/lib/party-realtime";
 import { mobileQueryKeys } from "@/lib/query-client";
 import {
@@ -412,9 +413,7 @@ export default function PredictionsScreen() {
 
         {/* 3 : Liste des questions */}
         {questions === null ? (
-          <View style={styles.loaderBox}>
-            <ActivityIndicator size="small" color={COLORS.betclicRed} />
-          </View>
+          <PulseFlashLoader compact />
         ) : loadError && questions.length === 0 ? (
           <View style={styles.errorCard}>
             <View style={styles.errorIconCircle}>
