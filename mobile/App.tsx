@@ -1,9 +1,13 @@
+import "./src/lib/rn-polyfills";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  initialWindowMetrics,
+  SafeAreaProvider,
+} from "react-native-safe-area-context";
 import { AppProvider, useApp } from "@/context/app-context";
 import { PulseSplashScreen } from "@/components/pulse-splash-screen";
 import {
@@ -158,18 +162,63 @@ function RootBootCoordinator() {
   );
 }
 
+interface RootErrorBoundaryState {
+  hasError: boolean;
+}
+
+class RootErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  RootErrorBoundaryState
+> {
+  state: RootErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): RootErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch() {
+    SplashScreen.hideAsync().catch(() => {});
+  }
+
+  private handleRetry = () => {
+    this.setState({ hasError: false });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorBoundaryRoot}>
+          <Text style={styles.errorBoundaryTitle}>PULSE BET</Text>
+          <Text style={styles.errorBoundaryBody}>
+            Une actualisation de l’affichage est nécessaire.
+          </Text>
+          <Pressable
+            onPress={this.handleRetry}
+            style={styles.errorBoundaryBtn}
+          >
+            <Text style={styles.errorBoundaryBtnText}>Réessayer</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
     <View style={styles.root}>
-      <QueryClientProvider client={mobileQueryClient}>
-        <SafeAreaProvider>
-          <RouterProvider initialHref="/">
-            <AppProvider>
-              <RootBootCoordinator />
-            </AppProvider>
-          </RouterProvider>
-        </SafeAreaProvider>
-      </QueryClientProvider>
+      <RootErrorBoundary>
+        <QueryClientProvider client={mobileQueryClient}>
+          <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+            <RouterProvider initialHref="/">
+              <AppProvider>
+                <RootBootCoordinator />
+              </AppProvider>
+            </RouterProvider>
+          </SafeAreaProvider>
+        </QueryClientProvider>
+      </RootErrorBoundary>
     </View>
   );
 }
@@ -182,5 +231,36 @@ const styles = StyleSheet.create({
   authRoot: {
     flex: 1,
     backgroundColor: COLORS.deep,
+  },
+  errorBoundaryRoot: {
+    flex: 1,
+    backgroundColor: "#090D16",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  errorBoundaryTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+    fontStyle: "italic",
+    marginBottom: 10,
+  },
+  errorBoundaryBody: {
+    color: "#9CA3AF",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  errorBoundaryBtn: {
+    backgroundColor: "#E10014",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  errorBoundaryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });
