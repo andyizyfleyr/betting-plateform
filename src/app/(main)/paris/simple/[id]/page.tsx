@@ -80,6 +80,7 @@ function parseSimpleBetSlug(raw: string | undefined): {
 
 export default function SingleBetDetailPage() {
   const params = useParams<{ id: string }>();
+  const paramPending = params?.id === undefined;
   const rawParamId = String(params?.id ?? "");
   const router = useRouter();
   const parsed = useMemo(() => parseSimpleBetSlug(rawParamId), [rawParamId]);
@@ -89,7 +90,11 @@ export default function SingleBetDetailPage() {
 
   const [prevSlug, setPrevSlug] = useState(params?.id);
   const [fetchedBet, setFetchedBet] = useState<ClientBet | null | undefined>(() =>
-    !parsed.valid ? null : (getCachedBet(parsed.kind, parsed.id) ?? undefined)
+    paramPending
+      ? undefined
+      : !parsed.valid
+        ? null
+        : (getCachedBet(parsed.kind, parsed.id) ?? undefined)
   );
   const [linkedMatch, setLinkedMatch] = useState<ClientMatch | null>(() => {
     const initial = parsed.valid ? getCachedBet(parsed.kind, parsed.id) : undefined;
@@ -108,7 +113,9 @@ export default function SingleBetDetailPage() {
   if (params?.id !== prevSlug) {
     setPrevSlug(params?.id);
     const cached = parsed.valid ? getCachedBet(parsed.kind, parsed.id) : undefined;
-    setFetchedBet(!parsed.valid ? null : (cached ?? undefined));
+    setFetchedBet(
+      paramPending ? undefined : !parsed.valid ? null : (cached ?? undefined)
+    );
     setLinkedMatch(
       cached?.matchId ? (getCachedClientMatch(cached.matchId) ?? null) : null
     );
@@ -117,7 +124,7 @@ export default function SingleBetDetailPage() {
     );
   }
 
-  const bet = !parsed.valid ? null : fetchedBet;
+  const bet = paramPending ? undefined : !parsed.valid ? null : fetchedBet;
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [sharing, setSharing] = useState(false);

@@ -187,7 +187,9 @@ export default function ResultDetailScreen() {
               color={COLORS.betclicRed}
               strokeWidth={2.2}
             />
-            <Text style={styles.notFoundTitle}>Résultat introuvable</Text>
+            <Text style={styles.notFoundTitle}>
+              {loadError ? "Connexion interrompue" : "Résultat introuvable"}
+            </Text>
             <Text style={styles.notFoundSub}>
               {loadError ??
                 "Ce match n'est pas encore terminé ou n'existe plus."}

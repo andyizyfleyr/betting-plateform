@@ -12,6 +12,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import PartySocket from "partysocket";
 import {
+  ApiRequestError,
   api,
   type ClientMatch,
   type ClientMatchHistoryItem,
@@ -426,6 +427,10 @@ export function useMatchDetailQuery(
 ) {
   const { isConstrained, isOffline } = useNetworkQuality();
   const detailIntervalMs = getAdaptiveIntervalMs(3_500, isConstrained);
+  const initialIsSlim =
+    Boolean(options?.initialMatch) &&
+    options?.initialMatch?.status !== "finished" &&
+    (options?.initialMatch?.markets?.length ?? 0) <= 1;
 
   return useQuery({
     queryKey: pulseQueryKeys.matchDetail(matchId),
@@ -439,8 +444,19 @@ export function useMatchDetailQuery(
       ? { match: options.initialMatch }
       : undefined,
     initialDataUpdatedAt: options?.initialMatch
-      ? () => Date.now() - 2_000
+      ? initialIsSlim
+        ? 0
+        : () => Date.now() - 2_000
       : undefined,
+    retry: (failureCount, err) => {
+      if (
+        err instanceof ApiRequestError &&
+        (err.status === 404 || err.status === 400)
+      ) {
+        return false;
+      }
+      return failureCount < 2;
+    },
     // Rafraîchit toujours `/api/matches/[id]` (~3 Ko) toutes les 3.5 s pour maintenir
     // les 19 marchés complets, les stats réelles et la télémétrie 2D en direct.
     refetchInterval: options?.isFinished ? false : detailIntervalMs,

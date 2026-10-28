@@ -35,7 +35,7 @@ import {
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
-import { api, type ClientMatch } from "@/lib/api";
+import { ApiHttpError, api, type ClientMatch } from "@/lib/api";
 import { getCachedClientMatch } from "@/lib/entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { useParams, useRouter } from "@/lib/router";
@@ -59,6 +59,7 @@ export default function MatchDetailScreen() {
     toggleComboLeg,
     toast,
     dataSaverMode,
+    feedMatches,
   } = useApp();
 
   const [prevId, setPrevId] = useState<number>(matchId);
@@ -82,29 +83,63 @@ export default function MatchDetailScreen() {
     setShowTracker(false);
   }
 
-  const cachedInitial = useMemo(
-    () => (invalidId ? null : getCachedClientMatch(matchId)),
-    [invalidId, matchId]
+  const sharedFromFeed = useMemo<ClientMatch | undefined>(
+    () =>
+      !invalidId && feedMatches
+        ? feedMatches.find((m) => m.id === matchId)
+        : undefined,
+    [invalidId, feedMatches, matchId]
+  );
+
+  const cachedInitial = useMemo<ClientMatch | undefined>(
+    () =>
+      invalidId
+        ? undefined
+        : (getCachedClientMatch(matchId) ?? sharedFromFeed ?? undefined),
+    [invalidId, matchId, sharedFromFeed]
   );
 
   const detailQuery = useMobileMatchDetailQuery(matchId, {
     enabled: !invalidId,
     dataSaver: dataSaverMode,
-    initialMatch: cachedInitial,
+    initialMatch:
+      cachedInitial &&
+      (cachedInitial.status === "finished" ||
+        (cachedInitial.markets?.length ?? 0) > 1)
+        ? cachedInitial
+        : null,
     isFinished: cachedInitial?.status === "finished",
   });
 
-  const match = invalidId
+  const isNotFoundError =
+    invalidId ||
+    (detailQuery.error instanceof ApiHttpError &&
+      (detailQuery.error.status === 404 || detailQuery.error.status === 400));
+
+  const fetchedMatch: ClientMatch | null | undefined = invalidId
     ? null
-    : detailQuery.data?.match ??
-      (detailQuery.isError ? null : undefined);
+    : detailQuery.data !== undefined
+      ? (detailQuery.data.match ?? null)
+      : detailQuery.isError
+        ? null
+        : undefined;
 
   const loadError =
-    !detailQuery.data && detailQuery.error instanceof Error
+    !isNotFoundError &&
+    !detailQuery.data &&
+    detailQuery.error instanceof Error
       ? detailQuery.error.message
-      : detailQuery.isError && !detailQuery.data
+      : !isNotFoundError && detailQuery.isError && !detailQuery.data
         ? "Impossible de charger cette rencontre."
         : null;
+
+  const match = useMemo<ClientMatch | null | undefined>(() => {
+    if (invalidId) return null;
+    if (fetchedMatch !== undefined) {
+      return fetchedMatch ?? cachedInitial ?? null;
+    }
+    return cachedInitial;
+  }, [invalidId, fetchedMatch, cachedInitial]);
 
   const fetchMatch = useCallback(async () => {
     if (invalidId) return;
@@ -167,6 +202,14 @@ export default function MatchDetailScreen() {
   const canToggleTracker = Boolean(
     match && ((!isReal && isLive) || realStatsAvailable)
   );
+
+  if (match === undefined && !loadError) {
+    return (
+      <View style={styles.page}>
+        <PulseFlashLoader compact />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -238,7 +281,9 @@ export default function MatchDetailScreen() {
               color={COLORS.betclicRed}
               strokeWidth={2.2}
             />
-            <Text style={styles.notFoundTitle}>Rencontre introuvable</Text>
+            <Text style={styles.notFoundTitle}>
+              {loadError ? "Connexion interrompue" : "Rencontre introuvable"}
+            </Text>
             <Text style={styles.notFoundSub}>
               {loadError ?? "Ce match n'est plus disponible."}
             </Text>

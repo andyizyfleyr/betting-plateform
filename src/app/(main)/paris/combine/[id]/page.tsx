@@ -109,16 +109,33 @@ function LegStatusBadge({
 
 export default function ComboDetailPage() {
   const params = useParams<{ id: string }>();
-  const comboId = Number(params?.id);
-  const invalidId = !Number.isFinite(comboId) || comboId <= 0;
+  const rawParamId = params?.id;
+  const paramPending = rawParamId === undefined;
+  const comboId = Number(rawParamId);
+  const invalidId = !paramPending && (!Number.isFinite(comboId) || comboId <= 0);
   const { betsVersion, oddsFormat, setBalance, bumpBets, toast, user } = useApp();
   const { isOffline, isConstrained } = useNetworkQuality();
   const pollIntervalMs = getAdaptiveIntervalMs(POLL_INTERVAL, isConstrained);
 
+  const [prevComboId, setPrevComboId] = useState(comboId);
   const [fetchedBet, setFetchedBet] = useState<ClientBet | null | undefined>(() =>
-    invalidId ? null : (getCachedBet("combo", comboId) ?? undefined)
+    paramPending
+      ? undefined
+      : invalidId
+        ? null
+        : (getCachedBet("combo", comboId) ?? undefined)
   );
-  const bet = invalidId ? null : fetchedBet;
+  if (comboId !== prevComboId) {
+    setPrevComboId(comboId);
+    setFetchedBet(
+      paramPending
+        ? undefined
+        : invalidId
+          ? null
+          : (getCachedBet("combo", comboId) ?? undefined)
+    );
+  }
+  const bet = paramPending ? undefined : invalidId ? null : fetchedBet;
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [sharing, setSharing] = useState(false);
