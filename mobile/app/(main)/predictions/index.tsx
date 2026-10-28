@@ -984,7 +984,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 32,
   },
@@ -995,7 +995,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pageTitle: {
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
@@ -1025,7 +1025,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 11.5,
     color: COLORS.ink,
     paddingVertical: 0,
   },
@@ -1055,14 +1055,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     marginTop: 12,
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.ink,
   },
   errorSub: {
     marginTop: 4,
     textAlign: "center",
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     lineHeight: 18,
   },
@@ -1077,8 +1077,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   retryBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   emptyState: {
@@ -1098,14 +1098,14 @@ const styles = StyleSheet.create({
   emptyTitle: {
     marginTop: 12,
     textAlign: "center",
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: "600",
     color: COLORS.ink,
   },
   emptySub: {
     marginTop: 4,
     textAlign: "center",
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.dim,
   },
   cardStack: {
@@ -1116,7 +1116,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 14,
+    padding: 12,
   },
   cardTopRow: {
     flexDirection: "row",
@@ -1131,8 +1131,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   catBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     textTransform: "uppercase",
     color: COLORS.ink,
   },
@@ -1142,21 +1142,21 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardTimeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
   questionTextBold: {
     marginTop: 8,
-    fontSize: 15.5,
-    fontWeight: "700",
+    fontSize: 12.5,
+    fontWeight: "500",
     lineHeight: 21,
     color: COLORS.ink,
   },
   questionTextSemi: {
     marginTop: 8,
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
     lineHeight: 21,
     color: COLORS.ink,
   },
@@ -1168,8 +1168,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   myBetBannerText: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   multiOptionsStack: {
@@ -1224,8 +1224,8 @@ const styles = StyleSheet.create({
   },
   multiLabel: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   multiRight: {
@@ -1234,8 +1234,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   multiPct: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -1258,8 +1258,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   multiOddsText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
   expandBtn: {
@@ -1273,8 +1273,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   expandBtnText: {
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   binaryGrid: {
@@ -1307,13 +1307,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.ink,
   },
   sideLabel: {
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   sideOdds: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
   winnerBox: {
@@ -1337,13 +1337,13 @@ const styles = StyleSheet.create({
   },
   winnerText: {
     flex: 1,
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.win,
   },
   winnerOddsText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },

@@ -151,19 +151,19 @@ export function RealMatchStatsCard({
         className
       )}
     >
-      <div className="mb-2 flex items-center justify-between gap-2 text-[11px]">
-        <span className="inline-flex items-center gap-1.5 font-display font-bold text-emerald-700">
+      <div className="mb-2 flex items-center justify-between gap-2 text-[10px]">
+        <span className="inline-flex items-center gap-1.5 font-display font-medium text-emerald-700">
           <BarChart3 className="h-3.5 w-3.5" strokeWidth={2.3} />
           Statistiques officielles
         </span>
         {effHtH != null && effHtA != null && (
-          <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-ink">
+          <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-ink">
             MT {effHtH} - {effHtA}
           </span>
         )}
       </div>
 
-      <div className="mb-2 flex items-center justify-between gap-2 text-[10.5px] font-semibold text-dim">
+      <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-medium text-dim">
         <span className="flex min-w-0 max-w-[46%] items-center gap-1.5">
           <TeamAvatar name={homeTeam} logo={homeLogo} size="2xs" />
           <span className="truncate">{homeTeam}</span>
@@ -177,12 +177,12 @@ export function RealMatchStatsCard({
       <div className="space-y-2">
         {visibleLines.map((row) => (
           <div key={row.key} className="space-y-1">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-display font-bold tabular-nums text-ink">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="font-display font-medium tabular-nums text-ink">
                 {row.left}
               </span>
-              <span className="text-[10.5px] font-medium text-mist">{row.label}</span>
-              <span className="font-display font-bold tabular-nums text-ink">
+              <span className="text-[10px] font-medium text-mist">{row.label}</span>
+              <span className="font-display font-medium tabular-nums text-ink">
                 {row.right}
               </span>
             </div>

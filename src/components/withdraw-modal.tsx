@@ -182,8 +182,8 @@ export function WithdrawModal({
         >
           <div className="flex shrink-0 items-center justify-between border-b border-edge px-4 py-3.5">
             <div>
-              <h2 className="font-display text-[17px] font-bold text-ink">Retirer mes gains</h2>
-              <p className="text-[11.5px] text-dim">
+              <h2 className="font-display text-[13.5px] font-bold text-ink">Retirer mes gains</h2>
+              <p className="text-[10.5px] text-dim">
                 Solde retirable : <strong className="text-win">{eur(withdrawable)}</strong>
                 {withdrawable < balance && (
                   <span className="text-dim"> (total {eur(balance)})</span>
@@ -203,12 +203,12 @@ export function WithdrawModal({
           <form onSubmit={submit} className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3.5">
             {bonusRemaining > 0 && (
               <div className="mb-3.5 rounded-2xl border border-amber-500/25 bg-amber-500/8 p-3">
-                <div className="flex items-center justify-between gap-2 text-[11.5px]">
-                  <span className="inline-flex items-center gap-1 font-display font-bold text-amber-900">
+                <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                  <span className="inline-flex items-center gap-1 font-display font-medium text-amber-900">
                     <Lock className="h-3.5 w-3.5 text-amber-700" strokeWidth={2.3} />
                     Déblocage du bonus de bienvenue
                   </span>
-                  <span className="font-display font-bold tabular-nums text-amber-900">
+                  <span className="font-display font-medium tabular-nums text-amber-900">
                     {progressPct}%
                   </span>
                 </div>
@@ -218,14 +218,14 @@ export function WithdrawModal({
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-amber-900/85">
+                <p className="mt-1.5 text-[10px] leading-relaxed text-amber-900/85">
                   Misez encore <strong>{eur(bonusRemaining)}</strong> sur des paris réglés à cote{" "}
                   <strong>≥ 1,30</strong> pour rendre l&apos;intégralité du bonus retirable.
                 </p>
               </div>
             )}
 
-            <label className="text-[11.5px] font-semibold text-mist">Mode de réception</label>
+            <label className="text-[10.5px] font-medium text-mist">Mode de réception</label>
             <div className="mt-1.5 grid grid-cols-2 gap-1.5">
               {METHODS.map((m) => {
                 const active = method === m.id;
@@ -246,7 +246,7 @@ export function WithdrawModal({
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" strokeWidth={2.1} />
-                    <span className="truncate font-display text-[11.5px] font-bold leading-tight">
+                    <span className="truncate font-display text-[10.5px] font-medium leading-tight">
                       {m.label}
                     </span>
                   </button>
@@ -255,7 +255,7 @@ export function WithdrawModal({
             </div>
 
             <div className="mt-3.5">
-              <label className="text-[11.5px] font-semibold text-mist">{currentMethod.hint}</label>
+              <label className="text-[10.5px] font-medium text-mist">{currentMethod.hint}</label>
               <input
                 type="text"
                 value={destination}
@@ -264,12 +264,12 @@ export function WithdrawModal({
                   setError(null);
                 }}
                 placeholder={currentMethod.placeholder}
-                className="mt-1.5 h-11 w-full rounded-2xl border border-edge bg-white px-3.5 text-[15px] font-medium text-ink outline-none focus:border-ink"
+                className="mt-1.5 h-11 w-full rounded-2xl border border-edge bg-white px-3.5 text-[12px] font-medium text-ink outline-none focus:border-ink"
               />
             </div>
 
             <div className="mt-3.5">
-              <label className="text-[11.5px] font-semibold text-mist">
+              <label className="text-[10.5px] font-medium text-mist">
                 Montant à retirer (min. 10 €)
               </label>
               <div
@@ -289,9 +289,9 @@ export function WithdrawModal({
                     setError(null);
                   }}
                   placeholder="20"
-                  className="w-full bg-transparent font-display text-[20px] font-bold tabular-nums text-ink outline-none"
+                  className="w-full bg-transparent font-display text-[14.5px] font-medium tabular-nums text-ink outline-none"
                 />
-                <span className="font-display text-[16px] font-bold text-dim">€</span>
+                <span className="font-display text-[12.5px] font-medium text-dim">€</span>
               </div>
 
               <div className="mt-2 grid grid-cols-4 gap-1.5">
@@ -304,7 +304,7 @@ export function WithdrawModal({
                       setError(null);
                     }}
                     className={cn(
-                      "h-8 rounded-xl border font-display text-[12px] font-bold",
+                      "h-8 rounded-xl border font-display text-[10.5px] font-medium",
                       amount === amt
                         ? "border-ink bg-ink text-white"
                         : "border-edge bg-elev text-ink"
@@ -319,7 +319,7 @@ export function WithdrawModal({
                     setAmountText(String(Math.max(0, Math.floor(withdrawable * 100) / 100)));
                     setError(null);
                   }}
-                  className="h-8 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red"
+                  className="h-8 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red"
                 >
                   MAX
                 </button>
@@ -327,19 +327,19 @@ export function WithdrawModal({
             </div>
 
             {belowMin && (
-              <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
+              <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
                 Montant minimum de retrait : 10,00 €
               </p>
             )}
             {overWithdrawable && (
-              <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
+              <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
                 {amount <= balance
                   ? `Montant supérieur à votre solde retirable (${eur(withdrawable)}).`
                   : "Ce montant dépasse votre solde disponible."}
               </p>
             )}
             {error && (
-              <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+              <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[10.5px] font-medium text-betclic-red">
                 {error}
               </p>
             )}
@@ -348,7 +348,7 @@ export function WithdrawModal({
               type="submit"
               disabled={!canSubmit}
               className={cn(
-                "mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14px] font-bold transition-all",
+                "mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[11.5px] font-medium transition-all",
                 canSubmit ? "bg-betclic-red text-white shadow-sm" : "bg-elev text-dim"
               )}
             >

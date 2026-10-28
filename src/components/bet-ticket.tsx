@@ -248,16 +248,16 @@ function ComboBetTicket({
 
       {/* En-tête identique aux paris simples */}
       <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
+        <div className="flex min-w-0 items-center gap-1.5 text-[10.5px] font-medium text-mist">
           <Layers className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
-          <span className="truncate font-semibold text-ink">Combiné</span>
+          <span className="truncate font-medium text-ink">Combiné</span>
           {bet.boostPct != null && bet.boostPct > 0 && (
-            <span className="shrink-0 rounded-md bg-win/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold text-win">
+            <span className="shrink-0 rounded-md bg-win/12 px-1.5 py-0.5 font-display text-[9.5px] font-medium text-win">
               +{bet.boostPct}%
             </span>
           )}
           <span className="text-dim">·</span>
-          <span className="shrink-0 text-[11px] text-dim">
+          <span className="shrink-0 text-[10px] text-dim">
             {formatPlacedAt(
               bet.status !== "pending"
                 ? (bet.settledAt ?? bet.placedAt)
@@ -272,7 +272,7 @@ function ComboBetTicket({
               type="button"
               onClick={() => onShare(bet)}
               aria-label="Partager ce combiné"
-              className="pointer-events-auto relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
+              className="pointer-events-auto relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[9.5px] font-medium text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
             >
               <Share2 className="h-3 w-3" strokeWidth={2.2} />
               Flex
@@ -331,7 +331,7 @@ function ComboBetTicket({
                     )}
                     <span
                       className={cn(
-                        "truncate font-display text-[13.5px] font-semibold leading-snug",
+                        "truncate font-display text-[11.5px] font-medium leading-snug",
                         leg.status === "lost" ? "text-mist line-through" : "text-ink"
                       )}
                     >
@@ -339,7 +339,7 @@ function ComboBetTicket({
                     </span>
                   </div>
 
-                  <span className="shrink-0 font-display text-[12.5px] font-bold tabular-nums text-mist">
+                  <span className="shrink-0 font-display text-[11px] font-medium tabular-nums text-mist">
                     {formatOdds(leg.odds, oddsFormat)}
                   </span>
                 </div>
@@ -352,13 +352,13 @@ function ComboBetTicket({
 
         {/* Barre compacte de synthèse (même gabarit que la barre de sélection d'un pari simple) */}
         <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-elev px-3 py-2">
-          <span className="truncate text-[12px] font-semibold text-ink">
+          <span className="truncate text-[10.5px] font-medium text-ink">
             {progressSummary}
             {extraCount > 0
               ? ` · +${extraCount} autre${extraCount > 1 ? "s" : ""}`
               : ""}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-0.5 font-display text-[12px] font-bold text-betclic-red">
+          <span className="inline-flex shrink-0 items-center gap-0.5 font-display text-[10.5px] font-medium text-betclic-red">
             Détails
             <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
           </span>
@@ -422,7 +422,7 @@ function ComboBetTicket({
           {cashoutChanged && (
             <div
               role="alert"
-              className="flex items-start gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11.5px] leading-snug text-amber-900"
+              className="flex items-start gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[10.5px] leading-snug text-amber-900"
             >
               <AlertTriangle
                 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700"
@@ -607,14 +607,14 @@ function SingleBetTicket({
 
       {/* En-tête : ligue/catégorie + date/heure + bouton partager + badge de statut */}
       <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
+        <div className="flex min-w-0 items-center gap-1.5 text-[10.5px] font-medium text-mist">
           {isPrediction ? (
             <TrendingUp className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
           ) : (
             <SportIcon sport={bet.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
           )}
           {!isPrediction && bet.matchSource === "manual" && (
-            <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide text-emerald-700 lg:inline-block">
+            <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9px] font-medium uppercase tracking-wide text-emerald-700 lg:inline-block">
               Réel
             </span>
           )}
@@ -629,7 +629,7 @@ function SingleBetTicket({
           </span>
           <span
             className={cn(
-              "shrink-0 text-[11px] tabular-nums text-dim",
+              "shrink-0 text-[10px] tabular-nums text-dim",
               !isPrediction && bet.matchStartsAt && !live && "hidden sm:inline"
             )}
           >
@@ -641,7 +641,7 @@ function SingleBetTicket({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {!isPrediction && bet.matchStartsAt && !live && (
-            <span className="text-[10px] font-medium tabular-nums text-dim sm:text-[10.5px]">
+            <span className="text-[9.5px] font-medium tabular-nums text-dim sm:text-[10px]">
               {formatKickoff(bet.matchStartsAt)}
             </span>
           )}
@@ -650,7 +650,7 @@ function SingleBetTicket({
               type="button"
               onClick={() => onShare(bet)}
               aria-label="Partager ce ticket"
-              className="pointer-events-auto relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
+              className="pointer-events-auto relative z-10 inline-flex h-6 items-center gap-1 rounded-full bg-elev px-2 font-display text-[9.5px] font-medium text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
             >
               <Share2 className="h-3 w-3" strokeWidth={2.2} />
               Flex
@@ -681,16 +681,16 @@ function SingleBetTicket({
         {isPrediction ? (
           <>
             <div className="flex items-center justify-between gap-2">
-              <p className="font-display text-[14.5px] font-semibold leading-snug text-ink">
+              <p className="font-display text-[12px] font-medium leading-snug text-ink">
                 {bet.question}
               </p>
               <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
             </div>
             <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
-              <span className="truncate pr-2 text-[12.5px] font-semibold text-ink">
+              <span className="truncate pr-2 text-[11px] font-medium text-ink">
                 {bet.selectionLabel}
               </span>
-              <span className="shrink-0 font-display text-[13.5px] font-bold tabular-nums text-ink">
+              <span className="shrink-0 font-display text-[11.5px] font-medium tabular-nums text-ink">
                 {formatOdds(bet.odds, oddsFormat)}
               </span>
             </div>
@@ -734,10 +734,10 @@ function SingleBetTicket({
             })()}
 
             <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
-              <span className="truncate pr-2 text-[12.5px] font-semibold text-ink">
+              <span className="truncate pr-2 text-[11px] font-medium text-ink">
                 {bet.selectionLabel}
               </span>
-              <span className="shrink-0 font-display text-[13.5px] font-bold tabular-nums text-ink">
+              <span className="shrink-0 font-display text-[11.5px] font-medium tabular-nums text-ink">
                 {formatOdds(bet.odds, oddsFormat)}
               </span>
             </div>
@@ -787,7 +787,7 @@ function SingleBetTicket({
           {cashoutChanged && (
             <div
               role="alert"
-              className="flex items-start gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11.5px] leading-snug text-amber-900"
+              className="flex items-start gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[10.5px] leading-snug text-amber-900"
             >
               <AlertTriangle
                 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700"
@@ -838,8 +838,8 @@ export function TicketTeamRow({
       <TeamAvatar name={name} logo={logo} size={compact ? "2xs" : "xs"} />
       <span
         className={cn(
-          "truncate font-display font-semibold leading-snug",
-          compact ? "text-[12.5px]" : "text-[14px]",
+          "truncate font-display font-medium leading-snug",
+          compact ? "text-[11px]" : "text-[11.5px]",
           isFinished && !winner ? "text-mist" : "text-ink"
         )}
       >
@@ -848,8 +848,8 @@ export function TicketTeamRow({
       {score != null && (
         <span
           className={cn(
-            "ml-auto min-w-[20px] rounded-md px-1.5 py-0.5 text-center font-display font-bold leading-none tabular-nums",
-            compact ? "text-[13px]" : "text-[15px]",
+            "ml-auto min-w-[20px] rounded-md px-1.5 py-0.5 text-center font-display font-medium leading-none tabular-nums",
+            compact ? "text-[11px]" : "text-[12px]",
             isLive
               ? "bg-betclic-red/10 text-betclic-red"
               : isFinished && winner
@@ -877,14 +877,14 @@ export function StatusPill({
 }) {
   if (status === "won") {
     return (
-      <span className="shrink-0 rounded-full bg-win/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-win">
+      <span className="shrink-0 rounded-full bg-win/12 px-2.5 py-0.5 font-display text-[10px] font-medium text-win">
         Gagné
       </span>
     );
   }
   if (status === "lost") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-betclic-red">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2.5 py-0.5 font-display text-[10px] font-medium text-betclic-red">
         <X className="h-2.5 w-2.5" strokeWidth={3} />
         Perdu
       </span>
@@ -892,21 +892,21 @@ export function StatusPill({
   }
   if (status === "cashed") {
     return (
-      <span className="shrink-0 rounded-full bg-sky-500/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-sky-700">
+      <span className="shrink-0 rounded-full bg-sky-500/12 px-2.5 py-0.5 font-display text-[10px] font-medium text-sky-700">
         Vendu
       </span>
     );
   }
   if (status === "void") {
     return (
-      <span className="shrink-0 rounded-full bg-amber-500/12 px-2.5 py-0.5 font-display text-[10.5px] font-bold text-amber-800">
+      <span className="shrink-0 rounded-full bg-amber-500/12 px-2.5 py-0.5 font-display text-[10px] font-medium text-amber-800">
         Remboursé
       </span>
     );
   }
   if (live) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-betclic-red/10 px-2.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums text-betclic-red">
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-betclic-red/10 px-2.5 py-0.5 font-display text-[10px] font-medium tabular-nums text-betclic-red">
         <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
         Direct{" "}
         <LiveMatchClock
@@ -917,7 +917,7 @@ export function StatusPill({
     );
   }
   return (
-    <span className="shrink-0 rounded-full bg-elev px-2.5 py-0.5 font-display text-[10.5px] font-semibold text-ink">
+    <span className="shrink-0 rounded-full bg-elev px-2.5 py-0.5 font-display text-[10px] font-medium text-ink">
       En cours
     </span>
   );
@@ -941,10 +941,10 @@ function Amount({
         align === "right" && "justify-end text-right"
       )}
     >
-      <span className="text-[10.5px] font-medium text-dim">{label} :</span>
+      <span className="text-[10px] font-medium text-dim">{label} :</span>
       <span
         className={cn(
-          "font-display text-[13.5px] font-bold tabular-nums",
+          "font-display text-[11.5px] font-medium tabular-nums",
           tone === "win" && "text-win",
           tone === "lost" && "text-betclic-red",
           tone === "cash" && "text-sky-700",

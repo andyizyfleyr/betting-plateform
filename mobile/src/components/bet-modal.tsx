@@ -445,8 +445,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   leagueText: {
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.mist,
     flexShrink: 1,
   },
@@ -466,8 +466,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   liveText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   closeBtn: {
@@ -494,8 +494,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   matchTeams: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
     flex: 1,
   },
@@ -506,13 +506,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   marketLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   pickLabel: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     marginTop: 1,
   },
@@ -525,8 +525,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
   },
   oddsBadgeText: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -543,8 +543,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   errorText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     flex: 1,
   },
@@ -555,8 +555,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   rechargeInlineText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   summaryBox: {
@@ -572,19 +572,19 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   summaryLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   summaryVal: {
-    fontSize: 14.5,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   summaryWin: {
-    fontSize: 16.5,
-    fontWeight: "800",
+    fontSize: 12.5,
+    fontWeight: "500",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
@@ -606,8 +606,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.outerSpace,
   },
   comboBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   submitBtn: {
@@ -620,8 +620,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   submitText: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },

@@ -28,8 +28,8 @@ const MINI_GAMES = [
 
 export default function JeuxPage() {
   return (
-    <div className="mx-auto w-full max-w-[1360px] px-4 pb-8 pt-4 lg:px-0 lg:py-0">
-      <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
+      <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
         Mini-jeux
       </h1>
 
@@ -54,20 +54,20 @@ export default function JeuxPage() {
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/15" />
 
               <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
-                <span className="rounded-full border border-white/20 bg-black/55 px-2.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-md">
+                <span className="rounded-full border border-white/20 bg-black/55 px-2.5 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wider text-white backdrop-blur-md">
                   {badge}
                 </span>
-                <span className="rounded-full bg-amber-400/95 px-2.5 py-0.5 font-display text-[10px] font-extrabold text-slate-950 shadow-xs">
+                <span className="rounded-full bg-amber-400/95 px-2.5 py-0.5 font-display text-[9.5px] font-medium text-slate-950 shadow-xs">
                   {tag}
                 </span>
               </div>
 
               <div className="absolute inset-x-3.5 bottom-3 flex items-end justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="font-display text-[20px] font-extrabold leading-tight tracking-tight text-white drop-shadow-sm">
+                  <h2 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-white drop-shadow-sm">
                     {title}
                   </h2>
-                  <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-white/85">
+                  <p className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-white/85">
                     {subtitle}
                   </p>
                 </div>

@@ -65,7 +65,7 @@ function LegLiveOddsBadge({
   return (
     <span
       className={cn(
-        "relative shrink-0 rounded-lg bg-white px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums shadow-2xs transition-colors duration-200",
+        "relative shrink-0 rounded-lg bg-white px-2.5 py-1 font-display text-[11.5px] font-medium tabular-nums shadow-2xs transition-colors duration-200",
         oddsTrendTextClass(trend)
       )}
     >
@@ -547,15 +547,15 @@ export default function BetslipPage() {
   // État après validation réussie
   if (receipt && comboLegs.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-[1360px] px-4 pt-6 pb-8 lg:px-0 lg:py-4">
+      <div className="mx-auto w-full max-w-[1600px] px-2 pt-4 pb-6 lg:px-0 lg:py-3">
         <div className="glass-card mx-auto max-w-[540px] rounded-3xl p-5 text-center lg:p-7">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
             <Check className="h-7 w-7" strokeWidth={2.6} />
           </div>
-          <h1 className="mt-3 font-display text-[20px] font-bold text-ink">
+          <h1 className="mt-3 font-display text-[14.5px] font-bold text-ink">
             Coupon validé !
           </h1>
-          <p className="mt-1 text-[12.5px] text-mist">
+          <p className="mt-1 text-[11px] text-mist">
             {receipt.kind === "combo"
               ? `Pari combiné (${receipt.count} sélections)`
               : "Pari simple enregistré"}
@@ -563,20 +563,20 @@ export default function BetslipPage() {
 
           <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-elev p-3">
             <div>
-              <p className="text-[10.5px] text-dim">Mise</p>
-              <p className="font-display text-[14px] font-bold tabular-nums text-ink">
+              <p className="text-[10px] text-dim">Mise</p>
+              <p className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                 {eur(receipt.stake)}
               </p>
             </div>
             <div>
-              <p className="text-[10.5px] text-dim">Cote totale</p>
-              <p className="font-display text-[14px] font-bold tabular-nums text-betclic-red">
+              <p className="text-[10px] text-dim">Cote totale</p>
+              <p className="font-display text-[11.5px] font-medium tabular-nums text-betclic-red">
                 {formatOdds(receipt.totalOdds, oddsFormat)}
               </p>
             </div>
             <div>
-              <p className="text-[10.5px] text-dim">Gain max</p>
-              <p className="font-display text-[14px] font-bold tabular-nums text-win">
+              <p className="text-[10px] text-dim">Gain max</p>
+              <p className="font-display text-[11.5px] font-medium tabular-nums text-win">
                 {eur(receipt.potentialWin)}
               </p>
             </div>
@@ -590,7 +590,7 @@ export default function BetslipPage() {
                 triggerRouteLoader("/matchs");
                 router.push("/matchs");
               }}
-              className="h-11 rounded-xl bg-elev font-display text-[13px] font-bold text-ink active:scale-[0.98]"
+              className="h-11 rounded-xl bg-elev font-display text-[11px] font-medium text-ink active:scale-[0.98]"
             >
               Continuer
             </button>
@@ -601,7 +601,7 @@ export default function BetslipPage() {
                 triggerRouteLoader("/paris");
                 router.push("/paris");
               }}
-              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[13px] font-bold text-white active:scale-[0.98]"
+              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[11px] font-medium text-white active:scale-[0.98]"
             >
               Mes paris
               <ArrowRight className="h-4 w-4" strokeWidth={2.3} />
@@ -614,15 +614,15 @@ export default function BetslipPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>
-    <div className="mx-auto w-full max-w-[1360px] px-4 pt-3.5 pb-2 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pt-2.5 pb-2 lg:px-0 lg:py-0">
       {/* En-tête */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+          <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
             Coupon de pari
           </h1>
           {enrichedLegs.length > 0 && (
-            <span className="rounded-full bg-betclic-red px-2 py-0.5 font-display text-[11px] font-bold text-white">
+            <span className="rounded-full bg-betclic-red px-2 py-0.5 font-display text-[10px] font-medium text-white">
               {enrichedLegs.length}/{MAX_COMBO_LEGS}
             </span>
           )}
@@ -634,7 +634,7 @@ export default function BetslipPage() {
               type="button"
               onClick={() => setMobileCouponOpen((o) => !o)}
               className={cn(
-                "inline-flex h-8 items-center gap-1 rounded-full px-2.5 font-display text-[11.5px] font-bold transition-colors active:scale-95 lg:hidden",
+                "inline-flex h-8 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-medium transition-colors active:scale-95 lg:hidden",
                 mobileCouponOpen
                   ? "bg-ink text-white"
                   : "bg-elev text-ink"
@@ -649,7 +649,7 @@ export default function BetslipPage() {
                 clearCombo();
                 setError(null);
               }}
-              className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[11.5px] font-bold text-mist hover:bg-edge/80 hover:text-ink active:bg-edge active:text-ink"
+              className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10.5px] font-medium text-mist hover:bg-edge/80 hover:text-ink active:bg-edge active:text-ink"
             >
               <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />
               Vider
@@ -664,11 +664,11 @@ export default function BetslipPage() {
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-betclic-red/10 text-betclic-red">
             <Layers className="h-6 w-6" strokeWidth={2.1} />
           </div>
-          <h2 className="mt-3.5 font-display text-[16.5px] font-bold text-ink">
+          <h2 className="mt-3.5 font-display text-[12.5px] font-bold text-ink">
             Votre coupon de pari est vide
           </h2>
-          <p className="mx-auto mt-1.5 max-w-[290px] text-[12.5px] leading-relaxed text-mist">
-            Faites un <strong className="font-semibold text-ink">appui long</strong> sur
+          <p className="mx-auto mt-1.5 max-w-[290px] text-[11px] leading-relaxed text-mist">
+            Faites un <strong className="font-medium text-ink">appui long</strong> sur
             n&apos;importe quelle cote dans Matchs ou Prédictions pour l&apos;ajouter à votre
             coupon combiné.
           </p>
@@ -676,14 +676,14 @@ export default function BetslipPage() {
           <div className="mt-5 grid grid-cols-2 gap-2.5">
             <Link
               href="/matchs"
-              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[13px] font-bold text-white active:scale-[0.98]"
+              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[11px] font-medium text-white active:scale-[0.98]"
             >
               <Trophy className="h-4 w-4" strokeWidth={2.2} />
               Matchs
             </Link>
             <Link
               href="/predictions"
-              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-elev font-display text-[13px] font-bold text-ink active:scale-[0.98]"
+              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-elev font-display text-[11px] font-medium text-ink active:scale-[0.98]"
             >
               <TrendingUp className="h-4 w-4 text-betclic-red" strokeWidth={2.2} />
               Prédictions
@@ -705,19 +705,19 @@ export default function BetslipPage() {
           {/* Jauge Bonus Combiné (uniquement en mode combiné ≥ 2 sélections) */}
           {isCombo && (
             <div className="rounded-2xl border border-edge bg-white p-3">
-              <div className="flex items-center justify-between gap-2 text-[11.5px]">
-                <span className="inline-flex items-center gap-1.5 font-display font-bold text-ink">
+              <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                <span className="inline-flex items-center gap-1.5 font-display font-medium text-ink">
                   <Flame className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
                   {quote.boostPct > 0
                     ? `Bonus Combiné actif : +${quote.boostPct}%`
                     : "Bonus Combiné jusqu'à +20%"}
                 </span>
                 {nextBoost ? (
-                  <span className="text-[11px] font-semibold text-mist">
+                  <span className="text-[10px] font-medium text-mist">
                     +{nextBoost.needed} cote{nextBoost.needed > 1 ? "s" : ""} (≥{MIN_ELIGIBLE_BOOST_ODDS}) → +{nextBoost.pct}%
                   </span>
                 ) : (
-                  <span className="text-[11px] font-bold text-win">Palier max atteint</span>
+                  <span className="text-[10px] font-medium text-win">Palier max atteint</span>
                 )}
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-elev">
@@ -771,10 +771,10 @@ export default function BetslipPage() {
 
                   {/* En-tête : ligue + statut + retrait */}
                   <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-mist">
-                      <span className="truncate font-semibold">{leg.league}</span>
+                    <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-mist">
+                      <span className="truncate font-medium">{leg.league}</span>
                       {leg.isLive && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-betclic-red">
                           <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
                           <LiveMatchClock
                             match={
@@ -790,17 +790,17 @@ export default function BetslipPage() {
                         </span>
                       )}
                       {!leg.isLive && !leg.closed && leg.startsAt && (
-                        <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-semibold tabular-nums text-ink">
+                        <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-ink">
                           {formatKickoff(leg.startsAt)}
                         </span>
                       )}
                       {leg.closed && (
-                        <span className="shrink-0 rounded-full bg-betclic-red/15 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+                        <span className="shrink-0 rounded-full bg-betclic-red/15 px-2 py-0.5 font-display text-[9.5px] font-medium text-betclic-red">
                           Clôturé
                         </span>
                       )}
                       {leg.suspended && !leg.closed && (
-                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10px] font-bold text-amber-700">
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[9.5px] font-medium text-amber-700">
                           Suspendu
                         </span>
                       )}
@@ -826,13 +826,13 @@ export default function BetslipPage() {
                             logo={leg.matchObj?.homeLogo ?? leg.homeLogo}
                             size="xs"
                           />
-                          <span className="truncate font-display text-[14px] font-semibold text-ink">
+                          <span className="truncate font-display text-[11.5px] font-medium text-ink">
                             {hName}
                           </span>
                           {showScores && (
                             <span
                               className={cn(
-                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[15px] font-bold tabular-nums",
+                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[12px] font-medium tabular-nums",
                                 leg.isLive ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-ink"
                               )}
                             >
@@ -846,13 +846,13 @@ export default function BetslipPage() {
                             logo={leg.matchObj?.awayLogo ?? leg.awayLogo}
                             size="xs"
                           />
-                          <span className="truncate font-display text-[14px] font-semibold text-ink">
+                          <span className="truncate font-display text-[11.5px] font-medium text-ink">
                             {aName}
                           </span>
                           {showScores && (
                             <span
                               className={cn(
-                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[15px] font-bold tabular-nums",
+                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[12px] font-medium tabular-nums",
                                 leg.isLive ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-ink"
                               )}
                             >
@@ -862,13 +862,13 @@ export default function BetslipPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="font-display text-[14px] font-semibold leading-snug text-ink">
+                      <p className="font-display text-[11.5px] font-medium leading-snug text-ink">
                         {leg.title}
                       </p>
                     )}
 
                     <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
-                      <span className="truncate pr-2 text-[12.5px] font-semibold text-ink">
+                      <span className="truncate pr-2 text-[11px] font-medium text-ink">
                         {leg.selectionLabel}
                       </span>
                       <LegLiveOddsBadge odds={leg.liveOdds} oddsFormat={oddsFormat} />
@@ -881,7 +881,7 @@ export default function BetslipPage() {
           </div>
 
           {/* Bloc Mise & Validation : barre collante juste au-dessus de la BottomNav sur mobile, colonne collante à droite sur desktop */}
-          <div className="glass-card rounded-2xl p-3.5 space-y-2.5 max-lg:sticky max-lg:bottom-[calc(58px+env(safe-area-inset-bottom,0px))] max-lg:z-20 max-lg:-mx-4 max-lg:rounded-t-2xl max-lg:rounded-b-none max-lg:border-x-0 max-lg:border-b-0 max-lg:border-t max-lg:border-edge max-lg:bg-white/98 max-lg:px-4 max-lg:pt-2.5 max-lg:pb-3 max-lg:shadow-[0_-6px_20px_rgba(17,24,39,0.08)] max-lg:backdrop-blur-md lg:sticky lg:top-[84px] lg:space-y-3 lg:p-5">
+          <div className="glass-card rounded-2xl p-3.5 space-y-2.5 max-lg:sticky max-lg:bottom-[calc(58px+env(safe-area-inset-bottom,0px))] max-lg:z-20 max-lg:-mx-2 max-lg:rounded-t-2xl max-lg:rounded-b-none max-lg:border-x-0 max-lg:border-b-0 max-lg:border-t max-lg:border-edge max-lg:bg-white/98 max-lg:px-2 max-lg:pt-2.5 max-lg:pb-3 max-lg:shadow-[0_-6px_20px_rgba(17,24,39,0.08)] max-lg:backdrop-blur-md lg:sticky lg:top-[84px] lg:space-y-3 lg:p-5">
             <TouchStakePad
               id="betslip-stake-input"
               label="Votre mise"
@@ -898,26 +898,26 @@ export default function BetslipPage() {
             />
 
             {/* Récapitulatif cotes & gain potentiel */}
-            <div className="space-y-1.5 border-t border-edge pt-2.5 text-[12.5px]">
+            <div className="space-y-1.5 border-t border-edge pt-2.5 text-[11px]">
               <div className="flex items-center justify-between text-mist">
                 <span>{isCombo ? "Cote totale" : "Cote"}</span>
-                <span className="font-display text-[14px] font-bold tabular-nums text-ink">
+                <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                   {formatOdds(quote.totalOdds, oddsFormat)}
                 </span>
               </div>
               {quote.boostAmount > 0 && (
                 <div className="flex items-center justify-between text-win">
                   <span>Bonus Combiné (+{quote.boostPct}%)</span>
-                  <span className="font-display font-bold tabular-nums">
+                  <span className="font-display font-medium tabular-nums">
                     +{eur(quote.boostAmount)}
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between pt-0.5">
-                <span className="font-display text-[13.5px] font-bold text-ink">
+                <span className="font-display text-[11.5px] font-medium text-ink">
                   Gain potentiel
                 </span>
-                <span className="font-display text-[18px] font-extrabold tabular-nums text-win">
+                <span className="font-display text-[13.5px] font-medium tabular-nums text-win">
                   <AnimatedNumber value={quote.potentialWin} format={eur} />
                 </span>
               </div>
@@ -925,7 +925,7 @@ export default function BetslipPage() {
 
             {/* Alertes éventuelles */}
             {hasMixedSources && (
-              <div className="flex items-center gap-2 rounded-xl bg-betclic-red/10 px-3 py-2 text-[12px] font-medium text-betclic-red">
+              <div className="flex items-center gap-2 rounded-xl bg-betclic-red/10 px-3 py-2 text-[10.5px] font-medium text-betclic-red">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>
                   Impossible de mélanger des matchs réels et des matchs virtuels dans un même coupon.
@@ -934,32 +934,32 @@ export default function BetslipPage() {
             )}
 
             {hasClosedLeg && (
-              <div className="flex items-center gap-2 rounded-xl bg-betclic-red/10 px-3 py-2 text-[12px] font-medium text-betclic-red">
+              <div className="flex items-center gap-2 rounded-xl bg-betclic-red/10 px-3 py-2 text-[10.5px] font-medium text-betclic-red">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>Retirez la sélection clôturée pour valider votre coupon.</span>
               </div>
             )}
 
             {hasSuspendedLeg && !hasClosedLeg && (
-              <div className="flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[12px] font-medium text-amber-800">
+              <div className="flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[10.5px] font-medium text-amber-800">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span>Une sélection est temporairement suspendue (coup d&apos;envoi ou action live).</span>
               </div>
             )}
 
             {belowMin && (
-              <p className="text-[11.5px] font-medium text-betclic-red">
+              <p className="text-[10.5px] font-medium text-betclic-red">
                 La mise minimale est de 0,50 €.
               </p>
             )}
 
             {overBalance && (
-              <div className="flex items-center justify-between rounded-xl bg-betclic-red/10 px-3 py-2 text-[12px]">
+              <div className="flex items-center justify-between rounded-xl bg-betclic-red/10 px-3 py-2 text-[10.5px]">
                 <span className="font-medium text-betclic-red">Solde insuffisant</span>
                 <button
                   type="button"
                   onClick={openRecharge}
-                  className="font-display font-bold text-betclic-red underline"
+                  className="font-display font-medium text-betclic-red underline"
                 >
                   Recharger
                 </button>
@@ -979,14 +979,14 @@ export default function BetslipPage() {
             />
 
             {error && !overBalance && (
-              <p className="text-[12px] font-medium text-betclic-red">{error}</p>
+              <p className="text-[10.5px] font-medium text-betclic-red">{error}</p>
             )}
 
             <button
               type="button"
               disabled={!canSubmit}
               onClick={submitSlip}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red font-display text-[14.5px] font-bold text-white shadow-sm transition-transform active:scale-[0.985] disabled:opacity-45"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red font-display text-[12px] font-medium text-white shadow-sm transition-transform active:scale-[0.985] disabled:opacity-45"
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />

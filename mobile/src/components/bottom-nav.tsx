@@ -170,19 +170,19 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
     lineHeight: 11,
     fontVariant: ["tabular-nums"],
   },
   label: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "500",
     color: COLORS.dim,
     lineHeight: 12,
   },
   labelActive: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
 });

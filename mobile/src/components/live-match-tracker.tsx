@@ -588,7 +588,7 @@ function PitchRadarView({
                     y="1.2"
                     textAnchor="middle"
                     fontSize="3.4"
-                    fontWeight="bold"
+                    fontWeight="500"
                     fill={txt}
                   >
                     {p.number}
@@ -703,11 +703,11 @@ function MomentumHistogramView({
         <View style={styles.momentumCenterBadge}>
           <Text style={styles.momentumCenterText}>
             10 dern. min :{" "}
-            <Text style={{ fontWeight: "800", color: "#ffffff" }}>
+            <Text style={{ fontWeight: "500", color: "#ffffff" }}>
               {telemetry.recentHomePressure}%
             </Text>{" "}
             –{" "}
-            <Text style={{ fontWeight: "800", color: "#ffffff" }}>
+            <Text style={{ fontWeight: "500", color: "#ffffff" }}>
               {100 - telemetry.recentHomePressure}%
             </Text>
           </Text>
@@ -1075,8 +1075,8 @@ const styles = StyleSheet.create({
   },
   headerLabel: {
     flex: 1,
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#ffffff",
   },
   tabGroup: {
@@ -1100,7 +1100,7 @@ const styles = StyleSheet.create({
   },
   tabPillText: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "rgba(209,250,229,0.78)",
   },
   tabPillTextActive: {
@@ -1150,12 +1150,12 @@ const styles = StyleSheet.create({
   },
   cornerText: {
     fontSize: 8.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "rgba(255,255,255,0.90)",
   },
   redPlayerCount: {
     fontSize: 8.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#fca5a5",
   },
   bannerCenter: {
@@ -1182,13 +1182,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(69,10,10,0.92)",
   },
   bannerTitle: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 9.5,
+    fontWeight: "700",
     color: "#fde68a",
   },
   bannerSub: {
     fontSize: 9,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "rgba(255,255,255,0.86)",
   },
   momentumWrap: {
@@ -1215,7 +1215,7 @@ const styles = StyleSheet.create({
   },
   momentumTeamText: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
   },
   momentumCenterBadge: {
@@ -1226,7 +1226,7 @@ const styles = StyleSheet.create({
   },
   momentumCenterText: {
     fontSize: 9,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#d1fae5",
   },
   momentumSvgFrame: {
@@ -1260,7 +1260,7 @@ const styles = StyleSheet.create({
   },
   statsVal: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
@@ -1295,7 +1295,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 1.5,
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#fde68a",
   },
   timelineRow: {
@@ -1305,7 +1305,7 @@ const styles = StyleSheet.create({
   },
   timelineEdgeText: {
     fontSize: 9,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "rgba(209,250,229,0.70)",
     fontVariant: ["tabular-nums"],
   },
@@ -1357,7 +1357,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.2 }],
   },
   timelineEventEmoji: {
-    fontSize: 7.5,
+    fontSize: 8.5,
     lineHeight: 9,
   },
   miniGaugesRow: {
@@ -1384,7 +1384,7 @@ const styles = StyleSheet.create({
   },
   miniGaugeVal: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },

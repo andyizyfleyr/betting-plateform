@@ -374,13 +374,13 @@ export default function MatchsPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-      <div className="mx-auto w-full max-w-[1440px] px-4 pb-6 pt-2.5 lg:px-0 lg:py-0">
+      <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2 lg:px-0 lg:py-0">
         {/* En-tête desktop uniquement (masqué sur mobile) */}
         <div className="hidden items-baseline justify-between gap-2 lg:flex">
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+          <h1 className="font-display text-[16px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
             {isRealUniverse && effectiveLeague !== "all" ? effectiveLeague : "Matchs"}
           </h1>
-          <p className="capitalize text-[12px] text-mist lg:text-[13px]">
+          <p className="capitalize text-[10.5px] text-mist lg:text-[11px]">
             {todayLabel()}
           </p>
         </div>
@@ -395,7 +395,7 @@ export default function MatchsPage() {
               type="button"
               onClick={() => switchUniverse("real")}
               className={cn(
-                "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+                "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
                 isRealUniverse
                   ? "bg-emerald-600 text-white shadow-xs"
                   : "text-mist hover:bg-elev/60 active:bg-elev"
@@ -406,7 +406,7 @@ export default function MatchsPage() {
               {matches !== null && (
                 <span
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
                     isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
                   )}
                 >
@@ -427,7 +427,7 @@ export default function MatchsPage() {
               type="button"
               onClick={() => switchUniverse("virtual")}
               className={cn(
-                "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+                "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
                 !isRealUniverse
                   ? "bg-betclic-red text-white shadow-xs"
                   : "text-mist hover:bg-elev/60 active:bg-elev"
@@ -438,7 +438,7 @@ export default function MatchsPage() {
               {matches !== null && (
                 <span
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                    "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
                     !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
                   )}
                 >
@@ -469,7 +469,7 @@ export default function MatchsPage() {
                     ? "Rechercher un match réel ou une compétition…"
                     : "Rechercher un club ou une ligue virtuelle…"
               }
-              className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+              className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
             />
             {query && (
               <button
@@ -492,10 +492,10 @@ export default function MatchsPage() {
             <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
               <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
             </div>
-            <p className="mt-3 font-display text-[15px] font-bold text-ink">
+            <p className="mt-3 font-display text-[12px] font-medium text-ink">
               Connexion au serveur interrompue
             </p>
-            <p className="mt-1 max-w-[330px] text-[12.5px] leading-relaxed text-mist">
+            <p className="mt-1 max-w-[330px] text-[11px] leading-relaxed text-mist">
               {loadError}
             </p>
             <button
@@ -503,7 +503,7 @@ export default function MatchsPage() {
               onClick={() => {
                 void handlePullRefresh();
               }}
-              className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white shadow-xs active:scale-95"
             >
               <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
               Réessayer
@@ -519,10 +519,10 @@ export default function MatchsPage() {
                     <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
                       <Trophy className="h-5 w-5" strokeWidth={1.9} />
                     </div>
-                    <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+                    <p className="mt-3 font-display text-[12px] font-medium text-ink">
                       Aucun match trouvé
                     </p>
-                    <p className="mt-1 max-w-[290px] text-[12.5px] text-dim">
+                    <p className="mt-1 max-w-[290px] text-[11px] text-dim">
                       Effacez la recherche pour retrouver toutes les rencontres.
                     </p>
                   </div>
@@ -576,12 +576,12 @@ export default function MatchsPage() {
                     <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
                       <Trophy className="h-5 w-5" strokeWidth={1.9} />
                     </div>
-                    <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+                    <p className="mt-3 font-display text-[12px] font-medium text-ink">
                       {isRealUniverse && realMatchesAll.length === 0
                         ? "Aucun match réel programmé"
                         : "Aucun match dans cette vue"}
                     </p>
-                    <p className="mt-1 max-w-[290px] text-[12.5px] text-dim">
+                    <p className="mt-1 max-w-[290px] text-[11px] text-dim">
                       {isRealUniverse && realActiveTotal === 0 && filter !== "finished"
                         ? "Les prochaines rencontres officielles publiées par l'opérateur s'afficheront ici."
                         : "Modifiez votre sélection de ligue ou effacez la recherche pour retrouver toutes les rencontres."}
@@ -592,7 +592,7 @@ export default function MatchsPage() {
                           <button
                             type="button"
                             onClick={() => setFilter("finished")}
-                            className="h-9 rounded-full bg-elev px-3.5 font-display text-[12px] font-bold text-ink active:scale-95"
+                            className="h-9 rounded-full bg-elev px-3.5 font-display text-[10.5px] font-medium text-ink active:scale-95"
                           >
                             Voir les résultats réels ({realMatchesAll.length})
                           </button>
@@ -600,7 +600,7 @@ export default function MatchsPage() {
                         <button
                           type="button"
                           onClick={() => switchUniverse("virtual")}
-                          className="inline-flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[12px] font-bold text-white active:scale-95"
+                          className="inline-flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[10.5px] font-medium text-white active:scale-95"
                         >
                           Ouvrir les matchs virtuels ({virtualActiveTotal})
                         </button>
@@ -642,12 +642,12 @@ export default function MatchsPage() {
                     {visibleFinishedList.length > 0 && (
                       <section>
                         <div className="flex items-center justify-between px-0.5">
-                          <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                          <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-ink">
                             Résultats officiels récents
                           </h2>
                           <Link
                             href={`/resultats?universe=${universe}`}
-                            className="font-display text-[11.5px] font-bold text-betclic-red"
+                            className="font-display text-[10.5px] font-medium text-betclic-red"
                           >
                             Tout l&apos;historique →
                           </Link>
@@ -704,12 +704,12 @@ export default function MatchsPage() {
                     {visibleFinishedList.length > 0 && (
                       <section>
                         <div className="flex items-center justify-between px-0.5">
-                          <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+                          <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-ink">
                             Résultats virtuels récents
                           </h2>
                           <Link
                             href={`/resultats?universe=${universe}`}
-                            className="font-display text-[11.5px] font-bold text-betclic-red"
+                            className="font-display text-[10.5px] font-medium text-betclic-red"
                           >
                             Tout l&apos;historique →
                           </Link>
@@ -865,7 +865,7 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
               )}
             />
           )}
-          <h2 className="truncate font-display text-[13.5px] font-bold tracking-tight text-ink">
+          <h2 className="truncate font-display text-[11.5px] font-bold tracking-tight text-ink">
             {label}
           </h2>
         </div>
@@ -873,7 +873,7 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
         {trailingHref && trailingLabel && (
           <Link
             href={trailingHref}
-            className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-full bg-betclic-red/10 pl-2.5 pr-1.5 font-display text-[11.5px] font-bold text-betclic-red transition-transform active:scale-95"
+            className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-full bg-betclic-red/10 pl-2.5 pr-1.5 font-display text-[10.5px] font-medium text-betclic-red transition-transform active:scale-95"
           >
             <span>{trailingLabel}</span>
             <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -882,14 +882,14 @@ const RealMatchCarouselRow = memo(function RealMatchCarouselRow({
       </div>
 
       {items.length === 0 ? (
-        <div className="mt-2 flex h-12 items-center justify-center rounded-2xl border border-dashed border-edge bg-white/75 px-3.5 text-[12px] font-medium text-mist">
+        <div className="mt-2 flex h-12 items-center justify-center rounded-2xl border border-dashed border-edge bg-white/75 px-3.5 text-[10.5px] font-medium text-mist">
           {emptyMessage ?? "Aucun match disponible"}
         </div>
       ) : (
         <div
           ref={scrollerRef}
           onScroll={handleScroll}
-          className="-mx-4 mt-2.5 flex snap-x snap-mandatory scroll-px-4 items-stretch gap-3 overflow-x-auto px-4 pb-1 no-scrollbar"
+          className="-mx-2 mt-2 flex snap-x snap-mandatory scroll-px-2 items-stretch gap-2.5 overflow-x-auto px-2 pb-1 no-scrollbar"
         >
           {visibleItems.map((m, idx) => (
             <div
@@ -949,11 +949,11 @@ function SectionHeader({
             )}
           />
         )}
-        <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-ink">
+        <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-ink">
           {label}
         </h2>
       </div>
-      <span className="text-[11px] font-semibold text-dim">{count}</span>
+      <span className="text-[10px] font-medium text-dim">{count}</span>
     </div>
   );
 }

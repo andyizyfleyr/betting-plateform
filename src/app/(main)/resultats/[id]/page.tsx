@@ -140,7 +140,7 @@ export default function ResultDetailPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>
-    <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -166,19 +166,19 @@ export default function ResultDetailPage() {
                 sport={item?.sport ?? "football"}
                 className="h-3.5 w-3.5 shrink-0 text-betclic-red"
               />
-              <h1 className="truncate font-display text-[14px] font-extrabold text-ink lg:text-[18px]">
+              <h1 className="truncate font-display text-[11.5px] font-bold text-ink lg:text-[13.5px]">
                 {item?.league ?? "Résultat"}
               </h1>
             </div>
             {item && (
-              <p className="truncate text-[10px] leading-tight text-dim lg:text-[11px]">
+              <p className="truncate text-[9.5px] leading-tight text-dim lg:text-[10px]">
                 {formatKickoff(item.finishedAt ?? item.startsAt)}
               </p>
             )}
           </div>
         </div>
 
-        <span className="shrink-0 rounded-full bg-win/12 px-2 py-0.5 font-display text-[10px] font-bold text-win">
+        <span className="shrink-0 rounded-full bg-win/12 px-2 py-0.5 font-display text-[9.5px] font-medium text-win">
           Officiel FT
         </span>
       </div>
@@ -189,24 +189,24 @@ export default function ResultDetailPage() {
         ) : item === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-betclic-red" />
-            <p className="mt-1.5 font-display text-[14.5px] font-bold text-ink">
+            <p className="mt-1.5 font-display text-[12px] font-medium text-ink">
               {loadError ? "Connexion interrompue" : "Résultat introuvable"}
             </p>
-            <p className="mt-0.5 text-[11.5px] text-mist">
+            <p className="mt-0.5 text-[10.5px] text-mist">
               {loadError ?? "Ce match n'est pas encore terminé ou n'existe plus."}
             </p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               <button
                 type="button"
                 onClick={() => void fetchResult()}
-                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[11.5px] font-bold text-ink"
+                className="inline-flex items-center gap-1 rounded-lg bg-elev px-3 py-1.5 font-display text-[10.5px] font-medium text-ink"
               >
                 <RefreshCw className="h-3 w-3" />
                 Réessayer
               </button>
               <Link
                 href={`/matchs/${matchId}`}
-                className="btn-red rounded-lg px-3.5 py-1.5 text-[11.5px]"
+                className="btn-red rounded-lg px-3.5 py-1.5 text-[10.5px]"
               >
                 Fiche du match
               </Link>
@@ -230,13 +230,13 @@ export default function ResultDetailPage() {
                     size="md"
                     className="hidden lg:grid"
                   />
-                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
+                  <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
                     {item.homeTeam}
                   </span>
                 </div>
 
                 <div className="flex flex-col items-center">
-                  <div className="flex items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[18px] font-black tabular-nums leading-none text-ink lg:rounded-xl lg:px-4 lg:py-2 lg:text-[24px]">
+                  <div className="flex items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[13.5px] font-medium tabular-nums leading-none text-ink lg:rounded-xl lg:px-4 lg:py-2 lg:text-[16px]">
                     <span
                       className={cn(
                         (item.homeScore ?? 0) > (item.awayScore ?? 0) && "text-win"
@@ -244,7 +244,7 @@ export default function ResultDetailPage() {
                     >
                       {item.homeScore ?? 0}
                     </span>
-                    <span className="text-[12px] text-dim lg:text-[15px]">-</span>
+                    <span className="text-[10.5px] text-dim lg:text-[12px]">-</span>
                     <span
                       className={cn(
                         (item.awayScore ?? 0) > (item.homeScore ?? 0) && "text-win"
@@ -254,7 +254,7 @@ export default function ResultDetailPage() {
                     </span>
                   </div>
                   {item.htHome != null && item.htAway != null && (
-                    <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim lg:mt-1 lg:text-[10.5px]">
+                    <span className="mt-0.5 text-[9.5px] font-medium tabular-nums text-dim lg:mt-1 lg:text-[10px]">
                       MT {item.htHome}-{item.htAway}
                     </span>
                   )}
@@ -273,7 +273,7 @@ export default function ResultDetailPage() {
                     size="md"
                     className="hidden lg:grid"
                   />
-                  <span className="font-display text-[11.5px] font-bold leading-tight text-ink lg:text-[13px]">
+                  <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
                     {item.awayTeam}
                   </span>
                 </div>
@@ -297,10 +297,10 @@ export default function ResultDetailPage() {
                           : "border-edge bg-elev/50 text-mist"
                       )}
                     >
-                      <span className="font-display text-[10.5px] font-bold">
+                      <span className="font-display text-[10px] font-medium">
                         {c.label}
                       </span>
-                      <span className="font-display text-[12px] font-extrabold tabular-nums">
+                      <span className="font-display text-[10.5px] font-medium tabular-nums">
                         {c.odds ? formatOdds(c.odds, oddsFormat) : "—"}
                       </span>
                     </div>
@@ -311,7 +311,7 @@ export default function ResultDetailPage() {
 
             {/* Marchés principaux validés en grille 2 colonnes compacte */}
             <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-              <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+              <h2 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
                 Marchés réglés
               </h2>
               <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -320,10 +320,10 @@ export default function ResultDetailPage() {
                     key={row.label}
                     className="rounded-lg bg-elev/60 px-2.5 py-1.5"
                   >
-                    <p className="text-[9.5px] font-semibold uppercase tracking-wide text-dim">
+                    <p className="text-[9.5px] font-medium uppercase tracking-wide text-dim">
                       {row.label}
                     </p>
-                    <p className="mt-0.5 flex items-center gap-1 truncate font-display text-[11.5px] font-bold text-ink">
+                    <p className="mt-0.5 flex items-center gap-1 truncate font-display text-[10.5px] font-medium text-ink">
                       <CheckCircle2 className="h-3 w-3 shrink-0 text-win" />
                       <span className="truncate">{row.value}</span>
                     </p>
@@ -348,10 +348,10 @@ export default function ResultDetailPage() {
 
             {item.source !== "manual" && item.telemetry && (
               <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-                <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+                <h2 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
                   Statistiques
                 </h2>
-                <div className="mt-2 space-y-1 text-[11px]">
+                <div className="mt-2 space-y-1 text-[10px]">
                   {[
                     {
                       label: "Possession",
@@ -383,13 +383,13 @@ export default function ResultDetailPage() {
                       key={s.label}
                       className="flex items-center justify-between rounded-lg bg-elev/55 px-2.5 py-1.5"
                     >
-                      <span className="font-display font-bold tabular-nums text-ink">
+                      <span className="font-display font-medium tabular-nums text-ink">
                         {s.left}
                       </span>
-                      <span className="text-[10.5px] font-medium text-mist">
+                      <span className="text-[10px] font-medium text-mist">
                         {s.label}
                       </span>
-                      <span className="font-display font-bold tabular-nums text-ink">
+                      <span className="font-display font-medium tabular-nums text-ink">
                         {s.right}
                       </span>
                     </div>
@@ -401,31 +401,31 @@ export default function ResultDetailPage() {
             {/* Chronologie compacte */}
             {cleanEvents.length > 0 && (
               <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-                <h2 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+                <h2 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
                   Faits de match ({cleanEvents.length})
                 </h2>
                 <div className="mt-1.5 divide-y divide-edge/60">
                   {cleanEvents.map((ev, idx) => (
                     <div
                       key={`${ev.minute}-${ev.type}-${idx}`}
-                      className="flex items-center justify-between gap-2 py-1.5 text-[11px]"
+                      className="flex items-center justify-between gap-2 py-1.5 text-[10px]"
                     >
                       <div className="flex min-w-0 items-center gap-1.5">
-                        <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[10px] font-bold tabular-nums text-ink">
+                        <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-ink">
                           {ev.minute}&apos;
                         </span>
-                        <span className="text-[11px]">
+                        <span className="text-[10px]">
                           {ev.type === "goal"
                             ? "⚽"
                             : ev.type === "red"
                               ? "🟥"
                               : "🟨"}
                         </span>
-                        <span className="truncate font-semibold text-ink">
+                        <span className="truncate font-medium text-ink">
                           {ev.player}
                         </span>
                       </div>
-                      <span className="shrink-0 text-[10px] font-medium text-dim">
+                      <span className="shrink-0 text-[9.5px] font-medium text-dim">
                         {ev.team === "home" ? item.homeTeam : item.awayTeam}
                       </span>
                     </div>

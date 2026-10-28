@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   headTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     color: "#047857",
   },
@@ -230,8 +230,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   htText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
   },
   teamName: {
     flexShrink: 1,
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   list: {
@@ -270,13 +270,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   val: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   label: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.mist,
   },

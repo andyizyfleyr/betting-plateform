@@ -82,7 +82,7 @@ export function ComboFloatingBar() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-[66px] z-40 mx-auto w-full max-w-[440px] px-3.5 lg:bottom-6 lg:left-auto lg:right-8 lg:mx-0 lg:max-w-[420px] lg:px-0"
+      className="pointer-events-none fixed inset-x-0 bottom-[66px] z-40 mx-auto w-full px-2 sm:max-w-[520px] lg:bottom-5 lg:left-auto lg:right-4 lg:mx-0 lg:max-w-[400px] lg:px-0"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <motion.div
@@ -95,23 +95,23 @@ export function ComboFloatingBar() {
           onClick={openCombo}
           className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
         >
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-betclic-red font-display text-[12.5px] font-bold text-white">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-betclic-red font-display text-[11px] font-medium text-white">
             {comboLegs.length}
           </span>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-display text-[13px] font-bold">
+              <span className="font-display text-[11px] font-medium">
                 {comboLegs.length === 1 ? "Coupon (1 sélection)" : "Coupon de pari · Combiné"}
               </span>
               {quote.boostPct > 0 && (
-                <span className="rounded-md bg-emerald-500/25 px-1.5 py-0.5 font-display text-[10px] font-bold text-emerald-300">
+                <span className="rounded-md bg-emerald-500/25 px-1.5 py-0.5 font-display text-[9.5px] font-medium text-emerald-300">
                   +{quote.boostPct}% Bonus
                 </span>
               )}
             </div>
-            <p className="truncate text-[11px] text-white/70">
+            <p className="truncate text-[10px] text-white/70">
               Cote totale{" "}
-              <strong className="font-display font-bold text-white">
+              <strong className="font-display font-medium text-white">
                 {formatOdds(quote.totalOdds, oddsFormat)}
               </strong>
             </p>
@@ -124,7 +124,7 @@ export function ComboFloatingBar() {
             onClick={() => setComboQuickMode(!comboQuickMode)}
             title="Mode ajout 1-clic sur les cotes"
             className={cn(
-              "inline-flex h-8 items-center gap-1 rounded-xl px-2.5 font-display text-[10.5px] font-bold transition-colors active:scale-95",
+              "inline-flex h-8 items-center gap-1 rounded-xl px-2.5 font-display text-[10px] font-medium transition-colors active:scale-95",
               comboQuickMode
                 ? "bg-emerald-500/25 text-emerald-300 ring-1 ring-emerald-400/40"
                 : "bg-white/10 text-white/75"
@@ -136,7 +136,7 @@ export function ComboFloatingBar() {
           <button
             type="button"
             onClick={openCombo}
-            className="h-8 rounded-xl bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white active:scale-95"
+            className="h-8 rounded-xl bg-betclic-red px-3 font-display text-[10.5px] font-medium text-white active:scale-95"
           >
             Ouvrir
           </button>
@@ -438,10 +438,10 @@ export function ComboSheet() {
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
                 <Check className="h-7 w-7" strokeWidth={2.6} />
               </div>
-              <h3 className="mt-3 font-display text-[19px] font-bold text-ink">
+              <h3 className="mt-3 font-display text-[14.5px] font-bold text-ink">
                 Pari combiné accepté !
               </h3>
-              <p className="mt-1 text-[12.5px] text-mist">
+              <p className="mt-1 text-[11px] text-mist">
                 Cote totale{" "}
                 <strong className="text-ink">{formatOdds(placedInfo.totalOdds, oddsFormat)}</strong>
                 {placedInfo.boostPct > 0 && ` (+${placedInfo.boostPct}% Bonus inclus)`}
@@ -449,12 +449,12 @@ export function ComboSheet() {
 
               <div className="mt-4 flex items-center justify-between rounded-2xl bg-elev px-4 py-3 text-left">
                 <div>
-                  <p className="text-[11px] text-dim">Mise : {eur(placedInfo.stake)}</p>
-                  <p className="font-display text-[12.5px] font-semibold text-ink">
+                  <p className="text-[10px] text-dim">Mise : {eur(placedInfo.stake)}</p>
+                  <p className="font-display text-[11px] font-medium text-ink">
                     Gain potentiel
                   </p>
                 </div>
-                <span className="font-display text-[20px] font-bold tabular-nums text-win">
+                <span className="font-display text-[14.5px] font-medium tabular-nums text-win">
                   {eur(placedInfo.potentialWin)}
                 </span>
               </div>
@@ -463,14 +463,14 @@ export function ComboSheet() {
                 <button
                   type="button"
                   onClick={() => finishAndClose(true)}
-                  className="h-11 rounded-2xl bg-betclic-red font-display text-[13px] font-bold text-white"
+                  className="h-11 rounded-2xl bg-betclic-red font-display text-[11px] font-medium text-white"
                 >
                   Voir mes paris
                 </button>
                 <button
                   type="button"
                   onClick={() => finishAndClose(false)}
-                  className="h-11 rounded-2xl bg-elev font-display text-[13px] font-bold text-ink"
+                  className="h-11 rounded-2xl bg-elev font-display text-[11px] font-medium text-ink"
                 >
                   Continuer
                 </button>
@@ -490,10 +490,10 @@ export function ComboSheet() {
                       <Layers className="h-4 w-4" strokeWidth={2.3} />
                     </span>
                     <div>
-                      <h2 className="font-display text-[16px] font-bold text-ink">
+                      <h2 className="font-display text-[12.5px] font-bold text-ink">
                         Coupon de pari ({comboLegs.length}/{MAX_COMBO_LEGS})
                       </h2>
-                      <p className="text-[11px] text-dim">
+                      <p className="text-[10px] text-dim">
                         Pari combiné · 2 à 8 événements
                       </p>
                     </div>
@@ -525,15 +525,15 @@ export function ComboSheet() {
               <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-3">
                 {/* Jauge Bonus Combiné */}
                 <div className="rounded-2xl border border-emerald-600/20 bg-emerald-500/8 px-3.5 py-2.5">
-                  <div className="flex items-center justify-between gap-2 text-[11.5px]">
-                    <span className="flex items-center gap-1.5 font-display font-bold text-emerald-800">
+                  <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                    <span className="flex items-center gap-1.5 font-display font-medium text-emerald-800">
                       <Flame className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.4} />
                       {quote.boostPct > 0
                         ? `Bonus Combiné actif : +${quote.boostPct}%`
                         : "Bonus Combiné jusqu'à +25%"}
                     </span>
                     {nextBoost && (
-                      <span className="text-[10.5px] font-semibold text-emerald-700">
+                      <span className="text-[10px] font-medium text-emerald-700">
                         +{nextBoost.needed} sél. (≥1,25) → +{nextBoost.pct}%
                       </span>
                     )}
@@ -572,7 +572,7 @@ export function ComboSheet() {
                             {leg.kind === "sport" && leg.matchSource && (
                               <span
                                 className={cn(
-                                  "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-bold uppercase tracking-wide",
+                                  "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9px] font-medium uppercase tracking-wide",
                                   leg.matchSource === "manual"
                                     ? "bg-emerald-600/12 text-emerald-700"
                                     : "bg-elev text-dim"
@@ -581,7 +581,7 @@ export function ComboSheet() {
                                 {leg.matchSource === "manual" ? "Réel" : "Virtuel"}
                               </span>
                             )}
-                            <p className="truncate text-[11px] font-semibold text-mist">
+                            <p className="truncate text-[10px] font-medium text-mist">
                               {leg.league}
                             </p>
                           </div>
@@ -603,7 +603,7 @@ export function ComboSheet() {
                                 logo={leg.homeLogo}
                                 size="xs"
                               />
-                              <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                              <span className="truncate font-display text-[11.5px] font-medium text-ink">
                                 {homeName}
                               </span>
                             </div>
@@ -613,22 +613,22 @@ export function ComboSheet() {
                                 logo={leg.awayLogo}
                                 size="xs"
                               />
-                              <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                              <span className="truncate font-display text-[11.5px] font-medium text-ink">
                                 {awayName}
                               </span>
                             </div>
                           </div>
                         ) : (
-                          <p className="pointer-events-none relative z-[1] mt-1.5 font-display text-[13.5px] font-bold text-ink">
+                          <p className="pointer-events-none relative z-[1] mt-1.5 font-display text-[11.5px] font-medium text-ink">
                             {leg.title}
                           </p>
                         )}
 
                         <div className="pointer-events-none relative z-[1] mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
-                          <span className="truncate pr-2 text-[12px] font-semibold text-ink">
+                          <span className="truncate pr-2 text-[10.5px] font-medium text-ink">
                             {leg.selectionLabel}
                           </span>
-                          <span className="shrink-0 font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
+                          <span className="shrink-0 font-display text-[11.5px] font-medium tabular-nums text-betclic-red">
                             {formatOdds(leg.odds, oddsFormat)}
                           </span>
                         </div>
@@ -638,7 +638,7 @@ export function ComboSheet() {
                 </div>
 
                 {!enoughLegs && (
-                  <p className="mt-3 rounded-xl bg-elev px-3 py-2 text-center text-[11.5px] font-medium text-mist">
+                  <p className="mt-3 rounded-xl bg-elev px-3 py-2 text-center text-[10.5px] font-medium text-mist">
                     Ajoutez encore au moins <strong>1 sélection</strong> depuis Matchs ou
                     Prédictions pour former un pari combiné.
                   </p>
@@ -664,7 +664,7 @@ export function ComboSheet() {
                 </div>
 
                 {overBalance && (
-                  <div className="mt-2.5 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
+                  <div className="mt-2.5 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[10.5px]">
                     <span className="font-medium text-betclic-red">Solde insuffisant</span>
                     <button
                       type="button"
@@ -672,7 +672,7 @@ export function ComboSheet() {
                         closeCombo();
                         openRecharge();
                       }}
-                      className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline"
+                      className="inline-flex items-center gap-1 font-display font-medium text-betclic-red underline"
                     >
                       <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
                       Recharger
@@ -681,35 +681,35 @@ export function ComboSheet() {
                 )}
 
                 {error && !overBalance && (
-                  <p className="mt-2.5 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+                  <p className="mt-2.5 rounded-xl bg-betclic-red/8 px-3 py-2 text-[10.5px] font-medium text-betclic-red">
                     {error}
                   </p>
                 )}
 
                 {/* Récapitulatif Cote & Gain */}
                 <div className="mt-3.5 rounded-2xl bg-elev px-3.5 py-3">
-                  <div className="flex items-center justify-between text-[12px]">
+                  <div className="flex items-center justify-between text-[10.5px]">
                     <span className="text-mist">Cote combinée totale</span>
-                    <span className="font-display font-bold tabular-nums text-ink">
+                    <span className="font-display font-medium tabular-nums text-ink">
                       {formatOdds(quote.totalOdds, oddsFormat)}
                     </span>
                   </div>
                   {quote.boostAmount > 0 && (
-                    <div className="mt-1 flex items-center justify-between text-[11.5px] text-win">
+                    <div className="mt-1 flex items-center justify-between text-[10.5px] text-win">
                       <span>Bonus Combiné (+{quote.boostPct}%)</span>
-                      <span className="font-display font-bold tabular-nums">
+                      <span className="font-display font-medium tabular-nums">
                         +{eur(quote.boostAmount)}
                       </span>
                     </div>
                   )}
                   <div className="mt-2 flex items-center justify-between border-t border-edge pt-2">
-                    <span className="font-display text-[13px] font-bold text-ink">
+                    <span className="font-display text-[11px] font-medium text-ink">
                       Gain potentiel
                     </span>
                     <AnimatedNumber
                       value={enoughLegs ? quote.potentialWin : 0}
                       format={eur}
-                      className="font-display text-[20px] font-bold tabular-nums text-win"
+                      className="font-display text-[14.5px] font-medium tabular-nums text-win"
                     />
                   </div>
                 </div>
@@ -731,7 +731,7 @@ export function ComboSheet() {
                   disabled={!canSubmit}
                   onClick={submitCombo}
                   className={cn(
-                    "mt-3.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[14.5px] font-bold transition-all active:scale-[0.99]",
+                    "mt-3.5 flex h-12 w-full items-center justify-center gap-2 rounded-2xl font-display text-[12px] font-medium transition-all active:scale-[0.99]",
                     canSubmit ? "bg-betclic-red text-white shadow-sm" : "bg-elev text-dim"
                   )}
                 >

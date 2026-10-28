@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 32,
   },
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 11.5,
     color: COLORS.ink,
     paddingVertical: 0,
   },
@@ -655,14 +655,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     marginTop: 12,
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.ink,
   },
   errorSub: {
     marginTop: 4,
     textAlign: "center",
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     lineHeight: 18,
   },
@@ -677,8 +677,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   retryBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   emptyState: {
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     marginTop: 12,
     textAlign: "center",
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: "600",
     color: COLORS.ink,
   },
@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     maxWidth: 290,
     textAlign: "center",
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.dim,
     lineHeight: 18,
   },
@@ -728,8 +728,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptySecondaryText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   emptyPrimaryBtn: {
@@ -742,8 +742,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyPrimaryText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   sectionsStack: {
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#059669",
   },
   sectionHeadTitle: {
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.6,
     color: COLORS.ink,
@@ -782,8 +782,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   emeraldCountText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#047857",
     fontVariant: ["tabular-nums"],
   },
@@ -794,8 +794,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   grayCountText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -805,8 +805,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   historyLinkText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   cardStack: {

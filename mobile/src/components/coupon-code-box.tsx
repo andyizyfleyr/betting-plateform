@@ -237,8 +237,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.10)",
   },
   saveBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   shareBtn: {
@@ -251,8 +251,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   shareBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   loadRow: {
@@ -265,8 +265,8 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 10,
     paddingHorizontal: 11,
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     borderWidth: 1,
   },
   inputLight: {
@@ -289,8 +289,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   loadBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
 });

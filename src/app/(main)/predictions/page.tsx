@@ -268,10 +268,10 @@ export default function PredictionsPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
       {/* En-tête compact + Loupe dépliable sur mobile / Recherche en ligne sur desktop */}
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+        <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
           Prédictions
         </h1>
 
@@ -301,7 +301,7 @@ export default function PredictionsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher une question ou un candidat…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
           />
           {query && (
             <button
@@ -326,7 +326,7 @@ export default function PredictionsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Rechercher une question ou un candidat…"
-            className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
           />
           <button
             type="button"
@@ -421,10 +421,10 @@ export default function PredictionsPage() {
           <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
             <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
           </div>
-          <p className="mt-3 font-display text-[15px] font-bold text-ink">
+          <p className="mt-3 font-display text-[12px] font-medium text-ink">
             Connexion au serveur interrompue
           </p>
-          <p className="mt-1 max-w-[330px] text-[12.5px] leading-relaxed text-mist">
+          <p className="mt-1 max-w-[330px] text-[11px] leading-relaxed text-mist">
             {loadError}
           </p>
           <button
@@ -433,7 +433,7 @@ export default function PredictionsPage() {
               void catalogQuery.refetch();
               if (user) void myBetsQuery.refetch();
             }}
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white shadow-xs active:scale-95"
           >
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
             Réessayer
@@ -444,12 +444,12 @@ export default function PredictionsPage() {
           <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
             <TrendingUp className="h-5 w-5" strokeWidth={1.9} />
           </div>
-          <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+          <p className="mt-3 font-display text-[12px] font-medium text-ink">
             {statusTab === "resolved"
               ? "Aucune prédiction résolue dans ce filtre"
               : "Aucune prédiction disponible"}
           </p>
-          <p className="mt-1 text-[12.5px] text-dim">
+          <p className="mt-1 text-[11px] text-dim">
             Modifiez ou réinitialisez les filtres pour élargir les résultats.
           </p>
         </div>
@@ -535,24 +535,24 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
         label={q.question}
         onBeforeNavigate={() => rememberPredictions([q])}
       />
-      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px]">
-        <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10px]">
+        <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-ink">
           {q.category}
         </span>
         <span className="text-dim">
           {q.resolvedAt ? `Résolu · ${formatPlacedAt(q.resolvedAt)}` : "Résolu"}
         </span>
       </div>
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[15px] font-bold leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[12px] font-medium leading-snug text-ink">
         {q.question}
       </p>
       <div className="pointer-events-none relative z-[1] mt-2.5 flex items-center justify-between rounded-xl border border-win/25 bg-win/10 px-3 py-2">
-        <span className="inline-flex items-center gap-1.5 font-display text-[12.5px] font-bold text-win">
+        <span className="inline-flex items-center gap-1.5 font-display text-[11px] font-medium text-win">
           <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} />
           Issue gagnante : {winner.label}
         </span>
         {winner.odds != null && (
-          <span className="font-display text-[12.5px] font-bold tabular-nums text-win">
+          <span className="font-display text-[11px] font-medium tabular-nums text-win">
             {formatOdds(winner.odds, oddsFormat)}
           </span>
         )}
@@ -614,8 +614,8 @@ function MultiChoiceQuestionCard({
         onBeforeNavigate={() => rememberPredictions([q])}
       />
 
-      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px]">
-        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10px]">
+        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-ink">
           {q.category}
         </span>
         <span className="flex shrink-0 items-center gap-1 font-medium text-dim">
@@ -624,12 +624,12 @@ function MultiChoiceQuestionCard({
         </span>
       </div>
 
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[15.5px] font-bold leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[12.5px] font-medium leading-snug text-ink">
         {q.question}
       </p>
 
       {q.myBet && myBetLabel && (
-        <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
+        <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[10px] font-medium text-betclic-red">
           Votre mise : {myBetLabel} · {eur(q.myBet.stake)}
         </p>
       )}
@@ -671,7 +671,7 @@ function MultiChoiceQuestionCard({
         <button
           type="button"
           onClick={() => setExpanded((s) => !s)}
-          className="pointer-events-auto relative z-10 mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[12.5px] font-semibold text-ink transition-colors hover:bg-elev active:scale-[0.99]"
+          className="pointer-events-auto relative z-10 mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[11px] font-medium text-ink transition-colors hover:bg-elev active:scale-[0.99]"
         >
           <span>
             {expanded
@@ -714,8 +714,8 @@ function BinaryQuestionCard({
         onBeforeNavigate={() => rememberPredictions([q])}
       />
 
-      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[11px]">
-        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-bold uppercase text-ink">
+      <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10px]">
+        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-ink">
           {q.category}
         </span>
         <span className="flex shrink-0 items-center gap-1 font-medium text-dim">
@@ -724,12 +724,12 @@ function BinaryQuestionCard({
         </span>
       </div>
 
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[15px] font-semibold leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[12px] font-medium leading-snug text-ink">
         {q.question}
       </p>
 
       {q.myBet && (
-        <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[11px] font-semibold text-betclic-red">
+        <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[10px] font-medium text-betclic-red">
           Votre mise : {q.myBet.selection === "yes" ? "Oui" : "Non"} · {eur(q.myBet.stake)}
         </p>
       )}
@@ -844,7 +844,7 @@ function MultiOptionButton({
         )}
         <span
           className={cn(
-            "truncate font-display text-[13.5px] font-semibold",
+            "truncate font-display text-[11.5px] font-medium",
             inCombo ? "text-white" : "text-ink"
           )}
         >
@@ -855,7 +855,7 @@ function MultiOptionButton({
       <span className="relative z-10 flex shrink-0 items-center gap-2">
         <span
           className={cn(
-            "text-[11px] font-semibold tabular-nums",
+            "text-[10px] font-medium tabular-nums",
             inCombo ? "text-white/75" : "text-dim"
           )}
         >
@@ -863,7 +863,7 @@ function MultiOptionButton({
         </span>
         <span
           className={cn(
-            "relative min-w-[52px] rounded-lg px-2.5 py-1 text-center font-display text-[13px] font-bold tabular-nums transition-colors duration-200",
+            "relative min-w-[52px] rounded-lg px-2.5 py-1 text-center font-display text-[11px] font-medium tabular-nums transition-colors duration-200",
             selected || inCombo
               ? cn("bg-betclic-red", oddsTrendTextClass(trend, true))
               : cn(
@@ -927,7 +927,7 @@ function SideButton({
       {!disabled && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
-          "text-[12.5px] font-semibold",
+          "text-[11px] font-medium",
           active ? "text-white" : "text-mist"
         )}
       >
@@ -935,7 +935,7 @@ function SideButton({
       </span>
       <span
         className={cn(
-          "font-display text-[14px] font-bold tabular-nums transition-colors duration-200",
+          "font-display text-[11.5px] font-medium tabular-nums transition-colors duration-200",
           oddsTrendTextClass(trend, active)
         )}
       >

@@ -398,7 +398,7 @@ function BetModalSheet({
               />
 
               <div className="mt-2.5 flex items-center justify-between">
-                <h2 className="font-display text-[16.5px] font-bold tracking-tight text-ink lg:text-[17px]">
+                <h2 className="font-display text-[12.5px] font-bold tracking-tight text-ink lg:text-[13.5px]">
                   Coupon de pari
                 </h2>
                 <button
@@ -414,9 +414,9 @@ function BetModalSheet({
               {/* Résumé de la sélection (même disposition d'équipes & logos que la page Matchs) */}
               <div className="mt-2.5 rounded-2xl border border-edge bg-elev/60 p-3">
                 {target.match.status === "live" && (
-                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[10.5px]">
-                    <span className="truncate font-semibold text-mist">{target.match.league}</span>
-                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display font-bold tabular-nums text-betclic-red">
+                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px]">
+                    <span className="truncate font-medium text-mist">{target.match.league}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display font-medium tabular-nums text-betclic-red">
                       <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
                       <LiveMatchClock
                         match={{
@@ -436,11 +436,11 @@ function BetModalSheet({
                       logo={target.match.homeLogo}
                       size="xs"
                     />
-                    <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                    <span className="truncate font-display text-[11.5px] font-medium text-ink">
                       {target.match.homeTeam}
                     </span>
                     {target.match.status === "live" && liveHomeScore != null && (
-                      <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14px] font-bold tabular-nums text-betclic-red">
+                      <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[11.5px] font-medium tabular-nums text-betclic-red">
                         {liveHomeScore}
                       </span>
                     )}
@@ -451,11 +451,11 @@ function BetModalSheet({
                       logo={target.match.awayLogo}
                       size="xs"
                     />
-                    <span className="truncate font-display text-[13.5px] font-semibold text-ink">
+                    <span className="truncate font-display text-[11.5px] font-medium text-ink">
                       {target.match.awayTeam}
                     </span>
                     {target.match.status === "live" && liveHomeScore != null && (
-                      <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[14px] font-bold tabular-nums text-betclic-red">
+                      <span className="ml-auto min-w-[22px] rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-center font-display text-[11.5px] font-medium tabular-nums text-betclic-red">
                         {liveAwayScore ?? 0}
                       </span>
                     )}
@@ -463,15 +463,15 @@ function BetModalSheet({
                 </div>
 
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-1.5">
-                  <p className="min-w-0 truncate text-[12px] text-mist">
-                    <span className="font-semibold text-ink">{target.label}</span>
+                  <p className="min-w-0 truncate text-[10.5px] text-mist">
+                    <span className="font-medium text-ink">{target.label}</span>
                     {target.market !== "result" && (
                       <span className="text-dim"> · {target.marketLabel}</span>
                     )}
                   </p>
                   <span
                     className={cn(
-                      "shrink-0 rounded-lg px-2.5 py-1 font-display text-[13.5px] font-bold tabular-nums text-white",
+                      "shrink-0 rounded-lg px-2.5 py-1 font-display text-[11.5px] font-medium tabular-nums text-white",
                       marketSuspended || marketClosed ? "bg-dim" : "bg-betclic-red"
                     )}
                   >
@@ -481,7 +481,7 @@ function BetModalSheet({
               </div>
 
               {(marketSuspended || marketClosed) && (
-                <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11.5px] font-semibold text-amber-800">
+                <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[10.5px] font-medium text-amber-800">
                   <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
                   <span>
                     {marketClosed
@@ -510,12 +510,12 @@ function BetModalSheet({
               </div>
 
               {overBalance && (
-                <div className="mt-2.5 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[12px]">
+                <div className="mt-2.5 flex items-center justify-between rounded-xl border border-betclic-red/25 bg-betclic-red/5 px-3 py-2 text-[10.5px]">
                   <span className="font-medium text-betclic-red">Solde insuffisant</span>
                   <button
                     type="button"
                     onClick={openRecharge}
-                    className="inline-flex items-center gap-1 font-display font-bold text-betclic-red underline underline-offset-2"
+                    className="inline-flex items-center gap-1 font-display font-medium text-betclic-red underline underline-offset-2"
                   >
                     <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
                     Recharger
@@ -524,13 +524,13 @@ function BetModalSheet({
               )}
 
               {belowMin && !overBalance && (
-                <p className="mt-2 text-[11.5px] font-medium text-betclic-red">
+                <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
                   Mise minimale : 0,50 €
                 </p>
               )}
 
               {error && !overBalance && (
-                <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[12px] font-medium text-betclic-red">
+                <p className="mt-2 rounded-xl bg-betclic-red/8 px-3 py-2 text-[10.5px] font-medium text-betclic-red">
                   {error}
                 </p>
               )}
@@ -548,17 +548,17 @@ function BetModalSheet({
             <div className="shrink-0 border-t border-edge bg-surface px-4 pb-4 pb-safe pt-2.5 lg:px-6 lg:pb-5">
               <div className="mb-2.5 flex items-center justify-between">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-display text-[12px] font-bold text-ink">
+                  <span className="font-display text-[10.5px] font-medium text-ink">
                     Gain potentiel
                   </span>
-                  <span className="text-[11px] font-medium text-win">
+                  <span className="text-[10px] font-medium text-win">
                     +{eur(Math.max(profit, 0))} net
                   </span>
                 </div>
                 <AnimatedNumber
                   value={payout}
                   format={eur}
-                  className="font-display text-[19px] font-extrabold tabular-nums text-win"
+                  className="font-display text-[14.5px] font-medium tabular-nums text-win"
                 />
               </div>
 
@@ -569,7 +569,7 @@ function BetModalSheet({
                     onClick={handleAddToCombo}
                     aria-label={inComboExact ? "Retirer du coupon" : "Ajouter au combiné"}
                     className={cn(
-                      "inline-flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3.5 font-display text-[12px] font-bold transition-colors active:scale-[0.99]",
+                      "inline-flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3.5 font-display text-[10.5px] font-medium transition-colors active:scale-[0.99]",
                       inComboExact
                         ? "border-ink bg-ink text-white"
                         : "border-edge bg-elev text-ink active:bg-edge"
@@ -595,7 +595,7 @@ function BetModalSheet({
                   disabled={!canSubmit}
                   onClick={confirm}
                   className={cn(
-                    "flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl px-3 font-display text-[14px] font-bold transition-all active:scale-[0.99]",
+                    "flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-2xl px-3 font-display text-[11.5px] font-medium transition-all active:scale-[0.99]",
                     canSubmit
                       ? "bg-betclic-red text-white shadow-sm"
                       : "bg-elev text-dim"
@@ -660,32 +660,32 @@ function SuccessView({
         <div className="grid h-14 w-14 place-items-center rounded-full bg-win/12 text-win">
           <Check className="h-7 w-7" strokeWidth={2.8} />
         </div>
-        <h3 className="mt-3 font-display text-[20px] font-bold text-ink">Pari accepté</h3>
-        <p className="mt-0.5 text-[12.5px] text-mist">Coupon #{String(betId).padStart(5, "0")}</p>
+        <h3 className="mt-3 font-display text-[14.5px] font-bold text-ink">Pari accepté</h3>
+        <p className="mt-0.5 text-[11px] text-mist">Coupon #{String(betId).padStart(5, "0")}</p>
       </div>
 
       <div className="mt-4 rounded-2xl border border-edge bg-elev/50 p-3.5">
-        <p className="truncate font-display text-[13.5px] font-semibold text-ink">
+        <p className="truncate font-display text-[11.5px] font-medium text-ink">
           {target.match.homeTeam} – {target.match.awayTeam}
         </p>
-        <p className="mt-0.5 text-[12px] font-medium text-mist">{target.label}</p>
+        <p className="mt-0.5 text-[10.5px] font-medium text-mist">{target.label}</p>
 
         <div className="mt-3 grid grid-cols-3 gap-2 border-t border-edge pt-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase text-dim">Mise</p>
-            <p className="mt-0.5 font-display text-[13.5px] font-bold tabular-nums text-ink">
+            <p className="text-[9.5px] font-medium uppercase text-dim">Mise</p>
+            <p className="mt-0.5 font-display text-[11.5px] font-medium tabular-nums text-ink">
               {eur(stake)}
             </p>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase text-dim">Cote</p>
-            <p className="mt-0.5 font-display text-[13.5px] font-bold tabular-nums text-ink">
+            <p className="text-[9.5px] font-medium uppercase text-dim">Cote</p>
+            <p className="mt-0.5 font-display text-[11.5px] font-medium tabular-nums text-ink">
               {formatOdds(odds, oddsFormat)}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase text-dim">Gain max</p>
-            <p className="mt-0.5 font-display text-[13.5px] font-bold tabular-nums text-win">
+            <p className="text-[9.5px] font-medium uppercase text-dim">Gain max</p>
+            <p className="mt-0.5 font-display text-[11.5px] font-medium tabular-nums text-win">
               {eur(payout)}
             </p>
           </div>
@@ -696,7 +696,7 @@ function SuccessView({
         <button
           type="button"
           onClick={onGoToBets}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[14px] font-bold text-white active:opacity-95"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[11.5px] font-medium text-white active:opacity-95"
         >
           <Ticket className="h-4 w-4" strokeWidth={2.3} />
           Voir mes paris
@@ -704,7 +704,7 @@ function SuccessView({
         <button
           type="button"
           onClick={onContinue}
-          className="flex h-11 w-full items-center justify-center rounded-2xl border border-edge bg-white font-display text-[13px] font-semibold text-ink active:bg-elev"
+          className="flex h-11 w-full items-center justify-center rounded-2xl border border-edge bg-white font-display text-[11px] font-medium text-ink active:bg-elev"
         >
           Continuer
         </button>

@@ -210,24 +210,24 @@ export default function ParametresPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1380px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-[20px] font-bold leading-tight tracking-tight text-ink lg:text-[24px]">
+        <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
           Compte
         </h1>
 
         {/* Mini-badge profil compact sur mobile */}
         <div className="flex min-w-0 items-center gap-2 lg:hidden">
           <div className="min-w-0 text-right">
-            <p className="max-w-[140px] truncate font-display text-[13px] font-bold text-ink">
+            <p className="max-w-[140px] truncate font-display text-[11px] font-medium text-ink">
               {user?.name ?? "—"}
             </p>
-            <p className="max-w-[140px] truncate text-[10.5px] text-dim">
+            <p className="max-w-[140px] truncate text-[10px] text-dim">
               {user?.email ?? "Session active"}
             </p>
           </div>
           <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-display text-[12.5px] font-bold text-white"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-display text-[11px] font-medium text-white"
             style={{
               background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))`,
             }}
@@ -243,7 +243,7 @@ export default function ParametresPage() {
           type="button"
           onClick={() => setMobileTab("wallet")}
           className={cn(
-            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[12.5px] font-bold transition-colors",
+            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[11px] font-medium transition-colors",
             mobileTab === "wallet"
               ? "bg-betclic-red text-white shadow-2xs"
               : "text-mist active:bg-elev"
@@ -256,7 +256,7 @@ export default function ParametresPage() {
           type="button"
           onClick={() => setMobileTab("settings")}
           className={cn(
-            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[12.5px] font-bold transition-colors",
+            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[11px] font-medium transition-colors",
             mobileTab === "settings"
               ? "bg-betclic-red text-white shadow-2xs"
               : "text-mist active:bg-elev"
@@ -273,7 +273,7 @@ export default function ParametresPage() {
           <section className="glass-card rounded-2xl p-4 lg:p-5">
             <div className="hidden items-center gap-3 pb-4 lg:flex">
               <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl font-display text-[14.5px] font-bold text-white"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl font-display text-[12px] font-medium text-white"
                 style={{
                   background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))`,
                 }}
@@ -282,34 +282,34 @@ export default function ParametresPage() {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="truncate font-display text-[16px] font-bold text-ink">
+                  <p className="truncate font-display text-[12.5px] font-medium text-ink">
                     {user?.name ?? "—"}
                   </p>
                   {user?.role === "admin" && (
-                    <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 font-display text-[10px] font-bold uppercase text-betclic-red">
+                    <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase text-betclic-red">
                       Admin
                     </span>
                   )}
                 </div>
-                <p className="truncate text-[12px] text-dim">{user?.email ?? "Session active"}</p>
+                <p className="truncate text-[10.5px] text-dim">{user?.email ?? "Session active"}</p>
               </div>
             </div>
 
             <div className="rounded-xl bg-elev p-3">
               <div className="flex items-baseline justify-between gap-2">
                 <div>
-                  <p className="text-[11px] font-medium text-dim">Solde disponible</p>
+                  <p className="text-[10px] font-medium text-dim">Solde disponible</p>
                   <AnimatedNumber
                     value={user?.balance ?? 0}
                     format={eur}
-                    className="mt-0.5 block font-display text-[24px] font-bold leading-none tabular-nums text-ink"
+                    className="mt-0.5 block font-display text-[16px] font-medium leading-none tabular-nums text-ink"
                   />
                   {wallet &&
                     wallet.summary.withdrawable != null &&
                     wallet.summary.withdrawable < (user?.balance ?? 0) && (
-                      <p className="mt-1 text-[11px] font-medium text-mist">
+                      <p className="mt-1 text-[10px] font-medium text-mist">
                         Retirable :{" "}
-                        <strong className="font-semibold text-win">
+                        <strong className="font-medium text-win">
                           {eur(wallet.summary.withdrawable)}
                         </strong>
                         {wallet.summary.bonusRemaining != null &&
@@ -324,12 +324,12 @@ export default function ParametresPage() {
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   {wallet && wallet.summary.pendingWithdrawals > 0 && (
-                    <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-amber-800">
+                    <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[9.5px] font-medium text-amber-800">
                       {eur(wallet.summary.pendingWithdrawals)} en retrait
                     </span>
                   )}
                   {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 && (
-                    <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 font-display text-[10px] font-bold text-sky-800">
+                    <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 font-display text-[9.5px] font-medium text-sky-800">
                       +{eur(wallet.summary.pendingDeposits ?? 0)} en dépôt
                     </span>
                   )}
@@ -339,14 +339,14 @@ export default function ParametresPage() {
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Link
                   href="/parametres/depot"
-                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12.5px] font-bold text-white active:opacity-90"
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[11px] font-medium text-white active:opacity-90"
                 >
                   <Plus className="h-4 w-4" strokeWidth={2.6} />
                   Déposer
                 </Link>
                 <Link
                   href="/parametres/retrait"
-                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[12.5px] font-bold text-ink active:bg-surface"
+                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[11px] font-medium text-ink active:bg-surface"
                 >
                   <ArrowUpRight className="h-4 w-4 text-betclic-red" strokeWidth={2.4} />
                   Retirer
@@ -364,10 +364,10 @@ export default function ParametresPage() {
                   className="flex items-center justify-between gap-2.5 p-3.5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-display text-[13px] font-bold text-ink">
+                    <p className="truncate font-display text-[11px] font-medium text-ink">
                       Retrait en attente · {eur(Math.abs(entry.amount))}
                     </p>
-                    <p className="truncate text-[11px] text-dim">
+                    <p className="truncate text-[10px] text-dim">
                       {entry.subtitle} · {formatPlacedAt(entry.createdAt)}
                     </p>
                   </div>
@@ -377,7 +377,7 @@ export default function ParametresPage() {
                     onClick={() =>
                       entry.rawId != null && cancelWithdrawal(entry.rawId)
                     }
-                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-edge bg-elev px-2.5 font-display text-[11px] font-bold text-ink active:scale-95 disabled:opacity-50"
+                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-edge bg-elev px-2.5 font-display text-[10px] font-medium text-ink active:scale-95 disabled:opacity-50"
                   >
                     {cancellingId === entry.rawId ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -400,10 +400,10 @@ export default function ParametresPage() {
               <History className="h-4 w-4" strokeWidth={2.2} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="font-display text-[13.5px] font-bold text-ink">
+              <p className="font-display text-[11.5px] font-medium text-ink">
                 Historique des mouvements
               </p>
-              <p className="truncate text-[11.5px] text-dim">
+              <p className="truncate text-[10.5px] text-dim">
                 {wallet
                   ? `${wallet.entries.length} opération${wallet.entries.length > 1 ? "s" : ""}`
                   : "Dépôts, retraits, mises et gains"}
@@ -426,7 +426,7 @@ export default function ParametresPage() {
                 <ShieldCheck className="h-4 w-4" strokeWidth={2.2} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-display text-[13.5px] font-bold text-ink">
+                <p className="font-display text-[11.5px] font-medium text-ink">
                   Espace administrateur
                 </p>
               </div>
@@ -444,7 +444,7 @@ export default function ParametresPage() {
                 <IconBox>
                   <SlidersHorizontal className="h-4 w-4" strokeWidth={2.1} />
                 </IconBox>
-                <p className="font-display text-[13.5px] font-semibold text-ink">
+                <p className="font-display text-[11.5px] font-medium text-ink">
                   Format des cotes
                 </p>
               </div>
@@ -459,7 +459,7 @@ export default function ParametresPage() {
                         patch({ oddsFormat: fmt }, "Format des cotes mis à jour")
                       }
                       className={cn(
-                        "rounded-lg px-2.5 py-1 font-display text-[11px] font-bold transition-colors",
+                        "rounded-lg px-2.5 py-1 font-display text-[10px] font-medium transition-colors",
                         active ? "bg-white text-ink shadow-2xs" : "text-mist"
                       )}
                     >
@@ -518,14 +518,14 @@ export default function ParametresPage() {
                 <LogOut className="h-4 w-4" strokeWidth={2.1} />
               )}
             </span>
-            <p className="font-display text-[13.5px] font-semibold text-betclic-red">
+            <p className="font-display text-[11.5px] font-medium text-betclic-red">
               Se déconnecter
             </p>
           </button>
         </div>
       </div>
 
-      <p className="mt-6 text-center text-[10.5px] leading-relaxed text-dim">
+      <p className="mt-6 text-center text-[10px] leading-relaxed text-dim">
         18+ · Jouer comporte des risques : endettement, isolement, dépendance.
       </p>
     </div>
@@ -556,7 +556,7 @@ function SwitchRow({
   return (
     <div className={cn("flex items-center gap-3 p-3.5", !last && "border-b border-edge")}>
       <IconBox>{Icon}</IconBox>
-      <p className="min-w-0 flex-1 font-display text-[13.5px] font-semibold text-ink">
+      <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">
         {label}
       </p>
       <Toggle checked={checked} onChange={onChange} />

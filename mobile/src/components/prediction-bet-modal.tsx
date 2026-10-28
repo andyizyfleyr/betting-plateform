@@ -370,8 +370,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   catText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     textTransform: "uppercase",
   },
@@ -394,8 +394,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   question: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
     lineHeight: 19,
   },
@@ -406,13 +406,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   subLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   pickLabel: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   oddsBadge: {
@@ -424,8 +424,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
   },
   oddsText: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -442,8 +442,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   errorText: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     flex: 1,
   },
@@ -454,8 +454,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   rechargeText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   summaryBox: {
@@ -468,19 +468,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   summaryLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   summaryVal: {
-    fontSize: 14.5,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   summaryWin: {
-    fontSize: 16.5,
-    fontWeight: "800",
+    fontSize: 12.5,
+    fontWeight: "500",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
@@ -502,8 +502,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.outerSpace,
   },
   comboText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   submitBtn: {
@@ -515,8 +515,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   submitText: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },

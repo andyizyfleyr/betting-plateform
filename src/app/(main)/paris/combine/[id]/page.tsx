@@ -70,7 +70,7 @@ function LegStatusBadge({
 }) {
   if (status === "won") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-win/12 px-2 py-0.5 font-display text-[10px] font-bold text-win">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-win/12 px-2 py-0.5 font-display text-[9.5px] font-medium text-win">
         <Check className="h-2.5 w-2.5" strokeWidth={3} />
         Validée
       </span>
@@ -78,7 +78,7 @@ function LegStatusBadge({
   }
   if (status === "lost") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold text-betclic-red">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[9.5px] font-medium text-betclic-red">
         <X className="h-2.5 w-2.5" strokeWidth={3} />
         Perdue
       </span>
@@ -86,7 +86,7 @@ function LegStatusBadge({
   }
   if (status === "void") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[10px] font-bold text-amber-800">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[9.5px] font-medium text-amber-800">
         <RotateCcw className="h-2.5 w-2.5" strokeWidth={2.5} />
         Remboursée
       </span>
@@ -94,14 +94,14 @@ function LegStatusBadge({
   }
   if (live) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-betclic-red">
         <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
         <LiveMatchClock match={clockSource} fallback={minute ?? "LIVE"} />
       </span>
     );
   }
   return (
-    <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-semibold text-dim">
+    <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium text-dim">
       En attente
     </span>
   );
@@ -401,7 +401,7 @@ export default function ComboDetailPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-      <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-3.5 lg:px-0 lg:py-0">
+      <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
         {/* En-tête avec retour vers Mes paris */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -413,11 +413,11 @@ export default function ComboDetailPage() {
               <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
             </Link>
             <div className="min-w-0">
-              <h1 className="truncate font-display text-[19px] font-bold leading-tight tracking-tight text-ink lg:text-[23px]">
+              <h1 className="truncate font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
                 {bet ? "Combiné" : "Détail du combiné"}
               </h1>
               {bet && (
-                <p className="truncate text-[11.5px] text-mist">
+                <p className="truncate text-[10.5px] text-mist">
                   Ticket #{bet.id} ·{" "}
                   {formatPlacedAt(
                     bet.status !== "pending"
@@ -435,7 +435,7 @@ export default function ComboDetailPage() {
                 type="button"
                 onClick={() => setSharing(true)}
                 aria-label="Partager ce combiné"
-                className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[11px] font-bold text-ink active:scale-95"
+                className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10px] font-medium text-ink active:scale-95"
               >
                 <Share2 className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
                 Flex
@@ -477,10 +477,10 @@ export default function ComboDetailPage() {
             <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
               <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
             </div>
-            <p className="mt-3 font-display text-[15px] font-bold text-ink">
+            <p className="mt-3 font-display text-[12px] font-medium text-ink">
               Connexion interrompue
             </p>
-            <p className="mt-1 max-w-[320px] text-[12.5px] text-mist">{loadError}</p>
+            <p className="mt-1 max-w-[320px] text-[11px] text-mist">{loadError}</p>
             <button
               type="button"
               onClick={() => {
@@ -488,7 +488,7 @@ export default function ComboDetailPage() {
                 setLoadError(null);
                 setReloadNonce((n) => n + 1);
               }}
-              className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white shadow-xs active:scale-95"
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white shadow-xs active:scale-95"
             >
               <RefreshCw className="h-3.5 w-3.5" strokeWidth={2.3} />
               Réessayer
@@ -499,15 +499,15 @@ export default function ComboDetailPage() {
             <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
               <TicketX className="h-5 w-5" strokeWidth={1.9} />
             </div>
-            <p className="mt-3 font-display text-[15px] font-semibold text-ink">
+            <p className="mt-3 font-display text-[12px] font-medium text-ink">
               Combiné introuvable
             </p>
-            <p className="mt-1 max-w-[290px] text-[12.5px] text-dim">
+            <p className="mt-1 max-w-[290px] text-[11px] text-dim">
               Ce coupon combiné n&apos;existe pas ou n&apos;est plus accessible sur ce compte.
             </p>
             <Link
               href="/paris"
-              className="mt-4 inline-flex h-9.5 items-center gap-1.5 rounded-full bg-betclic-red px-4 font-display text-[12.5px] font-bold text-white active:scale-95"
+              className="mt-4 inline-flex h-9.5 items-center gap-1.5 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white active:scale-95"
             >
               <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2.4} />
               Retour à Mes paris
@@ -524,14 +524,14 @@ export default function ComboDetailPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 font-display text-[12.5px] font-bold text-ink">
+                  <span className="inline-flex items-center gap-1.5 font-display text-[11px] font-medium text-ink">
                     <Layers className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
                     {progressSummary}
                   </span>
                 </div>
 
                 {bet.boostPct != null && bet.boostPct > 0 && (
-                  <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-win/12 px-2 py-0.5 font-display text-[10.5px] font-extrabold text-win">
+                  <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-win/12 px-2 py-0.5 font-display text-[10px] font-medium text-win">
                     <Flame className="h-3 w-3" strokeWidth={2.4} />
                     Boost +{bet.boostPct}%
                   </span>
@@ -572,23 +572,23 @@ export default function ComboDetailPage() {
               {/* Montants en ligne (Nom en petit + valeur en grand) */}
               <div className="mt-3.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-3">
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[10.5px] font-medium text-dim">Mise :</span>
-                  <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+                  <span className="text-[10px] font-medium text-dim">Mise :</span>
+                  <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                     {eur(bet.stake)}
                   </span>
                 </div>
 
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[10.5px] font-medium text-dim">Cote :</span>
+                  <span className="text-[10px] font-medium text-dim">Cote :</span>
                   {bet.boostPct != null &&
                     bet.boostPct > 0 &&
                     bet.baseOdds != null &&
                     bet.odds - bet.baseOdds >= 0.01 && (
-                      <span className="hidden font-display text-[11px] font-semibold tabular-nums text-dim line-through sm:inline">
+                      <span className="hidden font-display text-[10px] font-medium tabular-nums text-dim line-through sm:inline">
                         {formatOdds(bet.baseOdds, oddsFormat)}
                       </span>
                     )}
-                  <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+                  <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                     ×{formatOdds(bet.odds, oddsFormat)}
                   </span>
                 </div>
@@ -596,36 +596,36 @@ export default function ComboDetailPage() {
                 <div className="inline-flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
                   {bet.status === "won" ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">Gain reçu :</span>
-                      <span className="font-display text-[13.5px] font-bold tabular-nums text-win">
+                      <span className="text-[10px] font-medium text-dim">Gain reçu :</span>
+                      <span className="font-display text-[11.5px] font-medium tabular-nums text-win">
                         +{eur(bet.potentialWin)}
                       </span>
                     </>
                   ) : bet.status === "lost" ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">Résultat :</span>
-                      <span className="font-display text-[13.5px] font-bold tabular-nums text-betclic-red">
+                      <span className="text-[10px] font-medium text-dim">Résultat :</span>
+                      <span className="font-display text-[11.5px] font-medium tabular-nums text-betclic-red">
                         -{eur(bet.stake)}
                       </span>
                     </>
                   ) : bet.status === "cashed" ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">Vendu pour :</span>
-                      <span className="font-display text-[13.5px] font-bold tabular-nums text-sky-700">
+                      <span className="text-[10px] font-medium text-dim">Vendu pour :</span>
+                      <span className="font-display text-[11.5px] font-medium tabular-nums text-sky-700">
                         +{eur(bet.cashOutAmount ?? 0)}
                       </span>
                     </>
                   ) : bet.status === "void" ? (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">Remboursé :</span>
-                      <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+                      <span className="text-[10px] font-medium text-dim">Remboursé :</span>
+                      <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                         +{eur(bet.stake)}
                       </span>
                     </>
                   ) : (
                     <>
-                      <span className="text-[10.5px] font-medium text-dim">Gain max :</span>
-                      <span className="font-display text-[13.5px] font-bold tabular-nums text-ink">
+                      <span className="text-[10px] font-medium text-dim">Gain max :</span>
+                      <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                         {eur(bet.potentialWin)}
                       </span>
                     </>
@@ -638,7 +638,7 @@ export default function ComboDetailPage() {
                   {cashoutChanged && (
                     <div
                       role="alert"
-                      className="flex items-start gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11.5px] leading-snug text-amber-900"
+                      className="flex items-start gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[10.5px] leading-snug text-amber-900"
                     >
                       <AlertTriangle
                         className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700"
@@ -668,7 +668,7 @@ export default function ComboDetailPage() {
             {/* Liste propre et aérée de toutes les sélections du combiné */}
             <section>
               <div className="mb-2 flex items-center justify-between px-0.5">
-                <h2 className="font-display text-[12.5px] font-bold uppercase tracking-wider text-mist">
+                <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-mist">
                   Sélections du combiné ({totalLegs})
                 </h2>
               </div>
@@ -730,7 +730,7 @@ export default function ComboDetailPage() {
                     </div>
                   ) : (
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-display text-[14px] font-semibold leading-snug text-ink">
+                      <p className="font-display text-[11.5px] font-medium leading-snug text-ink">
                         {leg.title}
                       </p>
                       {legHref && (
@@ -759,8 +759,8 @@ export default function ComboDetailPage() {
                         />
                       )}
                       <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] font-medium text-mist">
-                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-elev px-1 font-display text-[10px] font-bold tabular-nums text-ink">
+                        <div className="flex min-w-0 items-center gap-1.5 text-[10.5px] font-medium text-mist">
+                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-elev px-1 font-display text-[9.5px] font-medium tabular-nums text-ink">
                             {idx + 1}
                           </span>
                           {leg.kind === "prediction" ? (
@@ -779,7 +779,7 @@ export default function ComboDetailPage() {
 
                         <div className="flex shrink-0 items-center gap-1.5">
                           {leg.matchStartsAt && (
-                            <span className="shrink-0 text-[10.5px] font-medium tabular-nums text-dim">
+                            <span className="shrink-0 text-[10px] font-medium tabular-nums text-dim">
                               {formatKickoff(leg.matchStartsAt)}
                             </span>
                           )}
@@ -811,13 +811,13 @@ export default function ComboDetailPage() {
                         <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-elev px-3 py-2">
                           <div className="flex min-w-0 items-center gap-1.5">
                             {marketTag && (
-                              <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase text-mist ring-1 ring-edge/80">
+                              <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase text-mist ring-1 ring-edge/80">
                                 {marketTag}
                               </span>
                             )}
                             <span
                               className={cn(
-                                "truncate text-[12.5px] font-semibold",
+                                "truncate text-[11px] font-medium",
                                 leg.status === "lost"
                                   ? "text-mist line-through"
                                   : "text-ink"
@@ -829,7 +829,7 @@ export default function ComboDetailPage() {
 
                           <span
                             className={cn(
-                              "shrink-0 font-display text-[13.5px] font-bold tabular-nums",
+                              "shrink-0 font-display text-[11.5px] font-medium tabular-nums",
                               leg.status === "won"
                                 ? "text-win"
                                 : leg.status === "lost"

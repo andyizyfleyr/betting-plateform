@@ -314,15 +314,15 @@ export default function SingleBetDetailPage() {
 
   if (!user && bet == null) {
     return (
-      <div className="mx-auto max-w-xl px-3 pt-4 pb-6">
+      <div className="mx-auto w-full max-w-[1600px] px-2 pt-3 pb-6 lg:px-0">
         <div className="glass-card rounded-xl p-4 text-center">
-          <p className="font-display text-[14.5px] font-bold text-ink">
+          <p className="font-display text-[12px] font-medium text-ink">
             Connectez-vous pour consulter ce pari
           </p>
           <div className="mt-3 flex justify-center">
             <Link
               href="/auth?mode=login"
-              className="btn-red rounded-xl px-4 py-2 text-[12px]"
+              className="btn-red rounded-xl px-4 py-2 text-[10.5px]"
             >
               Connexion
             </Link>
@@ -361,7 +361,7 @@ export default function SingleBetDetailPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>
-    <div className="mx-auto w-full max-w-[1440px] px-3 pb-6 pt-2.5 lg:px-0 lg:py-0">
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2 lg:px-0 lg:py-0">
       {/* En-tête compact en ligne */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -382,11 +382,11 @@ export default function SingleBetDetailPage() {
           </button>
 
           <div className="min-w-0">
-            <h1 className="truncate font-display text-[15px] font-bold leading-tight text-ink lg:text-[21px]">
+            <h1 className="truncate font-display text-[12px] font-bold leading-tight text-ink lg:text-[14.5px]">
               {isPrediction ? "Pari prédiction" : "Pari simple"}
             </h1>
             {bet && (
-              <p className="truncate text-[10.5px] leading-tight text-mist lg:text-[11.5px]">
+              <p className="truncate text-[10px] leading-tight text-mist lg:text-[10.5px]">
                 Ticket #{bet.id} · {formatPlacedAt(bet.placedAt)}
               </p>
             )}
@@ -399,7 +399,7 @@ export default function SingleBetDetailPage() {
               type="button"
               onClick={() => setSharing(true)}
               aria-label="Partager ce pari"
-              className="inline-flex h-7 items-center gap-1 rounded-full bg-elev px-2 font-display text-[10px] font-bold text-ink active:scale-95 lg:h-8 lg:px-2.5 lg:text-[11px]"
+              className="inline-flex h-7 items-center gap-1 rounded-full bg-elev px-2 font-display text-[9.5px] font-medium text-ink active:scale-95 lg:h-8 lg:px-2.5 lg:text-[10px]"
             >
               <Share2 className="h-3 w-3 text-betclic-red" strokeWidth={2.2} />
               Flex
@@ -429,17 +429,17 @@ export default function SingleBetDetailPage() {
         {loadError && bet === undefined ? (
           <div className="rounded-xl border border-rose-500/35 bg-rose-500/10 p-4 text-center">
             <AlertTriangle className="mx-auto h-5 w-5 text-rose-600" />
-            <p className="mt-1.5 font-display text-[13.5px] font-bold text-ink">
+            <p className="mt-1.5 font-display text-[11.5px] font-medium text-ink">
               Chargement interrompu
             </p>
-            <p className="mt-0.5 text-[11.5px] text-mist">{loadError}</p>
+            <p className="mt-0.5 text-[10.5px] text-mist">{loadError}</p>
             <button
               type="button"
               onClick={() => {
                 setLoadError(null);
                 setReloadNonce((n) => n + 1);
               }}
-              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-betclic-red px-3.5 py-1.5 font-display text-[11.5px] font-bold text-white"
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-betclic-red px-3.5 py-1.5 font-display text-[10.5px] font-medium text-white"
             >
               <RefreshCw className="h-3 w-3" />
               Réessayer
@@ -449,15 +449,15 @@ export default function SingleBetDetailPage() {
           <PulseFlashLoader compact />
         ) : bet === null ? (
           <div className="glass-card rounded-xl p-4 text-center">
-            <p className="font-display text-[14.5px] font-bold text-ink">
+            <p className="font-display text-[12px] font-medium text-ink">
               Pari introuvable
             </p>
-            <p className="mt-1 text-[11.5px] text-mist">
+            <p className="mt-1 text-[10.5px] text-mist">
               Ce ticket n&apos;existe pas ou n&apos;appartient pas à votre compte.
             </p>
             <Link
               href="/paris"
-              className="btn-red mt-3 inline-flex rounded-xl px-4 py-2 text-[12px]"
+              className="btn-red mt-3 inline-flex rounded-xl px-4 py-2 text-[10.5px]"
             >
               Retour à Mes paris
             </Link>
@@ -474,11 +474,11 @@ export default function SingleBetDetailPage() {
             >
               <div className="flex min-w-0 items-center gap-1.5 rounded-lg bg-elev px-2.5 py-1.5 lg:rounded-xl lg:px-3 lg:py-2">
                 {shortMarketBadge(bet.market) && (
-                  <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase text-mist ring-1 ring-edge/80">
+                  <span className="shrink-0 rounded bg-white px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase text-mist ring-1 ring-edge/80">
                     {shortMarketBadge(bet.market)}
                   </span>
                 )}
-                <span className="truncate text-[12.5px] font-semibold text-ink lg:text-[13.5px]">
+                <span className="truncate text-[11px] font-medium text-ink lg:text-[11.5px]">
                   {bet.selectionLabel}
                 </span>
               </div>
@@ -486,15 +486,15 @@ export default function SingleBetDetailPage() {
               {/* Montants financiers alignés sur une seule ligne compacte */}
               <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge/80 pt-2">
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[10px] font-medium text-dim">Mise :</span>
-                  <span className="font-display text-[13px] font-bold tabular-nums text-ink lg:text-[13.5px]">
+                  <span className="text-[9.5px] font-medium text-dim">Mise :</span>
+                  <span className="font-display text-[11px] font-medium tabular-nums text-ink lg:text-[11.5px]">
                     {eur(bet.stake)}
                   </span>
                 </div>
 
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[10px] font-medium text-dim">Cote :</span>
-                  <span className="font-display text-[13px] font-bold tabular-nums text-ink lg:text-[13.5px]">
+                  <span className="text-[9.5px] font-medium text-dim">Cote :</span>
+                  <span className="font-display text-[11px] font-medium tabular-nums text-ink lg:text-[11.5px]">
                     ×{formatOdds(bet.odds, oddsFormat)}
                   </span>
                 </div>
@@ -502,46 +502,46 @@ export default function SingleBetDetailPage() {
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
                   {won ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">
+                      <span className="text-[9.5px] font-medium text-dim">
                         Gain reçu :
                       </span>
-                      <span className="font-display text-[13px] font-extrabold tabular-nums text-win lg:text-[14px]">
+                      <span className="font-display text-[11px] font-medium tabular-nums text-win lg:text-[11.5px]">
                         +{eur(bet.potentialWin)}
                       </span>
                     </>
                   ) : cashed ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">
+                      <span className="text-[9.5px] font-medium text-dim">
                         Vendu pour :
                       </span>
-                      <span className="font-display text-[13px] font-extrabold tabular-nums text-sky-700 lg:text-[14px]">
+                      <span className="font-display text-[11px] font-medium tabular-nums text-sky-700 lg:text-[11.5px]">
                         {eur(bet.cashOutAmount ?? 0)}
                       </span>
                     </>
                   ) : voided ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">
+                      <span className="text-[9.5px] font-medium text-dim">
                         Remboursé :
                       </span>
-                      <span className="font-display text-[13px] font-bold tabular-nums text-ink">
+                      <span className="font-display text-[11px] font-medium tabular-nums text-ink">
                         {eur(bet.stake)}
                       </span>
                     </>
                   ) : lost ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">
+                      <span className="text-[9.5px] font-medium text-dim">
                         Résultat :
                       </span>
-                      <span className="font-display text-[13px] font-extrabold tabular-nums text-betclic-red lg:text-[14px]">
+                      <span className="font-display text-[11px] font-medium tabular-nums text-betclic-red lg:text-[11.5px]">
                         -{eur(bet.stake)}
                       </span>
                     </>
                   ) : (
                     <>
-                      <span className="text-[10px] font-medium text-dim">
+                      <span className="text-[9.5px] font-medium text-dim">
                         Gain max :
                       </span>
-                      <span className="font-display text-[13px] font-extrabold tabular-nums text-ink lg:text-[14px]">
+                      <span className="font-display text-[11px] font-medium tabular-nums text-ink lg:text-[11.5px]">
                         {eur(bet.potentialWin)}
                       </span>
                     </>
@@ -550,7 +550,7 @@ export default function SingleBetDetailPage() {
               </div>
 
               {bet.settledAt && bet.status !== "pending" && (
-                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-dim">
+                <div className="mt-1.5 flex items-center gap-1 text-[9.5px] text-dim">
                   <Clock className="h-3 w-3 shrink-0" />
                   <span>Validé {formatPlacedAt(bet.settledAt)}</span>
                 </div>
@@ -560,12 +560,12 @@ export default function SingleBetDetailPage() {
               {canCashOut && (
                 <div className="mt-2.5 space-y-2 border-t border-edge/80 pt-2.5">
                   {cashoutChanged && (
-                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/12 px-2.5 py-1.5 text-[11px] text-amber-900">
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/12 px-2.5 py-1.5 text-[10px] text-amber-900">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
                       <div className="min-w-0 flex-1">
-                        <div className="font-semibold">
+                        <div className="font-medium">
                           Offre réévaluée : {eur(cashoutChanged.previousCashout)} →{" "}
-                          <span className="font-bold">
+                          <span className="font-medium">
                             {eur(cashoutChanged.currentCashout)}
                           </span>
                         </div>
@@ -600,18 +600,18 @@ export default function SingleBetDetailPage() {
                 )}
                 <div className="pointer-events-none relative z-[1]">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1 rounded bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-betclic-red">
+                    <span className="inline-flex items-center gap-1 rounded bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wide text-betclic-red">
                       <TrendingUp className="h-3 w-3" />
                       {bet.league}
                     </span>
                     {linkedPrediction?.resolvesAt && (
-                      <span className="text-[10px] font-medium tabular-nums text-dim">
+                      <span className="text-[9.5px] font-medium tabular-nums text-dim">
                         Clôture · {formatKickoff(linkedPrediction.resolvesAt)}
                       </span>
                     )}
                   </div>
 
-                  <h2 className="mt-1.5 font-display text-[13.5px] font-bold leading-snug text-ink lg:text-[15.5px]">
+                  <h2 className="mt-1.5 font-display text-[11.5px] font-bold leading-snug text-ink lg:text-[12.5px]">
                     {bet.question}
                   </h2>
 
@@ -668,20 +668,20 @@ export default function SingleBetDetailPage() {
                               />
                               <div className="relative flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-1.5">
-                                  <span className="truncate font-display text-[12px] font-bold text-ink">
+                                  <span className="truncate font-display text-[10.5px] font-medium text-ink">
                                     {opt.label}
                                   </span>
                                   {picked && (
-                                    <span className="shrink-0 rounded-full bg-betclic-red px-1.5 py-0.5 font-display text-[9px] font-bold text-white">
+                                    <span className="shrink-0 rounded-full bg-betclic-red px-1.5 py-0.5 font-display text-[9px] font-medium text-white">
                                       Choisi
                                     </span>
                                   )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1.5">
-                                  <span className="text-[10.5px] font-semibold tabular-nums text-mist">
+                                  <span className="text-[10px] font-medium tabular-nums text-mist">
                                     {sharePct}%
                                   </span>
-                                  <span className="font-display text-[12px] font-extrabold tabular-nums text-ink">
+                                  <span className="font-display text-[10.5px] font-medium tabular-nums text-ink">
                                     {formatOdds(opt.odds, oddsFormat)}
                                   </span>
                                 </div>
@@ -694,7 +694,7 @@ export default function SingleBetDetailPage() {
                   })()}
 
                   {bet.questionId && (
-                    <div className="mt-2.5 flex h-8 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11.5px] font-bold text-ink">
+                    <div className="mt-2.5 flex h-8 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[10.5px] font-medium text-ink">
                       <span>Marché complet de la prédiction</span>
                       <ChevronRight className="h-3.5 w-3.5 text-dim" strokeWidth={2.3} />
                     </div>
@@ -721,7 +721,7 @@ export default function SingleBetDetailPage() {
                     />
                   )}
                   <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-mist">
+                    <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-mist">
                       <SportIcon
                         sport={bet.sport}
                         className="h-3.5 w-3.5 shrink-0 text-betclic-red"
@@ -731,7 +731,7 @@ export default function SingleBetDetailPage() {
 
                     <div className="flex shrink-0 items-center gap-1.5">
                       {bet.matchStartsAt && (
-                        <span className="text-[10.5px] font-medium tabular-nums text-dim">
+                        <span className="text-[10px] font-medium tabular-nums text-dim">
                           {formatKickoff(bet.matchStartsAt)}
                         </span>
                       )}
@@ -754,7 +754,7 @@ export default function SingleBetDetailPage() {
                           minute={bet.matchMinute}
                         />
                       ) : matchStatus === "finished" ? (
-                        <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wider text-mist">
+                        <span className="rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wider text-mist">
                           Terminé
                         </span>
                       ) : null}
@@ -770,14 +770,14 @@ export default function SingleBetDetailPage() {
                           logo={linkedMatch?.homeLogo ?? bet.homeLogo}
                           size="xs"
                         />
-                        <span className="font-display text-[12.5px] font-bold leading-snug text-ink lg:text-[13.5px]">
+                        <span className="font-display text-[11px] font-medium leading-snug text-ink lg:text-[11.5px]">
                           {bet.homeTeam}
                         </span>
                       </div>
                       {hasScore && (
                         <span
                           className={cn(
-                            "shrink-0 font-display text-[14.5px] font-black tabular-nums",
+                            "shrink-0 font-display text-[12px] font-medium tabular-nums",
                             matchStatus === "live"
                               ? "text-betclic-red"
                               : (homeScore ?? 0) > (awayScore ?? 0)
@@ -797,14 +797,14 @@ export default function SingleBetDetailPage() {
                           logo={linkedMatch?.awayLogo ?? bet.awayLogo}
                           size="xs"
                         />
-                        <span className="font-display text-[12.5px] font-bold leading-snug text-ink lg:text-[13.5px]">
+                        <span className="font-display text-[11px] font-medium leading-snug text-ink lg:text-[11.5px]">
                           {bet.awayTeam}
                         </span>
                       </div>
                       {hasScore && (
                         <span
                           className={cn(
-                            "shrink-0 font-display text-[14.5px] font-black tabular-nums",
+                            "shrink-0 font-display text-[12px] font-medium tabular-nums",
                             matchStatus === "live"
                               ? "text-betclic-red"
                               : (awayScore ?? 0) > (homeScore ?? 0)
@@ -820,8 +820,8 @@ export default function SingleBetDetailPage() {
 
                   {linkedMatch?.htHomeScore != null &&
                     linkedMatch?.htAwayScore != null && (
-                      <div className="pointer-events-none relative z-[1] mt-2 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
-                        <span className="rounded bg-elev px-1.5 py-0.5 font-semibold tabular-nums">
+                      <div className="pointer-events-none relative z-[1] mt-2 border-t border-edge/60 pt-1.5 text-[9.5px] text-mist">
+                        <span className="rounded bg-elev px-1.5 py-0.5 font-medium tabular-nums">
                           MT {linkedMatch.htHomeScore}-{linkedMatch.htAwayScore}
                         </span>
                       </div>
@@ -835,7 +835,7 @@ export default function SingleBetDetailPage() {
                           type="button"
                           onClick={() => setShowTracker((s) => !s)}
                           className={cn(
-                            "pointer-events-auto relative z-10 inline-flex h-7.5 items-center gap-1 rounded-lg px-2.5 font-display text-[10.5px] font-bold transition-colors",
+                            "pointer-events-auto relative z-10 inline-flex h-7.5 items-center gap-1 rounded-lg px-2.5 font-display text-[10px] font-medium transition-colors",
                             showTracker
                               ? "bg-ink text-white"
                               : "bg-elev text-ink"
@@ -849,7 +849,7 @@ export default function SingleBetDetailPage() {
                           {isReal ? "Stats" : "Terrain 2D"}
                         </button>
                       )}
-                      <div className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink">
+                      <div className="inline-flex h-7.5 flex-1 items-center justify-between rounded-lg bg-elev px-2.5 font-display text-[10px] font-medium text-ink">
                         <span className="truncate">
                           {matchStatus === "finished"
                             ? "Voir le résultat du match"
@@ -882,31 +882,31 @@ export default function SingleBetDetailPage() {
                 {/* Chronologie compacte des faits de jeu */}
                 {cleanEvents.length > 0 && (
                   <div className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-                    <h3 className="font-display text-[11px] font-extrabold uppercase tracking-wider text-mist">
+                    <h3 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
                       Faits de match ({cleanEvents.length})
                     </h3>
                     <div className="mt-1.5 divide-y divide-edge/60">
                       {cleanEvents.map((ev, i) => (
                         <div
                           key={`${ev.minute}-${ev.type}-${i}`}
-                          className="flex items-center justify-between gap-2 py-1.5 text-[11px]"
+                          className="flex items-center justify-between gap-2 py-1.5 text-[10px]"
                         >
                           <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[10px] font-bold tabular-nums text-ink">
+                            <span className="inline-flex min-w-[28px] justify-center rounded bg-elev px-1 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-ink">
                               {ev.minute}&apos;
                             </span>
-                            <span className="text-[11px]">
+                            <span className="text-[10px]">
                               {ev.type === "goal"
                                 ? "⚽"
                                 : ev.type === "red"
                                   ? "🟥"
                                   : "🟨"}
                             </span>
-                            <span className="truncate font-semibold text-ink">
+                            <span className="truncate font-medium text-ink">
                               {ev.player}
                             </span>
                           </div>
-                          <span className="shrink-0 text-[10px] font-medium text-dim">
+                          <span className="shrink-0 text-[9.5px] font-medium text-dim">
                             {ev.team === "home" ? bet.homeTeam : bet.awayTeam}
                           </span>
                         </div>

@@ -109,8 +109,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   titleLine: {
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   oldOdds: {
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   newOdds: {
-    fontWeight: "800",
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   subText: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.mist,
     flex: 1,
   },
@@ -154,8 +154,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   policyText: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     flex: 1,
   },

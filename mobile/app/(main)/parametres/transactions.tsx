@@ -308,12 +308,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 28,
   },
   guestWrap: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 16,
   },
   headerRow: {
@@ -333,8 +333,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   stickyFilterWrap: {
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyTitle: {
-    fontSize: 13.5,
+    fontSize: 11.5,
     fontWeight: "700",
     color: COLORS.ink,
     textAlign: "center",
@@ -366,8 +366,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   redBtnText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   txRow: {
@@ -403,12 +403,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   txTitle: {
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "700",
     color: COLORS.ink,
   },
   txSub: {
-    fontSize: 10.5,
+    fontSize: 10,
     color: COLORS.dim,
   },
   txRight: {
@@ -416,8 +416,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   txAmount: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -433,8 +433,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cancelBtnText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
 });

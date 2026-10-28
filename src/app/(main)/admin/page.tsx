@@ -608,20 +608,20 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-4 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full max-w-[1680px] px-2 pb-6 pt-3 lg:px-3.5 lg:py-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-ink lg:text-[25px]">
+          <h1 className="font-display text-[16px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
             Administration
           </h1>
-          <p className="text-[12px] text-mist lg:text-[13px]">
+          <p className="text-[10.5px] text-mist lg:text-[11px]">
             Pilotage des matchs, pronostics et joueurs
           </p>
         </div>
         <button
           type="button"
           onClick={() => load()}
-          className="glass-card flex h-9 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold text-ink hover:bg-elev/60 active:bg-elev"
+          className="glass-card flex h-9 items-center gap-1.5 rounded-full px-3 text-[10.5px] font-medium text-ink hover:bg-elev/60 active:bg-elev"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} strokeWidth={2.3} />
           Actualiser
@@ -631,7 +631,7 @@ export default function AdminPage() {
       {notice && (
         <div
           className={cn(
-            "mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-[12.5px] font-medium",
+            "mt-3 flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-medium",
             notice.kind === "ok"
               ? "border-win/30 bg-win/10 text-win"
               : "border-betclic-red/30 bg-betclic-red/8 text-betclic-red"
@@ -655,14 +655,14 @@ export default function AdminPage() {
       )}
 
       {user && user.role !== "admin" && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-betclic-red/30 bg-betclic-red/8 px-3.5 py-2.5 text-[12.5px] text-betclic-red">
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-betclic-red/30 bg-betclic-red/8 px-3.5 py-2.5 text-[11px] text-betclic-red">
           <ShieldCheck className="h-4 w-4 shrink-0" strokeWidth={2.2} />
           Accès réservé au compte administrateur.
         </div>
       )}
 
       {/* Onglets collants mobiles (remplacés par la barre latérale à gauche sur desktop) */}
-      <div className="sticky top-[52px] z-30 -mx-4 mt-3 border-b border-edge/70 bg-deep/95 px-4 py-2 backdrop-blur-md lg:hidden">
+      <div className="sticky top-[48px] z-30 -mx-2 mt-2.5 border-b border-edge/70 bg-deep/95 px-2 py-1.5 backdrop-blur-md lg:hidden">
         <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
           {TABS.map(({ key, label, Icon }) => {
             const active = tab === key;
@@ -676,16 +676,16 @@ export default function AdminPage() {
                 type="button"
                 onClick={() => setTab(key)}
                 className={cn(
-                  "flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 font-display text-[12px] transition-colors",
+                  "flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 font-display text-[10.5px] transition-colors",
                   active
-                    ? "border-ink bg-ink font-bold text-white"
+                    ? "border-ink bg-ink font-medium text-white"
                     : "border-edge bg-white font-medium text-mist"
                 )}
               >
                 <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
                 <span>{label}</span>
                 {pendingFinance > 0 && (
-                  <span className="ml-0.5 rounded-full bg-betclic-red px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                  <span className="ml-0.5 rounded-full bg-betclic-red px-1.5 py-0.5 text-[9.5px] font-medium leading-none text-white">
                     {pendingFinance}
                   </span>
                 )}
@@ -782,14 +782,14 @@ function Dashboard({ stats }: { stats: PanelData["stats"] }) {
   return (
     <div className="flex flex-col gap-3">
       <section className="glass-card rounded-2xl p-4">
-        <p className="text-[11px] font-medium text-dim">Marge brute globale (mises − gains)</p>
+        <p className="text-[10px] font-medium text-dim">Marge brute globale (mises − gains)</p>
         <div className="mt-1 flex items-baseline justify-between gap-2">
-          <p className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">
+          <p className="font-display text-[17.5px] font-medium leading-none tabular-nums text-ink">
             {eur(revenue)}
           </p>
           <span
             className={cn(
-              "rounded-full px-2.5 py-0.5 font-display text-[11px] font-bold",
+              "rounded-full px-2.5 py-0.5 font-display text-[10px] font-medium",
               revenue >= 0 ? "bg-win/12 text-win" : "bg-betclic-red/10 text-betclic-red"
             )}
           >
@@ -806,10 +806,10 @@ function Dashboard({ stats }: { stats: PanelData["stats"] }) {
               className={cn("h-4 w-4", c.accent ? "text-betclic-red" : "text-dim")}
               strokeWidth={2.1}
             />
-            <p className="mt-2 font-display text-[17px] font-bold tabular-nums text-ink lg:text-[19px]">
+            <p className="mt-2 font-display text-[13.5px] font-medium tabular-nums text-ink lg:text-[14.5px]">
               {c.value}
             </p>
-            <p className="text-[11px] font-medium text-dim">{c.label}</p>
+            <p className="text-[10px] font-medium text-dim">{c.label}</p>
           </div>
         ))}
       </div>
@@ -1029,14 +1029,14 @@ function MatchesTab({
             setLeagueFilter("all");
           }}
           className={cn(
-            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
             isReal ? "bg-emerald-600 text-white shadow-xs" : "text-mist active:bg-elev"
           )}
         >
           <span>Matchs réels</span>
           <span
             className={cn(
-              "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+              "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
               isReal ? "bg-white/20 text-white" : "bg-elev text-ink"
             )}
           >
@@ -1051,14 +1051,14 @@ function MatchesTab({
             setLeagueFilter("all");
           }}
           className={cn(
-            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[12.5px] font-bold transition-all",
+            "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
             !isReal ? "bg-betclic-red text-white shadow-xs" : "text-mist active:bg-elev"
           )}
         >
           <span>Matchs virtuels</span>
           <span
             className={cn(
-              "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+              "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
               !isReal ? "bg-white/20 text-white" : "bg-elev text-ink"
             )}
           >
@@ -1071,10 +1071,10 @@ function MatchesTab({
         <div className="glass-card rounded-2xl p-3 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-display text-[12.5px] font-bold text-ink">
+              <p className="font-display text-[11px] font-medium text-ink">
                 Flux officiel automatique (Scores, MT et Stats)
               </p>
-              <p className="text-[11px] text-mist">
+              <p className="text-[10px] text-mist">
                 {realMatches.filter((m) => Boolean(m.externalId) && m.autoSync !== false).length}{" "}
                 match(s) lié(s) en Auto-Sync · sans clé API payante
               </p>
@@ -1083,7 +1083,7 @@ function MatchesTab({
               type="button"
               disabled={syncingAll || busy["sync-all-real"]}
               onClick={() => void handleSyncAllReal()}
-              className="inline-flex h-8.5 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 font-display text-[11.5px] font-bold text-white active:scale-95 disabled:opacity-60"
+              className="inline-flex h-8.5 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 font-display text-[10.5px] font-medium text-white active:scale-95 disabled:opacity-60"
             >
               {syncingAll || busy["sync-all-real"] ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1095,7 +1095,7 @@ function MatchesTab({
           </div>
 
           <div className="flex flex-col gap-1 border-t border-edge/70 pt-2">
-            <span className="text-[10.5px] font-semibold text-dim">
+            <span className="text-[10px] font-medium text-dim">
               Règlement de fin de match (protection anti-VAR) :
             </span>
             <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
@@ -1104,10 +1104,10 @@ function MatchesTab({
                 disabled={busy["real-settle-mode"]}
                 onClick={() => void handleSetSettlementMode("auto")}
                 className={cn(
-                  "h-8 rounded-lg px-2 font-display text-[11px] transition-colors",
+                  "h-8 rounded-lg px-2 font-display text-[10px] transition-colors",
                   activeSettleMode === "auto"
-                    ? "bg-emerald-600 font-bold text-white"
-                    : "font-semibold text-mist"
+                    ? "bg-emerald-600 font-medium text-white"
+                    : "font-medium text-mist"
                 )}
               >
                 Auto (Anti-VAR 90s)
@@ -1117,16 +1117,16 @@ function MatchesTab({
                 disabled={busy["real-settle-mode"]}
                 onClick={() => void handleSetSettlementMode("confirm")}
                 className={cn(
-                  "h-8 rounded-lg px-2 font-display text-[11px] transition-colors",
+                  "h-8 rounded-lg px-2 font-display text-[10px] transition-colors",
                   activeSettleMode === "confirm"
-                    ? "bg-ink font-bold text-white"
-                    : "font-semibold text-mist"
+                    ? "bg-ink font-medium text-white"
+                    : "font-medium text-mist"
                 )}
               >
                 Confirmation Admin
               </button>
             </div>
-            <p className="text-[10.5px] text-mist">
+            <p className="text-[10px] text-mist">
               {activeSettleMode === "auto"
                 ? "Actif : clôture et règlement automatiques 90 s après le coup de sifflet final officiel."
                 : "Actif : suspension automatique à la 90e et validation finale par l'administrateur en 1 clic."}
@@ -1136,7 +1136,7 @@ function MatchesTab({
           {realBanner && (
             <div
               className={cn(
-                "flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-[11.5px] font-semibold",
+                "flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-[10.5px] font-medium",
                 realBanner.kind === "ok"
                   ? "bg-emerald-600/12 text-emerald-800"
                   : realBanner.kind === "info"
@@ -1157,15 +1157,15 @@ function MatchesTab({
           )}
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/70 px-3 py-2 text-[11.5px] text-mist">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/70 px-3 py-2 text-[10.5px] text-mist">
           <span>
-            <strong className="font-display font-bold text-ink">Simulateur 5 min :</strong> 4
+            <strong className="font-display font-medium text-ink">Simulateur 5 min :</strong> 4
             matchs en direct simultanés (canaux décalés), 100 % séparés des matchs réels.
           </span>
           <button
             type="button"
             onClick={onOpenForecasts}
-            className="shrink-0 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[10.5px] font-bold text-betclic-red"
+            className="shrink-0 rounded-full bg-betclic-red/12 px-2.5 py-1 font-display text-[10px] font-medium text-betclic-red"
           >
             Scores prévus →
           </button>
@@ -1189,7 +1189,7 @@ function MatchesTab({
           onClick={() => setFormOpen((s) => !s)}
           className="flex w-full items-center justify-between px-4 py-3.5 text-left"
         >
-          <span className="flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
+          <span className="flex items-center gap-2 font-display text-[11.5px] font-medium text-ink">
             <Plus className="h-4 w-4 text-emerald-600" strokeWidth={2.5} />
             Créer un match réel manuellement
           </span>
@@ -1280,7 +1280,7 @@ function MatchesTab({
                 onChange={(v) => setForm({ ...form, startsAt: v })}
               />
               <div>
-                <span className="mb-1 block text-[11px] font-semibold text-mist">Statut initial</span>
+                <span className="mb-1 block text-[10px] font-medium text-mist">Statut initial</span>
                 <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
                   {[
                     { v: "upcoming", label: "À venir" },
@@ -1293,8 +1293,8 @@ function MatchesTab({
                         key={v}
                         onClick={() => setForm({ ...form, status: v })}
                         className={cn(
-                          "h-9 rounded-lg font-display text-[12px] transition-colors",
-                          active ? "bg-ink font-bold text-white" : "font-medium text-mist"
+                          "h-9 rounded-lg font-display text-[10.5px] transition-colors",
+                          active ? "bg-ink font-medium text-white" : "font-medium text-mist"
                         )}
                       >
                         {label}
@@ -1328,7 +1328,7 @@ function MatchesTab({
               <button
                 type="button"
                 onClick={() => setOpenLogos((s) => !s)}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-[11.5px] font-semibold text-mist"
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10.5px] font-medium text-mist"
               >
                 <span>Logos personnalisés (optionnel)</span>
                 <ChevronDown
@@ -1358,7 +1358,7 @@ function MatchesTab({
               <button
                 type="button"
                 onClick={() => setOpenMarkets((s) => !s)}
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-[11.5px] font-semibold text-mist"
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-[10.5px] font-medium text-mist"
               >
                 <span>
                   Marchés libres{" "}
@@ -1372,7 +1372,7 @@ function MatchesTab({
                 <div className="flex flex-col gap-2 border-t border-edge p-2.5">
                   {form.markets.map((g, gi) => (
                     <div key={g.key} className="rounded-xl border border-edge bg-white p-2.5">
-                      <p className="text-[11.5px] font-semibold text-ink">{g.label}</p>
+                      <p className="text-[10.5px] font-medium text-ink">{g.label}</p>
                       <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                         {g.outcomes.map((o, oi) => (
                           <input
@@ -1396,7 +1396,7 @@ function MatchesTab({
                                 ),
                               })
                             }
-                            className="h-10 w-full rounded-lg border border-edge bg-elev/60 px-2 text-center text-[16px] font-semibold tabular-nums text-ink outline-none focus:border-ink"
+                            className="h-10 w-full rounded-lg border border-edge bg-elev/60 px-2 text-center text-[12.5px] font-medium tabular-nums text-ink outline-none focus:border-ink"
                           />
                         ))}
                       </div>
@@ -1409,7 +1409,7 @@ function MatchesTab({
             <button
               type="submit"
               disabled={!form.home || !form.away || busy["add-match"]}
-              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 font-display text-[13.5px] font-bold text-white disabled:opacity-55"
+              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 font-display text-[11.5px] font-medium text-white disabled:opacity-55"
             >
               {busy["add-match"] ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1434,7 +1434,7 @@ function MatchesTab({
               ? "Rechercher un match réel ou une compétition…"
               : "Rechercher un match virtuel…"
           }
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
         />
         {matchQuery && (
           <button type="button" onClick={() => setMatchQuery("")} className="text-dim">
@@ -1493,7 +1493,7 @@ function MatchesTab({
       />
 
       {filteredMatches.length === 0 ? (
-        <div className="glass-card rounded-2xl p-5 text-center text-[12.5px] text-mist">
+        <div className="glass-card rounded-2xl p-5 text-center text-[11px] text-mist">
           {isReal && realMatches.length === 0
             ? "Aucun match réel créé pour l'instant. Importez une affiche officielle en 1 clic ci-dessus ou créez une rencontre manuelle."
             : "Aucun match dans cette sélection."}
@@ -1668,10 +1668,10 @@ function OfficialFixtureImporter({
         <div className="flex min-w-0 items-center gap-2">
           <CalendarPlus className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.4} />
           <div className="min-w-0">
-            <p className="truncate font-display text-[13.5px] font-bold text-ink">
+            <p className="truncate font-display text-[11.5px] font-medium text-ink">
               Importer du calendrier officiel (1 clic)
             </p>
-            <p className="truncate text-[10.5px] text-mist">
+            <p className="truncate text-[10px] text-mist">
               Liaison ID officielle · Scores live, MT, buteurs et stats automatiques
             </p>
           </div>
@@ -1692,7 +1692,7 @@ function OfficialFixtureImporter({
                 setLeagueSlug(next);
                 void loadFixtures(next, daysAhead);
               }}
-              className="h-10 w-full rounded-xl border border-edge bg-white px-3 text-[13px] font-semibold text-ink outline-none focus:border-emerald-600"
+              className="h-10 w-full rounded-xl border border-edge bg-white px-3 text-[11px] font-medium text-ink outline-none focus:border-emerald-600"
             >
               <option value="all">Toutes les grandes compétitions</option>
               {OFFICIAL_SOCCER_LEAGUES.map((lg) => (
@@ -1717,10 +1717,10 @@ function OfficialFixtureImporter({
                     void loadFixtures(leagueSlug, d);
                   }}
                   className={cn(
-                    "h-8 rounded-lg px-2.5 font-display text-[11.5px] transition-colors",
+                    "h-8 rounded-lg px-2.5 font-display text-[10.5px] transition-colors",
                     daysAhead === d
-                      ? "bg-ink font-bold text-white"
-                      : "font-semibold text-mist"
+                      ? "bg-ink font-medium text-white"
+                      : "font-medium text-mist"
                   )}
                 >
                   {label}
@@ -1741,7 +1741,7 @@ function OfficialFixtureImporter({
           {feedback && (
             <div
               className={cn(
-                "rounded-xl px-3 py-2 text-[11.5px] font-semibold",
+                "rounded-xl px-3 py-2 text-[10.5px] font-medium",
                 feedback.kind === "ok"
                   ? "bg-emerald-600/12 text-emerald-800"
                   : "bg-betclic-red/12 text-betclic-red"
@@ -1752,18 +1752,18 @@ function OfficialFixtureImporter({
           )}
 
           {extendedWindow && !loading && fixtures && fixtures.length > 0 && (
-            <div className="rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] font-medium text-amber-900">
+            <div className="rounded-xl bg-amber-500/12 px-3 py-2 text-[10px] font-medium text-amber-900">
               Aucune rencontre dans le filtre court — prochaines journées officielles chargées automatiquement.
             </div>
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-[12.5px] text-mist">
+            <div className="flex items-center justify-center gap-2 py-8 text-[11px] text-mist">
               <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
               Recherche des rencontres officielles…
             </div>
           ) : fixtures && fixtures.length === 0 ? (
-            <div className="rounded-xl bg-elev/70 p-4 text-center text-[12px] text-mist">
+            <div className="rounded-xl bg-elev/70 p-4 text-center text-[10.5px] text-mist">
               {!reachable
                 ? "Le flux sportif officiel est momentanément indisponible. Appuyez sur Actualiser pour réessayer."
                 : "Aucune affiche programmée actuellement pour cette compétition (hors saison ou trêve). Choisissez « Toutes les grandes compétitions » ou un horizon de 14 jours."}
@@ -1772,7 +1772,7 @@ function OfficialFixtureImporter({
             <div className="space-y-2">
               {availableToImport.length > 1 && (
                 <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-600/8 px-3 py-2">
-                  <span className="text-[11.5px] font-semibold text-emerald-900">
+                  <span className="text-[10.5px] font-medium text-emerald-900">
                     {availableToImport.length} affiche(s) disponible(s)
                   </span>
                   <button
@@ -1781,7 +1781,7 @@ function OfficialFixtureImporter({
                     onClick={() =>
                       void importItems(availableToImport.slice(0, 15), "bulk")
                     }
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 font-display text-[11px] font-bold text-white disabled:opacity-50"
+                    className="rounded-lg bg-emerald-600 px-3 py-1.5 font-display text-[10px] font-medium text-white disabled:opacity-50"
                   >
                     {importingKey === "bulk"
                       ? "Importation…"
@@ -1809,10 +1809,10 @@ function OfficialFixtureImporter({
                             <LogoOrAvatar logo={f.awayLogo} name={f.awayTeam} />
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-display text-[12.5px] font-bold text-ink">
+                            <p className="truncate font-display text-[11px] font-medium text-ink">
                               {f.homeTeam} – {f.awayTeam}
                             </p>
-                            <p className="truncate text-[10.5px] text-mist">
+                            <p className="truncate text-[10px] text-mist">
                               {f.leagueLabel} ·{" "}
                               {f.status === "live"
                                 ? `En direct ${f.minute ?? ""} (${f.homeScore ?? 0}-${f.awayScore ?? 0})`
@@ -1822,7 +1822,7 @@ function OfficialFixtureImporter({
                         </div>
 
                         {f.alreadyImported ? (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600/12 px-2.5 py-1 font-display text-[10.5px] font-bold text-emerald-700">
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600/12 px-2.5 py-1 font-display text-[10px] font-medium text-emerald-700">
                             <CheckCircle2 className="h-3 w-3" />
                             Importé
                           </span>
@@ -1831,7 +1831,7 @@ function OfficialFixtureImporter({
                             type="button"
                             disabled={importingKey !== null}
                             onClick={() => void importItems([f], f.externalId)}
-                            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 font-display text-[11px] font-bold text-white active:scale-95 disabled:opacity-50"
+                            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 font-display text-[10px] font-medium text-white active:scale-95 disabled:opacity-50"
                           >
                             {importingKey === f.externalId ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -1854,9 +1854,9 @@ function OfficialFixtureImporter({
                           ).map(({ k, lbl }) => (
                             <label
                               key={k}
-                              className="flex h-8 items-center justify-between rounded-lg border border-edge bg-elev/50 px-2 text-[11px]"
+                              className="flex h-8 items-center justify-between rounded-lg border border-edge bg-elev/50 px-2 text-[10px]"
                             >
-                              <span className="font-display font-bold text-dim">{lbl}</span>
+                              <span className="font-display font-medium text-dim">{lbl}</span>
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -1870,7 +1870,7 @@ function OfficialFixtureImporter({
                                     },
                                   }))
                                 }
-                                className="w-12 bg-transparent text-right font-display text-[12.5px] font-bold tabular-nums text-ink outline-none"
+                                className="w-12 bg-transparent text-right font-display text-[11px] font-medium tabular-nums text-ink outline-none"
                               />
                             </label>
                           ))}
@@ -1949,12 +1949,12 @@ function AdminMatchCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <p className="truncate font-display text-[13.5px] font-bold text-ink">
+            <p className="truncate font-display text-[11.5px] font-medium text-ink">
               {m.homeTeam} – {m.awayTeam}
             </p>
             <span
               className={cn(
-                "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase",
+                "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase",
                 isManual ? "bg-emerald-600 text-white" : "bg-elev text-mist"
               )}
             >
@@ -1979,7 +1979,7 @@ function AdminMatchCard({
                     )
                   }
                   className={cn(
-                    "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-bold",
+                    "shrink-0 rounded-md px-1.5 py-0.5 font-display text-[9.5px] font-medium",
                     autoSyncActive
                       ? "bg-emerald-600/14 text-emerald-700"
                       : "bg-amber-500/15 text-amber-800"
@@ -1989,13 +1989,13 @@ function AdminMatchCard({
                   {autoSyncActive ? "⚡ Auto-Sync" : "⏸ Sync pause"}
                 </button>
               ) : (
-                <span className="shrink-0 rounded-md bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-semibold text-dim">
+                <span className="shrink-0 rounded-md bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-medium text-dim">
                   Manuel
                 </span>
               )
             )}
           </div>
-          <p className="truncate text-[11.5px] tabular-nums text-mist">
+          <p className="truncate text-[10.5px] tabular-nums text-mist">
             {m.league} ·{" "}
             {m.status === "live" ? (
               <>
@@ -2011,7 +2011,7 @@ function AdminMatchCard({
             {effHtH != null && effHtA != null && ` (MT ${effHtH}-${effHtA})`}
           </p>
           {cleanFeedNote && (
-            <p className="truncate text-[10.5px] font-medium text-emerald-700">
+            <p className="truncate text-[10px] font-medium text-emerald-700">
               {cleanFeedNote}
             </p>
           )}
@@ -2065,7 +2065,7 @@ function AdminMatchCard({
 
       {/* Résumé compact des vraies statistiques officielles captées */}
       {isManual && m.realStats && m.realStats.possessionHome != null && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-emerald-600/6 px-2.5 py-1.5 text-[10.5px] font-medium text-mist">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-emerald-600/6 px-2.5 py-1.5 text-[10px] font-medium text-mist">
           <span>
             Poss.{" "}
             <strong className="text-ink">
@@ -2093,7 +2093,7 @@ function AdminMatchCard({
 
       {/* Confirmation finale 1-clic en cas de fin de match détectée */}
       {isPendingAdminFt && (
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-[11px] text-emerald-950">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-[10px] text-emerald-950">
           <span>
             <strong>Fin du match détectée ({m.homeScore ?? 0}–{m.awayScore ?? 0})</strong>
             {effHtH != null && effHtA != null ? ` · MT ${effHtH}-${effHtA}` : ""} — marchés verrouillés.
@@ -2116,7 +2116,7 @@ function AdminMatchCard({
                 "Résultat officiel confirmé et paris réglés"
               )
             }
-            className="rounded-lg bg-emerald-600 px-3 py-1 font-display text-[11px] font-bold text-white disabled:opacity-50"
+            className="rounded-lg bg-emerald-600 px-3 py-1 font-display text-[10px] font-medium text-white disabled:opacity-50"
           >
             Confirmer &amp; régler
           </button>
@@ -2125,7 +2125,7 @@ function AdminMatchCard({
 
       {/* Alerte match reporté / annulé */}
       {isPostponedAlert && (
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/35 bg-amber-500/12 px-3 py-2 text-[11px] text-amber-900">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/35 bg-amber-500/12 px-3 py-2 text-[10px] text-amber-900">
           <span>
             <strong>Match reporté / interrompu détecté</strong> — paris suspendus automatiquement.
           </span>
@@ -2139,7 +2139,7 @@ function AdminMatchCard({
                 "Match annulé — mises simples remboursées et sélections combinées annulées (cote 1.00)"
               )
             }
-            className="rounded-lg bg-amber-700 px-2.5 py-1 font-display text-[10.5px] font-bold text-white disabled:opacity-50"
+            className="rounded-lg bg-amber-700 px-2.5 py-1 font-display text-[10px] font-medium text-white disabled:opacity-50"
           >
             Annuler &amp; rembourser
           </button>
@@ -2147,7 +2147,7 @@ function AdminMatchCard({
       )}
 
       {kickoffReached && !autoSyncActive && (
-        <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800">
+        <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-500/12 px-2.5 py-1.5 text-[10px] font-medium text-amber-800">
           <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
           <span>
             Coup d&apos;envoi officiel atteint — paris pré-match verrouillés. Passez en direct ou
@@ -2158,7 +2158,7 @@ function AdminMatchCard({
 
       {/* Aperçu direct du score final prévu — réservé aux matchs virtuels uniquement */}
       {!isManual && m.status !== "finished" && forecast && (
-        <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/60 px-2.5 py-1.5 text-[11.5px]">
+        <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/60 px-2.5 py-1.5 text-[10.5px]">
           <div className="flex min-w-0 items-center gap-1.5">
             {forecast.isLocked ? (
               <Lock className="h-3.5 w-3.5 shrink-0 text-win" strokeWidth={2.4} />
@@ -2167,10 +2167,10 @@ function AdminMatchCard({
             )}
             <span className="truncate font-medium text-mist">
               Score final prévu :{" "}
-              <strong className="font-display font-bold tabular-nums text-ink">
+              <strong className="font-display font-medium tabular-nums text-ink">
                 {forecast.finalHomeScore} – {forecast.finalAwayScore}
               </strong>{" "}
-              <span className="text-[10.5px] text-dim">
+              <span className="text-[10px] text-dim">
                 (MT {forecast.htHomeScore}-{forecast.htAwayScore})
               </span>
             </span>
@@ -2179,7 +2179,7 @@ function AdminMatchCard({
             type="button"
             onClick={onOpenForecasts}
             className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+              "shrink-0 rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium",
               forecast.isLocked
                 ? "bg-win/12 text-win"
                 : "bg-betclic-red/10 text-betclic-red"
@@ -2192,7 +2192,7 @@ function AdminMatchCard({
 
       {/* Cotes 1x2 (V1 / X / V2) actuelles + édition rapide */}
       {m.status !== "finished" && (
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-dim">
+        <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-dim">
           <span>
             V1: <strong className="text-ink">{formatOdds(m.oddsHome)}</strong> · X:{" "}
             <strong className="text-ink">{formatOdds(m.oddsDraw ?? 3.2)}</strong> · V2:{" "}
@@ -2206,7 +2206,7 @@ function AdminMatchCard({
               setO2(String(m.oddsAway));
               setEditingOdds((s) => !s);
             }}
-            className="rounded-md bg-elev px-2 py-0.5 font-display text-[10.5px] font-semibold text-ink"
+            className="rounded-md bg-elev px-2 py-0.5 font-display text-[10px] font-medium text-ink"
           >
             {editingOdds ? "Fermer" : "Éditer cotes"}
           </button>
@@ -2221,7 +2221,7 @@ function AdminMatchCard({
             value={o1}
             onChange={(e) => setO1(e.target.value)}
             placeholder="V1"
-            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[11.5px] font-medium text-ink"
           />
           <input
             type="text"
@@ -2229,7 +2229,7 @@ function AdminMatchCard({
             value={oN}
             onChange={(e) => setON(e.target.value)}
             placeholder="X"
-            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[11.5px] font-medium text-ink"
           />
           <input
             type="text"
@@ -2237,7 +2237,7 @@ function AdminMatchCard({
             value={o2}
             onChange={(e) => setO2(e.target.value)}
             placeholder="V2"
-            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[14px] font-bold text-ink"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-edge bg-white px-2 text-center font-display text-[11.5px] font-medium text-ink"
           />
           <button
             type="button"
@@ -2256,7 +2256,7 @@ function AdminMatchCard({
               );
               if (ok) setEditingOdds(false);
             }}
-            className="h-9 shrink-0 rounded-lg bg-betclic-red px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-50"
+            className="h-9 shrink-0 rounded-lg bg-betclic-red px-3 font-display text-[10.5px] font-medium text-white disabled:opacity-50"
           >
             OK
           </button>
@@ -2296,7 +2296,7 @@ function MatchControls({
     return (
       <div className="mt-3 border-t border-edge pt-2.5 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] text-dim">
+          <span className="text-[10px] text-dim">
             {isAutoSynced
               ? "Démarrage & stats live automatiques au coup d'envoi"
               : isManual
@@ -2308,7 +2308,7 @@ function MatchControls({
               <button
                 type="button"
                 onClick={() => setConfirmVoid((s) => !s)}
-                className="flex h-8 items-center rounded-lg bg-amber-500/12 px-2 font-display text-[10.5px] font-bold text-amber-800"
+                className="flex h-8 items-center rounded-lg bg-amber-500/12 px-2 font-display text-[10px] font-medium text-amber-800"
               >
                 {confirmVoid ? "Garder" : "Annuler"}
               </button>
@@ -2317,7 +2317,7 @@ function MatchControls({
               <button
                 type="button"
                 onClick={() => setDirectSettleOpen((s) => !s)}
-                className="flex h-8 items-center gap-1 rounded-lg bg-elev px-2.5 font-display text-[11px] font-bold text-ink"
+                className="flex h-8 items-center gap-1 rounded-lg bg-elev px-2.5 font-display text-[10px] font-medium text-ink"
               >
                 <Flag className="h-3 w-3 text-emerald-600" strokeWidth={2.3} />
                 {directSettleOpen ? "Fermer" : "Régler score"}
@@ -2336,7 +2336,7 @@ function MatchControls({
               }
               disabled={busy[`start-${m.id}`]}
               className={cn(
-                "flex h-8 items-center gap-1.5 rounded-lg px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60",
+                "flex h-8 items-center gap-1.5 rounded-lg px-3 font-display text-[10.5px] font-medium text-white disabled:opacity-60",
                 isManual ? "bg-emerald-600" : "bg-betclic-red"
               )}
             >
@@ -2351,7 +2351,7 @@ function MatchControls({
         </div>
 
         {isManual && confirmVoid && (
-          <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[11px] text-amber-900">
+          <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[10px] text-amber-900">
             <span>Rembourser les paris simples et annuler (1.00) dans les combinés ?</span>
             <button
               type="button"
@@ -2364,7 +2364,7 @@ function MatchControls({
                 );
                 if (ok) setConfirmVoid(false);
               }}
-              className="shrink-0 rounded-lg bg-amber-700 px-2.5 py-1 font-display text-[10.5px] font-bold text-white disabled:opacity-50"
+              className="shrink-0 rounded-lg bg-amber-700 px-2.5 py-1 font-display text-[10px] font-medium text-white disabled:opacity-50"
             >
               Confirmer l&apos;annulation
             </button>
@@ -2375,14 +2375,14 @@ function MatchControls({
         {isManual && directSettleOpen && (
           <div className="rounded-xl bg-elev/70 p-2.5 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-ink">Score final officiel :</span>
+              <span className="text-[10px] font-medium text-ink">Score final officiel :</span>
               <div className="flex items-center gap-1">
                 <input
                   inputMode="numeric"
                   value={home}
                   onChange={(e) => setHome(e.target.value.replace(/[^\d]/g, ""))}
                   placeholder="0"
-                  className="h-8 w-10 rounded-lg border border-edge bg-white text-center font-display text-[14px] font-bold text-ink"
+                  className="h-8 w-10 rounded-lg border border-edge bg-white text-center font-display text-[11.5px] font-medium text-ink"
                 />
                 <span className="text-dim">–</span>
                 <input
@@ -2390,19 +2390,19 @@ function MatchControls({
                   value={away}
                   onChange={(e) => setAway(e.target.value.replace(/[^\d]/g, ""))}
                   placeholder="0"
-                  className="h-8 w-10 rounded-lg border border-edge bg-white text-center font-display text-[14px] font-bold text-ink"
+                  className="h-8 w-10 rounded-lg border border-edge bg-white text-center font-display text-[11.5px] font-medium text-ink"
                 />
               </div>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10.5px] text-mist">Mi-temps (optionnel) :</span>
+              <span className="text-[10px] text-mist">Mi-temps (optionnel) :</span>
               <div className="flex items-center gap-1">
                 <input
                   inputMode="numeric"
                   value={htHome}
                   onChange={(e) => setHtHome(e.target.value.replace(/[^\d]/g, ""))}
                   placeholder="MT"
-                  className="h-7 w-10 rounded-lg border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+                  className="h-7 w-10 rounded-lg border border-edge bg-white text-center font-display text-[10.5px] font-medium text-ink"
                 />
                 <span className="text-dim">–</span>
                 <input
@@ -2410,7 +2410,7 @@ function MatchControls({
                   value={htAway}
                   onChange={(e) => setHtAway(e.target.value.replace(/[^\d]/g, ""))}
                   placeholder="MT"
-                  className="h-7 w-10 rounded-lg border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+                  className="h-7 w-10 rounded-lg border border-edge bg-white text-center font-display text-[10.5px] font-medium text-ink"
                 />
               </div>
             </div>
@@ -2434,7 +2434,7 @@ function MatchControls({
                 );
                 if (ok) setDirectSettleOpen(false);
               }}
-              className="flex h-8.5 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 font-display text-[12px] font-bold text-white disabled:opacity-60"
+              className="flex h-8.5 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 font-display text-[10.5px] font-medium text-white disabled:opacity-60"
             >
               {busy[`fin-${m.id}`] ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2452,7 +2452,7 @@ function MatchControls({
   if (m.status === "finished") {
     return (
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-edge pt-2.5">
-        <span className="text-[11.5px] text-mist">
+        <span className="text-[10.5px] text-mist">
           Score final : <strong>{m.homeScore}–{m.awayScore}</strong>
         </span>
         <button
@@ -2461,7 +2461,7 @@ function MatchControls({
             act({ action: "reopenMatch", matchId: m.id }, `reopen-${m.id}`, "Match rouvert")
           }
           disabled={busy[`reopen-${m.id}`]}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-elev px-3 font-display text-[11.5px] font-semibold text-ink disabled:opacity-60"
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-elev px-3 font-display text-[10.5px] font-medium text-ink disabled:opacity-60"
         >
           {busy[`reopen-${m.id}`] ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2487,7 +2487,7 @@ function MatchControls({
             act({ action: "markGoal", matchId: m.id, team: "home" }, `gh-${m.id}`, "But domicile")
           }
           disabled={busy[`gh-${m.id}`]}
-          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-win/30 bg-white text-[11.5px] font-bold text-win active:scale-95 disabled:opacity-60"
+          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-win/30 bg-white text-[10.5px] font-medium text-win active:scale-95 disabled:opacity-60"
         >
           {busy[`gh-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" />}
           +1 Dom.
@@ -2498,14 +2498,14 @@ function MatchControls({
             inputMode="numeric"
             value={home}
             onChange={(e) => setHome(e.target.value.replace(/[^\d]/g, ""))}
-            className="h-9 w-10 rounded-lg border border-edge bg-white text-center font-display text-[16px] font-bold text-ink outline-none focus:border-ink"
+            className="h-9 w-10 rounded-lg border border-edge bg-white text-center font-display text-[12.5px] font-medium text-ink outline-none focus:border-ink"
           />
           <span className="text-dim">–</span>
           <input
             inputMode="numeric"
             value={away}
             onChange={(e) => setAway(e.target.value.replace(/[^\d]/g, ""))}
-            className="h-9 w-10 rounded-lg border border-edge bg-white text-center font-display text-[16px] font-bold text-ink outline-none focus:border-ink"
+            className="h-9 w-10 rounded-lg border border-edge bg-white text-center font-display text-[12.5px] font-medium text-ink outline-none focus:border-ink"
           />
           {isManual && scoreDirty && (
             <button
@@ -2523,7 +2523,7 @@ function MatchControls({
                   "Score direct mis à jour"
                 )
               }
-              className="h-9 rounded-lg bg-ink px-2 font-display text-[10.5px] font-bold text-white"
+              className="h-9 rounded-lg bg-ink px-2 font-display text-[10px] font-medium text-white"
             >
               MAJ
             </button>
@@ -2536,7 +2536,7 @@ function MatchControls({
             act({ action: "markGoal", matchId: m.id, team: "away" }, `ga-${m.id}`, "But extérieur")
           }
           disabled={busy[`ga-${m.id}`]}
-          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-win/30 bg-white text-[11.5px] font-bold text-win active:scale-95 disabled:opacity-60"
+          className="flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-win/30 bg-white text-[10.5px] font-medium text-win active:scale-95 disabled:opacity-60"
         >
           {busy[`ga-${m.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Goal className="h-3.5 w-3.5" />}
           +1 Ext.
@@ -2545,7 +2545,7 @@ function MatchControls({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-medium text-mist">Min.</span>
+          <span className="text-[10px] font-medium text-mist">Min.</span>
           <input
             type="text"
             value={mp}
@@ -2557,7 +2557,7 @@ function MatchControls({
               )
             }
             placeholder={m.minute ?? "45'"}
-            className="h-8 w-16 rounded-lg border border-edge bg-white px-2 text-center text-[14px] font-semibold text-ink outline-none focus:border-ink"
+            className="h-8 w-16 rounded-lg border border-edge bg-white px-2 text-center text-[11.5px] font-medium text-ink outline-none focus:border-ink"
           />
           <button
             type="button"
@@ -2572,7 +2572,7 @@ function MatchControls({
               );
             }}
             disabled={busy[`min-${m.id}`] || !mp.trim()}
-            className="h-8 rounded-lg border border-edge bg-white px-2.5 text-[11.5px] font-bold text-ink disabled:opacity-50"
+            className="h-8 rounded-lg border border-edge bg-white px-2.5 text-[10.5px] font-medium text-ink disabled:opacity-50"
           >
             OK
           </button>
@@ -2587,7 +2587,7 @@ function MatchControls({
                   "Mi-temps affichée"
                 )
               }
-              className="h-8 rounded-lg border border-edge bg-white px-2 text-[11px] font-bold text-mist active:bg-elev"
+              className="h-8 rounded-lg border border-edge bg-white px-2 text-[10px] font-medium text-mist active:bg-elev"
             >
               MT
             </button>
@@ -2614,7 +2614,7 @@ function MatchControls({
           }}
           disabled={busy[`fin-${m.id}`]}
           className={cn(
-            "flex h-8 items-center gap-1.5 rounded-lg px-3 font-display text-[11.5px] font-bold text-white disabled:opacity-60",
+            "flex h-8 items-center gap-1.5 rounded-lg px-3 font-display text-[10.5px] font-medium text-white disabled:opacity-60",
             isManual ? "bg-emerald-600" : "bg-betclic-red"
           )}
         >
@@ -2628,7 +2628,7 @@ function MatchControls({
       </div>
 
       {isManual && (
-        <div className="space-y-1.5 border-t border-edge/60 pt-1.5 text-[10.5px] text-mist">
+        <div className="space-y-1.5 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
           <div className="flex items-center justify-between gap-2">
             <span>
               Score MT officiel{" "}
@@ -2642,7 +2642,7 @@ function MatchControls({
                 value={htHome}
                 onChange={(e) => setHtHome(e.target.value.replace(/[^\d]/g, ""))}
                 placeholder={m.htHomeScore != null ? String(m.htHomeScore) : "MT"}
-                className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+                className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[10.5px] font-medium text-ink"
               />
               <span className="text-dim">–</span>
               <input
@@ -2650,7 +2650,7 @@ function MatchControls({
                 value={htAway}
                 onChange={(e) => setHtAway(e.target.value.replace(/[^\d]/g, ""))}
                 placeholder={m.htAwayScore != null ? String(m.htAwayScore) : "MT"}
-                className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[12px] font-semibold text-ink"
+                className="h-7 w-9 rounded-md border border-edge bg-white text-center font-display text-[10.5px] font-medium text-ink"
               />
             </div>
           </div>
@@ -2662,7 +2662,7 @@ function MatchControls({
                 <button
                   type="button"
                   onClick={() => setConfirmVoid(false)}
-                  className="rounded-md bg-white px-2 py-0.5 font-semibold text-mist ring-1 ring-edge"
+                  className="rounded-md bg-white px-2 py-0.5 font-medium text-mist ring-1 ring-edge"
                 >
                   Non
                 </button>
@@ -2676,7 +2676,7 @@ function MatchControls({
                       "Match annulé et paris remboursés"
                     )
                   }
-                  className="rounded-md bg-amber-700 px-2 py-0.5 font-display font-bold text-white"
+                  className="rounded-md bg-amber-700 px-2 py-0.5 font-display font-medium text-white"
                 >
                   Confirmer remboursement
                 </button>
@@ -2685,7 +2685,7 @@ function MatchControls({
               <button
                 type="button"
                 onClick={() => setConfirmVoid(true)}
-                className="font-display font-bold text-amber-800 underline underline-offset-2"
+                className="font-display font-medium text-amber-800 underline underline-offset-2"
               >
                 Annuler &amp; rembourser
               </button>
@@ -2817,7 +2817,7 @@ function QuestionsTab({
           onClick={() => setFormOpen((s) => !s)}
           className="flex w-full items-center justify-between px-4 py-3.5 text-left"
         >
-          <span className="flex items-center gap-2 font-display text-[13.5px] font-bold text-ink">
+          <span className="flex items-center gap-2 font-display text-[11.5px] font-medium text-ink">
             <Plus className="h-4 w-4 text-betclic-red" strokeWidth={2.5} />
             Nouvelle question (Oui / Non ou Choix multiples)
           </span>
@@ -2850,8 +2850,8 @@ function QuestionsTab({
                     type="button"
                     onClick={() => setForm({ ...form, mode: m.key })}
                     className={cn(
-                      "h-8 rounded-lg font-display text-[12px] transition-colors",
-                      active ? "bg-ink font-bold text-white" : "font-semibold text-mist"
+                      "h-8 rounded-lg font-display text-[10.5px] transition-colors",
+                      active ? "bg-ink font-medium text-white" : "font-medium text-mist"
                     )}
                   >
                     {m.label}
@@ -2874,12 +2874,12 @@ function QuestionsTab({
             {form.mode === "binary" ? (
               <div className="mt-2.5 grid grid-cols-3 gap-2">
                 <label className="block">
-                  <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                  <span className="mb-1 block text-[10px] font-medium text-mist">Catégorie</span>
                   <select
                     value={form.category}
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
                     aria-label="Catégorie"
-                    className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink outline-none focus:border-ink"
+                    className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[12.5px] font-medium text-ink outline-none focus:border-ink"
                   >
                     <option value="Sport">Sport</option>
                     <option value="Actus">Actus</option>
@@ -2902,12 +2902,12 @@ function QuestionsTab({
               <>
                 <div className="mt-2.5 grid grid-cols-2 gap-2">
                   <label className="block">
-                    <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                    <span className="mb-1 block text-[10px] font-medium text-mist">Catégorie</span>
                     <select
                       value={form.category}
                       onChange={(e) => setForm({ ...form, category: e.target.value })}
                       aria-label="Catégorie"
-                      className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink outline-none focus:border-ink"
+                      className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[12.5px] font-medium text-ink outline-none focus:border-ink"
                     >
                       <option value="Sport">Sport</option>
                       <option value="Actus">Actus</option>
@@ -2924,7 +2924,7 @@ function QuestionsTab({
 
                 <div className="mt-3">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-mist">
+                    <span className="text-[10px] font-medium text-mist">
                       Choix & cotes fixes ({form.options.length})
                     </span>
                     <button
@@ -2935,7 +2935,7 @@ function QuestionsTab({
                           options: [...form.options, { label: "", odds: "5.00" }],
                         })
                       }
-                      className="inline-flex items-center gap-1 rounded-lg bg-elev px-2 py-1 font-display text-[11px] font-bold text-betclic-red"
+                      className="inline-flex items-center gap-1 rounded-lg bg-elev px-2 py-1 font-display text-[10px] font-medium text-betclic-red"
                     >
                       <Plus className="h-3 w-3" strokeWidth={2.5} />
                       Ajouter un choix
@@ -2953,7 +2953,7 @@ function QuestionsTab({
                             setForm({ ...form, options: next });
                           }}
                           placeholder={multiPlaceholders[idx] ?? `Choix #${idx + 1}`}
-                          className="h-10 min-w-0 flex-1 rounded-xl border border-edge bg-elev/60 px-3 text-[15px] font-medium text-ink outline-none focus:border-ink"
+                          className="h-10 min-w-0 flex-1 rounded-xl border border-edge bg-elev/60 px-3 text-[12px] font-medium text-ink outline-none focus:border-ink"
                         />
                         <input
                           type="text"
@@ -2965,7 +2965,7 @@ function QuestionsTab({
                             setForm({ ...form, options: next });
                           }}
                           placeholder="Cote"
-                          className="h-10 w-20 shrink-0 rounded-xl border border-edge bg-elev/60 px-2.5 text-center font-display text-[15px] font-bold tabular-nums text-ink outline-none focus:border-ink"
+                          className="h-10 w-20 shrink-0 rounded-xl border border-edge bg-elev/60 px-2.5 text-center font-display text-[12px] font-medium tabular-nums text-ink outline-none focus:border-ink"
                         />
                         {form.options.length > 2 && (
                           <button
@@ -3001,7 +3001,7 @@ function QuestionsTab({
             <button
               type="submit"
               disabled={!form.question || busy["add-q"]}
-              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red font-display text-[13.5px] font-bold text-white disabled:opacity-55"
+              className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red font-display text-[11.5px] font-medium text-white disabled:opacity-55"
             >
               {busy["add-q"] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Publier
@@ -3017,7 +3017,7 @@ function QuestionsTab({
           value={qQuery}
           onChange={(e) => setQQuery(e.target.value)}
           placeholder="Rechercher une question ou un candidat…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
         />
         {qQuery && (
           <button type="button" onClick={() => setQQuery("")} className="text-dim">
@@ -3096,12 +3096,12 @@ function QuestionsTab({
                   {editForm.options ? (
                     <>
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                        <span className="mb-1 block text-[10px] font-medium text-mist">Catégorie</span>
                         <select
                           value={editForm.category}
                           onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
                           aria-label="Catégorie"
-                          className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink"
+                          className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[12.5px] font-medium text-ink"
                         >
                           <option value="Sport">Sport</option>
                           <option value="Actus">Actus</option>
@@ -3111,7 +3111,7 @@ function QuestionsTab({
                       </label>
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold text-mist">Choix & cotes</span>
+                          <span className="text-[10px] font-medium text-mist">Choix & cotes</span>
                           <button
                             type="button"
                             onClick={() =>
@@ -3120,7 +3120,7 @@ function QuestionsTab({
                                 options: [...(editForm.options ?? []), { label: "", odds: "4.00" }],
                               })
                             }
-                            className="inline-flex items-center gap-1 rounded-lg bg-elev px-2 py-0.5 font-display text-[11px] font-bold text-betclic-red"
+                            className="inline-flex items-center gap-1 rounded-lg bg-elev px-2 py-0.5 font-display text-[10px] font-medium text-betclic-red"
                           >
                             <Plus className="h-3 w-3" /> Ajouter
                           </button>
@@ -3136,7 +3136,7 @@ function QuestionsTab({
                                 setEditForm({ ...editForm, options: next });
                               }}
                               placeholder={`Choix #${idx + 1}`}
-                              className="h-9 min-w-0 flex-1 rounded-xl border border-edge bg-elev/60 px-2.5 text-[14px] font-medium text-ink"
+                              className="h-9 min-w-0 flex-1 rounded-xl border border-edge bg-elev/60 px-2.5 text-[11.5px] font-medium text-ink"
                             />
                             <input
                               type="text"
@@ -3147,7 +3147,7 @@ function QuestionsTab({
                                 next[idx] = { ...next[idx], odds: e.target.value };
                                 setEditForm({ ...editForm, options: next });
                               }}
-                              className="h-9 w-20 shrink-0 rounded-xl border border-edge bg-elev/60 px-2 text-center font-display text-[14px] font-bold tabular-nums text-ink"
+                              className="h-9 w-20 shrink-0 rounded-xl border border-edge bg-elev/60 px-2 text-center font-display text-[11.5px] font-medium tabular-nums text-ink"
                             />
                             {editForm.options && editForm.options.length > 2 && (
                               <button
@@ -3170,12 +3170,12 @@ function QuestionsTab({
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
                       <label className="block">
-                        <span className="mb-1 block text-[11px] font-semibold text-mist">Catégorie</span>
+                        <span className="mb-1 block text-[10px] font-medium text-mist">Catégorie</span>
                         <select
                           value={editForm.category}
                           onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
                           aria-label="Catégorie"
-                          className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[16px] font-medium text-ink"
+                          className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-2.5 text-[12.5px] font-medium text-ink"
                         >
                           <option value="Sport">Sport</option>
                           <option value="Actus">Actus</option>
@@ -3200,14 +3200,14 @@ function QuestionsTab({
                       type="button"
                       onClick={() => saveEdit(q.id)}
                       disabled={busy[`edit-q-${q.id}`]}
-                      className="h-9 flex-1 rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white"
+                      className="h-9 flex-1 rounded-xl bg-betclic-red font-display text-[10.5px] font-medium text-white"
                     >
                       Enregistrer
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditingId(null)}
-                      className="h-9 rounded-xl bg-elev px-4 font-display text-[12px] font-semibold text-mist"
+                      className="h-9 rounded-xl bg-elev px-4 font-display text-[10.5px] font-medium text-mist"
                     >
                       Annuler
                     </button>
@@ -3216,12 +3216,12 @@ function QuestionsTab({
               ) : (
                 <>
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-display text-[13.5px] font-semibold leading-snug text-ink">
+                    <p className="font-display text-[11.5px] font-medium leading-snug text-ink">
                       {q.question}
                     </p>
                     <span
                       className={cn(
-                        "shrink-0 rounded-full px-2.5 py-0.5 font-display text-[10px] font-bold",
+                        "shrink-0 rounded-full px-2.5 py-0.5 font-display text-[9.5px] font-medium",
                         q.status === "open"
                           ? "bg-betclic-red/10 text-betclic-red"
                           : "bg-elev text-mist"
@@ -3232,11 +3232,11 @@ function QuestionsTab({
                   </div>
 
                   {isMulti && q.options ? (
-                    <p className="mt-1 text-[11.5px] leading-relaxed text-dim">
+                    <p className="mt-1 text-[10.5px] leading-relaxed text-dim">
                       {q.category} · {q.options.map((o) => `${o.label} (${formatOdds(o.odds)})`).join(" · ")} · Mises {eur(q.volume)}
                     </p>
                   ) : (
-                    <p className="mt-1 text-[11.5px] text-dim">
+                    <p className="mt-1 text-[10.5px] text-dim">
                       {q.category} · Oui {formatOdds(q.oddsYes)} · Non {formatOdds(q.oddsNo)} · Mises{" "}
                       {eur(q.volume)}
                     </p>
@@ -3258,7 +3258,7 @@ function QuestionsTab({
                                 `Résolue : ${opt.label}`
                               )
                             }
-                            className="inline-flex h-7 items-center gap-1 rounded-lg bg-win/12 px-2.5 font-display text-[11px] font-bold text-win active:opacity-80 disabled:opacity-50"
+                            className="inline-flex h-7 items-center gap-1 rounded-lg bg-win/12 px-2.5 font-display text-[10px] font-medium text-win active:opacity-80 disabled:opacity-50"
                           >
                             {busy[bKey] ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -3285,7 +3285,7 @@ function QuestionsTab({
                                 "Résolue : Oui"
                               )
                             }
-                            className="h-8 flex-1 rounded-lg bg-win/12 font-display text-[11.5px] font-bold text-win disabled:opacity-50"
+                            className="h-8 flex-1 rounded-lg bg-win/12 font-display text-[10.5px] font-medium text-win disabled:opacity-50"
                           >
                             {busy[`ry-${q.id}`] ? "..." : "Oui gagne"}
                           </button>
@@ -3299,7 +3299,7 @@ function QuestionsTab({
                                 "Résolue : Non"
                               )
                             }
-                            className="h-8 flex-1 rounded-lg bg-betclic-red/10 font-display text-[11.5px] font-bold text-betclic-red disabled:opacity-50"
+                            className="h-8 flex-1 rounded-lg bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red disabled:opacity-50"
                           >
                             {busy[`rn-${q.id}`] ? "..." : "Non gagne"}
                           </button>
@@ -3316,7 +3316,7 @@ function QuestionsTab({
                             "Question réouverte et paris restaurés"
                           )
                         }
-                        className="h-8 flex-1 rounded-lg bg-sky-500/12 font-display text-[11.5px] font-bold text-sky-700 disabled:opacity-50"
+                        className="h-8 flex-1 rounded-lg bg-sky-500/12 font-display text-[10.5px] font-medium text-sky-700 disabled:opacity-50"
                       >
                         {busy[`reopen-${q.id}`] ? "..." : "Réouvrir"}
                       </button>
@@ -3325,7 +3325,7 @@ function QuestionsTab({
                       type="button"
                       onClick={() => startEdit(q)}
                       className={cn(
-                        "h-8 rounded-lg bg-elev px-3 font-display text-[11.5px] font-semibold text-ink",
+                        "h-8 rounded-lg bg-elev px-3 font-display text-[10.5px] font-medium text-ink",
                         q.status === "open" && isMulti && "flex-1"
                       )}
                     >
@@ -3423,7 +3423,7 @@ function UsersTab({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Rechercher par nom, e-mail ou #id…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
         />
         {query && (
           <button type="button" onClick={() => setQuery("")} className="text-dim">
@@ -3489,11 +3489,11 @@ function UsersTab({
         <div key={u.id} className="glass-card rounded-2xl p-3.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev font-display text-[12px] font-bold text-ink">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev font-display text-[10.5px] font-medium text-ink">
                 {initials(u.name)}
               </span>
               <div className="min-w-0">
-                <p className="truncate font-display text-[13.5px] font-bold text-ink">
+                <p className="truncate font-display text-[11.5px] font-medium text-ink">
                   {u.name}
                   {u.role === "admin" && (
                     <ShieldCheck
@@ -3502,10 +3502,10 @@ function UsersTab({
                     />
                   )}
                 </p>
-                <p className="truncate text-[11.5px] text-dim">{u.email ?? "—"}</p>
+                <p className="truncate text-[10.5px] text-dim">{u.email ?? "—"}</p>
               </div>
             </div>
-            <p className="shrink-0 font-display text-[15px] font-bold tabular-nums text-ink">
+            <p className="shrink-0 font-display text-[12px] font-medium tabular-nums text-ink">
               {eur(u.balance)}
             </p>
           </div>
@@ -3532,7 +3532,7 @@ function UsersTab({
                 }
               }}
               disabled={busy[`bal-${u.id}`] || !balanceForm[u.id]}
-              className="h-11 shrink-0 rounded-xl bg-ink px-4 font-display text-[12.5px] font-bold text-white disabled:opacity-50"
+              className="h-11 shrink-0 rounded-xl bg-ink px-4 font-display text-[11px] font-medium text-white disabled:opacity-50"
             >
               {busy[`bal-${u.id}`] ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fixer"}
             </button>
@@ -3656,7 +3656,7 @@ function BetsTab({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filtrer par match, question, combiné…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
         />
         {query && (
           <button type="button" onClick={() => setQuery("")} className="text-dim">
@@ -3758,21 +3758,21 @@ function BetsTab({
                 </div>
               )}
               <div className="min-w-0">
-                <p className="truncate font-display text-[13.5px] font-semibold text-ink">{b.label}</p>
-                <p className="mt-0.5 truncate text-[11.5px] text-dim">
+                <p className="truncate font-display text-[11.5px] font-medium text-ink">{b.label}</p>
+                <p className="mt-0.5 truncate text-[10.5px] text-dim">
                   {b.kind} · {b.detail} · {formatPlacedAt(b.placedAt)}
                 </p>
                 {(b.riskFlag || b.clv != null) && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {b.riskFlag && (
-                      <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-[10px] font-semibold text-betclic-red">
+                      <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 text-[9.5px] font-medium text-betclic-red">
                         {riskLabel(b.riskFlag)}
                       </span>
                     )}
                     {b.clv != null && (
                       <span
                         className={cn(
-                          "rounded-md px-1.5 py-0.5 text-[10px] font-semibold",
+                          "rounded-md px-1.5 py-0.5 text-[9.5px] font-medium",
                           b.clv >= 0 ? "bg-win/12 text-win" : "bg-elev text-mist"
                         )}
                       >
@@ -3786,9 +3786,9 @@ function BetsTab({
             </div>
             <StatusBadge status={b.status} />
           </div>
-          <div className="mt-2 flex items-center justify-between border-t border-edge pt-2 text-[11.5px]">
+          <div className="mt-2 flex items-center justify-between border-t border-edge pt-2 text-[10.5px]">
             <span className="text-mist">Mise {eur(b.stake)}</span>
-            <span className="font-display font-bold tabular-nums text-ink">→ {eur(b.win)}</span>
+            <span className="font-display font-medium tabular-nums text-ink">→ {eur(b.win)}</span>
           </div>
         </div>
       ))}
@@ -3844,14 +3844,14 @@ function DepositsTab({
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2.5">
         <div className="glass-card rounded-2xl p-3.5 text-center">
-          <p className="text-[11px] font-medium text-dim">Dépôts crédités</p>
-          <p className="mt-0.5 font-display text-[20px] font-bold tabular-nums text-win">
+          <p className="text-[10px] font-medium text-dim">Dépôts crédités</p>
+          <p className="mt-0.5 font-display text-[14.5px] font-medium tabular-nums text-win">
             {eur(totalDeposits)}
           </p>
         </div>
         <div className="glass-card rounded-2xl p-3.5 text-center">
-          <p className="text-[11px] font-medium text-dim">Retraits payés</p>
-          <p className="mt-0.5 font-display text-[20px] font-bold tabular-nums text-ink">
+          <p className="text-[10px] font-medium text-dim">Retraits payés</p>
+          <p className="mt-0.5 font-display text-[14.5px] font-medium tabular-nums text-ink">
             {eur(totalWithdrawals)}
           </p>
         </div>
@@ -3860,7 +3860,7 @@ function DepositsTab({
       {/* Demandes de dépôt Mobile Money / Virement à valider */}
       <AdminSectionTitle label="Demandes de dépôt à valider" count={pendingDeposits.length} />
       {pendingDeposits.length === 0 ? (
-        <p className="rounded-2xl border border-edge bg-white py-4 text-center text-[12px] text-dim">
+        <p className="rounded-2xl border border-edge bg-white py-4 text-center text-[10.5px] text-dim">
           Aucune demande de dépôt en attente.
         </p>
       ) : (
@@ -3872,14 +3872,14 @@ function DepositsTab({
               <div key={d.id} className="glass-card rounded-2xl p-3.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-display text-[14px] font-bold text-ink">
+                    <p className="truncate font-display text-[11.5px] font-medium text-ink">
                       {d.userName ?? `Joueur #${d.userId ?? 1}`} · +{eur(d.amount)}
                     </p>
-                    <p className="truncate text-[11.5px] font-medium text-mist">
+                    <p className="truncate text-[10.5px] font-medium text-mist">
                       {d.provider === "mobile_money" ? "Mobile Money" : "Virement SEPA"} ·{" "}
                       {d.providerRef ?? "—"}
                     </p>
-                    <p className="text-[10.5px] text-dim">{formatPlacedAt(d.createdAt)}</p>
+                    <p className="text-[10px] text-dim">{formatPlacedAt(d.createdAt)}</p>
                   </div>
                   <StatusBadge status="pending" />
                 </div>
@@ -3895,7 +3895,7 @@ function DepositsTab({
                         `Dépôt de ${eur(d.amount)} crédité sur le compte`
                       )
                     }
-                    className="h-9 rounded-xl bg-win font-display text-[12px] font-bold text-white disabled:opacity-50"
+                    className="h-9 rounded-xl bg-win font-display text-[10.5px] font-medium text-white disabled:opacity-50"
                   >
                     {busy[appKey] ? "Crédit…" : "Créditer"}
                   </button>
@@ -3909,7 +3909,7 @@ function DepositsTab({
                         "Demande de dépôt refusée"
                       )
                     }
-                    className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[12px] font-bold text-betclic-red disabled:opacity-50"
+                    className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red disabled:opacity-50"
                   >
                     {busy[rejKey] ? "Refus…" : "Refuser"}
                   </button>
@@ -3923,7 +3923,7 @@ function DepositsTab({
       {/* Demandes de retrait */}
       <AdminSectionTitle label="Demandes de retrait en attente" count={pendingWithdrawals.length} />
       {pendingWithdrawals.length === 0 ? (
-        <p className="rounded-2xl border border-edge bg-white py-4 text-center text-[12px] text-dim">
+        <p className="rounded-2xl border border-edge bg-white py-4 text-center text-[10.5px] text-dim">
           Aucune demande de retrait en attente.
         </p>
       ) : (
@@ -3936,13 +3936,13 @@ function DepositsTab({
               <div key={w.id} className="glass-card rounded-2xl p-3.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-display text-[14px] font-bold text-ink">
+                    <p className="truncate font-display text-[11.5px] font-medium text-ink">
                       {w.userName} · {eur(w.amount)}
                     </p>
-                    <p className="truncate text-[11.5px] font-medium text-mist">
+                    <p className="truncate text-[10.5px] font-medium text-mist">
                       {w.method.toUpperCase()} · {w.destination}
                     </p>
-                    <p className="text-[10.5px] text-dim">
+                    <p className="text-[10px] text-dim">
                       {w.userEmail || `Joueur #${w.userId}`} · {formatPlacedAt(w.createdAt)}
                     </p>
                   </div>
@@ -3954,7 +3954,7 @@ function DepositsTab({
                   value={noteVal}
                   onChange={(e) => setWdNotes({ ...wdNotes, [w.id]: e.target.value })}
                   placeholder="Motif ou réf. transfert (optionnel, visible par le joueur)"
-                  className="mt-2.5 h-9 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[12px] text-ink outline-none placeholder:text-dim focus:border-ink focus:bg-white"
+                  className="mt-2.5 h-9 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[10.5px] text-ink outline-none placeholder:text-dim focus:border-ink focus:bg-white"
                 />
 
                 <div className="mt-2 grid grid-cols-2 gap-2">
@@ -3972,7 +3972,7 @@ function DepositsTab({
                         `Retrait de ${eur(w.amount)} approuvé`
                       )
                     }
-                    className="h-9 rounded-xl bg-win font-display text-[12px] font-bold text-white disabled:opacity-50"
+                    className="h-9 rounded-xl bg-win font-display text-[10.5px] font-medium text-white disabled:opacity-50"
                   >
                     {busy[approveKey] ? "Validation…" : "Approuver"}
                   </button>
@@ -3990,7 +3990,7 @@ function DepositsTab({
                         `Retrait refusé et ${eur(w.amount)} recrédités`
                       )
                     }
-                    className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[12px] font-bold text-betclic-red disabled:opacity-50"
+                    className="h-9 rounded-xl border border-betclic-red/30 bg-betclic-red/10 font-display text-[10.5px] font-medium text-betclic-red disabled:opacity-50"
                   >
                     {busy[rejectKey] ? "Remboursement…" : "Refuser & rembourser"}
                   </button>
@@ -4011,10 +4011,10 @@ function DepositsTab({
             {pagedSettledWithdrawals.map((w) => (
                 <div key={w.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-display text-[13px] font-semibold text-ink">
+                    <p className="truncate font-display text-[11px] font-medium text-ink">
                       {w.userName} · {eur(w.amount)} ({w.method.toUpperCase()})
                     </p>
-                    <p className="truncate text-[11px] text-dim">
+                    <p className="truncate text-[10px] text-dim">
                       {w.destination}
                       {w.adminNote ?? w.note ? ` · ${w.adminNote ?? w.note}` : ""} ·{" "}
                       {formatPlacedAt(w.createdAt)}
@@ -4034,7 +4034,7 @@ function DepositsTab({
 
       <AdminSectionTitle label="Dépôts traités" count={settledDeposits.length} />
       {settledDeposits.length === 0 ? (
-        <p className="py-6 text-center text-[12.5px] text-dim">Aucun dépôt enregistré.</p>
+        <p className="py-6 text-center text-[11px] text-dim">Aucun dépôt enregistré.</p>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-2 xl:grid-cols-2 xl:gap-3">
@@ -4044,11 +4044,11 @@ function DepositsTab({
                   <CircleDollarSign className="h-4 w-4" strokeWidth={2.1} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="font-display text-[13.5px] font-semibold capitalize text-ink">
+                  <p className="font-display text-[11.5px] font-medium capitalize text-ink">
                     {d.userName ? `${d.userName} · ` : ""}
                     {d.provider === "mobile_money" ? "Mobile Money" : d.provider} · {eur(d.amount)}
                   </p>
-                  <p className="truncate text-[11.5px] text-dim">
+                  <p className="truncate text-[10.5px] text-dim">
                     {d.providerRef ? `${d.providerRef} · ` : ""}
                     {formatPlacedAt(d.createdAt)}
                   </p>
@@ -4077,7 +4077,7 @@ function StatusBadge({ status }: { status: string }) {
     rejected: { label: "Refusé", cls: "bg-betclic-red/10 text-betclic-red" },
     cancelled: { label: "Annulé", cls: "bg-elev text-dim" },
     won: { label: "Gagné", cls: "bg-win/12 text-win" },
-    lost: { label: "Perdu", cls: "bg-betclic-red/12 text-betclic-red font-bold" },
+    lost: { label: "Perdu", cls: "bg-betclic-red/12 text-betclic-red font-medium" },
     cashed: { label: "Vendu", cls: "bg-sky-500/12 text-sky-700" },
     void: { label: "Remboursé", cls: "bg-amber-500/12 text-amber-800" },
     paid: { label: "Payé", cls: "bg-win/12 text-win" },
@@ -4087,7 +4087,7 @@ function StatusBadge({ status }: { status: string }) {
   };
   const s = map[status] ?? { label: status, cls: "bg-elev text-mist" };
   return (
-    <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 font-display text-[10px] font-bold", s.cls)}>
+    <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 font-display text-[9.5px] font-medium", s.cls)}>
       {s.label}
     </span>
   );
@@ -4116,14 +4116,14 @@ function AdminInput({
 }) {
   return (
     <label className={cn("block", className)}>
-      {label && <span className="mb-1 block text-[11px] font-semibold text-mist">{label}</span>}
+      {label && <span className="mb-1 block text-[10px] font-medium text-mist">{label}</span>}
       <input
         type={type}
         inputMode={inputMode}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[16px] text-ink outline-none transition-colors placeholder:text-dim focus:border-ink focus:bg-white"
+        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[12.5px] text-ink outline-none transition-colors placeholder:text-dim focus:border-ink focus:bg-white"
       />
     </label>
   );
@@ -4132,10 +4132,10 @@ function AdminInput({
 function AdminSectionTitle({ label, count }: { label: string; count?: number }) {
   return (
     <div className="flex items-center justify-between px-0.5">
-      <h2 className="font-display text-[12px] font-bold uppercase tracking-wider text-mist">
+      <h2 className="font-display text-[10.5px] font-bold uppercase tracking-wider text-mist">
         {label}
       </h2>
-      {count != null && <span className="text-[11.5px] font-semibold text-dim">{count}</span>}
+      {count != null && <span className="text-[10.5px] font-medium text-dim">{count}</span>}
     </div>
   );
 }
@@ -4177,7 +4177,7 @@ function ComboBox({
 
   return (
     <div className="relative" ref={boxRef}>
-      {label && <span className="mb-1 block text-[11px] font-semibold text-mist">{label}</span>}
+      {label && <span className="mb-1 block text-[10px] font-medium text-mist">{label}</span>}
       <input
         value={open ? query : value}
         placeholder={placeholder}
@@ -4203,13 +4203,13 @@ function ComboBox({
           }
           if (e.key === "Escape") setOpen(false);
         }}
-        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[16px] text-ink outline-none transition-colors placeholder:text-dim focus:border-ink focus:bg-white"
+        className="h-11 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[12.5px] text-ink outline-none transition-colors placeholder:text-dim focus:border-ink focus:bg-white"
       />
 
       {open && options.length > 0 && (
         <div className="absolute z-40 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-edge bg-white p-1 shadow-lg">
           {filtered.length === 0 && (
-            <p className="px-2.5 py-2 text-[12px] text-dim">Aucun résultat</p>
+            <p className="px-2.5 py-2 text-[10.5px] text-dim">Aucun résultat</p>
           )}
           {filtered.map((o) => (
             <button
@@ -4227,10 +4227,10 @@ function ComboBox({
                 <TeamAvatar name={o.label} logo={o.logo} size="2xs" />
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-display text-[13px] font-semibold text-ink">
+                <span className="block truncate font-display text-[11px] font-medium text-ink">
                   {o.label}
                 </span>
-                {o.hint && <span className="block text-[11px] text-dim">{o.hint}</span>}
+                {o.hint && <span className="block text-[10px] text-dim">{o.hint}</span>}
               </span>
             </button>
           ))}
@@ -4243,8 +4243,8 @@ function ComboBox({
 function StatPill({ label, value }: { label: string; value: number }) {
   return (
     <div className="glass-card rounded-2xl p-3 text-center">
-      <p className="font-display text-[16px] font-bold tabular-nums text-ink">{value}</p>
-      <p className="text-[10.5px] font-medium text-dim">{label}</p>
+      <p className="font-display text-[12.5px] font-medium tabular-nums text-ink">{value}</p>
+      <p className="text-[10px] font-medium text-dim">{label}</p>
     </div>
   );
 }
@@ -4262,7 +4262,7 @@ function MlAdminTab({
 }) {
   if (!ml) {
     return (
-      <div className="glass-card rounded-2xl p-6 text-center text-[13px] text-dim">
+      <div className="glass-card rounded-2xl p-6 text-center text-[11px] text-dim">
         Chargement de la télémétrie Machine Learning…
       </div>
     );
@@ -4276,11 +4276,11 @@ function MlAdminTab({
           <div>
             <div className="flex items-center gap-1.5">
               <Brain className="h-4 w-4 text-betclic-red" />
-              <h2 className="font-display text-[15px] font-bold text-ink">
+              <h2 className="font-display text-[12px] font-bold text-ink">
                 Moteur IA & Machine Learning (4 modèles actifs)
               </h2>
             </div>
-            <p className="mt-0.5 text-[11.5px] text-dim">
+            <p className="mt-0.5 text-[10.5px] text-dim">
               Apprentissage en ligne continu à chaque règlement + consolidation batch PostgreSQL.
             </p>
           </div>
@@ -4294,7 +4294,7 @@ function MlAdminTab({
                 "Les 4 modèles IA ont été ré-entraînés sur l'historique complet"
               )
             }
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-ink px-3.5 font-display text-[12px] font-bold text-white transition-opacity disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-ink px-3.5 font-display text-[10.5px] font-medium text-white transition-opacity disabled:opacity-50"
           >
             {busy["retrain-ml"] ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -4312,15 +4312,15 @@ function MlAdminTab({
               className="rounded-xl border border-edge bg-elev/60 p-3"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-display text-[13px] font-bold text-ink">
+                <span className="truncate font-display text-[11px] font-medium text-ink">
                   {m.name}
                 </span>
-                <span className="rounded-full bg-ink/8 px-2 py-0.5 font-display text-[10px] font-bold text-ink">
+                <span className="rounded-full bg-ink/8 px-2 py-0.5 font-display text-[9.5px] font-medium text-ink">
                   v{m.version}
                 </span>
               </div>
-              <p className="mt-0.5 text-[11px] font-medium text-mist">{m.algorithm}</p>
-              <div className="mt-2 flex items-center justify-between border-t border-edge/70 pt-2 text-[11px] tabular-nums">
+              <p className="mt-0.5 text-[10px] font-medium text-mist">{m.algorithm}</p>
+              <div className="mt-2 flex items-center justify-between border-t border-edge/70 pt-2 text-[10px] tabular-nums">
                 <span className="text-dim">
                   Échantillons : <strong className="text-ink">{m.samplesCount}</strong>
                 </span>
@@ -4339,10 +4339,10 @@ function MlAdminTab({
       {/* Modèle 1 : Poids appris Logistic SGD + Radar comptes */}
       <section className="glass-card rounded-2xl p-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-display text-[14px] font-bold text-ink">
+          <h3 className="font-display text-[11.5px] font-bold text-ink">
             1. Poids appris · Détecteur Sharp (Logistic SGD)
           </h3>
-          <span className="text-[11px] tabular-nums text-dim">
+          <span className="text-[10px] tabular-nums text-dim">
             Biais b₀ = {ml.sharpBias.toFixed(2)}
           </span>
         </div>
@@ -4352,11 +4352,11 @@ function MlAdminTab({
             const delta = w.weight - w.prior;
             return (
               <div key={w.key}>
-                <div className="flex items-center justify-between text-[11.5px]">
+                <div className="flex items-center justify-between text-[10.5px]">
                   <span className="truncate font-medium text-ink">{w.label}</span>
-                  <span className="shrink-0 font-display font-bold tabular-nums text-ink">
+                  <span className="shrink-0 font-display font-medium tabular-nums text-ink">
                     {w.weight.toFixed(3)}{" "}
-                    <span className="text-[10px] font-normal text-dim">
+                    <span className="text-[9.5px] font-normal text-dim">
                       ({delta >= 0 ? "+" : ""}
                       {delta.toFixed(2)} vs prior)
                     </span>
@@ -4373,11 +4373,11 @@ function MlAdminTab({
           })}
         </div>
 
-        <h4 className="mt-4 font-display text-[12.5px] font-bold text-ink">
+        <h4 className="mt-4 font-display text-[11px] font-bold text-ink">
           Radar IA des profils joueurs ({ml.playerProfiles.length})
         </h4>
         {ml.playerProfiles.length === 0 ? (
-          <p className="mt-1.5 text-[12px] text-dim">
+          <p className="mt-1.5 text-[10.5px] text-dim">
             Aucun historique de pari suffisant pour scorer les profils.
           </p>
         ) : (
@@ -4385,16 +4385,16 @@ function MlAdminTab({
             {ml.playerProfiles.map((p) => (
               <div
                 key={p.userId}
-                className="flex flex-col gap-1 rounded-xl border border-edge bg-white p-2.5 text-[11.5px]"
+                className="flex flex-col gap-1 rounded-xl border border-edge bg-white p-2.5 text-[10.5px]"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-bold text-ink">
+                  <span className="truncate font-medium text-ink">
                     {p.name}{" "}
                     <span className="font-normal text-dim">({p.betsCount} paris)</span>
                   </span>
                   <span
                     className={cn(
-                      "rounded-full px-2 py-0.5 font-display text-[10.5px] font-bold tabular-nums",
+                      "rounded-full px-2 py-0.5 font-display text-[10px] font-medium tabular-nums",
                       p.pSharpPct >= 55
                         ? "bg-betclic-red/12 text-betclic-red"
                         : p.pSharpPct >= 35
@@ -4405,13 +4405,13 @@ function MlAdminTab({
                     P(Sharp) {p.pSharpPct.toFixed(0)} %
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[11px] text-dim">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[10px] text-dim">
                   <span>Z-Score : <strong className="text-ink">{p.zScore}</strong></span>
                   <span>ROI : <strong className="text-ink">{p.roiPct}%</strong></span>
                   <span>Bouclier : <strong className="text-ink">×{p.riskWeight}</strong></span>
                   <span>Plafond IA : <strong className="text-ink">{p.maxStake} €</strong></span>
                 </div>
-                <p className="truncate text-[10.5px] text-mist">
+                <p className="truncate text-[10px] text-mist">
                   Signal dominant : {p.topReason}
                 </p>
               </div>
@@ -4422,14 +4422,14 @@ function MlAdminTab({
 
       {/* Modèle 2 : Auto-Calibration Bayésienne des Marchés */}
       <section className="glass-card rounded-2xl p-4">
-        <h3 className="font-display text-[14px] font-bold text-ink">
+        <h3 className="font-display text-[11.5px] font-bold text-ink">
           2. Auto-Calibration Bayésienne des Marchés
         </h3>
-        <p className="mt-0.5 text-[11.5px] text-dim">
+        <p className="mt-0.5 text-[10.5px] text-dim">
           Ajuste tout seul le multiplicateur de marge si un segment gagne plus souvent que prévu.
         </p>
         {ml.calibratedSegments.length === 0 ? (
-          <p className="mt-2 text-[12px] text-dim">
+          <p className="mt-2 text-[10.5px] text-dim">
             En attente des premiers paris réglés pour calibrer les segments.
           </p>
         ) : (
@@ -4437,22 +4437,22 @@ function MlAdminTab({
             {ml.calibratedSegments.map((s) => (
               <div
                 key={s.segment}
-                className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-white px-3 py-2 text-[11.5px]"
+                className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-white px-3 py-2 text-[10.5px]"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-bold text-ink">
+                  <p className="truncate font-medium text-ink">
                     {s.market}{" "}
-                    <span className="rounded bg-elev px-1.5 py-0.5 text-[10px] font-semibold uppercase text-mist">
+                    <span className="rounded bg-elev px-1.5 py-0.5 text-[9.5px] font-medium uppercase text-mist">
                       {s.bucket}
                     </span>
                   </p>
-                  <p className="text-[10.5px] tabular-nums text-dim">
+                  <p className="text-[10px] tabular-nums text-dim">
                     {s.samples} paris · Prédit {s.predWinPct}% vs Réel {s.obsWinPct}%
                   </p>
                 </div>
                 <span
                   className={cn(
-                    "shrink-0 rounded-lg px-2 py-1 font-display text-[11px] font-bold tabular-nums",
+                    "shrink-0 rounded-lg px-2 py-1 font-display text-[10px] font-medium tabular-nums",
                     s.marginMult > 1.005
                       ? "bg-amber-500/15 text-amber-800"
                       : "bg-elev text-ink"
@@ -4468,14 +4468,14 @@ function MlAdminTab({
 
       {/* Modèle 3 : Classement Dynamique Glicko-2 des Clubs */}
       <section className="glass-card rounded-2xl p-4">
-        <h3 className="font-display text-[14px] font-bold text-ink">
+        <h3 className="font-display text-[11.5px] font-bold text-ink">
           3. Forces Dynamiques des Clubs (Glicko-2 Attaque / Défense)
         </h3>
-        <p className="mt-0.5 text-[11.5px] text-dim">
+        <p className="mt-0.5 text-[10.5px] text-dim">
           Mis à jour automatiquement après chaque coup de sifflet final.
         </p>
         {ml.clubRatings.length === 0 ? (
-          <p className="mt-2 text-[12px] text-dim">
+          <p className="mt-2 text-[10.5px] text-dim">
             Les ratings apparaissent dès les premiers matchs terminés.
           </p>
         ) : (
@@ -4483,15 +4483,15 @@ function MlAdminTab({
             {ml.clubRatings.map((c) => (
               <div
                 key={c.clubKey}
-                className="flex items-center justify-between rounded-xl border border-edge bg-white px-3 py-2 text-[11.5px]"
+                className="flex items-center justify-between rounded-xl border border-edge bg-white px-3 py-2 text-[10.5px]"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-bold capitalize text-ink">{c.clubKey}</p>
-                  <p className="text-[10.5px] tabular-nums text-dim">
+                  <p className="truncate font-medium capitalize text-ink">{c.clubKey}</p>
+                  <p className="text-[10px] tabular-nums text-dim">
                     {c.matches} m · Att ×{c.attack.toFixed(2)} · Déf ×{c.defense.toFixed(2)} ({c.goalsFor}:{c.goalsAgainst})
                   </p>
                 </div>
-                <span className="shrink-0 rounded-lg bg-ink px-2 py-0.5 font-display text-[11px] font-bold tabular-nums text-white">
+                <span className="shrink-0 rounded-lg bg-ink px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-white">
                   {c.netPower.toFixed(1)}
                 </span>
               </div>
@@ -4602,11 +4602,11 @@ function ScoresPrevusTab({
       <section className="glass-card rounded-2xl p-4">
         <div className="flex items-center gap-2">
           <Eye className="h-4 w-4 text-betclic-red" strokeWidth={2.3} />
-          <h2 className="font-display text-[15px] font-bold text-ink">
+          <h2 className="font-display text-[12px] font-bold text-ink">
             Mode des scores anticipés (Avant-match & Direct)
           </h2>
         </div>
-        <p className="mt-1 text-[11.5px] leading-relaxed text-dim">
+        <p className="mt-1 text-[10.5px] leading-relaxed text-dim">
           Visible uniquement par l&apos;administrateur. Les joueurs ne reçoivent jamais ces données.
         </p>
 
@@ -4631,12 +4631,12 @@ function ScoresPrevusTab({
             )}
           >
             <div className="flex w-full items-center justify-between gap-2">
-              <span className="font-display text-[13px] font-bold text-ink">
+              <span className="font-display text-[11px] font-medium text-ink">
                 Mode 1 · Dynamique + Verrouillage
               </span>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                  "rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium",
                   scenarioMode === "dynamic"
                     ? "bg-betclic-red text-white"
                     : "bg-elev text-dim"
@@ -4645,7 +4645,7 @@ function ScoresPrevusTab({
                 {scenarioMode === "dynamic" ? "Actif" : "Choisir"}
               </span>
             </div>
-            <p className="mt-1 text-[11px] leading-snug text-mist">
+            <p className="mt-1 text-[10px] leading-snug text-mist">
               Affiche les scores prévus à l&apos;avance tout en gardant le bouclier de la banque actif en live, avec bouton pour figer ou forcer chaque match.
             </p>
           </button>
@@ -4670,12 +4670,12 @@ function ScoresPrevusTab({
             )}
           >
             <div className="flex w-full items-center justify-between gap-2">
-              <span className="font-display text-[13px] font-bold text-ink">
+              <span className="font-display text-[11px] font-medium text-ink">
                 Mode 2 · 100 % Figé d&apos;office
               </span>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                  "rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium",
                   scenarioMode === "locked"
                     ? "bg-win text-white"
                     : "bg-elev text-dim"
@@ -4684,7 +4684,7 @@ function ScoresPrevusTab({
                 {scenarioMode === "locked" ? "Actif" : "Choisir"}
               </span>
             </div>
-            <p className="mt-1 text-[11px] leading-snug text-mist">
+            <p className="mt-1 text-[10px] leading-snug text-mist">
               Verrouille automatiquement tous les scénarios dès l&apos;avant-match : le score final et les minutes des buts sont garantis à 100 % sans bouger.
             </p>
           </button>
@@ -4699,7 +4699,7 @@ function ScoresPrevusTab({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Rechercher une affiche ou une ligue…"
-          className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-dim"
+          className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
         />
         {query && (
           <button type="button" onClick={() => setQuery("")} className="text-dim">
@@ -4765,7 +4765,7 @@ function ScoresPrevusTab({
       />
 
       {visible.length === 0 ? (
-        <div className="glass-card rounded-2xl p-6 text-center text-[12.5px] text-dim">
+        <div className="glass-card rounded-2xl p-6 text-center text-[11px] text-dim">
           Aucun match programmé dans ce filtre.
         </div>
       ) : (
@@ -4782,10 +4782,10 @@ function ScoresPrevusTab({
             return (
               <div key={m.id} className="glass-card rounded-2xl p-3.5">
                 {/* En-tête ligue + ordre file + badge Figé/Dynamique */}
-                <div className="flex items-center justify-between gap-2 text-[11px]">
+                <div className="flex items-center justify-between gap-2 text-[10px]">
                   <div className="flex min-w-0 items-center gap-1.5">
                     {m.status === "live" ? (
-                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-betclic-red">
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-betclic-red">
                         <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
                         Direct{" "}
                         <LiveMatchClock
@@ -4794,7 +4794,7 @@ function ScoresPrevusTab({
                         />
                       </span>
                     ) : (
-                      <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[10px] font-bold text-ink">
+                      <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium text-ink">
                         À venir {rank ? `#${rank}` : ""} · {formatKickoff(new Date(m.startsAt))}
                       </span>
                     )}
@@ -4803,7 +4803,7 @@ function ScoresPrevusTab({
 
                   <span
                     className={cn(
-                      "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-display text-[10px] font-bold",
+                      "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-display text-[9.5px] font-medium",
                       fc.isLocked
                         ? "bg-win/12 text-win"
                         : "bg-amber-500/15 text-amber-800"
@@ -4824,19 +4824,19 @@ function ScoresPrevusTab({
                 <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl bg-elev/55 px-3 py-2.5">
                   <div className="flex min-w-0 items-center gap-2">
                     <LogoOrAvatar logo={m.homeLogo} name={m.homeTeam} />
-                    <span className="truncate font-display text-[13px] font-bold text-ink">
+                    <span className="truncate font-display text-[11px] font-medium text-ink">
                       {m.homeTeam}
                     </span>
                   </div>
 
                   <div className="flex flex-col items-center px-2">
-                    <span className="text-[9.5px] font-semibold uppercase tracking-wider text-dim">
+                    <span className="text-[9.5px] font-medium uppercase tracking-wider text-dim">
                       Score final
                     </span>
-                    <span className="font-display text-[21px] font-extrabold leading-tight tabular-nums text-ink">
+                    <span className="font-display text-[14.5px] font-medium leading-tight tabular-nums text-ink">
                       {fc.finalHomeScore} – {fc.finalAwayScore}
                     </span>
-                    <span className="text-[10px] font-medium tabular-nums text-mist">
+                    <span className="text-[9.5px] font-medium tabular-nums text-mist">
                       MT {fc.htHomeScore} – {fc.htAwayScore}
                       {m.status === "live" &&
                         ` · Actuel ${m.homeScore ?? 0}-${m.awayScore ?? 0}`}
@@ -4844,7 +4844,7 @@ function ScoresPrevusTab({
                   </div>
 
                   <div className="flex min-w-0 items-center justify-end gap-2 text-right">
-                    <span className="truncate font-display text-[13px] font-bold text-ink">
+                    <span className="truncate font-display text-[11px] font-medium text-ink">
                       {m.awayTeam}
                     </span>
                     <LogoOrAvatar logo={m.awayLogo} name={m.awayTeam} />
@@ -4854,7 +4854,7 @@ function ScoresPrevusTab({
                 {/* Chronologie minute par minute des buts et cartons prévus */}
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
                   {fc.events.length === 0 ? (
-                    <span className="rounded-lg bg-elev/60 px-2.5 py-1 text-[11px] font-medium text-dim">
+                    <span className="rounded-lg bg-elev/60 px-2.5 py-1 text-[10px] font-medium text-dim">
                       Aucun but ni carton prévu (0 – 0)
                     </span>
                   ) : (
@@ -4865,7 +4865,7 @@ function ScoresPrevusTab({
                         <span
                           key={`${ev.minute}-${ev.type}-${idx}`}
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium",
+                            "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium",
                             isRed
                               ? "bg-betclic-red/10 text-betclic-red"
                               : isHome
@@ -4878,7 +4878,7 @@ function ScoresPrevusTab({
                           <span className="truncate max-w-[130px]">
                             {ev.player ?? (isHome ? m.homeTeam : m.awayTeam)}
                           </span>
-                          <span className="text-[10px] opacity-70">
+                          <span className="text-[9.5px] opacity-70">
                             ({isHome ? "Dom." : "Ext."})
                           </span>
                         </span>
@@ -4890,7 +4890,7 @@ function ScoresPrevusTab({
                 {/* Éditeur rapide de score exact personnalisé */}
                 {isEditingScore && (
                   <div className="mt-3 rounded-xl border border-edge bg-white p-3">
-                    <p className="text-[11.5px] font-semibold text-ink">
+                    <p className="text-[10.5px] font-medium text-ink">
                       Imposer le score final exact (génère automatiquement minutes & buteurs)
                     </p>
                     <div className="mt-2.5 flex items-center justify-center gap-3">
@@ -4903,11 +4903,11 @@ function ScoresPrevusTab({
                               home: Math.max(minHome, s.home - 1),
                             }))
                           }
-                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[12px] font-medium text-ink active:scale-95"
                         >
                           −
                         </button>
-                        <span className="w-7 text-center font-display text-[18px] font-extrabold tabular-nums text-ink">
+                        <span className="w-7 text-center font-display text-[13.5px] font-medium tabular-nums text-ink">
                           {targetScore.home}
                         </span>
                         <button
@@ -4918,13 +4918,13 @@ function ScoresPrevusTab({
                               home: Math.min(9, s.home + 1),
                             }))
                           }
-                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[12px] font-medium text-ink active:scale-95"
                         >
                           +
                         </button>
                       </div>
 
-                      <span className="font-display text-[14px] font-bold text-dim">–</span>
+                      <span className="font-display text-[11.5px] font-medium text-dim">–</span>
 
                       <div className="flex items-center gap-1.5">
                         <button
@@ -4935,11 +4935,11 @@ function ScoresPrevusTab({
                               away: Math.max(minAway, s.away - 1),
                             }))
                           }
-                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[12px] font-medium text-ink active:scale-95"
                         >
                           −
                         </button>
-                        <span className="w-7 text-center font-display text-[18px] font-extrabold tabular-nums text-ink">
+                        <span className="w-7 text-center font-display text-[13.5px] font-medium tabular-nums text-ink">
                           {targetScore.away}
                         </span>
                         <button
@@ -4950,7 +4950,7 @@ function ScoresPrevusTab({
                               away: Math.min(9, s.away + 1),
                             }))
                           }
-                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[15px] font-bold text-ink active:scale-95"
+                          className="grid h-8 w-8 place-items-center rounded-lg bg-elev font-display text-[12px] font-medium text-ink active:scale-95"
                         >
                           +
                         </button>
@@ -4974,7 +4974,7 @@ function ScoresPrevusTab({
                           );
                           if (ok) setEditingMatchId(null);
                         }}
-                        className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-bold text-white disabled:opacity-50"
+                        className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[10.5px] font-medium text-white disabled:opacity-50"
                       >
                         {busy[`force-${m.id}`] ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -4986,7 +4986,7 @@ function ScoresPrevusTab({
                       <button
                         type="button"
                         onClick={() => setEditingMatchId(null)}
-                        className="h-9 rounded-xl bg-elev px-3 font-display text-[12px] font-semibold text-mist"
+                        className="h-9 rounded-xl bg-elev px-3 font-display text-[10.5px] font-medium text-mist"
                       >
                         Annuler
                       </button>
@@ -5012,7 +5012,7 @@ function ScoresPrevusTab({
                       )
                     }
                     className={cn(
-                      "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-display text-[11.5px] font-bold transition-colors disabled:opacity-50",
+                      "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-display text-[10.5px] font-medium transition-colors disabled:opacity-50",
                       fc.isLocked
                         ? "bg-elev text-ink hover:bg-edge/70"
                         : "bg-win/12 text-win hover:bg-win/18"
@@ -5038,7 +5038,7 @@ function ScoresPrevusTab({
                         "Nouveau scénario généré"
                       )
                     }
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-elev font-display text-[11.5px] font-bold text-ink transition-colors hover:bg-edge/70 disabled:opacity-50"
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-elev font-display text-[10.5px] font-medium text-ink transition-colors hover:bg-edge/70 disabled:opacity-50"
                   >
                     {busy[`reroll-${m.id}`] ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -5062,7 +5062,7 @@ function ScoresPrevusTab({
                       }
                     }}
                     className={cn(
-                      "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-display text-[11.5px] font-bold transition-colors",
+                      "inline-flex h-9 items-center justify-center gap-1.5 rounded-xl font-display text-[10.5px] font-medium transition-colors",
                       isEditingScore
                         ? "bg-ink text-white"
                         : "bg-betclic-red/10 text-betclic-red hover:bg-betclic-red/16"

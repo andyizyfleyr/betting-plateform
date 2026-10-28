@@ -39,7 +39,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 8px 8px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   flex-shrink: 0;
@@ -53,8 +53,8 @@
 }
 
 .logo {
-  font-size: 1rem;
-  font-weight: 800;
+  font-size: 0.92rem;
+  font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -75,14 +75,14 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
   color: var(--text);
-  height: 34px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 9px;
   border-radius: 999px;
-  font-weight: 700;
+  font-weight: 500;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
+  gap: 5px;
+  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -114,16 +114,16 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 14px 16px;
-  gap: 12px;
+  padding: 10px 8px;
+  gap: 10px;
 }
 
 .gaugeCard {
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 22px;
-  padding: 16px 16px 18px;
+  border-radius: 20px;
+  padding: 12px 12px 14px;
   position: relative;
   transition: border-color 0.25s, box-shadow 0.25s;
 }
@@ -169,14 +169,14 @@
 }
 
 .multPrefix {
-  font-size: 1.4rem;
-  font-weight: 800;
+  font-size: 1.15rem;
+  font-weight: 500;
   color: var(--muted);
 }
 
 .value {
-  font-size: clamp(2.2rem, 9vw, 3rem);
-  font-weight: 800;
+  font-size: clamp(1.9rem, 8vw, 2.5rem);
+  font-weight: 500;
   color: #ffffff;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -188,8 +188,8 @@
   align-items: center;
   gap: 8px;
   margin-top: 6px;
-  font-weight: 700;
-  font-size: 0.92rem;
+  font-weight: 500;
+  font-size: 0.82rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -209,10 +209,10 @@
   transform: translate(-50%, -50%);
   background: var(--danger);
   color: #ffffff;
-  padding: 8px 18px;
+  padding: 7px 15px;
   border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 800;
+  font-size: 0.78rem;
+  font-weight: 500;
   opacity: 0;
   pointer-events: none;
   z-index: 10;
@@ -235,10 +235,10 @@
 .controls {
   background: var(--panel);
   border-top: 1px solid var(--border);
-  padding: 14px 16px max(16px, env(safe-area-inset-bottom));
+  padding: 10px 8px max(12px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -253,12 +253,12 @@
 
 .stakeIn {
   width: 100%;
-  height: 46px;
-  padding: 0 38px 0 14px;
+  height: 42px;
+  padding: 0 34px 0 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  font-weight: 700;
-  font-size: 16px;
+  font-weight: 500;
+  font-size: 13.5px;
   background: var(--bg);
   color: #ffffff;
   outline: none;
@@ -272,12 +272,12 @@
 
 .currencyBadge {
   position: absolute;
-  right: 14px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--muted);
-  font-weight: 700;
-  font-size: 0.95rem;
+  font-weight: 500;
+  font-size: 0.85rem;
   pointer-events: none;
 }
 
@@ -288,13 +288,13 @@
 }
 
 .quickBtn {
-  height: 36px;
+  height: 33px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--panel-soft);
   color: #e2e8f0;
-  font-weight: 700;
-  font-size: 0.78rem;
+  font-weight: 500;
+  font-size: 0.72rem;
   font-family: inherit;
   cursor: pointer;
 }
@@ -311,12 +311,12 @@
 
 .btnPlace {
   width: 100%;
-  height: 54px;
+  height: 48px;
   background: var(--gold);
   border: none;
-  border-radius: 14px;
-  font-weight: 800;
-  font-size: 0.95rem;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 0.85rem;
   cursor: pointer;
   color: #0b0f19;
   display: flex;
@@ -338,9 +338,9 @@
 
 .errorMsg {
   color: #f87171;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   text-align: center;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* ---------------- Modales ---------------- */
@@ -352,7 +352,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 16px;
   z-index: 4000;
   backdrop-filter: blur(4px);
 }
@@ -364,7 +364,7 @@
 .modalV2 {
   background: var(--panel);
   border-radius: 20px;
-  padding: 22px;
+  padding: 20px;
   width: 100%;
   max-width: 320px;
   border: 1px solid var(--border);
@@ -380,8 +380,8 @@
 }
 
 .title {
-  font-size: 1.25rem;
-  font-weight: 800;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .win .title {
@@ -393,8 +393,8 @@
 }
 
 .amount {
-  font-size: 1.7rem;
-  font-weight: 800;
+  font-size: 1.45rem;
+  font-weight: 500;
   margin: 10px 0 4px;
   color: #ffffff;
   font-variant-numeric: tabular-nums;
@@ -402,21 +402,21 @@
 
 .multLabel {
   color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 
 .btnCloseModal {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border);
   color: #ffffff;
-  height: 44px;
+  height: 40px;
   border-radius: 12px;
-  font-weight: 700;
-  font-size: 0.9rem;
+  font-weight: 500;
+  font-size: 0.82rem;
   cursor: pointer;
   width: 100%;
-  margin-top: 16px;
+  margin-top: 14px;
   font-family: inherit;
 }
 

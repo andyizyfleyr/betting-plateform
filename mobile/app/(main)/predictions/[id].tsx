@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 28,
   },
@@ -573,8 +573,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   statusBadge: {
@@ -592,8 +592,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(21,128,61,0.12)",
   },
   statusBadgeText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -611,13 +611,13 @@ const styles = StyleSheet.create({
   },
   notFoundTitle: {
     marginTop: 6,
-    fontSize: 14.5,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.ink,
   },
   notFoundSub: {
     marginTop: 2,
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: COLORS.mist,
     textAlign: "center",
   },
@@ -636,8 +636,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   retryGrayText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   redBtn: {
@@ -647,8 +647,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   redBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   stack: {
@@ -662,14 +662,14 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   questionText: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     lineHeight: 20,
     color: COLORS.ink,
   },
   resolvesSub: {
     marginTop: 4,
-    fontSize: 10.5,
+    fontSize: 10,
     color: COLORS.dim,
   },
   myBetRow: {
@@ -683,19 +683,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   myBetLeft: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   myBetRight: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
   optionsHeading: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     letterSpacing: 0.5,
     color: COLORS.mist,
   },
@@ -755,8 +755,8 @@ const styles = StyleSheet.create({
   },
   outcomeLabel: {
     flex: 1,
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   outcomeRight: {
@@ -765,8 +765,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   outcomePct: {
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -786,8 +786,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
   },
   outcomeOddsText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
 });

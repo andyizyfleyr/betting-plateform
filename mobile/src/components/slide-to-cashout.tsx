@@ -286,14 +286,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   titleText: {
-    fontSize: 12.5,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
     letterSpacing: -0.2,
   },
   subText: {
     marginTop: 1,
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "500",
     color: "rgba(236, 253, 245, 0.90)",
   },
@@ -315,8 +315,8 @@ const styles = StyleSheet.create({
     color: "#fde68a",
   },
   amountText: {
-    fontSize: 14.5,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   },
   profitText: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },

@@ -119,7 +119,7 @@ export function LiveMatchTracker({
                     : "bg-emerald-400"
             )}
           />
-          <span className="truncate font-display text-[10.5px] font-bold tracking-tight text-white">
+          <span className="truncate font-display text-[10px] font-medium tracking-tight text-white">
             {frame.label}
           </span>
         </div>
@@ -240,7 +240,7 @@ function TabPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-5 items-center gap-1 rounded-[6px] px-1.5 font-display text-[9.5px] font-bold transition-colors",
+        "inline-flex h-5 items-center gap-1 rounded-[6px] px-1.5 font-display text-[9.5px] font-medium transition-colors",
         active ? "bg-emerald-400 text-[#052e16]" : "text-emerald-100/75 hover:text-white"
       )}
     >
@@ -539,7 +539,7 @@ function PitchRadarView({
         </svg>
 
         {/* Repères d'attaque discrets intégrés aux coins du terrain (zéro hauteur ajoutée) */}
-        <div className="pointer-events-none absolute bottom-1 left-2 flex items-center gap-1 rounded bg-black/40 px-1.5 py-0.5 text-[8.5px] font-bold text-white/90">
+        <div className="pointer-events-none absolute bottom-1 left-2 flex items-center gap-1 rounded bg-black/40 px-1.5 py-0.5 text-[8.5px] font-medium text-white/90">
           <span
             className="h-1.5 w-1.5 rounded-full"
             style={{ backgroundColor: colors.homePrimary }}
@@ -547,7 +547,7 @@ function PitchRadarView({
           <span>{initials(match.homeTeam)} →</span>
           {redHome > 0 && <span className="text-red-300">({11 - redHome}j)</span>}
         </div>
-        <div className="pointer-events-none absolute bottom-1 right-2 flex items-center gap-1 rounded bg-black/40 px-1.5 py-0.5 text-[8.5px] font-bold text-white/90">
+        <div className="pointer-events-none absolute bottom-1 right-2 flex items-center gap-1 rounded bg-black/40 px-1.5 py-0.5 text-[8.5px] font-medium text-white/90">
           {redAway > 0 && <span className="text-red-300">({11 - redAway}j)</span>}
           <span>← {initials(match.awayTeam)}</span>
           <span
@@ -569,10 +569,10 @@ function PitchRadarView({
                     : "border-amber-400/50 bg-black/75 text-amber-100"
               )}
             >
-              <span className="truncate font-display text-[10px] font-extrabold">
+              <span className="truncate font-display text-[9.5px] font-medium">
                 {frame.banner.title}
               </span>
-              <span className="truncate text-[9px] font-semibold text-white/85">
+              <span className="truncate text-[9px] font-medium text-white/85">
                 · {frame.banner.subtitle}
               </span>
             </div>
@@ -763,19 +763,19 @@ function MomentumHistogramView({
   return (
     <div className="flex h-[104px] flex-col justify-between px-2.5 py-1.5">
       <div className="flex items-center justify-between gap-2 text-[9.5px]">
-        <span className="flex items-center gap-1 font-display font-bold text-white">
+        <span className="flex items-center gap-1 font-display font-medium text-white">
           <span
             className="h-2 w-2 rounded-full"
             style={{ backgroundColor: colors.homePrimary }}
           />
           {initials(match.homeTeam)}
         </span>
-        <span className="rounded-full bg-white/10 px-2 py-0.2 text-[9px] font-semibold text-emerald-100">
+        <span className="rounded-full bg-white/10 px-2 py-0.2 text-[9px] font-medium text-emerald-100">
           10 dern. min :{" "}
           <strong className="text-white">{telemetry.recentHomePressure}%</strong> –{" "}
           <strong className="text-white">{100 - telemetry.recentHomePressure}%</strong>
         </span>
-        <span className="flex items-center gap-1 font-display font-bold text-white">
+        <span className="flex items-center gap-1 font-display font-medium text-white">
           {initials(match.awayTeam)}
           <span
             className="h-2 w-2 rounded-full"
@@ -916,9 +916,9 @@ function DetailedStatsView({
         return (
           <div key={r.label}>
             <div className="mb-0.5 flex items-center justify-between text-[9.5px] tabular-nums">
-              <span className="font-display font-bold text-white">{r.leftText}</span>
+              <span className="font-display font-medium text-white">{r.leftText}</span>
               <span className="truncate px-1 text-[9px] text-emerald-100/75">{r.label}</span>
-              <span className="font-display font-bold text-white">{r.rightText}</span>
+              <span className="font-display font-medium text-white">{r.rightText}</span>
             </div>
             <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/12">
               <div
@@ -980,7 +980,7 @@ function MatchTimelineStrip({
     <div>
       {activePinnedEvent && (
         <div className="mb-1 flex justify-center">
-          <span className="truncate rounded-full bg-white/14 px-2 py-0.2 font-display text-[9.5px] font-bold text-amber-200">
+          <span className="truncate rounded-full bg-white/14 px-2 py-0.2 font-display text-[9.5px] font-medium text-amber-200">
             {activePinnedEvent.minute}’ ·{" "}
             {activePinnedEvent.type === "red_card" ? "🟥 Rouge" : "⚽ But"}{" "}
             {activePinnedEvent.player ? `${activePinnedEvent.player} ` : ""}(
@@ -989,7 +989,7 @@ function MatchTimelineStrip({
         </div>
       )}
 
-      <div className="flex items-center gap-2 text-[9px] font-semibold tabular-nums text-emerald-100/70">
+      <div className="flex items-center gap-2 text-[9px] font-medium tabular-nums text-emerald-100/70">
         <span>0’</span>
         <div className="relative h-3 flex-1">
           <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-white/14">
@@ -1022,7 +1022,7 @@ function MatchTimelineStrip({
                   borderColor: isHome ? colors.homePrimary : colors.awayPrimary,
                 }}
                 className={cn(
-                  "absolute top-1/2 grid h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border bg-[#082216] text-[7.5px] leading-none transition-transform",
+                  "absolute top-1/2 grid h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border bg-[#082216] text-[8.5px] leading-none transition-transform",
                   selected && "scale-125 ring-1 ring-amber-300"
                 )}
               >
@@ -1058,9 +1058,9 @@ function MiniStatGauge({
   return (
     <div className="px-1.5">
       <div className="flex items-center justify-between gap-1 text-[9.5px] tabular-nums">
-        <span className="font-display font-bold text-white">{leftText}</span>
+        <span className="font-display font-medium text-white">{leftText}</span>
         <span className="text-[8.5px] font-medium text-emerald-200/75">{label}</span>
-        <span className="font-display font-bold text-white">{rightText}</span>
+        <span className="font-display font-medium text-white">{rightText}</span>
       </div>
       <div className="mt-0.5 flex h-1 w-full overflow-hidden rounded-full bg-white/12">
         <div

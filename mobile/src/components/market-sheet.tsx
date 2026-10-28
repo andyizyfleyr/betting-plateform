@@ -900,8 +900,8 @@ const styles = StyleSheet.create({
   },
   leagueText: {
     flexShrink: 1,
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   topActions: {
@@ -918,8 +918,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   datePillText: {
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -936,8 +936,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#047857",
   },
   trackerPillText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   closeBtn: {
@@ -976,15 +976,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   clubName: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
     lineHeight: 16,
   },
   redLabel: {
     marginTop: 2,
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   centerScore: {
@@ -992,26 +992,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   scoreDigits: {
-    fontSize: 19,
-    fontWeight: "700",
+    fontSize: 14.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   htText: {
     marginTop: 2,
     fontSize: 9.5,
-    fontWeight: "600",
+    fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
   finSmall: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   vsText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   goalsRow: {
@@ -1024,7 +1024,7 @@ const styles = StyleSheet.create({
   },
   goalText: {
     flex: 1,
-    fontSize: 10.5,
+    fontSize: 10,
     color: COLORS.mist,
   },
   suspendedBanner: {
@@ -1039,8 +1039,8 @@ const styles = StyleSheet.create({
   },
   suspendedBannerText: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#92400e",
   },
   catRow: {
@@ -1065,16 +1065,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.ink,
   },
   catLabel: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   catLabelActive: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: "#ffffff",
   },
   catCount: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -1085,14 +1085,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 8,
     paddingTop: 12,
     paddingBottom: 32,
   },
   emptyText: {
     paddingVertical: 40,
     textAlign: "center",
-    fontSize: 13,
+    fontSize: 11,
     color: COLORS.mist,
   },
   accCard: {
@@ -1119,7 +1119,7 @@ const styles = StyleSheet.create({
   accTitle: {
     flex: 1,
     paddingRight: 8,
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
@@ -1137,14 +1137,14 @@ const styles = StyleSheet.create({
     width: 44,
     textAlign: "center",
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.dim,
   },
   tableHeadCol: {
     flex: 1,
     textAlign: "center",
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.dim,
   },
   tableDataRow: {
@@ -1161,8 +1161,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowLineText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1197,12 +1197,12 @@ const styles = StyleSheet.create({
   },
   outcomeShort: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
   },
   outcomeOdds: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
 });

@@ -698,7 +698,7 @@ export default function BetslipScreen() {
             </Text>
             <Text style={styles.emptySub}>
               Faites un{" "}
-              <Text style={{ fontWeight: "700", color: COLORS.ink }}>
+              <Text style={{ fontWeight: "500", color: COLORS.ink }}>
                 appui long
               </Text>{" "}
               sur n&apos;importe quelle cote dans Matchs ou Prédictions pour
@@ -993,13 +993,13 @@ export default function BetslipScreen() {
 
             {quote.boostAmount > 0 ? (
               <View style={styles.summaryLine}>
-                <Text style={{ fontSize: 12.5, color: COLORS.win }}>
+                <Text style={{ fontSize: 11, color: COLORS.win }}>
                   Bonus Combiné (+{quote.boostPct}%)
                 </Text>
                 <Text
                   style={{
-                    fontSize: 12.5,
-                    fontWeight: "700",
+                    fontSize: 11,
+                    fontWeight: "500",
                     color: COLORS.win,
                     fontVariant: ["tabular-nums"],
                   }}
@@ -1118,7 +1118,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 16,
   },
@@ -1134,7 +1134,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pageTitle: {
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
@@ -1146,8 +1146,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   countBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#ffffff",
   },
   headerActions: {
@@ -1168,8 +1168,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.ink,
   },
   actionPillText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   clearPill: {
@@ -1182,8 +1182,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   clearPillText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   emptyCard: {
@@ -1205,7 +1205,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     marginTop: 14,
-    fontSize: 16.5,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
     textAlign: "center",
@@ -1213,7 +1213,7 @@ const styles = StyleSheet.create({
   emptySub: {
     marginTop: 6,
     maxWidth: 290,
-    fontSize: 12.5,
+    fontSize: 11,
     lineHeight: 18,
     color: COLORS.mist,
     textAlign: "center",
@@ -1235,8 +1235,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptyPrimaryText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   emptySecondaryBtn: {
@@ -1250,8 +1250,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   emptySecondaryText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   legsWrap: {
@@ -1278,18 +1278,18 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   boostTitleText: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   boostHintText: {
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   boostMaxText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.win,
   },
   boostTrack: {
@@ -1333,8 +1333,8 @@ const styles = StyleSheet.create({
   },
   legLeague: {
     flexShrink: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   livePill: {
@@ -1353,8 +1353,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   livePillText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -1365,8 +1365,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   kickoffPillText: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1377,8 +1377,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   closedPillText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   suspendedPill: {
@@ -1388,8 +1388,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   suspendedPillText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: "#b45309",
   },
   removeLegBtn: {
@@ -1407,8 +1407,8 @@ const styles = StyleSheet.create({
   },
   teamName: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   scoreBox: {
@@ -1425,13 +1425,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(225,0,20,0.10)",
   },
   scoreBoxText: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   predTitle: {
-    fontSize: 14,
+    fontSize: 11.5,
     fontWeight: "600",
     lineHeight: 19,
     color: COLORS.ink,
@@ -1449,8 +1449,8 @@ const styles = StyleSheet.create({
   },
   selectionLabelText: {
     flex: 1,
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   legOddsBadge: {
@@ -1467,8 +1467,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   legOddsText: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
   stickyDock: {
@@ -1477,7 +1477,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.edge,
     backgroundColor: "rgba(255,255,255,0.98)",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 12,
     gap: 10,
@@ -1499,23 +1499,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   summaryMuted: {
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
   },
   summaryOddsVal: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   potentialLabel: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   potentialValue: {
-    fontSize: 18,
-    fontWeight: "800",
+    fontSize: 13.5,
+    fontWeight: "500",
     color: COLORS.win,
     fontVariant: ["tabular-nums"],
   },
@@ -1530,7 +1530,7 @@ const styles = StyleSheet.create({
   },
   redAlertText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.betclicRed,
   },
@@ -1545,12 +1545,12 @@ const styles = StyleSheet.create({
   },
   amberAlertText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "500",
     color: "#92400e",
   },
   inlineRedError: {
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.betclicRed,
   },
@@ -1564,8 +1564,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   rechargeLink: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     textDecorationLine: "underline",
   },
@@ -1577,12 +1577,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   submitBtnText: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#ffffff",
   },
   receiptScroll: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 24,
     paddingBottom: 32,
   },
@@ -1604,13 +1604,13 @@ const styles = StyleSheet.create({
   },
   receiptTitle: {
     marginTop: 12,
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   receiptSub: {
     marginTop: 4,
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
   },
   receiptSummaryGrid: {
@@ -1627,13 +1627,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   receiptStatLabel: {
-    fontSize: 10.5,
+    fontSize: 10,
     color: COLORS.dim,
   },
   receiptStatValue: {
     marginTop: 2,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1652,8 +1652,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   receiptSecondaryText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   receiptPrimaryBtn: {
@@ -1667,8 +1667,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   receiptPrimaryText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
 });

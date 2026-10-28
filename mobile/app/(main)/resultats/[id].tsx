@@ -404,7 +404,7 @@ export default function ResultDetailScreen() {
                             {ev.minute}&apos;
                           </Text>
                         </View>
-                        <Text style={{ fontSize: 11 }}>
+                        <Text style={{ fontSize: 10 }}>
                           {ev.type === "goal"
                             ? "⚽"
                             : ev.type === "red"
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 28,
   },
@@ -470,12 +470,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: COLORS.dim,
   },
   ftBadge: {
@@ -485,8 +485,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
   },
   ftBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.win,
   },
   loaderBox: {
@@ -503,13 +503,13 @@ const styles = StyleSheet.create({
   },
   notFoundTitle: {
     marginTop: 6,
-    fontSize: 14.5,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.ink,
   },
   notFoundSub: {
     marginTop: 2,
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: COLORS.mist,
     textAlign: "center",
   },
@@ -528,8 +528,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   retryGrayText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   redBtn: {
@@ -539,8 +539,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   redBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   stack: {
@@ -564,8 +564,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   teamName: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
     textAlign: "center",
   },
@@ -582,20 +582,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   scoreDigit: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 13.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   scoreDash: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   htText: {
     marginTop: 2,
     fontSize: 9.5,
-    fontWeight: "600",
+    fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -626,19 +626,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(21,128,61,0.10)",
   },
   closingLabel: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   closingOdds: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
     fontVariant: ["tabular-nums"],
   },
   sectionCaps: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "500",
     letterSpacing: 0.5,
     color: COLORS.mist,
   },
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
   },
   settledLabel: {
     fontSize: 9.5,
-    fontWeight: "600",
+    fontWeight: "500",
     textTransform: "uppercase",
     color: COLORS.dim,
   },
@@ -669,8 +669,8 @@ const styles = StyleSheet.create({
   },
   settledValText: {
     flex: 1,
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   statRow: {
@@ -683,13 +683,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   statNum: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   statLabel: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.mist,
   },
@@ -720,19 +720,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   minuteText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   playerName: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   eventTeam: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "500",
     color: COLORS.dim,
   },

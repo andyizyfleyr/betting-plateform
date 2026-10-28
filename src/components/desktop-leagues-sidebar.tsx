@@ -194,7 +194,7 @@ function CountryFlagCircle({
         <span
           className={cn(
             base,
-            "bg-elev font-display text-[10px] font-extrabold uppercase text-ink"
+            "bg-elev font-display text-[9.5px] font-medium uppercase text-ink"
           )}
           aria-hidden
         >
@@ -405,7 +405,7 @@ export function DesktopLeaguesSidebar() {
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-ink">
               <SportIcon sport="football" className="h-4 w-4 text-ink" />
             </span>
-            <span className="font-display text-[15px] font-bold tracking-tight text-ink">
+            <span className="font-display text-[12px] font-medium tracking-tight text-ink">
               Football
             </span>
           </div>
@@ -440,14 +440,14 @@ export function DesktopLeaguesSidebar() {
                 >
                   <SportIcon sport="football" className="h-3.5 w-3.5" />
                 </span>
-                <span className="truncate font-display text-[13.5px] font-bold">
+                <span className="truncate font-display text-[11.5px] font-medium">
                   Toute l&apos;offre
                 </span>
               </div>
 
               <div className="flex shrink-0 items-center gap-1.5">
                 {realLiveTotal > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-1.5 py-0.5 font-display text-[10px] font-extrabold text-betclic-red">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/12 px-1.5 py-0.5 font-display text-[9.5px] font-medium text-betclic-red">
                     <span className="live-dot !h-1.5 !w-1.5" />
                     {realLiveTotal}
                   </span>
@@ -455,7 +455,7 @@ export function DesktopLeaguesSidebar() {
                 {realActiveTotal > 0 && (
                   <span
                     className={cn(
-                      "rounded-full px-1.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums",
+                      "rounded-full px-1.5 py-0.5 font-display text-[10px] font-medium tabular-nums",
                       isAllRealSelected
                         ? "bg-betclic-red text-white"
                         : "bg-elev text-mist"
@@ -469,7 +469,7 @@ export function DesktopLeaguesSidebar() {
 
             {/* Top des compétitions */}
             <div className="mt-1 border-t border-edge/70 pt-2.5">
-              <p className="px-4 pb-1.5 text-[11px] font-semibold text-dim">
+              <p className="px-4 pb-1.5 text-[10px] font-medium text-dim">
                 Top des compétitions
               </p>
 
@@ -499,8 +499,8 @@ export function DesktopLeaguesSidebar() {
                         <CountryFlagCircle country={flagCountry} />
                         <span
                           className={cn(
-                            "truncate text-[13px]",
-                            selected ? "font-bold text-betclic-red" : "font-semibold text-ink"
+                            "truncate text-[11px]",
+                            selected ? "font-medium text-betclic-red" : "font-medium text-ink"
                           )}
                         >
                           {entry.topDisplayLabel}
@@ -514,7 +514,7 @@ export function DesktopLeaguesSidebar() {
                         {entry.totalCount > 0 && (
                           <span
                             className={cn(
-                              "rounded-full px-1.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums",
+                              "rounded-full px-1.5 py-0.5 font-display text-[10px] font-medium tabular-nums",
                               selected
                                 ? "bg-betclic-red text-white"
                                 : "bg-elev text-mist"
@@ -532,7 +532,7 @@ export function DesktopLeaguesSidebar() {
 
             {/* Pays (A-Z) */}
             <div className="mt-2 border-t border-edge/70 pt-2.5">
-              <p className="px-4 pb-1.5 text-[11px] font-semibold text-dim">
+              <p className="px-4 pb-1.5 text-[10px] font-medium text-dim">
                 Pays (A-Z)
               </p>
 
@@ -553,7 +553,7 @@ export function DesktopLeaguesSidebar() {
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <CountryFlagCircle country={group.flagCountry} />
-                          <span className="truncate text-[13px] font-semibold">
+                          <span className="truncate text-[11px] font-medium">
                             {group.country}
                           </span>
                         </div>
@@ -563,7 +563,7 @@ export function DesktopLeaguesSidebar() {
                             <span className="live-dot !h-1.5 !w-1.5" title="En direct" />
                           )}
                           {group.total > 0 && (
-                            <span className="rounded-full bg-elev px-1.5 py-0.5 font-display text-[10px] font-bold tabular-nums text-mist">
+                            <span className="rounded-full bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-mist">
                               {group.total}
                             </span>
                           )}
@@ -587,9 +587,9 @@ export function DesktopLeaguesSidebar() {
                                 type="button"
                                 onClick={() => selectRealLeague(entry.filterValue)}
                                 className={cn(
-                                  "flex w-full items-center justify-between gap-2 py-1.5 pl-12 pr-4 text-left text-[12.5px] transition-colors",
+                                  "flex w-full items-center justify-between gap-2 py-1.5 pl-12 pr-4 text-left text-[11px] transition-colors",
                                   selected
-                                    ? "bg-betclic-red/10 font-bold text-betclic-red"
+                                    ? "bg-betclic-red/10 font-medium text-betclic-red"
                                     : "font-medium text-ink hover:bg-elev/70"
                                 )}
                               >
@@ -601,7 +601,7 @@ export function DesktopLeaguesSidebar() {
                                   {entry.totalCount > 0 && (
                                     <span
                                       className={cn(
-                                        "rounded-full px-1.5 py-0.5 font-display text-[10px] font-bold tabular-nums",
+                                        "rounded-full px-1.5 py-0.5 font-display text-[9.5px] font-medium tabular-nums",
                                         selected
                                           ? "bg-betclic-red text-white"
                                           : "bg-white text-mist"
@@ -624,7 +624,7 @@ export function DesktopLeaguesSidebar() {
 
             {/* Univers Virtuel 24/7 séparé */}
             <div className="mt-2 border-t border-edge/70 pt-2 pb-1">
-              <p className="px-4 pb-1 text-[11px] font-semibold text-dim">
+              <p className="px-4 pb-1 text-[10px] font-medium text-dim">
                 Simulation 24/7
               </p>
               <button
@@ -650,8 +650,8 @@ export function DesktopLeaguesSidebar() {
                   </span>
                   <span
                     className={cn(
-                      "truncate text-[13px]",
-                      isVirtualSelected ? "font-bold text-betclic-red" : "font-semibold text-ink"
+                      "truncate text-[11px]",
+                      isVirtualSelected ? "font-medium text-betclic-red" : "font-medium text-ink"
                     )}
                   >
                     Ligue Virtuelle 24/7
@@ -665,7 +665,7 @@ export function DesktopLeaguesSidebar() {
                   {virtualActiveTotal > 0 && (
                     <span
                       className={cn(
-                        "rounded-full px-1.5 py-0.5 font-display text-[10.5px] font-bold tabular-nums",
+                        "rounded-full px-1.5 py-0.5 font-display text-[10px] font-medium tabular-nums",
                         isVirtualSelected
                           ? "bg-betclic-red text-white"
                           : "bg-elev text-mist"

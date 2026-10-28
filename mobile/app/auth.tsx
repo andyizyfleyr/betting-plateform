@@ -1377,7 +1377,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingVertical: 14,
   },
   topBar: {
@@ -1401,8 +1401,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   backPillText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   cardWrap: {
@@ -1413,7 +1413,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 20,
+    padding: 12,
     shadowColor: "#111827",
     shadowOpacity: 0.05,
     shadowRadius: 12,
@@ -1445,26 +1445,26 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   tabBtnText: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   tabBtnTextActive: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.ink,
   },
   headingBlock: {
     marginTop: 18,
   },
   h1: {
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "700",
     letterSpacing: -0.4,
     color: COLORS.ink,
   },
   subtitle: {
     marginTop: 4,
-    fontSize: 13,
+    fontSize: 11,
     color: COLORS.mist,
     lineHeight: 19,
   },
@@ -1488,8 +1488,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   stepPillText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   form: {
@@ -1506,13 +1506,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   forgotLink: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   inputBox: {
@@ -1536,7 +1536,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 12,
     color: COLORS.ink,
     paddingVertical: 0,
   },
@@ -1569,7 +1569,7 @@ const styles = StyleSheet.create({
   },
   rememberText: {
     flex: 1,
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "500",
     color: COLORS.mist,
   },
@@ -1584,13 +1584,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   strengthTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
   strengthLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
   },
   strengthBars: {
     flexDirection: "row",
@@ -1620,13 +1620,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.winSoft,
   },
   ruleChipText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
   ruleChipTextOk: {
     color: COLORS.win,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   termsBox: {
     flexDirection: "row",
@@ -1644,12 +1644,12 @@ const styles = StyleSheet.create({
   },
   termsText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 10.5,
     lineHeight: 17,
     color: COLORS.mist,
   },
   termsBold: {
-    fontWeight: "800",
+    fontWeight: "500",
     color: COLORS.ink,
   },
   errorBox: {
@@ -1665,7 +1665,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "500",
     color: COLORS.betclicRed,
     lineHeight: 17,
@@ -1686,8 +1686,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   submitText: {
-    fontSize: 14.5,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: "#ffffff",
   },
   switchPromptRow: {
@@ -1698,12 +1698,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   switchPromptText: {
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
   },
   switchPromptLink: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
     textDecorationLine: "underline",
   },
@@ -1712,8 +1712,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   alreadyCodeText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   emailSummaryCard: {
@@ -1732,12 +1732,12 @@ const styles = StyleSheet.create({
   },
   emailSummaryAddress: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   emailSummaryInfo: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     lineHeight: 16,
     color: COLORS.mist,
   },
@@ -1773,8 +1773,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
   },
   otpChar: {
-    fontSize: 19,
-    fontWeight: "800",
+    fontSize: 14.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1799,18 +1799,18 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   tlsText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
   footerDisclaimer: {
     textAlign: "center",
-    fontSize: 10.5,
+    fontSize: 10,
     color: COLORS.dim,
     lineHeight: 15,
   },
   footerBold: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.mist,
   },
 });

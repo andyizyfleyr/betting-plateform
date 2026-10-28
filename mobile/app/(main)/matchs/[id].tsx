@@ -644,7 +644,7 @@ export default function MatchDetailScreen() {
                             {ev.minute}’
                           </Text>
                         </View>
-                        <Text style={{ fontSize: 11 }}>
+                        <Text style={{ fontSize: 10 }}>
                           {ev.type === "goal"
                             ? "⚽"
                             : ev.type === "red"
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingTop: 10,
     paddingBottom: 28,
   },
@@ -712,8 +712,8 @@ const styles = StyleSheet.create({
   },
   leagueTitle: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   headerRight: {
@@ -728,8 +728,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   finBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.mist,
     letterSpacing: 0.4,
   },
@@ -740,8 +740,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2.5,
   },
   datePillText: {
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -759,13 +759,13 @@ const styles = StyleSheet.create({
   },
   notFoundTitle: {
     marginTop: 6,
-    fontSize: 14.5,
+    fontSize: 12,
     fontWeight: "700",
     color: COLORS.ink,
   },
   notFoundSub: {
     marginTop: 2,
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: COLORS.mist,
     textAlign: "center",
   },
@@ -784,8 +784,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   retryGrayText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   redBtn: {
@@ -798,8 +798,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   redBtnText: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: "#ffffff",
   },
   stack: {
@@ -823,15 +823,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   teamName: {
-    fontSize: 11.5,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
     textAlign: "center",
     lineHeight: 15,
   },
   redCardLabel: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   scoreCenter: {
@@ -847,20 +847,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   scoreDigit: {
-    fontSize: 18,
-    fontWeight: "900",
+    fontSize: 13.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   scoreDash: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.dim,
   },
   htScore: {
     marginTop: 2,
     fontSize: 9.5,
-    fontWeight: "600",
+    fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -871,8 +871,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   vsText: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   scoreFooter: {
@@ -899,8 +899,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.ink,
   },
   trackerToggleText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   resultLinkPill: {
@@ -913,8 +913,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   resultLinkText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   closedMarketsCard: {
@@ -926,14 +926,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   closedMarketsTitle: {
-    fontSize: 12.5,
+    fontSize: 11,
     fontWeight: "700",
     color: COLORS.ink,
     textAlign: "center",
   },
   catTabsRow: {
-    marginHorizontal: -12,
-    paddingHorizontal: 12,
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     flexDirection: "row",
     gap: 6,
@@ -951,16 +951,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   catTabLabel: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   catTabLabelActive: {
     color: "#ffffff",
   },
   catTabCount: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -977,8 +977,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   suspendedNoticeText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: "#92400e",
   },
   timelineCard: {
@@ -989,8 +989,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   timelineHeading: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 10,
+    fontWeight: "700",
     letterSpacing: 0.5,
     color: COLORS.mist,
   },
@@ -1021,19 +1021,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   minuteText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   playerName: {
     flex: 1,
-    fontSize: 11,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   eventTeam: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "500",
     color: COLORS.dim,
   },

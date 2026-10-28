@@ -7,9 +7,9 @@ import { cn, initials, teamHue } from "@/lib/format";
 const SIZES = {
   "2xs": { box: "h-6 w-6 rounded-md text-[8.5px]", pad: "p-0.5" },
   xs: { box: "h-7 w-7 rounded-lg text-[9.5px]", pad: "p-1" },
-  sm: { box: "h-8 w-8 rounded-[10px] text-[10.5px]", pad: "p-[5px]" },
-  md: { box: "h-11 w-11 rounded-xl text-[12px]", pad: "p-1.5" },
-  lg: { box: "h-13 w-13 rounded-2xl text-[14px]", pad: "p-1.5" },
+  sm: { box: "h-8 w-8 rounded-[10px] text-[10px]", pad: "p-[5px]" },
+  md: { box: "h-11 w-11 rounded-xl text-[10.5px]", pad: "p-1.5" },
+  lg: { box: "h-13 w-13 rounded-2xl text-[11.5px]", pad: "p-1.5" },
 } as const;
 
 export type TeamAvatarSize = keyof typeof SIZES;
@@ -76,7 +76,7 @@ export function TeamAvatar({
   return (
     <span
       className={cn(
-        "grid shrink-0 place-items-center font-display font-bold text-white/95",
+        "grid shrink-0 place-items-center font-display font-medium text-white/95",
         s.box,
         className
       )}

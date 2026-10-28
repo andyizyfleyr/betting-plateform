@@ -241,14 +241,14 @@ const styles = StyleSheet.create({
   },
   errorBoundaryTitle: {
     color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "900",
+    fontSize: 16,
+    fontWeight: "700",
     fontStyle: "italic",
     marginBottom: 10,
   },
   errorBoundaryBody: {
     color: "#9CA3AF",
-    fontSize: 14,
+    fontSize: 11.5,
     textAlign: "center",
     marginBottom: 20,
   },
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   },
   errorBoundaryBtnText: {
     color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "500",
   },
 });

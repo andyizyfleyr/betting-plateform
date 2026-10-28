@@ -205,11 +205,11 @@ export function CouponCodeBox({
   if (variant === "empty") {
     return (
       <div className="mt-5 rounded-2xl border border-edge bg-elev/55 p-3.5 text-left">
-        <div className="flex items-center gap-1.5 text-[12px] font-bold text-ink">
+        <div className="flex items-center gap-1.5 text-[10.5px] font-medium text-ink">
           <Hash className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.5} />
           <span className="font-display">Charger un code du coupon</span>
         </div>
-        <p className="mt-0.5 text-[11px] text-mist">
+        <p className="mt-0.5 text-[10px] text-mist">
           Entrez le code partagé par un ami (ex. <strong className="text-ink">BX-84K2</strong>) pour importer ses sélections.
         </p>
         <form
@@ -225,12 +225,12 @@ export function CouponCodeBox({
             onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
             placeholder="Ex. BX-84K2"
             maxLength={48}
-            className="h-10 min-w-0 flex-1 rounded-xl border border-edge bg-white px-3 font-display text-[13.5px] font-bold tracking-wider text-ink uppercase outline-none placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-dim focus:border-ink"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-edge bg-white px-3 font-display text-[11.5px] font-medium tracking-wider text-ink uppercase outline-none placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-dim focus:border-ink"
           />
           <button
             type="submit"
             disabled={loadingCode || !codeInput.trim()}
-            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-ink px-3.5 font-display text-[12.5px] font-bold text-white transition-transform active:scale-95 disabled:opacity-45"
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-ink px-3.5 font-display text-[11px] font-medium text-white transition-transform active:scale-95 disabled:opacity-45"
           >
             {loadingCode ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />
@@ -250,10 +250,10 @@ export function CouponCodeBox({
         {activeCode ? (
           <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl bg-elev px-3 py-1.5">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-dim">
+              <p className="text-[9.5px] font-medium uppercase tracking-wider text-dim">
                 Code du coupon
               </p>
-              <p className="truncate font-display text-[14.5px] font-extrabold tracking-wider text-ink">
+              <p className="truncate font-display text-[12px] font-medium tracking-wider text-ink">
                 {activeCode}
               </p>
             </div>
@@ -261,7 +261,7 @@ export function CouponCodeBox({
               <button
                 type="button"
                 onClick={() => void handleCopyCode()}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-edge bg-white px-2.5 font-display text-[11.5px] font-bold text-ink active:scale-95"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-edge bg-white px-2.5 font-display text-[10.5px] font-medium text-ink active:scale-95"
               >
                 {copied ? (
                   <Check className="h-3.5 w-3.5 text-win" strokeWidth={2.6} />
@@ -273,7 +273,7 @@ export function CouponCodeBox({
               <button
                 type="button"
                 onClick={() => void handleShareCode()}
-                className="inline-flex h-8 items-center gap-1 rounded-lg bg-betclic-red px-2.5 font-display text-[11.5px] font-bold text-white active:scale-95"
+                className="inline-flex h-8 items-center gap-1 rounded-lg bg-betclic-red px-2.5 font-display text-[10.5px] font-medium text-white active:scale-95"
               >
                 <Share2 className="h-3.5 w-3.5" strokeWidth={2.3} />
                 Partager
@@ -285,7 +285,7 @@ export function CouponCodeBox({
             type="button"
             onClick={() => void handleGenerateCode()}
             disabled={saving || comboLegs.length === 0}
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-elev px-3 font-display text-[12px] font-bold text-ink transition-colors hover:bg-edge/70 active:scale-95 disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-elev px-3 font-display text-[10.5px] font-medium text-ink transition-colors hover:bg-edge/70 active:scale-95 disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-betclic-red" strokeWidth={2.4} />
@@ -303,7 +303,7 @@ export function CouponCodeBox({
             setLoadOpen((o) => !o);
           }}
           className={cn(
-            "inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 font-display text-[12px] font-bold transition-colors active:scale-95",
+            "inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 font-display text-[10.5px] font-medium transition-colors active:scale-95",
             loadOpen
               ? "border-ink bg-ink text-white"
               : "border-edge bg-white text-mist hover:text-ink"
@@ -328,12 +328,12 @@ export function CouponCodeBox({
             onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
             placeholder="Code coupon (ex. BX-84K2)"
             maxLength={48}
-            className="h-9.5 min-w-0 flex-1 rounded-xl border border-edge bg-elev/50 px-3 font-display text-[13px] font-bold tracking-wider text-ink uppercase outline-none placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-dim focus:border-ink focus:bg-white"
+            className="h-9.5 min-w-0 flex-1 rounded-xl border border-edge bg-elev/50 px-3 font-display text-[11px] font-medium tracking-wider text-ink uppercase outline-none placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-dim focus:border-ink focus:bg-white"
           />
           <button
             type="submit"
             disabled={loadingCode || !codeInput.trim()}
-            className="inline-flex h-9.5 shrink-0 items-center gap-1 rounded-xl bg-betclic-red px-3 font-display text-[12px] font-bold text-white active:scale-95 disabled:opacity-45"
+            className="inline-flex h-9.5 shrink-0 items-center gap-1 rounded-xl bg-betclic-red px-3 font-display text-[10.5px] font-medium text-white active:scale-95 disabled:opacity-45"
           >
             {loadingCode ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.4} />

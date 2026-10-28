@@ -10,11 +10,13 @@ import {
   View,
 } from "react-native";
 import {
+  AlertTriangle,
   ArrowLeft,
   CalendarClock,
   ChevronRight,
   Cpu,
   History,
+  RefreshCw,
   Search,
   Trophy,
   X,
@@ -261,6 +263,13 @@ export default function ResultatsScreen() {
     () => historyQuery.data?.matches ?? (historyQuery.isError ? [] : null),
     [historyQuery.data, historyQuery.isError]
   );
+
+  const loadError =
+    !historyQuery.data && historyQuery.error instanceof Error
+      ? historyQuery.error.message
+      : historyQuery.isError && !historyQuery.data
+        ? "Impossible de charger les résultats."
+        : null;
 
   const focusedInBase = useMemo(
     () =>
@@ -724,6 +733,35 @@ export default function ResultatsScreen() {
       {/* 5 : Liste groupée par journée */}
       {history === null ? (
         <PulseFlashLoader compact />
+      ) : loadError && history.length === 0 ? (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyCircle}>
+            <AlertTriangle size={18} color="#d97706" strokeWidth={2} />
+          </View>
+          <Text style={styles.emptyTitle}>Connexion au serveur interrompue</Text>
+          <Text style={styles.emptySub}>{loadError}</Text>
+          <Pressable
+            onPress={() => void onRefresh()}
+            style={({ pressed }) => [
+              {
+                marginTop: 12,
+                height: 34,
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                backgroundColor: COLORS.betclicRed,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+              },
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <RefreshCw size={13} color="#ffffff" strokeWidth={2.2} />
+            <Text style={{ fontSize: 10.5, fontWeight: "500", color: "#ffffff" }}>
+              Réessayer
+            </Text>
+          </Pressable>
+        </View>
       ) : groupedByDay.length === 0 && !focusedMatch ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyCircle}>
@@ -759,7 +797,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 28,
   },
@@ -785,7 +823,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pageTitle: {
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     letterSpacing: -0.3,
     color: COLORS.ink,
@@ -828,8 +866,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   universeBtnText: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.mist,
     flexShrink: 1,
   },
@@ -843,8 +881,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.22)",
   },
   universeCountText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -862,7 +900,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 11.5,
     color: COLORS.ink,
     paddingVertical: 0,
   },
@@ -878,14 +916,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   focusedTitleText: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "700",
     letterSpacing: 0.6,
     color: COLORS.betclicRed,
   },
   focusedCloseText: {
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   stickyFilterWrap: {
@@ -911,7 +949,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     marginTop: 12,
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: "600",
     color: COLORS.ink,
   },
@@ -919,13 +957,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     maxWidth: 260,
     textAlign: "center",
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     lineHeight: 18,
   },
   dayHeading: {
     paddingHorizontal: 2,
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.6,
@@ -936,7 +974,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 14,
+    padding: 12,
   },
   cardHighlighted: {
     borderWidth: 2,
@@ -957,16 +995,16 @@ const styles = StyleSheet.create({
   },
   leagueText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.mist,
   },
   dotSep: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.dim,
   },
   timeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
@@ -991,8 +1029,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   liveBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   winnerBadge: {
@@ -1002,8 +1040,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   winnerBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1014,8 +1052,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   upcomingBadgeText: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   teamsBlock: {
@@ -1037,12 +1075,12 @@ const styles = StyleSheet.create({
   },
   teamName: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: "rgba(17,24,39,0.85)",
   },
   teamNameWinner: {
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.ink,
   },
   redCardChip: {
@@ -1052,13 +1090,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   scoreText: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.mist,
     fontVariant: ["tabular-nums"],
   },
   scoreTextWinner: {
-    fontWeight: "800",
+    fontWeight: "500",
     color: COLORS.ink,
   },
   summaryPillsRow: {
@@ -1075,8 +1113,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   summaryPillText: {
-    fontSize: 10.5,
-    fontWeight: "600",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.mist,
     fontVariant: ["tabular-nums"],
   },

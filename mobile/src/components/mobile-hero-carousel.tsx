@@ -347,13 +347,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontSize: 13.5,
-    fontWeight: "800",
+    fontSize: 11.5,
+    fontWeight: "700",
     letterSpacing: -0.2,
     color: "#ffffff",
   },
   desc: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "500",
     lineHeight: 13.5,
     color: "rgba(255, 255, 255, 0.85)",
@@ -372,8 +372,8 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   ctaText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     flexShrink: 1,
   },
   dotsRow: {

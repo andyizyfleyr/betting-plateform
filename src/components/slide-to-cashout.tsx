@@ -354,14 +354,14 @@ export function SlideToCashOut({
           className="pointer-events-none relative z-10 flex w-full items-center justify-between gap-2 pr-3 pl-[56px]"
         >
           <div className="min-w-0 flex-1">
-            <p className="truncate font-display text-[12.5px] font-extrabold leading-tight tracking-tight text-white">
+            <p className="truncate font-display text-[11px] font-medium leading-tight tracking-tight text-white">
               {loading
                 ? "Vente en cours…"
                 : readyToConfirm
                   ? "Relâchez pour vendre !"
                   : "Vendre le coupon"}
             </p>
-            <p className="mt-0.5 truncate text-[10px] font-medium leading-tight text-emerald-50/90">
+            <p className="mt-0.5 truncate text-[9.5px] font-medium leading-tight text-emerald-50/90">
               {loading
                 ? "Crédit immédiat sur le solde"
                 : nudge
@@ -371,7 +371,7 @@ export function SlideToCashOut({
           </div>
 
           <div className="flex shrink-0 flex-col items-end justify-center text-right">
-            <span className="inline-flex items-center gap-1 font-display text-[14.5px] font-extrabold leading-tight tabular-nums text-white">
+            <span className="inline-flex items-center gap-1 font-display text-[12px] font-medium leading-tight tabular-nums text-white">
               {trend === "up" && (
                 <span className="text-[9.5px] leading-none text-emerald-100" aria-hidden>
                   ▲
@@ -386,7 +386,7 @@ export function SlideToCashOut({
             </span>
 
             {inProfit && (
-              <span className="mt-0.5 rounded-full bg-white/22 px-1.5 py-[1px] font-display text-[9.5px] font-bold leading-tight tabular-nums text-white">
+              <span className="mt-0.5 rounded-full bg-white/22 px-1.5 py-[1px] font-display text-[9.5px] font-medium leading-tight tabular-nums text-white">
                 +{eur(profit)}
               </span>
             )}
@@ -399,11 +399,11 @@ export function SlideToCashOut({
         {desktopConfirm ? (
           <div className="flex items-center justify-between gap-2 rounded-2xl border border-emerald-500/35 bg-emerald-500/[0.08] p-2">
             <div className="min-w-0 pl-1.5">
-              <p className="truncate font-display text-[12px] font-bold text-ink">
+              <p className="truncate font-display text-[10.5px] font-medium text-ink">
                 Confirmer la vente à <AnimatedNumber value={amount} format={eur} /> ?
               </p>
               {inProfit && (
-                <p className="text-[10.5px] font-semibold text-[#047857]">
+                <p className="text-[10px] font-medium text-[#047857]">
                   Gain net sécurisé : +{eur(profit)}
                 </p>
               )}
@@ -418,7 +418,7 @@ export function SlideToCashOut({
                   );
                 }}
                 disabled={loading}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#047857] to-[#10b981] px-3.5 font-display text-[12px] font-bold text-white shadow-xs transition hover:brightness-105 disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#047857] to-[#10b981] px-3.5 font-display text-[10.5px] font-medium text-white shadow-xs transition hover:brightness-105 disabled:opacity-60"
               >
                 {loading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2.5} />
@@ -452,10 +452,10 @@ export function SlideToCashOut({
                 <HandCoins className="h-4 w-4" strokeWidth={2.3} />
               </span>
               <span className="min-w-0 text-left">
-                <span className="block truncate font-display text-[12.5px] font-extrabold leading-tight">
+                <span className="block truncate font-display text-[11px] font-medium leading-tight">
                   Vendre le coupon
                 </span>
-                <span className="block truncate text-[10px] font-medium leading-tight text-emerald-50/90">
+                <span className="block truncate text-[9.5px] font-medium leading-tight text-emerald-50/90">
                   Encaissement immédiat
                 </span>
               </span>
@@ -463,18 +463,18 @@ export function SlideToCashOut({
 
             <span className="flex shrink-0 items-center gap-1.5">
               {inProfit && (
-                <span className="rounded-full bg-white/22 px-2 py-0.5 font-display text-[10px] font-bold tabular-nums text-white">
+                <span className="rounded-full bg-white/22 px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-white">
                   +{eur(profit)}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 font-display text-[14.5px] font-extrabold tabular-nums text-white">
+              <span className="inline-flex items-center gap-1 font-display text-[12px] font-medium tabular-nums text-white">
                 {trend === "up" && (
-                  <span className="text-[10px] text-emerald-100" aria-hidden>
+                  <span className="text-[9.5px] text-emerald-100" aria-hidden>
                     ▲
                   </span>
                 )}
                 {trend === "down" && (
-                  <span className="text-[10px] text-amber-200" aria-hidden>
+                  <span className="text-[9.5px] text-amber-200" aria-hidden>
                     ▼
                   </span>
                 )}

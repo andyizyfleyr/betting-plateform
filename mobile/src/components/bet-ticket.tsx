@@ -970,7 +970,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 14,
+    padding: 12,
     shadowColor: "#111827",
     shadowOpacity: 0.03,
     shadowRadius: 4,
@@ -997,8 +997,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   comboLabel: {
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   boostMiniBadge: {
@@ -1009,21 +1009,21 @@ const styles = StyleSheet.create({
   },
   boostMiniText: {
     fontSize: 9.5,
-    fontWeight: "700",
+    fontWeight: "500",
     color: COLORS.win,
   },
   leagueText: {
     flexShrink: 1,
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.mist,
   },
   dot: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.dim,
   },
   dateText: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
   },
@@ -1034,7 +1034,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   kickoffText: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
@@ -1049,8 +1049,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   flexText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   statusPill: {
@@ -1077,8 +1077,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   statusText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
   },
   liveDot: {
     width: 6,
@@ -1102,8 +1102,8 @@ const styles = StyleSheet.create({
   },
   predQuestion: {
     flex: 1,
-    fontSize: 14.5,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     lineHeight: 20,
   },
@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
   },
   previewLegTitle: {
     flex: 1,
-    fontSize: 13.5,
+    fontSize: 11.5,
     fontWeight: "600",
     color: COLORS.ink,
   },
@@ -1131,8 +1131,8 @@ const styles = StyleSheet.create({
     textDecorationLine: "line-through",
   },
   previewLegOdds: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.mist,
     fontVariant: ["tabular-nums"],
   },
@@ -1156,8 +1156,8 @@ const styles = StyleSheet.create({
   },
   ticketTeamName: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "500",
   },
   ticketScorePill: {
     minWidth: 22,
@@ -1168,8 +1168,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ticketScoreText: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
   selectionBar: {
@@ -1185,13 +1185,13 @@ const styles = StyleSheet.create({
   },
   selectionBarText: {
     flex: 1,
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   selectionOdds: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
@@ -1201,8 +1201,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   detailsText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   amountsRow: {
@@ -1222,13 +1222,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   amountLabel: {
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
   amountVal: {
-    fontSize: 13.5,
-    fontWeight: "700",
+    fontSize: 11.5,
+    fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },
   cashoutSection: {
@@ -1251,7 +1251,7 @@ const styles = StyleSheet.create({
   },
   cashoutAlertText: {
     flex: 1,
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: "#78350f",
     lineHeight: 16,
   },

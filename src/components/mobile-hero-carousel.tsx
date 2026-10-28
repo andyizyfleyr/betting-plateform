@@ -230,10 +230,10 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
               {/* Colonne texte & CTA strictement cantonnée à gauche (55 %) */}
               <div className="relative z-10 flex h-full w-[55%] flex-col justify-between py-2.5 pl-3.5 pr-1">
                 <div className="min-w-0 space-y-0.5">
-                  <h2 className="truncate text-[13.5px] font-extrabold leading-tight tracking-[-0.01em] text-white">
+                  <h2 className="truncate text-[11.5px] font-bold leading-tight tracking-[-0.01em] text-white">
                     {slide.title}
                   </h2>
-                  <p className="line-clamp-2 text-[10.5px] font-medium leading-[1.28] text-white/85">
+                  <p className="line-clamp-2 text-[10px] font-medium leading-[1.28] text-white/85">
                     {slide.description}
                   </p>
                 </div>
@@ -243,10 +243,10 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
                     <Link
                       href="/matchs/virtuels"
                       onClick={pauseAutoplay}
-                      className={`inline-flex h-[26px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10.5px] font-bold tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
+                      className={`inline-flex h-[24px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10px] font-medium tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
                     >
                       <span className="truncate">{slide.ctaLabel}</span>
-                      <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.6]" />
+                      <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.2]" />
                     </Link>
                   ) : (
                     <button
@@ -255,10 +255,10 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
                         pauseAutoplay();
                         onAction(slide.action);
                       }}
-                      className={`inline-flex h-[26px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10.5px] font-bold tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
+                      className={`inline-flex h-[24px] max-w-full items-center gap-1 rounded-full px-2.5 text-[10px] font-medium tracking-[0.01em] transition-transform active:scale-95 ${slide.ctaClassName}`}
                     >
                       <span className="truncate">{slide.ctaLabel}</span>
-                      <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.6]" />
+                      <ChevronRight className="h-3 w-3 shrink-0 stroke-[2.2]" />
                     </button>
                   )}
                 </div>

@@ -241,17 +241,17 @@ export function MarketSheet() {
               >
                 <div className="mx-auto h-1 w-10 rounded-full bg-edge lg:hidden" />
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-mist">
+                  <div className="flex min-w-0 items-center gap-1.5 text-[10.5px] text-mist">
                     {isReal && (
-                      <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9.5px] font-bold uppercase tracking-wide text-emerald-700 lg:inline-block">
+                      <span className="hidden shrink-0 rounded-md bg-emerald-600/12 px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wide text-emerald-700 lg:inline-block">
                         Match réel
                       </span>
                     )}
                     <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
-                    <span className="truncate font-semibold">{match.league}</span>
+                    <span className="truncate font-medium">{match.league}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <span className="inline-flex h-7 items-center rounded-full bg-elev px-2.5 font-display text-[10.5px] font-semibold tabular-nums text-ink">
+                    <span className="inline-flex h-7 items-center rounded-full bg-elev px-2.5 font-display text-[10px] font-medium tabular-nums text-ink">
                       {formatMatchDateTime(match.startsAt)}
                     </span>
                     {(isLive || isFinished) && (isReal ? realStatsAvailable : true) && (
@@ -260,7 +260,7 @@ export function MarketSheet() {
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={() => setShowTracker((s) => !s)}
                         className={cn(
-                          "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-bold transition-colors",
+                          "inline-flex h-7 items-center gap-1 rounded-full px-2.5 font-display text-[10px] font-medium transition-colors",
                           showTracker ? "bg-emerald-700 text-white" : "bg-elev text-mist"
                         )}
                       >
@@ -296,11 +296,11 @@ export function MarketSheet() {
                   <div className="flex min-w-0 items-center gap-2">
                     <TeamAvatar name={match.homeTeam} logo={match.homeLogo} size="sm" />
                     <div className="min-w-0">
-                      <p className="font-display text-[13px] font-bold leading-tight break-words text-ink lg:text-[14px]">
+                      <p className="font-display text-[11px] font-medium leading-tight break-words text-ink lg:text-[11.5px]">
                         {match.homeTeam}
                       </p>
                       {(match.redHome ?? 0) > 0 && (
-                        <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-betclic-red">
+                        <span className="mt-0.5 inline-flex items-center gap-1 text-[9.5px] font-medium text-betclic-red">
                           <span className="inline-block h-2.5 w-1.5 rounded-[1.5px] bg-betclic-red" />
                           {match.redHome} rouge
                         </span>
@@ -313,7 +313,7 @@ export function MarketSheet() {
                       <>
                         <div className="mb-1">
                           {isFinished ? (
-                            <span className="text-[10px] font-bold text-dim">Terminé</span>
+                            <span className="text-[9.5px] font-medium text-dim">Terminé</span>
                           ) : (
                             <LiveStatusBadge
                               match={match}
@@ -322,19 +322,19 @@ export function MarketSheet() {
                             />
                           )}
                         </div>
-                        <span className="font-display text-[19px] font-bold leading-none tabular-nums text-ink">
+                        <span className="font-display text-[14.5px] font-medium leading-none tabular-nums text-ink">
                           {match.homeScore ?? 0} – {match.awayScore ?? 0}
                         </span>
                         {isReal &&
                           match.htHomeScore != null &&
                           match.htAwayScore != null && (
-                            <span className="mt-0.5 text-[9.5px] font-semibold tabular-nums text-dim">
+                            <span className="mt-0.5 text-[9.5px] font-medium tabular-nums text-dim">
                               MT {match.htHomeScore} - {match.htAwayScore}
                             </span>
                           )}
                       </>
                     ) : (
-                      <span className="font-display text-[11px] font-bold uppercase tracking-wide text-dim">
+                      <span className="font-display text-[10px] font-medium uppercase tracking-wide text-dim">
                         vs
                       </span>
                     )}
@@ -342,11 +342,11 @@ export function MarketSheet() {
 
                   <div className="flex min-w-0 items-center justify-end gap-2 text-right">
                     <div className="min-w-0">
-                      <p className="font-display text-[13px] font-bold leading-tight break-words text-ink lg:text-[14px]">
+                      <p className="font-display text-[11px] font-medium leading-tight break-words text-ink lg:text-[11.5px]">
                         {match.awayTeam}
                       </p>
                       {(match.redAway ?? 0) > 0 && (
-                        <span className="mt-0.5 inline-flex items-center justify-end gap-1 text-[10px] font-semibold text-betclic-red">
+                        <span className="mt-0.5 inline-flex items-center justify-end gap-1 text-[9.5px] font-medium text-betclic-red">
                           {match.redAway} rouge
                           <span className="inline-block h-2.5 w-1.5 rounded-[1.5px] bg-betclic-red" />
                         </span>
@@ -357,7 +357,7 @@ export function MarketSheet() {
                 </div>
 
                 {hasGoals && (
-                  <div className="mt-2 grid grid-cols-2 gap-2 border-t border-edge/60 pt-1.5 text-[10.5px] text-mist">
+                  <div className="mt-2 grid grid-cols-2 gap-2 border-t border-edge/60 pt-1.5 text-[10px] text-mist">
                     <div className="min-w-0 truncate">
                       {homeGoals.length > 0 ? `⚽ ${homeGoals.join(", ")}` : ""}
                     </div>
@@ -369,7 +369,7 @@ export function MarketSheet() {
               </div>
 
               {suspended && (
-                <div className="mt-2 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-1.5 text-[11px] font-semibold text-amber-800">
+                <div className="mt-2 flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-1.5 text-[10px] font-medium text-amber-800">
                   <Lock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
                   <span>
                     {isReal && !isLive && match.kickoffReached
@@ -399,14 +399,14 @@ export function MarketSheet() {
                         type="button"
                         onClick={() => setCategory(tab.key)}
                         className={cn(
-                          "flex h-7.5 shrink-0 items-center gap-1 rounded-full border px-2.5 font-display text-[11px] transition-colors",
+                          "flex h-7.5 shrink-0 items-center gap-1 rounded-full border px-2.5 font-display text-[10px] transition-colors",
                           active
-                            ? "border-ink bg-ink font-bold text-white"
-                            : "border-edge bg-white font-semibold text-mist active:bg-elev"
+                            ? "border-ink bg-ink font-medium text-white"
+                            : "border-edge bg-white font-medium text-mist active:bg-elev"
                         )}
                       >
                         <span>{tab.label}</span>
-                        <span className={cn("text-[10px]", active ? "text-white/75" : "text-dim")}>
+                        <span className={cn("text-[9.5px]", active ? "text-white/75" : "text-dim")}>
                           {count}
                         </span>
                       </button>
@@ -440,7 +440,7 @@ export function MarketSheet() {
                 />
               )}
               {isFinished || filteredGroups.length === 0 ? (
-                <div className="py-10 text-center text-[13px] text-mist">
+                <div className="py-10 text-center text-[11px] text-mist">
                   {isFinished
                     ? "Cette rencontre est terminée — les marchés sont clôturés."
                     : "Aucun marché ouvert dans cette catégorie pour le moment."}
@@ -590,7 +590,7 @@ export function AccordionItem({
           open ? "rounded-t-xl lg:rounded-t-2xl" : "rounded-xl lg:rounded-2xl"
         )}
       >
-        <span className="pr-2 font-display text-[12px] font-bold leading-snug text-ink lg:text-[13px]">
+        <span className="pr-2 font-display text-[10.5px] font-medium leading-snug text-ink lg:text-[11px]">
           {group.label}
         </span>
         <ChevronDown
@@ -607,14 +607,14 @@ export function AccordionItem({
           {group.rows ? (
             <div className="space-y-1.5 lg:space-y-2">
               {(group.rows[0]?.outcomes.length ?? 2) === 3 ? (
-                <div className="grid grid-cols-[44px_1fr_1fr_1fr] items-center gap-1.5 px-1 text-[9.5px] font-bold uppercase tracking-wider text-dim lg:grid-cols-[50px_1fr_1fr_1fr] lg:gap-2 lg:text-[10px]">
+                <div className="grid grid-cols-[44px_1fr_1fr_1fr] items-center gap-1.5 px-1 text-[9.5px] font-medium uppercase tracking-wider text-dim lg:grid-cols-[50px_1fr_1fr_1fr] lg:gap-2 lg:text-[9.5px]">
                   <span className="text-center">Hcap</span>
                   <span className="text-center">V1</span>
                   <span className="text-center">X</span>
                   <span className="text-center">V2</span>
                 </div>
               ) : (
-                <div className="grid grid-cols-[44px_1fr_1fr] items-center gap-1.5 px-1 text-[9.5px] font-bold uppercase tracking-wider text-dim lg:grid-cols-[50px_1fr_1fr] lg:gap-2 lg:text-[10px]">
+                <div className="grid grid-cols-[44px_1fr_1fr] items-center gap-1.5 px-1 text-[9.5px] font-medium uppercase tracking-wider text-dim lg:grid-cols-[50px_1fr_1fr] lg:gap-2 lg:text-[9.5px]">
                   <span className="text-center">Total</span>
                   <span className="text-center">Plus de</span>
                   <span className="text-center">Moins de</span>
@@ -630,7 +630,7 @@ export function AccordionItem({
                       : "grid-cols-[44px_1fr_1fr] lg:grid-cols-[50px_1fr_1fr]"
                   )}
                 >
-                  <span className="flex h-9 items-center justify-center rounded-lg bg-elev font-display text-[11px] font-bold tabular-nums text-ink lg:h-11 lg:rounded-xl lg:text-[12px]">
+                  <span className="flex h-9 items-center justify-center rounded-lg bg-elev font-display text-[10px] font-medium tabular-nums text-ink lg:h-11 lg:rounded-xl lg:text-[10.5px]">
                     {row.label}
                   </span>
                   {row.outcomes.map((o) => (
@@ -741,7 +741,7 @@ function OutcomeCell({
       {!suspended && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
-          "truncate text-[11px] font-semibold lg:text-[12px]",
+          "truncate text-[10px] font-medium lg:text-[10.5px]",
           active ? "text-white/90" : "text-mist"
         )}
       >
@@ -752,7 +752,7 @@ function OutcomeCell({
       ) : (
         <span
           className={cn(
-            "shrink-0 font-display text-[12.5px] font-bold tabular-nums transition-colors duration-200 lg:text-[13.5px]",
+            "shrink-0 font-display text-[11px] font-medium tabular-nums transition-colors duration-200 lg:text-[11.5px]",
             oddsTrendTextClass(trend, active)
           )}
         >

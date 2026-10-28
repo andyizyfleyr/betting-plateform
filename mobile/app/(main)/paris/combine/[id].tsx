@@ -709,12 +709,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
   },
   content: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 36,
   },
   centerWrap: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     justifyContent: "center",
   },
   authCard: {
@@ -722,18 +722,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 24,
+    padding: 12,
     alignItems: "center",
   },
   authTitle: {
     marginTop: 10,
-    fontSize: 16,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   authSub: {
     marginTop: 4,
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     textAlign: "center",
   },
@@ -747,8 +747,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   redPillBtnText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: "#ffffff",
   },
   headerRow: {
@@ -780,13 +780,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pageTitle: {
-    fontSize: 20,
+    fontSize: 14.5,
     fontWeight: "700",
     color: COLORS.ink,
     letterSpacing: -0.3,
   },
   subText: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     color: COLORS.dim,
   },
   headerRight: {
@@ -806,8 +806,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sharePillText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   loaderBox: {
@@ -824,13 +824,13 @@ const styles = StyleSheet.create({
   },
   notFoundTitle: {
     marginTop: 12,
-    fontSize: 16,
+    fontSize: 12.5,
     fontWeight: "700",
     color: COLORS.ink,
   },
   notFoundSub: {
     marginTop: 4,
-    fontSize: 12.5,
+    fontSize: 11,
     color: COLORS.mist,
     textAlign: "center",
   },
@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 16,
+    padding: 12,
   },
   progressHeader: {
     flexDirection: "row",
@@ -853,13 +853,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   progressLabel: {
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   progressFraction: {
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
     fontVariant: ["tabular-nums"],
   },
@@ -873,8 +873,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   boostBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: COLORS.betclicRed,
   },
   progressTrack: {
@@ -900,21 +900,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   amountItem: {
-    fontSize: 11,
+    fontSize: 10,
   },
   amountMuted: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
   },
   amountStrong: {
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   cashoutError: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.betclicRed,
   },
@@ -931,14 +931,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cashedBannerText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.win,
   },
   sectionCaps: {
     paddingHorizontal: 2,
-    fontSize: 12.5,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     letterSpacing: 0.5,
     color: COLORS.mist,
   },
@@ -970,8 +970,8 @@ const styles = StyleSheet.create({
   },
   legLeagueText: {
     flex: 1,
-    fontSize: 11.5,
-    fontWeight: "600",
+    fontSize: 10.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   legTopRight: {
@@ -980,7 +980,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   legDateText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: COLORS.dim,
     fontVariant: ["tabular-nums"],
@@ -1001,8 +1001,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.betclicRed,
   },
   liveBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.betclicRed,
     fontVariant: ["tabular-nums"],
   },
@@ -1024,11 +1024,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
   },
   legStatusText: {
-    fontSize: 10.5,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
   },
   predTitle: {
-    fontSize: 14,
+    fontSize: 11.5,
     fontWeight: "600",
     lineHeight: 19,
     color: COLORS.ink,
@@ -1053,8 +1053,8 @@ const styles = StyleSheet.create({
   },
   pickLabel: {
     flexShrink: 1,
-    fontSize: 12.5,
-    fontWeight: "600",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
   },
   marketBadge: {
@@ -1066,8 +1066,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   marketBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
+    fontSize: 9.5,
+    fontWeight: "500",
     color: COLORS.mist,
   },
   pickOddsBadge: {
@@ -1079,8 +1079,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   pickOddsText: {
-    fontSize: 13,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
