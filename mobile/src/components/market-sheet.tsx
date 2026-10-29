@@ -170,7 +170,7 @@ function OutcomeCell({
 
   const handleLongPress = () => {
     if (suspended) return;
-    triggerHaptic("medium", hapticsEnabled);
+
     const res = toggleComboLeg(comboSelection);
     if (res === "full") {
       toast({ kind: "error", title: "Betslip complet (limite atteinte)" });

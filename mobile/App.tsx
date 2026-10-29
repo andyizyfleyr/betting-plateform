@@ -19,7 +19,6 @@ import { RouterProvider, usePathname, useRouter } from "@/lib/router";
 import { isBiometricModeActive, persistAuthToken, verifyBiometricUnlock } from "@/lib/http";
 import { COLORS } from "@/theme/tokens";
 import { InAppBrowserSheet } from "@/components/in-app-browser-sheet";
-import { ToastHost } from "@/components/toast-host";
 import { PushCoordinator } from "@/components/push-coordinator";
 import { unregisterPushDevice } from "@/lib/push-notifications";
 
@@ -70,7 +69,6 @@ function ActiveScreenSwitch() {
         <StatusBar style="dark" backgroundColor={COLORS.deep} />
         <AuthScreen />
         <InAppBrowserSheet />
-        <ToastHost />
       </View>
     );
   }

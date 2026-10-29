@@ -384,7 +384,7 @@ export default function PredictionDetailScreen() {
                         onLongPress={() => {
                           if (disabled) return;
                           const res = toggleComboLeg(comboSel);
-                          triggerHaptic("medium", hapticsEnabled);
+
                           if (res === "added" || res === "replaced") {
                             toast({
                               kind: "info",

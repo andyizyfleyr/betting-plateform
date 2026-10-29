@@ -94,7 +94,7 @@ function OddsCell({
 
   const handleLongPress = () => {
     if (suspended) return;
-    triggerHaptic("medium", hapticsEnabled);
+
     const res = toggleComboLeg(comboSelection);
     if (res === "full") {
       toast({

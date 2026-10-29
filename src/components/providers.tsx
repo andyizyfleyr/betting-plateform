@@ -17,8 +17,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { ApiRequestError, api, type ClientMatch, type ClientUser } from "@/lib/api";
 import { AUTH_UID_COOKIE, USER_CACHE_STORAGE_KEY } from "@/lib/jwt";
 import {
@@ -41,7 +39,7 @@ import {
   type CurrencyCode,
   type CurrencyConfig,
 } from "@/lib/countries";
-import { cn, eur, setActiveDisplayCurrency } from "@/lib/format";
+import { setActiveDisplayCurrency } from "@/lib/format";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import {
   readStoredOddsPolicy,
@@ -161,7 +159,6 @@ export function useFeedMatches(): ClientMatch[] | null {
   return useContext(FeedMatchesContext);
 }
 
-let toastId = 0;
 const COMBO_STORAGE_KEY = "pulsebet_combo_v1";
 const GUEST_COUNTRY_STORAGE_KEY = "pulse_guest_country_v1";
 
@@ -319,7 +316,6 @@ function ProvidersRealtimeQueries({
   betsVersion,
   setFeedMatches,
   setPendingCount,
-  toast,
 }: {
   user: ClientUser | null;
   setBalance: (n: number) => void;
@@ -333,7 +329,6 @@ function ProvidersRealtimeQueries({
   betsVersion: number;
   setFeedMatches: (m: ClientMatch[] | null) => void;
   setPendingCount: (n: number) => void;
-  toast: (t: Omit<Toast, "id">) => void;
 }) {
   const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
@@ -353,12 +348,6 @@ function ProvidersRealtimeQueries({
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
-
-  const prevBetStatuses = useRef<Map<string, string> | null>(null);
-  const userRef = useRef<ClientUser | null>(user);
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
 
   const shouldSyncBgMatches =
     !isAuthRoute &&
@@ -407,43 +396,7 @@ function ProvidersRealtimeQueries({
       setBalance(r.balance);
     }
 
-    const currentPrefs = userRef.current;
-    const prev = prevBetStatuses.current;
-    if (prev && (currentPrefs?.notifications ?? true)) {
-      for (const b of r.tickets) {
-        const key = `${b.kind}-${b.id}`;
-        if (prev.get(key) !== "pending" || b.status === "pending") continue;
-        if (b.status === "won") {
-          playUiSound(currentPrefs?.sound, "win");
-          triggerHaptic(currentPrefs?.haptics, [25, 35, 55]);
-          toast({
-            kind: "success",
-            title: "Pari gagné !",
-            description: `+${eur(b.potentialWin)} crédités sur votre solde`,
-          });
-        } else if (b.status === "void") {
-          triggerHaptic(currentPrefs?.haptics, 18);
-          toast({
-            kind: "info",
-            title: "Mise remboursée",
-            description: `+${eur(b.stake)} recrédités sur votre solde`,
-          });
-        } else if (b.status === "lost") {
-          triggerHaptic(currentPrefs?.haptics, 18);
-          toast({
-            kind: "info",
-            title: "Pari terminé",
-            description: b.selectionLabel
-              ? `${b.title} · ${b.selectionLabel}`
-              : b.title,
-          });
-        }
-      }
-    }
-    prevBetStatuses.current = new Map(
-      r.tickets.map((b) => [`${b.kind}-${b.id}`, b.status])
-    );
-  }, [pulseQuery.data, setBalance, setPendingCount, toast]);
+  }, [pulseQuery.data, setBalance, setPendingCount]);
 
   return null;
 }
@@ -472,7 +425,6 @@ function ProvidersInner({ children }: { children: ReactNode }) {
   const [comboOpen, setComboOpen] = useState(false);
   const [comboQuickMode, setComboQuickMode] = useState(false);
   const [oddsPolicy, setOddsPolicyState] = useState<OddsChangePolicy>("confirm_all");
-  const [toasts, setToasts] = useState<Toast[]>([]);
   const [betsVersion, setBetsVersion] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [adminTab, setAdminTab] = useState<AdminTabKey>("dashboard");
@@ -481,7 +433,6 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     useState<string>(DEFAULT_COUNTRY_CODE);
   const [clientHydrated, setClientHydrated] = useState(false);
   const guestCountryManualRef = useRef(false);
-  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const userRef = useRef<ClientUser | null>(null);
 
   const setGuestCountryCode = useCallback((raw: string) => {
@@ -612,14 +563,11 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Les erreurs restent explicites sans afficher de bannière en haut de l'écran.
   const toast = useCallback((t: Omit<Toast, "id">) => {
-    const id = ++toastId;
-    setToasts((prev) => [...prev.slice(-1), { ...t, id }]);
-    const timer = setTimeout(
-      () => setToasts((prev) => prev.filter((x) => x.id !== id)),
-      2800
-    );
-    timers.current.set(id, timer);
+    if (t.kind === "error" && typeof window !== "undefined") {
+      window.alert([t.title, t.description].filter(Boolean).join("\n"));
+    }
   }, []);
 
   useEffect(() => {
@@ -703,13 +651,12 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     target !== null;
   const hasPending = pendingCount > 0;
 
-  useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
 
   const toggleComboLeg = useCallback(
     (
       sel: ComboSelection
     ): "added" | "replaced" | "removed" | "full" | "source_conflict" => {
-      triggerHaptic(userRef.current?.haptics, 14);
+      triggerHaptic(userRef.current?.haptics ?? true, 10);
       playUiSound(userRef.current?.sound, "tap");
       const existingIdx = comboLegs.findIndex((l) => l.uid === sel.uid);
       if (existingIdx >= 0) {
@@ -1058,7 +1005,6 @@ function ProvidersInner({ children }: { children: ReactNode }) {
             betsVersion={betsVersion}
             setFeedMatches={setFeedMatches}
             setPendingCount={setPendingCount}
-            toast={toast}
           />
           {children}
           {!isAdminMode && (
@@ -1069,51 +1015,8 @@ function ProvidersInner({ children }: { children: ReactNode }) {
               <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
             </>
           )}
-          <Toasts toasts={toasts} />
         </PartyRealtimeBridge>
       </FeedMatchesContext.Provider>
     </AppContext.Provider>
-  );
-}
-
-const TOAST_STYLE = {
-  success: { Icon: CheckCircle2, cls: "text-win", bar: "bg-win" },
-  error: { Icon: AlertTriangle, cls: "text-betclic-red", bar: "bg-betclic-red" },
-  info: { Icon: Info, cls: "text-ink", bar: "bg-ink" },
-} as const;
-
-function Toasts({ toasts }: { toasts: Toast[] }) {
-  return (
-    <div
-      className="pointer-events-none fixed inset-x-0 top-3 z-[90] mx-auto flex w-full max-w-[420px] flex-col items-center gap-2 px-3.5 lg:left-auto lg:right-6 lg:top-4 lg:mx-0 lg:px-0"
-      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
-    >
-      <AnimatePresence>
-        {toasts.map((t) => {
-          const { Icon, cls, bar } = TOAST_STYLE[t.kind];
-          return (
-            <motion.div
-              key={t.id}
-              initial={{ opacity: 0, y: -16, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.96 }}
-              transition={{ duration: 0.18 }}
-              className="pointer-events-auto flex w-full items-center gap-3 overflow-hidden rounded-xl border border-edge bg-white py-2.5 pl-0 pr-3.5 shadow-lg"
-            >
-              <span className={cn("h-full w-1 shrink-0 self-stretch", bar)} />
-              <Icon className={cn("h-4 w-4 shrink-0", cls)} strokeWidth={2.3} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-[11px] font-medium text-ink">
-                  {t.title}
-                </p>
-                {t.description && (
-                  <p className="truncate text-[10.5px] text-mist">{t.description}</p>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-    </div>
   );
 }
