@@ -32,3 +32,16 @@ assert.equal(generated.size, 1000);
 assert.throws(() => hashTransferCode('79927398713000000008', ''));
 assert.throws(() => hashTransferCode('79927398713000000009', secret));
 console.log('Génération et HMAC avec clé explicite : OK');
+
+const { encryptTransferCode, decryptTransferCode } = require('../src/lib/transfer-code-crypto.ts');
+const sample = '79927398713000000008';
+const envelope = encryptTransferCode(sample, secret, 1);
+const sampleHash = hashTransferCode(sample, secret);
+assert(!envelope.includes(sample));
+assert.notEqual(envelope, encryptTransferCode(sample, secret, 1));
+assert.equal(decryptTransferCode(envelope, secret, 1, sampleHash), sample);
+assert.throws(() => decryptTransferCode(envelope, secret, 2, sampleHash));
+assert.throws(() => decryptTransferCode(envelope, '5a'.repeat(32), 1, sampleHash));
+assert.throws(() => decryptTransferCode(envelope.slice(0,-4)+'AAAA', secret, 1, sampleHash));
+console.log('Chiffrement authentifié et propriété : OK');
+assert.throws(() => decryptTransferCode(envelope, secret, 1, 'f'.repeat(64)));

@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { getCurrencyConfig, roundEurPivot } from "@/lib/countries";
 import { DEFAULT_BETTING_LIMITS, limitsForCurrency, validateBettingLimits } from "@/lib/betting-limits-shared";
 import { MIN_WAGER_ODDS_COMBO, MIN_WAGER_ODDS_SINGLE } from "@/lib/wager";
-import { generateTransferCode, hashTransferCode } from "@/lib/transfer-code-crypto";
+import { generateTransferCode, hashTransferCode, encryptTransferCode } from "@/lib/transfer-code-crypto";
 import { isValidTransferCode } from "@/lib/transfer-code";
 
 // Tous les résultats retournés par ces fonctions proviennent de transactions validées.
@@ -47,9 +47,10 @@ export async function createTransfer(uid: number, amountInput: number, key: stri
     if (amountInput > roundEurPivot(Math.max(0, Number(user.balance) - lockedBonus))) throw new Error("Solde transférable insuffisant");
     const code = generateTransferCode();
     const hash = hashTransferCode(code, secret);
+    const ciphertext = encryptTransferCode(code, secret, uid);
     const [debited] = rows<{ balance: number }>(await tx.execute(sql`UPDATE app_user SET balance=ROUND((balance-${amountInput})::numeric,6)::float8 WHERE id=${uid} AND balance >= ${amountInput} RETURNING balance`));
     if (!debited) throw new Error("Solde transférable insuffisant");
-    const [created] = rows<{ id: string }>(await tx.execute(sql`INSERT INTO transfer_codes(owner_id,code_hash,create_key,amount) VALUES (${uid},${hash},${key},${amountInput}) RETURNING id`));
+    const [created] = rows<{ id: string }>(await tx.execute(sql`INSERT INTO transfer_codes(owner_id,code_hash,code_ciphertext,create_key,amount) VALUES (${uid},${hash},${ciphertext},${key},${amountInput}) RETURNING id`));
     await tx.execute(sql`INSERT INTO transfer_code_audit(transfer_id,actor_id,action,amount) VALUES (${created.id},${uid},'created',${amountInput})`);
     return { id: created.id, status: "new", amount: amountInput, balance: debited.balance, code };
   });

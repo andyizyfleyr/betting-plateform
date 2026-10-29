@@ -59,6 +59,7 @@ import { BetModal } from "./bet-modal";
 import { ComboSheet, type ComboSelection } from "./combo-slip";
 import { MarketSheet } from "./market-sheet";
 import { RechargeModal } from "./recharge-modal";
+import { ActionOutcome } from "./action-outcome";
 
 export interface BetTarget {
   match: ClientMatch;
@@ -563,11 +564,10 @@ function ProvidersInner({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Les erreurs restent explicites sans afficher de bannière en haut de l'écran.
+  const [outcome, setOutcome] = useState<Omit<Toast, "id"> | null>(null);
   const toast = useCallback((t: Omit<Toast, "id">) => {
-    if (t.kind === "error" && typeof window !== "undefined") {
-      window.alert([t.title, t.description].filter(Boolean).join("\n"));
-    }
+    if (t.kind === "info" || /ajouté au coupon|sélection remplacée dans le coupon/i.test(t.title)) return;
+    setOutcome(t);
   }, []);
 
   useEffect(() => {
@@ -1007,6 +1007,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
             setPendingCount={setPendingCount}
           />
           {children}
+          {outcome && outcome.kind !== "info" && <ActionOutcome kind={outcome.kind} title={outcome.title} description={outcome.description} onClose={() => setOutcome(null)} />}
           {!isAdminMode && (
             <>
               <ComboSheet />
