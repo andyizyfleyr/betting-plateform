@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
+import { SupportChat } from "@/components/support-chat";
 import { AppHeader } from "@/components/app-header";
 import { BetModal } from "@/components/bet-modal";
 import { BottomNav } from "@/components/bottom-nav";
@@ -32,6 +33,7 @@ export function MainShellLayout({ children }: { children: React.ReactNode }) {
       <RechargeModal />
       <ShareTicketModal />
       <InAppBrowserSheet />
+      {!isFullscreenGame ? <SupportChat /> : null}
       <ToastHost />
     </View>
   );
