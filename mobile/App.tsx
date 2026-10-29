@@ -1,6 +1,6 @@
 import "./src/lib/rn-polyfills";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -15,10 +15,13 @@ import {
   ensureMobileFocusManagerBound,
   mobileQueryClient,
 } from "@/lib/query-client";
-import { RouterProvider, usePathname } from "@/lib/router";
+import { RouterProvider, usePathname, useRouter } from "@/lib/router";
+import { isBiometricModeActive, persistAuthToken, verifyBiometricUnlock } from "@/lib/http";
 import { COLORS } from "@/theme/tokens";
 import { InAppBrowserSheet } from "@/components/in-app-browser-sheet";
 import { ToastHost } from "@/components/toast-host";
+import { PushCoordinator } from "@/components/push-coordinator";
+import { unregisterPushDevice } from "@/lib/push-notifications";
 
 import IndexRedirect from "./app/index";
 import MainShellLayout from "./app/(main)/_layout";
@@ -130,7 +133,30 @@ function ActiveScreenSwitch() {
 }
 
 function RootBootCoordinator() {
-  const { authReady } = useApp();
+  const { authReady, user, applyUser } = useApp();
+  const router = useRouter();
+  const [biometricLocked, setBiometricLocked] = useState(false);
+  const unlocking = useRef(false);
+  const unlock = useCallback(async () => {
+    if (unlocking.current) return;
+    unlocking.current = true;
+    try { if (await verifyBiometricUnlock()) setBiometricLocked(false); } catch { /* l'utilisateur peut réessayer ou utiliser son mot de passe */ }
+    finally { unlocking.current = false; }
+  }, []);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", (state) => {
+      if (state === "background" && user && isBiometricModeActive() && !unlocking.current) setBiometricLocked(true);
+      if (state === "active" && biometricLocked) void unlock();
+    });
+    return () => listener.remove();
+  }, [biometricLocked, unlock, user]);
+  const usePassword = async () => {
+    await unregisterPushDevice().catch(() => {});
+    await persistAuthToken(null);
+    applyUser(null);
+    setBiometricLocked(false);
+    router.replace("/auth/connexion");
+  };
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [splashMounted, setSplashMounted] = useState(true);
   const nativeHiddenRef = useRef(false);
@@ -156,6 +182,11 @@ function RootBootCoordinator() {
     <View style={styles.root} onLayout={hideNativeSplash}>
       <ActiveScreenSwitch />
       {!splashMounted ? <AutoOtaUpdateCoordinator /> : null}
+      {biometricLocked && user ? <View style={{ ...StyleSheet.absoluteFillObject, zIndex: 10000, backgroundColor: "#090D16", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <Text style={{ color: "white", fontSize: 16 }}>Pulse Bet est verrouillé</Text>
+        <Pressable onPress={() => void unlock()} style={{ padding: 12 }}><Text style={{ color: "white" }}>Déverrouiller avec la biométrie</Text></Pressable>
+        <Pressable onPress={() => void usePassword()} style={{ padding: 12 }}><Text style={{ color: "white" }}>Utiliser le mot de passe</Text></Pressable>
+      </View> : null}
       {splashMounted ? (
         <PulseSplashScreen
           exiting={splashReadyToExit}
@@ -217,6 +248,7 @@ export default function App() {
           <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <RouterProvider initialHref="/">
               <AppProvider>
+                <PushCoordinator />
                 <RootBootCoordinator />
               </AppProvider>
             </RouterProvider>

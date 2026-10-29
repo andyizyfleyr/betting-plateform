@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { settlementPayout } from "@/lib/settlement-payout";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -257,6 +258,7 @@ async function settleRows(
   const affectedUsers = [
     ...new Set(batch.filter((p) => updatedIds.has(p.betId)).map((p) => p.userId)),
   ];
+  schedulePushNotifications();
   notifyBetsSettledOrMutated(affectedUsers);
   invalidateHouseHealthCache();
 

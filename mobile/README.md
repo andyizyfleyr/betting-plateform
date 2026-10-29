@@ -35,3 +35,17 @@ npx eas-cli build --platform android --profile preview
 - **Validation conditionnelle `ETag` + `If-None-Match` (`304 Not Modified`)** et **Client Singleflight** sur toutes les lectures.
 - **Cache Stale-While-Revalidate `0 ms` (RAM + `AsyncStorage`)** + **assets Hero & Mini-jeux embarqués localement**.
 - **Planificateur `AppState` & Mode économie 3G** : mise en pause automatique de 100 % du polling en arrière-plan, reprise instantanée au premier plan et pagination infinie 10 par 10 (`FlatList` virtualisée).
+
+### Notifications push Android
+
+Les notifications système exigent un **nouvel APK** contenant `expo-notifications` et une configuration Firebase Cloud Messaging (FCM v1). Les anciennes APK compatibles OTA continuent de fonctionner sans le module natif et affichent une indication d'installation si l'utilisateur tente d'activer les push.
+
+Configurer dans le fournisseur de build (EAS ou Codemagic), sans placer de secrets dans Git :
+
+1. Le projet Expo/EAS associé à l'application et `EXPO_PUBLIC_EAS_PROJECT_ID` (identifiant public du projet).
+2. Un projet Firebase pour le paquet Android `app.pulsebets.android`, avec le fichier de configuration fourni comme fichier sécurisé. Définir `GOOGLE_SERVICES_JSON` sur son chemin dans le build : `app.config.js` le transmet à Expo.
+3. La clé de service FCM v1 dans les identifiants push du projet EAS, via le gestionnaire de credentials Expo. Ne pas copier cette clé dans le dépôt.
+4. Construire et installer l'APK 1.2.6 ou ultérieur, autoriser les notifications, puis tester la réception sur un appareil physique. Un build sans fichier Firebase ou sans identifiant EAS ne permet pas les push.
+5. Un déclencheur régulier de `/api/cron/tick` est nécessaire lorsque personne n'ouvre l'application ; la fréquence du déclencheur détermine le délai des alertes hors ligne. Les événements actifs déclenchent aussi une tentative en arrière-plan. Les reçus Expo indiquent l'acceptation par Expo, pas une garantie de livraison sur le téléphone.
+
+La biométrie utilise le Keystore via `expo-secure-store` : seul le jeton de session est protégé, jamais le mot de passe. En cas d'annulation, de changement de biométrie ou d'expiration de session, une reconnexion par mot de passe reste possible. La déconnexion invalide la session biométrique.

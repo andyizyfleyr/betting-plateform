@@ -513,7 +513,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ]);
 
       const [token] = await Promise.all([
-        withStorageTimeout(hydrateAuthToken(), null),
+        hydrateAuthToken(),
         withStorageTimeout(hydrateEntityCacheFromDisk(), undefined),
         withStorageTimeout(
           (async () => {

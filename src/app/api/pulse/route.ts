@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/db";
@@ -102,6 +103,7 @@ export async function GET(req: NextRequest) {
         ? (JSON.parse(row.tickets) as UserPulseTicketItem[])
         : [];
 
+    schedulePushNotifications();
     const pendingCount = tickets.filter((t) => t.status === "pending").length;
     const payload: UserPulsePayload = {
       balance: typeof row.balance === "number" ? row.balance : 0,

@@ -58,3 +58,5 @@ next-env.d.ts
 
 # Root APK copy (canonical downloadable copy lives in public/Pulse-Bet-Android.apk)
 /Pulse-Bet-Android.apk
+# Firebase client configuration is supplied through the build provider.
+/mobile/google-services.json

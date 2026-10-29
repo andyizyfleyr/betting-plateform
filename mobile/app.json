@@ -3,7 +3,7 @@
     "name": "Pulse Bet",
     "slug": "pulsebets-android",
     "owner": "andyizyfleur",
-    "version": "1.2.5",
+    "version": "1.2.6",
     "runtimeVersion": "pulse-sdk52-v1",
     "updates": {
       "enabled": true,
@@ -44,7 +44,7 @@
     },
     "android": {
       "package": "app.pulsebets.android",
-      "versionCode": 8,
+      "versionCode": 9,
       "jsEngine": "hermes",
       "backgroundColor": "#090D16",
       "adaptiveIcon": {
@@ -70,6 +70,13 @@
       "./plugins/with-pulse-android-release",
       "expo-updates",
       "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#e10014"
+        }
+      ],
       "expo-system-ui",
       [
         "expo-splash-screen",

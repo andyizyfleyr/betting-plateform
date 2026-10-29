@@ -34,7 +34,8 @@ import { useApp } from "@/context/app-context";
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
 import { eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
-import { createIdempotencyKey } from "@/lib/http";
+import { createIdempotencyKey, isBiometricLoginEnabled, setBiometricLoginEnabled } from "@/lib/http";
+import { registerPushDevice, unregisterPushDevice } from "@/lib/push-notifications";
 import {
   getOtaRuntimeDiagnostics,
   manualCheckAndApplyOtaUpdate,
@@ -86,6 +87,20 @@ export default function ParametresScreen() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [checkingOta, setCheckingOta] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  useEffect(() => { void isBiometricLoginEnabled().then(setBiometricEnabled); }, []);
+  const changeBiometrics = async (enabled: boolean) => {
+    if (biometricBusy) return;
+    setBiometricBusy(true);
+    try {
+      await setBiometricLoginEnabled(enabled);
+      setBiometricEnabled(enabled);
+      toast({ kind: "success", title: enabled ? "Connexion biométrique activée" : "Connexion biométrique désactivée" });
+    } catch (error) {
+      toast({ kind: "error", title: "Biométrie indisponible", description: error instanceof Error ? error.message : "Réessayez avec votre mot de passe." });
+    } finally { setBiometricBusy(false); }
+  };
   const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
   const [refreshing, setRefreshing] = useState(false);
   const otaDiag = useMemo(() => getOtaRuntimeDiagnostics(), []);
@@ -187,6 +202,7 @@ export default function ParametresScreen() {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
+      await unregisterPushDevice().catch(() => {});
       await api.auth.logout();
     } catch {
       /* déconnexion locale même en cas d'erreur réseau */
@@ -587,6 +603,25 @@ export default function ParametresScreen() {
               onChange={(v) =>
                 patch({ notifications: v }, "Notifications mises à jour")
               }
+            />
+            <Pressable onPress={() => void (async () => {
+              try {
+                await registerPushDevice(true);
+                const result = await api.patchSettings({ notifications: true });
+                applyUser(result.user);
+                toast({ kind: "success", title: "Notifications système activées" });
+              } catch (e) {
+                toast({ kind: "error", title: "Notifications indisponibles", description: e instanceof Error ? e.message : "Réessayez plus tard." });
+              }
+            })()} style={styles.prefRow}>
+              <Text style={styles.prefLabel}>Activer les notifications système</Text>
+              <ChevronRight size={16} color={COLORS.dim} />
+            </Pressable>
+            <SwitchRow
+              icon={<ShieldCheck size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Connexion biométrique"
+              checked={biometricEnabled}
+              onChange={(v) => void changeBiometrics(v)}
             />
             <SwitchRow
               icon={<Volume2 size={16} color={COLORS.ink} strokeWidth={2.1} />}
