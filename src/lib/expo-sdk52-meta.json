@@ -1,17 +1,17 @@
 {
-  "id": "fa8f3050-65d0-4d34-a67c-fc7d0dacb467",
-  "createdAt": "2026-10-29T15:53:47.007Z",
+  "id": "d0bf121c-7206-4297-a560-8143cd3e71eb",
+  "createdAt": "2026-10-29T16:07:26.037Z",
   "appVersion": "1.2.6",
   "versionCode": 9,
   "runtimeVersion": "pulse-sdk52-v1",
   "expoGoRuntimeVersion": "exposdk:52.0.0",
   "sdkVersion": "52.0.0",
   "launchAsset": {
-    "hash": "HZ76p9EpLBOCSAUD4sR8bXjSq2X_2Rqwe5rsVXdo3Xk",
-    "key": "fa8f305065d07d34067cfc7d0dacb467",
+    "hash": "Qo44vkp-N5lz6TKfUI1VD2J3fCdilxmsWyWg1wYq1TA",
+    "key": "d0bf121c7206629765608143cd3e71eb",
     "contentType": "application/javascript",
     "fileExtension": ".hbc",
-    "relativePath": "/expo-sdk52/AppEntry-fa8f305065d0.hbc"
+    "relativePath": "/expo-sdk52/AppEntry-d0bf121c7206.hbc"
   },
   "assets": [
     {
