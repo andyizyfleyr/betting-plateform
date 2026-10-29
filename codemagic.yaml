@@ -28,7 +28,7 @@ workflows:
       - name: Installation des dépendances React Native (mobile/)
         script: |
           cd mobile
-          npm ci --no-audit --no-fund
+          npm ci --include=dev --no-audit --no-fund
       - name: Génération du projet Android natif (Expo SDK 52 Prebuild)
         script: |
           cd mobile
@@ -37,6 +37,7 @@ workflows:
           npx expo prebuild --platform android --no-install
       - name: Configuration Android SDK & compilation APK Release (ARM compressé)
         script: |
+          set -e
           SDK_DIR="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           echo "sdk.dir=$SDK_DIR" > "$CM_BUILD_DIR/mobile/android/local.properties"
           cd "$CM_BUILD_DIR/mobile/android"
