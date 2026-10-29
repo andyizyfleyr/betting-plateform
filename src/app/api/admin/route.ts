@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -1368,6 +1369,7 @@ async function handleAdminPost(
       if (!updated) {
         return NextResponse.json({ error: "Ce retrait a déjà été traité" }, { status: 400 });
       }
+      schedulePushNotifications();
       return NextResponse.json({ ok: true, withdrawal: updated });
     }
 
@@ -1402,6 +1404,7 @@ async function handleAdminPost(
       if (!updated) {
         return NextResponse.json({ error: "Ce retrait a déjà été traité" }, { status: 400 });
       }
+      schedulePushNotifications();
       return NextResponse.json({ ok: true, withdrawal: updated });
     }
 

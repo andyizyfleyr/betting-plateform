@@ -340,6 +340,10 @@ export interface ClientUser {
   balance: number;
   role: string;
   notifications: boolean;
+  notifyMatches?: boolean;
+  notifyBets?: boolean;
+  notifyPayments?: boolean;
+  notifyDisputes?: boolean;
   sound: boolean;
   haptics: boolean;
   oddsFormat: "decimal" | "fractional";

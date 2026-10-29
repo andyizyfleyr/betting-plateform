@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v14";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v15";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -252,6 +252,10 @@ async function runSeedInternal(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_matches" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_bets" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_payments" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_disputes" boolean NOT NULL DEFAULT true;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "country_code" text DEFAULT 'FR' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "currency" text DEFAULT 'EUR' NOT NULL;

@@ -598,7 +598,7 @@ export default function ParametresScreen() {
 
             <SwitchRow
               icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Notifications de paris"
+              label="Toutes les notifications"
               checked={user.notifications ?? true}
               onChange={(v) =>
                 patch({ notifications: v }, "Notifications mises à jour")
@@ -622,6 +622,30 @@ export default function ParametresScreen() {
               label="Connexion biométrique"
               checked={biometricEnabled}
               onChange={(v) => void changeBiometrics(v)}
+            />
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Matchs et buts"
+              checked={user.notifyMatches ?? true}
+              onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Résultats des paris"
+              checked={user.notifyBets ?? true}
+              onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Dépôts et retraits"
+              checked={user.notifyPayments ?? true}
+              onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Réclamations"
+              checked={user.notifyDisputes ?? true}
+              onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")}
             />
             <SwitchRow
               icon={<Volume2 size={16} color={COLORS.ink} strokeWidth={2.1} />}
