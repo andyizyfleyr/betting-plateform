@@ -575,7 +575,7 @@ function MultiChoiceQuestionCard({
   onSelect: (selection: string, label: string, odds: number) => void;
 }) {
   const router = useRouter();
-  const { oddsFormat, isInCombo, toggleComboLeg, toast, hapticsEnabled } =
+  const { oddsFormat, isInCombo, toggleComboLeg, toast } =
     useApp();
   const expired = new Date(q.resolvesAt).getTime() <= nowMs;
   const comboUid = `pred-${q.id}`;
@@ -669,7 +669,7 @@ function MultiChoiceQuestionCard({
               onLongPress={() => {
                 if (expired) return;
                 const res = toggleComboLeg(comboSel);
-                triggerHaptic("medium", hapticsEnabled);
+
                 if (res === "added" || res === "replaced") {
                   toast({
                     kind: "info",
@@ -830,7 +830,7 @@ function BinaryQuestionCard({
   onSelect: (selection: "yes" | "no") => void;
 }) {
   const router = useRouter();
-  const { oddsFormat, isInCombo, toggleComboLeg, toast, hapticsEnabled } =
+  const { oddsFormat, isInCombo, toggleComboLeg, toast } =
     useApp();
   const expired = new Date(q.resolvesAt).getTime() <= nowMs;
   const comboUid = `pred-${q.id}`;
@@ -898,7 +898,7 @@ function BinaryQuestionCard({
                   odds: side.odds,
                   startsAt: q.resolvesAt,
                 });
-                triggerHaptic("medium", hapticsEnabled);
+
                 if (res === "added" || res === "replaced") {
                   toast({
                     kind: "info",

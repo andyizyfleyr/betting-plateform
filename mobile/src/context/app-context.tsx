@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   api,
@@ -36,7 +37,7 @@ import {
   type CurrencyCode,
   type CurrencyConfig,
 } from "@/lib/countries";
-import { eur, setActiveDisplayCurrency } from "@/lib/format";
+import { setActiveDisplayCurrency } from "@/lib/format";
 import { usePathname } from "@/lib/router";
 import {
   clearPrivateEntityCaches,
@@ -174,9 +175,7 @@ interface AppContextValue {
   shareTicketBet: ClientBet | null;
   openShareTicket: (bet: ClientBet) => void;
   closeShareTicket: () => void;
-  toasts: ToastItem[];
   toast: (t: Omit<ToastItem, "id">) => void;
-  dismissToast: (id: string) => void;
 }
 
 const COMBO_STORAGE_KEY = "pulse_android_combo_v2";
@@ -196,8 +195,6 @@ function MobileBackgroundQueries({
   setFeedMatches,
   setBalance,
   setPendingCount,
-  toast,
-  seenSettledTicketIds,
 }: {
   authReady: boolean;
   dataSaverMode: boolean;
@@ -207,8 +204,6 @@ function MobileBackgroundQueries({
   setFeedMatches: (list: ClientMatch[]) => void;
   setBalance: (b: number) => void;
   setPendingCount: (n: number) => void;
-  toast: (t: Omit<ToastItem, "id">) => void;
-  seenSettledTicketIds: React.MutableRefObject<Set<string>>;
 }) {
   const matchesQuery = useMobileMatchesSlimQuery({
     enabled: authReady,
@@ -246,26 +241,7 @@ function MobileBackgroundQueries({
       setBalance(res.balance);
     }
     setPendingCount(res.pendingCount ?? 0);
-    for (const tk of res.tickets ?? []) {
-      if (tk.status === "pending") continue;
-      const key = `${tk.kind}:${tk.id}:${tk.status}`;
-      if (seenSettledTicketIds.current.has(key)) continue;
-      seenSettledTicketIds.current.add(key);
-      if (tk.status === "won" && (user.notifications ?? true)) {
-        toast({
-          kind: "win",
-          title: `Pari gagné ! +${eur(tk.potentialWin)}`,
-          description: `${tk.title} · ${tk.selectionLabel}`,
-        });
-      } else if (tk.status === "void" && (user.notifications ?? true)) {
-        toast({
-          kind: "info",
-          title: "Pari remboursé",
-          description: `${tk.title} · Mise restituée`,
-        });
-      }
-    }
-  }, [pulseQuery.data, seenSettledTicketIds, setBalance, setPendingCount, toast, user]);
+  }, [pulseQuery.data, setBalance, setPendingCount, user]);
 
   return null;
 }
@@ -301,9 +277,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [marketMatch, setMarketMatch] = useState<ClientMatch | null>(null);
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [shareTicketBet, setShareTicketBet] = useState<ClientBet | null>(null);
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const seenSettledTicketIds = useRef<Set<string>>(new Set());
   const comboLegsRef = useRef<ComboSelection[]>([]);
   comboLegsRef.current = comboLegs;
 
@@ -368,25 +342,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setActiveDisplayCurrency(isAdminPath ? "EUR" : currency);
   }, [isAdminPath, currency]);
 
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+  // Pas de notification flottante ; les erreurs d'action restent visibles.
+  const toast = useCallback((t: Omit<ToastItem, "id">) => {
+    if (t.kind === "error") Alert.alert(t.title, t.description ?? t.subtitle);
   }, []);
-
-  const toast = useCallback(
-    (t: Omit<ToastItem, "id">) => {
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      setToasts((prev) => [...prev.slice(-2), { ...t, id }]);
-      if (t.kind === "win" || t.kind === "success") {
-        triggerHaptic("success", hapticsEnabled);
-      } else if (t.kind === "error") {
-        triggerHaptic("error", hapticsEnabled);
-      }
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((item) => item.id !== id));
-      }, 3_600);
-    },
-    [hapticsEnabled]
-  );
 
   const setBalance = useCallback((b: number) => {
     if (Number.isFinite(b)) {
@@ -425,7 +384,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBalanceState(0);
       setPendingCount(0);
       clearPrivateEntityCaches();
-      seenSettledTicketIds.current.clear();
       void AsyncStorage.removeItem(USER_STORAGE_KEY).catch(() => {});
     }
   }, []);
@@ -949,9 +907,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       shareTicketBet,
       openShareTicket,
       closeShareTicket,
-      toasts,
       toast,
-      dismissToast,
     }),
     [
       applyComboOddsUpdates,
@@ -981,7 +937,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       comboQuickMode,
       adminPendingFinance,
       dataSaverMode,
-      dismissToast,
       feedMatches,
       hapticsEnabled,
       isInCombo,
@@ -1010,7 +965,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       soundEnabled,
       target,
       toast,
-      toasts,
       toggleComboLeg,
       user,
     ]
@@ -1032,8 +986,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setFeedMatches={setFeedMatches}
           setBalance={setBalance}
           setPendingCount={setPendingCount}
-          toast={toast}
-          seenSettledTicketIds={seenSettledTicketIds}
         />
         {children}
       </MobilePartyRealtimeBridge>

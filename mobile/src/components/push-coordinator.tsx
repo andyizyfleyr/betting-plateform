@@ -14,7 +14,7 @@ export function PushCoordinator() {
   useEffect(() => {
     const n = loadNotifications();
     if (!n) return;
-    n.setNotificationHandler({ handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }) });
+    n.setNotificationHandler({ handleNotification: async () => ({ shouldShowAlert: false, shouldPlaySound: false, shouldSetBadge: false }) });
     const open = (response: import("expo-notifications").NotificationResponse) => {
       const path = response.notification.request.content.data?.path;
       if (typeof path === "string" && /^\/(matchs\/\d+|paris\/(simple\/(sport|pred)-\d+|combine\/\d+)|parametres\/transactions|admin)$/.test(path)) router.push(path);

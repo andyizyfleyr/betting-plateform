@@ -10,7 +10,6 @@ import { MarketSheet } from "@/components/market-sheet";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
 import { RechargeModal } from "@/components/recharge-modal";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
-import { ToastHost } from "@/components/toast-host";
 import { usePathname } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
@@ -33,7 +32,6 @@ export function MainShellLayout({ children }: { children: React.ReactNode }) {
       <ShareTicketModal />
       <InAppBrowserSheet />
       {!isFullscreenGame ? <SupportChat /> : null}
-      <ToastHost />
     </View>
   );
 }
