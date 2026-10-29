@@ -205,7 +205,7 @@ export default function PredictionDetailPage() {
               className="h-3.5 w-3.5 shrink-0 text-betclic-red"
               strokeWidth={2.3}
             />
-            <h1 className="truncate font-display text-[11.5px] font-bold text-ink lg:text-[13.5px]">
+            <h1 className={cn("truncate font-display text-[11.5px] font-bold lg:text-[13.5px]", question ? "text-betclic-red" : "text-ink")}>
               {question?.category ?? "Prédiction"}
             </h1>
           </div>

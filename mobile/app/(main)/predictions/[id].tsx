@@ -246,7 +246,7 @@ export default function PredictionDetailScreen() {
             >
               <ArrowLeft size={14} color={COLORS.ink} strokeWidth={2.3} />
             </Pressable>
-            <Text numberOfLines={1} style={styles.headerTitle}>
+            <Text numberOfLines={1} style={[styles.headerTitle, mergedQuestion && { color: COLORS.betclicRed }]}>
               {mergedQuestion ? mergedQuestion.category : "Prédiction"}
             </Text>
           </View>
