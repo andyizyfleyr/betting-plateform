@@ -536,7 +536,7 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
         onBeforeNavigate={() => rememberPredictions([q])}
       />
       <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10px]">
-        <span className="rounded-md bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-ink">
+        <span className="rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-betclic-red">
           {q.category}
         </span>
         <span className="text-dim">
@@ -615,7 +615,7 @@ function MultiChoiceQuestionCard({
       />
 
       <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10px]">
-        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-ink">
+        <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-betclic-red">
           {q.category}
         </span>
         <span className="flex shrink-0 items-center gap-1 font-medium text-dim">
@@ -715,7 +715,7 @@ function BinaryQuestionCard({
       />
 
       <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2 text-[10px]">
-        <span className="shrink-0 rounded-md bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-ink">
+        <span className="shrink-0 rounded-md bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-medium uppercase text-betclic-red">
           {q.category}
         </span>
         <span className="flex shrink-0 items-center gap-1 font-medium text-dim">

@@ -1126,7 +1126,7 @@ const styles = StyleSheet.create({
   },
   catBadge: {
     borderRadius: 6,
-    backgroundColor: COLORS.elev,
+    backgroundColor: COLORS.redSoft,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
@@ -1134,7 +1134,7 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: "500",
     textTransform: "uppercase",
-    color: COLORS.ink,
+    color: COLORS.betclicRed,
   },
   timeRow: {
     flexDirection: "row",
