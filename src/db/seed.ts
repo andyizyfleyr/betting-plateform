@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v19";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v20";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -53,6 +53,7 @@ async function runSeedInternal(): Promise<void> {
 
   // Fast-path serverless en UNE SEULE requête SQL (au lieu de 2 allers-retours séquentiels) :
   // vérifie simultanément le marqueur `schema_seed_v8` et l'existence du compte administrateur.
+  let canMigrateFromV19 = false;
   try {
     const adminEmailFast = (process.env.ADMIN_EMAIL ?? "admin@pulse.app")
       .trim()
@@ -63,19 +64,42 @@ async function runSeedInternal(): Promise<void> {
           SELECT 1 FROM "admin_settings" WHERE "setting_key" = ${SCHEMA_SEED_MARKER_KEY}
         ) AS has_marker,
         EXISTS (
+          SELECT 1 FROM "admin_settings" WHERE "setting_key" = 'schema_seed_v19'
+        ) AS has_previous_marker,
+        EXISTS (
           SELECT 1 FROM "app_user" WHERE "email" = ${adminEmailFast}
         ) AS has_admin
     `);
     const chk = (fastCheck.rows?.[0] ?? {}) as {
       has_marker?: boolean;
+      has_previous_marker?: boolean;
       has_admin?: boolean;
     };
     if (chk.has_marker && chk.has_admin) {
       return;
     }
+    canMigrateFromV19 = Boolean(chk.has_previous_marker && chk.has_admin);
   } catch {
     // Table `admin_settings` ou colonne absente sur une base neuve : exécute la migration complète.
   }
+
+  // Sur une base déjà en v19, éviter de rejouer l'initialisation complète :
+  // la suppression et son marqueur sont atomiques, même en cas de déploiements concurrents.
+  if (canMigrateFromV19) {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`DROP TABLE IF EXISTS "favorite_teams"`);
+      await tx.execute(sql`
+        INSERT INTO "admin_settings" ("setting_key", "value", "updated_at")
+        VALUES (${SCHEMA_SEED_MARKER_KEY}, jsonb_build_object('ready', true, 'version', ${SCHEMA_SEED_MARKER_KEY}::text), now())
+        ON CONFLICT ("setting_key") DO UPDATE SET "value" = EXCLUDED."value", "updated_at" = EXCLUDED."updated_at"
+      `);
+    });
+    return;
+  }
+
+  // Suppression définitive des anciens favoris : la fonctionnalité et son API ont été retirées.
+  // Sans CASCADE : une dépendance inattendue arrête la migration au lieu de supprimer d'autres données.
+  await db.execute(sql`DROP TABLE IF EXISTS "favorite_teams"`);
 
   // Création idempotente de toutes les tables de base (permet de brancher une base PostgreSQL
   // 100 % vierge sur Vercel Storage sans avoir besoin de lancer `drizzle-kit push`).
