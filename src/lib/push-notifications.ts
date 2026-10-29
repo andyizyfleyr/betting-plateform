@@ -8,20 +8,23 @@ export async function enqueueRecentPushEvents(): Promise<void> {
     INSERT INTO push_outbox (token, event_key, title, body, data)
     SELECT events.token, events.event_key, events.title, events.body, events.data FROM (
       SELECT d.token, 'bet:sport:' || b.id || ':' || b.status AS event_key,
-        'Résultat de votre pari' AS title, 'Votre pari sportif a été réglé.' AS body,
+        CASE b.status WHEN 'won' THEN 'Pari gagné' WHEN 'lost' THEN 'Pari perdu' ELSE 'Pari annulé' END AS title,
+        CASE b.status WHEN 'won' THEN 'Votre pari sportif est gagné. Consultez votre ticket.' WHEN 'lost' THEN 'Votre pari sportif est perdu. Consultez votre ticket.' ELSE 'Votre pari sportif a été annulé. Consultez votre ticket.' END AS body,
         jsonb_build_object('path', '/paris/simple/sport-' || b.id) AS data
       FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
       JOIN bets b ON b.user_id=d.user_id AND b.status IN ('won','lost','void')
       WHERE b.settled_at >= GREATEST(d.created_at, now() - interval '1 day')
       UNION ALL
       SELECT d.token, 'bet:prediction:' || b.id || ':' || b.status,
-        'Résultat de votre pari', 'Votre pronostic a été réglé.', jsonb_build_object('path', '/paris/simple/pred-' || b.id)
+        CASE b.status WHEN 'won' THEN 'Pronostic gagné' WHEN 'lost' THEN 'Pronostic perdu' ELSE 'Pronostic annulé' END,
+        CASE b.status WHEN 'won' THEN 'Votre pronostic est gagné. Consultez votre ticket.' WHEN 'lost' THEN 'Votre pronostic est perdu. Consultez votre ticket.' ELSE 'Votre pronostic a été annulé. Consultez votre ticket.' END, jsonb_build_object('path', '/paris/simple/pred-' || b.id)
       FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
       JOIN prediction_bets b ON b.user_id=d.user_id AND b.status IN ('won','lost','void')
       WHERE b.settled_at >= GREATEST(d.created_at, now() - interval '1 day')
       UNION ALL
       SELECT d.token, 'bet:combo:' || b.id || ':' || b.status,
-        'Résultat de votre combiné', 'Votre combiné a été réglé.', jsonb_build_object('path', '/paris/combine/' || b.id)
+        CASE b.status WHEN 'won' THEN 'Combiné gagné' WHEN 'lost' THEN 'Combiné perdu' ELSE 'Combiné annulé' END,
+        CASE b.status WHEN 'won' THEN 'Votre combiné est gagné. Consultez votre ticket.' WHEN 'lost' THEN 'Votre combiné est perdu. Consultez votre ticket.' ELSE 'Votre combiné a été annulé. Consultez votre ticket.' END, jsonb_build_object('path', '/paris/combine/' || b.id)
       FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
       JOIN combo_bets b ON b.user_id=d.user_id AND b.status IN ('won','lost','void')
       WHERE b.settled_at >= GREATEST(d.created_at, now() - interval '1 day')
@@ -47,29 +50,12 @@ export async function enqueueRecentPushEvents(): Promise<void> {
       JOIN matches m ON m.id=b.match_id AND m.status='live'
       WHERE m.starts_at >= GREATEST(d.created_at, now() - interval '1 day')
       UNION ALL
-      SELECT d.token, 'match:goal:' || m.id || ':' || COALESCE(m.home_score,0) || ':' || COALESCE(m.away_score,0),
-        'But dans votre match', m.home_team || ' ' || COALESCE(m.home_score,0) || ' – ' || COALESCE(m.away_score,0) || ' ' || m.away_team,
-        jsonb_build_object('path', '/matchs/' || m.id)
-      FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
-      JOIN bets b ON b.user_id=d.user_id AND b.status='pending'
-      JOIN matches m ON m.id=b.match_id AND m.status='live'
-      WHERE m.last_goal_at >= GREATEST(d.created_at, now() - interval '1 day')
-      UNION ALL
       SELECT d.token, 'match:start:' || m.id, 'Match commencé', m.home_team || ' – ' || m.away_team, jsonb_build_object('path', '/matchs/' || m.id)
       FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
       JOIN combo_bets cb ON cb.user_id=d.user_id AND cb.status='pending'
       JOIN LATERAL jsonb_array_elements(cb.legs) leg ON leg->>'kind'='sport'
       JOIN matches m ON (leg->>'matchId') ~ '^[0-9]+$' AND m.id=(leg->>'matchId')::integer AND m.status='live'
       WHERE m.starts_at >= GREATEST(d.created_at, now() - interval '1 day')
-      UNION ALL
-      SELECT d.token, 'match:goal:' || m.id || ':' || COALESCE(m.home_score,0) || ':' || COALESCE(m.away_score,0),
-        'But dans votre match', m.home_team || ' ' || COALESCE(m.home_score,0) || ' – ' || COALESCE(m.away_score,0) || ' ' || m.away_team,
-        jsonb_build_object('path', '/matchs/' || m.id)
-      FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
-      JOIN combo_bets cb ON cb.user_id=d.user_id AND cb.status='pending'
-      JOIN LATERAL jsonb_array_elements(cb.legs) leg ON leg->>'kind'='sport'
-      JOIN matches m ON (leg->>'matchId') ~ '^[0-9]+$' AND m.id=(leg->>'matchId')::integer AND m.status='live'
-      WHERE m.last_goal_at >= GREATEST(d.created_at, now() - interval '1 day')
       UNION ALL
       SELECT d.token, 'dispute:admin:' || x.id, 'Nouvelle réclamation',
         'Une réclamation attend votre attention.', jsonb_build_object('path', '/admin')
@@ -117,8 +103,8 @@ export async function flushPushNotifications(): Promise<void> {
         WHEN o.event_key LIKE 'deposit:%' OR o.event_key LIKE 'withdrawal:%' THEN u.notify_payments
         WHEN o.event_key LIKE 'dispute:%' THEN u.notify_disputes
         ELSE true END
-      -- Les alertes de favoris déjà en file ne doivent plus être envoyées.
-      AND o.title <> 'But dans un match favori'
+      -- Bloque également les anciennes alertes de but encore en attente.
+      AND o.event_key NOT LIKE 'match:goal:%'
       AND (o.event_key NOT LIKE 'match:start:%' OR EXISTS (
         SELECT 1 FROM bets b WHERE b.user_id=d.user_id AND b.match_id::text=split_part(o.event_key, ':', 3)
       ) OR EXISTS (
@@ -127,7 +113,15 @@ export async function flushPushNotifications(): Promise<void> {
       ))
       AND o.sent_at IS NULL AND o.attempts < 5 AND (o.claimed_until IS NULL OR o.claimed_until < now())
       ORDER BY o.id LIMIT 100 FOR UPDATE OF o SKIP LOCKED
-    ) UPDATE push_outbox o SET claimed_until=now() + interval '2 minutes', attempts=o.attempts+1
+    ) UPDATE push_outbox o SET claimed_until=now() + interval '2 minutes', attempts=o.attempts+1,
+      title=CASE WHEN o.event_key ~ '^bet:(sport|prediction|combo):[0-9]+:(won|lost|void)$' THEN
+        (CASE split_part(o.event_key, ':', 2) WHEN 'combo' THEN 'Combiné' WHEN 'prediction' THEN 'Pronostic' ELSE 'Pari' END) ||
+        (CASE split_part(o.event_key, ':', 4) WHEN 'won' THEN ' gagné' WHEN 'lost' THEN ' perdu' ELSE ' annulé' END)
+        ELSE o.title END,
+      body=CASE WHEN o.event_key ~ '^bet:(sport|prediction|combo):[0-9]+:(won|lost|void)$' THEN
+        (CASE split_part(o.event_key, ':', 2) WHEN 'combo' THEN 'Votre combiné' WHEN 'prediction' THEN 'Votre pronostic' ELSE 'Votre pari sportif' END) ||
+        (CASE split_part(o.event_key, ':', 4) WHEN 'won' THEN ' est gagné.' WHEN 'lost' THEN ' est perdu.' ELSE ' a été annulé.' END) || ' Consultez votre ticket.'
+        ELSE o.body END
       FROM chosen WHERE o.id=chosen.id RETURNING o.id, o.token, o.title, o.body, o.data
   `);
   const rows = claim.rows as unknown as PushRow[];
