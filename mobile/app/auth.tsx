@@ -173,7 +173,6 @@ export default function AuthScreen() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(() => params.get("email")?.trim() ?? "");
   const [password, setPassword] = useState("");
-  const [totpCode, setTotpCode] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
@@ -301,7 +300,6 @@ export default function AuthScreen() {
         email: cleanEmail,
         password,
         rememberMe,
-        totpCode,
       });
       completeAuth(r.user, "login");
     } catch (err) {
@@ -665,11 +663,6 @@ export default function AuthScreen() {
                         )}
                       </Pressable>
                     </View>
-                  </View>
-
-                  <View>
-                    <Text style={styles.label}>Code de double authentification (si activée)</Text>
-                    <View style={styles.inputBox}><TextInput value={totpCode} onChangeText={setTotpCode} autoCapitalize="none" placeholder="Code ou code de secours" placeholderTextColor={COLORS.dim} style={styles.input} /></View>
                   </View>
 
                   <Pressable

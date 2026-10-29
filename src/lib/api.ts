@@ -952,7 +952,6 @@ export const api = {
       email: string;
       password: string;
       rememberMe?: boolean;
-      totpCode?: string;
     }) =>
       request<{ user: ClientUser }>("/api/auth/login", {
         method: "POST",

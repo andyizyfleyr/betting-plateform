@@ -1,4 +1,3 @@
-import { hasSecondFactor, verifySecondFactor } from "@/lib/two-factor";
 import { recordSecurityAlert } from "@/lib/security-alerts";
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -33,7 +32,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { email?: string; password?: string; rememberMe?: boolean; totpCode?: string };
+  let body: { email?: string; password?: string; rememberMe?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -79,12 +78,6 @@ export async function POST(req: NextRequest) {
         { error: "Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe." },
         { status: 401 }
       );
-    }
-
-    if (await hasSecondFactor(user.id)) {
-      const code = typeof body.totpCode === "string" ? body.totpCode.trim() : "";
-      if (!code) return NextResponse.json({ error: "Saisissez votre code d’authentification à 6 chiffres.", code: "TOTP_REQUIRED" }, { status: 401 });
-      if (!await verifySecondFactor(user.id, code)) return NextResponse.json({ error: "Code d’authentification invalide ou temporairement verrouillé." }, { status: 401 });
     }
 
     const token = await signSession(

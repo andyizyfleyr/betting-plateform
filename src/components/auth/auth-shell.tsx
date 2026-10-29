@@ -212,7 +212,6 @@ function AuthShellInner({
   const [name, setName] = useState("");
   const [email, setEmail] = useState(() => params.get("email")?.trim() ?? "");
   const [password, setPassword] = useState("");
-  const [totpCode, setTotpCode] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
@@ -325,7 +324,6 @@ function AuthShellInner({
         email: cleanEmail,
         password,
         rememberMe,
-        totpCode,
       });
       completeAuth(r.user, "login");
     } catch (err) {
@@ -746,10 +744,6 @@ function AuthShellInner({
                     </button>
                   </div>
                 </div>
-
-                <label className="block text-[10.5px] text-ink">Code de double authentification (si activée)
-                  <input value={totpCode} onChange={e=>setTotpCode(e.target.value)} autoComplete="one-time-code" placeholder="Code ou code de secours" className="mt-1 h-12 w-full rounded-2xl border border-edge bg-deep/45 px-3 text-xs text-ink" />
-                </label>
 
                 <button
                   type="button"
