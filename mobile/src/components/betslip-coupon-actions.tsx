@@ -84,7 +84,7 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
       if (!(await clipboard.setStringAsync(savedCode))) throw new Error("Copie impossible.");
       setCopied(true);
     } catch {
-      Alert.alert("Copie indisponible", "Maintenez le code appuyé pour le sélectionner et le copier.");
+      toast({ kind: "error", title: "Copie indisponible", description: "Maintenez le code appuyé pour le copier." });
     }
   };
 

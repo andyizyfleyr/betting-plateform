@@ -1,8 +1,9 @@
--- À appliquer explicitement avant l'activation ; ne contient aucun code en clair.
+-- Schéma de référence : les codes sont chiffrés, jamais stockés en clair.
 CREATE TABLE IF NOT EXISTS transfer_codes (
   id bigserial PRIMARY KEY,
   owner_id integer NOT NULL REFERENCES app_user(id),
   code_hash text NOT NULL UNIQUE,
+  code_ciphertext text,
   create_key text NOT NULL,
   amount numeric(20,6) NOT NULL CHECK (amount > 0),
   status text NOT NULL DEFAULT 'new' CHECK (status IN ('new','used','cancelled')),
@@ -28,3 +29,5 @@ CREATE TABLE IF NOT EXISTS transfer_code_audit (
   amount numeric(20,6),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE transfer_codes ADD COLUMN IF NOT EXISTS code_ciphertext text;

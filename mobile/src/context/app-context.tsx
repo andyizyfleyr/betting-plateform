@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert } from "react-native";
+import { ActionOutcome } from "@/components/action-outcome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   api,
@@ -342,9 +342,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setActiveDisplayCurrency(isAdminPath ? "EUR" : currency);
   }, [isAdminPath, currency]);
 
-  // Pas de notification flottante ; les erreurs d'action restent visibles.
+  const [outcome, setOutcome] = useState<Omit<ToastItem, "id"> | null>(null);
   const toast = useCallback((t: Omit<ToastItem, "id">) => {
-    if (t.kind === "error") Alert.alert(t.title, t.description ?? t.subtitle);
+    if (t.kind === "info" || /ajouté au coupon|sélection remplacée dans le coupon/i.test(t.title)) return;
+    setOutcome(t);
   }, []);
 
   const setBalance = useCallback((b: number) => {
@@ -988,6 +989,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setPendingCount={setPendingCount}
         />
         {children}
+        {outcome && outcome.kind !== "info" && <ActionOutcome kind={outcome.kind === "error" ? "error" : "success"} title={outcome.title} description={outcome.description ?? outcome.subtitle} onClose={() => setOutcome(null)} />}
       </MobilePartyRealtimeBridge>
     </AppContext.Provider>
   );

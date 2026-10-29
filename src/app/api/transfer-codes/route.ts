@@ -5,6 +5,7 @@ import { ensureSeeded } from "@/db/seed";
 import { ensureTransferSchema } from "@/db/transfer-schema";
 import { requireUserId } from "@/lib/session";
 import { createTransfer, redeemTransfer, cancelTransfer } from "@/lib/transfer-code-engine";
+import { decryptTransferCode } from "@/lib/transfer-code-crypto";
 import { invalidateUserCaches } from "@/lib/active-state-cache";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +22,19 @@ export async function GET(req: NextRequest) {
     const before = req.nextUrl.searchParams.get("before");
     if (before !== null && !/^[1-9]\d{0,17}$/.test(before)) return reply({ error: "Demande invalide" }, 400);
     const result = await db.execute(sql`SELECT id::text, amount::float8, status, created_at, updated_at,
-      CASE WHEN owner_id=${uid} THEN 'withdrawal' ELSE 'deposit' END AS type
+      CASE WHEN owner_id=${uid} THEN 'withdrawal' ELSE 'deposit' END AS type,
+      CASE WHEN owner_id=${uid} THEN code_ciphertext ELSE NULL END AS encrypted_code,
+      CASE WHEN owner_id=${uid} THEN code_hash ELSE NULL END AS private_hash
       FROM transfer_codes WHERE (owner_id=${uid} OR redeemed_by=${uid})
       AND (${before}::text IS NULL OR id < ${before}::bigint) ORDER BY transfer_codes.id DESC LIMIT 51`);
-    const transfers = result.rows.slice(0, 50);
+    const transfers = result.rows.slice(0, 50).map(raw => {
+      const { encrypted_code, private_hash, ...entry } = raw as { id: string; [key: string]: unknown };
+      let code: string | null = null;
+      if (typeof encrypted_code === "string" && typeof private_hash === "string") {
+        try { code = decryptTransferCode(encrypted_code, process.env.TRANSFER_CODE_SECRET!, uid, private_hash); } catch { /* ancienne clé ou enveloppe invalide */ }
+      }
+      return { ...entry, code };
+    });
     const last = transfers[transfers.length - 1] as { id: string } | undefined;
     return reply({ transfers, nextCursor: result.rows.length > 50 ? last?.id : null });
   } catch {

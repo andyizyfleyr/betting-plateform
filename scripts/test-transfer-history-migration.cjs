@@ -1,0 +1,20 @@
+const assert = require('node:assert/strict');
+const Module = require('node:module');
+const { PGlite } = require('@electric-sql/pglite');
+const { drizzle } = require('drizzle-orm/pglite');
+const original = Module._load;
+(async () => {
+  const pg = new PGlite();
+  await pg.exec(`CREATE TABLE admin_settings(setting_key text primary key,value jsonb,updated_at timestamp);
+    CREATE TABLE transfer_codes(id serial primary key, code_hash text not null);
+    INSERT INTO admin_settings VALUES ('transfer_codes_schema_v1','{}',now());
+    INSERT INTO transfer_codes(code_hash) VALUES ('ancien');`);
+  Module._load = function(name) { if (name === '@/db') return {db:drizzle(pg)}; return original.apply(this,arguments); };
+  const { ensureTransferSchema } = require('../src/db/transfer-schema.ts');
+  await ensureTransferSchema();
+  const rows = await pg.query('SELECT code_hash,code_ciphertext FROM transfer_codes');
+  assert.deepEqual(rows.rows, [{code_hash:'ancien',code_ciphertext:null}]);
+  const marker = await pg.query("SELECT setting_key FROM admin_settings WHERE setting_key='transfer_codes_schema_v2'");
+  assert.equal(marker.rows.length,1);
+  await pg.close(); console.log('Migration v1 vers v2 : anciens codes conservés, enveloppe absente correctement reconnue');
+})().catch(e => { console.error(e); process.exitCode = 1; });

@@ -4,10 +4,10 @@ Les écrans web et Android utilisent `/api/transfer-codes`. Le service est ferm�
 
 La migration est exécutée automatiquement à la première requête authentifiée lorsque le service est activé, avec verrou transactionnel PostgreSQL et marqueur dédié ; `migrations/transfer-codes.sql` documente le même schéma pour les déploiements manuels. Ne jamais supprimer les tables pour revenir en arrière après création de codes : elles contiennent les réservations et leur audit.
 
-Le code n'est pas conservé en clair et ne peut pas être affiché une seconde fois. Si la réponse de création est perdue, l'utilisateur peut retrouver la réservation et l'annuler dans l'historique. Un même essai de création ou de dépôt peut être repris avec la même clé d'idempotence, sans nouveau débit ni nouveau crédit. La limite minimum/maximum reprend les paramètres de limites administrables et leur conversion par devise.
+Les nouveaux codes sont stockés chiffrés par AES-256-GCM avec une clé dérivée distincte du HMAC et associés à leur propriétaire ; seul celui-ci peut les retrouver dans son historique. Les anciens codes, créés avant ce changement et stockés uniquement sous forme de HMAC, ne peuvent pas être reconstitués ; ils restent utilisables ou annulables selon leur état. Un même essai de création ou de dépôt peut être repris avec la même clé d'idempotence, sans nouveau débit ni nouveau crédit. La limite minimum/maximum reprend les paramètres de limites administrables et leur conversion par devise.
 
 Tests :
-- `node --import tsx scripts/test-transfer-code.cjs` : génération, HMAC et Luhn ;
+- `node --import tsx scripts/test-transfer-code.cjs` : génération, HMAC, chiffrement authentifié et Luhn ;
 - `node --import tsx scripts/test-transfer-engine.cjs` et `node --import tsx scripts/test-transfer-api.cjs` : parcours sur PGlite isolé ;
 - `node --import tsx scripts/test-transfer-postgres.cjs` : concurrence sur serveur PostgreSQL local isolé, via le socket `/home/user/pgtemp` port 55432 ; le script crée puis supprime uniquement son propre schéma aléatoire. Ce test ne se connecte jamais à la base de production.
 
