@@ -625,7 +625,7 @@ export default function ParametresScreen() {
             />
             <SwitchRow
               icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Matchs et buts"
+              label="Début des matchs"
               checked={user.notifyMatches ?? true}
               onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
             />

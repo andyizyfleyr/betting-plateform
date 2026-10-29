@@ -511,7 +511,7 @@ export default function ParametresPage() {
             />
             <SwitchRow
               Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-              label="Matchs et buts"
+              label="Début des matchs"
               checked={user?.notifyMatches ?? true}
               onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
             />
