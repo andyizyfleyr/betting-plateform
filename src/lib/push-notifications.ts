@@ -41,21 +41,6 @@ export async function enqueueRecentPushEvents(): Promise<void> {
       JOIN withdrawals w ON w.user_id=d.user_id AND w.status IN ('approved','rejected','cancelled')
       WHERE w.processed_at >= GREATEST(d.created_at, now() - interval '1 day')
       UNION ALL
-      SELECT d.token, 'match:start:' || m.id, 'Match commencé',
-        m.home_team || ' – ' || m.away_team, jsonb_build_object('path', '/matchs/' || m.id)
-      FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
-      JOIN favorite_teams f ON f.user_id=d.user_id
-      JOIN matches m ON (m.home_team=f.team_name OR m.away_team=f.team_name) AND m.status='live'
-      WHERE m.starts_at >= GREATEST(d.created_at, now() - interval '1 day')
-      UNION ALL
-      SELECT d.token, 'match:goal:' || m.id || ':' || COALESCE(m.home_score,0) || ':' || COALESCE(m.away_score,0),
-        'But dans un match favori', m.home_team || ' ' || COALESCE(m.home_score,0) || ' – ' || COALESCE(m.away_score,0) || ' ' || m.away_team,
-        jsonb_build_object('path', '/matchs/' || m.id)
-      FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
-      JOIN favorite_teams f ON f.user_id=d.user_id
-      JOIN matches m ON (m.home_team=f.team_name OR m.away_team=f.team_name) AND m.status='live'
-      WHERE m.last_goal_at >= GREATEST(d.created_at, now() - interval '1 day')
-      UNION ALL
       SELECT d.token, 'match:start:' || m.id, 'Match commencé', m.home_team || ' – ' || m.away_team, jsonb_build_object('path', '/matchs/' || m.id)
       FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
       JOIN bets b ON b.user_id=d.user_id AND b.status='pending'
@@ -132,6 +117,14 @@ export async function flushPushNotifications(): Promise<void> {
         WHEN o.event_key LIKE 'deposit:%' OR o.event_key LIKE 'withdrawal:%' THEN u.notify_payments
         WHEN o.event_key LIKE 'dispute:%' THEN u.notify_disputes
         ELSE true END
+      -- Les alertes de favoris déjà en file ne doivent plus être envoyées.
+      AND o.title <> 'But dans un match favori'
+      AND (o.event_key NOT LIKE 'match:start:%' OR EXISTS (
+        SELECT 1 FROM bets b WHERE b.user_id=d.user_id AND b.match_id::text=split_part(o.event_key, ':', 3)
+      ) OR EXISTS (
+        SELECT 1 FROM combo_bets cb CROSS JOIN LATERAL jsonb_array_elements(cb.legs) leg
+        WHERE cb.user_id=d.user_id AND leg->>'kind'='sport' AND leg->>'matchId'=split_part(o.event_key, ':', 3)
+      ))
       AND o.sent_at IS NULL AND o.attempts < 5 AND (o.claimed_until IS NULL OR o.claimed_until < now())
       ORDER BY o.id LIMIT 100 FOR UPDATE OF o SKIP LOCKED
     ) UPDATE push_outbox o SET claimed_until=now() + interval '2 minutes', attempts=o.attempts+1

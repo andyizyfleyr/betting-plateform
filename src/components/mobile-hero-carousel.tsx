@@ -64,7 +64,7 @@ const HERO_SLIDES: HeroSlide[] = [
     player: "Kylian Mbappé",
     club: "Real Madrid",
     title: "Combinés · Boost +50 %",
-    description: "Combinez Mbappé et vos favoris au Betslip jusqu'à +50 %.",
+    description: "Combinez Mbappé et vos sélections au Betslip jusqu'à +50 %.",
     ctaLabel: "Créer un combiné",
     action: { type: "combo" },
     image: "/images/hero/kylian-mbappe.webp",

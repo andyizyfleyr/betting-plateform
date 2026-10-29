@@ -22,7 +22,6 @@ import {
 } from "lucide-react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { MatchCard } from "@/components/match-card";
-import { FavoriteMatches } from "@/components/favorite-teams";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import {
   MobileHeroCarousel,
@@ -373,7 +372,6 @@ export default function MatchsHomeScreen() {
         ) : null}
       </View>
 
-      <FavoriteMatches matches={activeMatches ?? []} />
       {activeMatches === null ? (
         <PulseFlashLoader compact />
       ) : loadError ? (

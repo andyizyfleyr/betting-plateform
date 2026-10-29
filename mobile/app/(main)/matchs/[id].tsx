@@ -38,7 +38,6 @@ import {
 } from "@/components/real-match-stats-card";
 import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
-import { FavoriteTeamButton } from "@/components/favorite-teams";
 import { useApp } from "@/context/app-context";
 import { ApiHttpError, api, type ClientMatch } from "@/lib/api";
 import { getCachedClientMatch } from "@/lib/entity-cache";
@@ -314,7 +313,6 @@ export default function MatchDetailScreen() {
                     size="sm"
                   />
                   <Text style={styles.teamName}>{match.homeTeam}</Text>
-                  <FavoriteTeamButton teamName={match.homeTeam} />
                   {(match.redHome ?? 0) > 0 ? (
                     <Text style={styles.redCardLabel}>
                       🟥 ×{match.redHome}
@@ -382,7 +380,6 @@ export default function MatchDetailScreen() {
                     size="sm"
                   />
                   <Text style={styles.teamName}>{match.awayTeam}</Text>
-                  <FavoriteTeamButton teamName={match.awayTeam} />
                   {(match.redAway ?? 0) > 0 ? (
                     <Text style={styles.redCardLabel}>
                       🟥 ×{match.redAway}

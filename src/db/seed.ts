@@ -168,13 +168,6 @@ async function runSeedInternal(): Promise<void> {
     CREATE TABLE IF NOT EXISTS "support_presence" (
       "user_id" integer PRIMARY KEY REFERENCES "app_user"("id"), "last_seen_at" timestamp NOT NULL DEFAULT now()
     );
-    CREATE TABLE IF NOT EXISTS "favorite_teams" (
-      "user_id" integer NOT NULL REFERENCES "app_user"("id"),
-      "team_key" text NOT NULL,
-      "team_name" text NOT NULL,
-      "created_at" timestamp NOT NULL DEFAULT now(),
-      PRIMARY KEY ("user_id", "team_key")
-    );
     CREATE TABLE IF NOT EXISTS "bet_disputes" (
       "id" serial PRIMARY KEY,
       "user_id" integer NOT NULL REFERENCES "app_user"("id"),
