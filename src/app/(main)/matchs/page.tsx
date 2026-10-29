@@ -1,5 +1,4 @@
 "use client";
-import { FavoriteMatches } from "@/components/favorite-teams";
 
 import {
   memo,
@@ -485,7 +484,6 @@ export default function MatchsPage() {
           </div>
         </div>
 
-        <FavoriteMatches matches={matches ?? []} />
 
         {/* Contenu */}
         {matches === null ? (

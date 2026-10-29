@@ -554,11 +554,3 @@ export const betDisputes = pgTable("bet_disputes", {
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
-
-/** Clubs suivis par compte, synchronisés entre appareils. */
-export const favoriteTeams = pgTable("favorite_teams", {
-  userId: integer("user_id").notNull().references(() => appUser.id),
-  teamKey: text("team_key").notNull(),
-  teamName: text("team_name").notNull(),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.userId, table.teamKey] })]);
