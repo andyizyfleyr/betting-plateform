@@ -1,0 +1,15 @@
+"use client";
+import { useCallback, useEffect, useState } from "react";
+type Incident = { kind: "deposit" | "withdrawal"; id: number; payment_status: string; method: string; created_at: string; review_state: string; note: string };
+export function PaymentIncidents() {
+  const [items, setItems] = useState<Incident[]>([]); const [notes, setNotes] = useState<Record<string, string>>({});
+  const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [loaded, setLoaded] = useState(false);
+  const load = useCallback(async () => { const res = await fetch("/api/admin/payment-incidents", { cache: "no-store" }); if (!res.ok) throw new Error("Chargement impossible"); const data = await res.json(); setItems(data.incidents); setLoaded(true); }, []);
+  useEffect(() => { let active=true; const tick=()=>void load().catch(()=>{if(active)setError("Chargement des incidents impossible.");}); tick(); const id=setInterval(tick,30000); return ()=>{active=false;clearInterval(id);}; }, [load]);
+  async function save(item: Incident, state: string) {
+    if (busy) return; setBusy(true); setError("");
+    try { const r=await fetch("/api/admin/payment-incidents", { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({kind:item.kind,id:item.id,state,note:notes[`${item.kind}:${item.id}`] ?? item.note}) }); if(!r.ok) throw new Error("Enregistrement impossible."); setNotes(n=>{const next={...n}; delete next[`${item.kind}:${item.id}`]; return next;}); await load(); }
+    catch(e){setError(e instanceof Error ? e.message : "Erreur.");} finally{setBusy(false);}
+  }
+  return <section className="mt-4 rounded-xl border border-edge bg-white p-4 text-[11px] text-ink"><h2 className="font-bold">Suivi des incidents de paiement</h2><p className="mt-1 text-mist">Signalements basés sur les statuts et délais. Modifier le suivi ne modifie pas le paiement ni le solde.</p>{error && <p className="text-betclic-red">{error}</p>}{loaded && !items.length && <p className="mt-2 text-mist">Aucun incident détecté.</p>}{items.map(item=>{ const key=`${item.kind}:${item.id}`; return <div key={key} className="mt-3 border-t border-edge pt-2"><p>{item.kind === "deposit" ? "Dépôt" : "Retrait"} #{item.id} · {item.method} · {item.payment_status}</p><p className="text-mist">{new Date(item.created_at).toLocaleString("fr-FR")} · Suivi : {item.review_state === "resolved" ? "clos" : item.review_state === "investigating" ? "en cours" : "ouvert"}</p><textarea aria-label={`Note incident ${key}`} maxLength={1000} value={notes[key] ?? item.note} onChange={e=>setNotes(v=>({...v,[key]:e.target.value}))} placeholder="Note interne" className="mt-1 w-full rounded-lg border border-edge p-2"/><div className="flex gap-3"><button disabled={busy} onClick={()=>void save(item,"investigating")}>En cours</button><button disabled={busy} onClick={()=>void save(item,"resolved")} className="text-betclic-red">Clore le suivi</button><button disabled={busy} onClick={()=>void save(item,"open")}>Rouvrir</button></div></div>;})}</section>;
+}
