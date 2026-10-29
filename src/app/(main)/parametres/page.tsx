@@ -30,6 +30,7 @@ import {
 } from "@/components/pulse-flash-loader";
 import { AnimatedNumber } from "@/components/animated-number";
 import { Toggle } from "@/components/toggle";
+import { TransferCodeSheet } from "@/components/transfer-code-sheet";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
@@ -50,6 +51,7 @@ export default function ParametresPage() {
   const [wallet, setWallet] = useState<ClientWalletData | null>(() => getCachedWallet());
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
 
   const reloadWallet = useCallback(() => {
@@ -364,6 +366,8 @@ export default function ParametresPage() {
                   Retirer
                 </Link>
               </div>
+              <button type="button" onClick={() => setTransferOpen(true)} className="mt-2 w-full rounded-xl border border-edge bg-white py-2.5 text-xs text-ink">Transférer avec un code</button>
+              {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
             </div>
           </section>
 

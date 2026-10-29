@@ -30,6 +30,7 @@ import {
   Zap,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
+import { TransferCodeSheet } from "@/components/transfer-code-sheet";
 import { useApp } from "@/context/app-context";
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
@@ -86,6 +87,7 @@ export default function ParametresScreen() {
   );
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [checkingOta, setCheckingOta] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
@@ -437,6 +439,8 @@ export default function ParametresScreen() {
                   <Text style={styles.withdrawBtnText}>Retirer</Text>
                 </Pressable>
               </View>
+              <Pressable onPress={() => setTransferOpen(true)} style={{ marginTop: 8, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#e5e7eb", alignItems: "center" }}><Text style={{ fontSize: 12, color: "#20242a" }}>Transférer avec un code</Text></Pressable>
+              {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
             </View>
           </View>
 

@@ -85,6 +85,13 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 260
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Autorisez la caméra pour scanner les codes de transfert.",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "extra": {
