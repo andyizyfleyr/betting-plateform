@@ -2368,12 +2368,11 @@ function projectLiveRealMatchRow(base: MatchRow, nowMs: number): MatchRow {
 
   const is2H =
     anchor.phase === "2H" ||
-    anchor.phase === "2H_STOPPAGE" ||
-    anchor.anchorSeconds >= 2700;
+    anchor.phase === "2H_STOPPAGE";
   const rawProjSec = anchor.anchorSeconds + driftSec;
   const projSec = !is2H
-    ? Math.min(2820, Math.max(0, rawProjSec))
-    : Math.min(5880, Math.max(2700, rawProjSec));
+    ? Math.max(0, rawProjSec)
+    : Math.min(Math.max(5880, anchor.anchorSeconds), Math.max(2700, rawProjSec));
 
   let projMinute = base.minute;
   if (!is2H) {
