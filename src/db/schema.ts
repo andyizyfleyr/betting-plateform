@@ -537,3 +537,24 @@ export type DepositRow = typeof deposits.$inferSelect;
 export type TapHistoryRow = typeof tapHistory.$inferSelect;
 export type AcceleratorRoundRow = typeof acceleratorRounds.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
+
+/** Réclamations liées à un ticket ; elles ne modifient jamais les soldes. */
+export const betDisputes = pgTable("bet_disputes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => appUser.id),
+  betKind: text("bet_kind").notNull(),
+  betId: integer("bet_id").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("open"),
+  adminReply: text("admin_reply"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
+
+/** Clubs suivis par compte, synchronisés entre appareils. */
+export const favoriteTeams = pgTable("favorite_teams", {
+  userId: integer("user_id").notNull().references(() => appUser.id),
+  teamKey: text("team_key").notNull(),
+  teamName: text("team_name").notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.userId, table.teamKey] })]);

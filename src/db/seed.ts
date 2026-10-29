@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v12";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v13";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -101,6 +101,30 @@ async function runSeedInternal(): Promise<void> {
       CONSTRAINT "app_user_balance_nonneg_chk" CHECK ("balance" >= 0),
       CONSTRAINT "app_user_bonus_nonneg_chk" CHECK ("bonus_locked" >= 0)
     );
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "favorite_teams" (
+      "user_id" integer NOT NULL REFERENCES "app_user"("id"),
+      "team_key" text NOT NULL,
+      "team_name" text NOT NULL,
+      "created_at" timestamp NOT NULL DEFAULT now(),
+      PRIMARY KEY ("user_id", "team_key")
+    );
+    CREATE TABLE IF NOT EXISTS "bet_disputes" (
+      "id" serial PRIMARY KEY,
+      "user_id" integer NOT NULL REFERENCES "app_user"("id"),
+      "bet_kind" text NOT NULL CHECK ("bet_kind" IN ('sport', 'prediction', 'combo')),
+      "bet_id" integer NOT NULL CHECK ("bet_id" > 0),
+      "message" text NOT NULL,
+      "status" text NOT NULL DEFAULT 'open' CHECK ("status" IN ('open', 'in_review', 'resolved')),
+      "admin_reply" text,
+      "created_at" timestamp NOT NULL DEFAULT now(),
+      "updated_at" timestamp NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS "bet_disputes_one_active_idx" ON "bet_disputes" ("user_id", "bet_kind", "bet_id") WHERE "status" IN ('open', 'in_review');
+    CREATE INDEX IF NOT EXISTS "bet_disputes_user_created_idx" ON "bet_disputes" ("user_id", "created_at" DESC);
+    CREATE INDEX IF NOT EXISTS "bet_disputes_status_idx" ON "bet_disputes" ("status", "created_at" DESC);
   `);
 
   await db.execute(sql`

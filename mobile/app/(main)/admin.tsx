@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react-native";
 import { LiveMatchClock } from "@/components/live-match-clock";
+import { AdminDisputes } from "@/components/admin-disputes";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
@@ -591,6 +592,7 @@ export default function AdminScreen() {
               </View>
             ))}
           </View>
+          <AdminDisputes />
           {panel.bettingLimits && <MobileBettingLimits key={JSON.stringify(panel.bettingLimits)} limits={panel.bettingLimits} busy={busyKey === "bettingLimits"} act={act} />}
         </View>
       ) : tab === "forecasts" ? (
