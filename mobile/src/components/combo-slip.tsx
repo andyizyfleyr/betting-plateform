@@ -13,7 +13,6 @@ import {
   Flame,
   Trash2,
   X,
-  Zap,
 } from "lucide-react-native";
 import { useApp, type ComboSelection } from "@/context/app-context";
 import {
@@ -37,118 +36,13 @@ import {
   localToEur,
 } from "@/lib/countries";
 import { eur, formatOdds } from "@/lib/format";
-import { usePathname, useRouter } from "@/lib/router";
+import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 import { OddsLockControls } from "./odds-lock-controls";
 import { TeamAvatar } from "./team-avatar";
 import { TouchStakePad } from "./touch-stake-pad";
 
 export type { ComboSelection };
-
-export function ComboFloatingBar() {
-  const pathname = usePathname();
-  const {
-    comboLegs,
-    comboOpen,
-    comboQuickMode,
-    setComboQuickMode,
-    openCombo,
-    clearCombo,
-    target,
-    marketMatch,
-    rechargeOpen,
-    oddsFormat,
-  } = useApp();
-
-  const allowedRoute =
-    pathname === "/matchs" ||
-    pathname.startsWith("/matchs/") ||
-    pathname === "/predictions" ||
-    pathname.startsWith("/predictions/") ||
-    pathname === "/paris";
-
-  if (
-    !allowedRoute ||
-    comboLegs.length === 0 ||
-    comboOpen ||
-    target ||
-    marketMatch ||
-    rechargeOpen
-  ) {
-    return null;
-  }
-
-  const quote = computeComboQuote(
-    comboLegs.map((l) => l.odds),
-    10
-  );
-
-  return (
-    <View pointerEvents="box-none" style={styles.floatWrap}>
-      <View style={styles.floatCard}>
-        <Pressable onPress={openCombo} style={styles.floatLeft}>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{comboLegs.length}</Text>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <View style={styles.floatTitleRow}>
-              <Text numberOfLines={1} style={styles.floatTitle}>
-                {comboLegs.length === 1
-                  ? "Coupon (1 sélection)"
-                  : "Coupon de pari · Combiné"}
-              </Text>
-              {quote.boostPct > 0 ? (
-                <View style={styles.floatBoostBadge}>
-                  <Text style={styles.floatBoostText}>
-                    +{quote.boostPct}% Bonus
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <Text numberOfLines={1} style={styles.floatSub}>
-              Cote totale{" "}
-              <Text style={styles.floatSubStrong}>
-                {formatOdds(quote.totalOdds, oddsFormat)}
-              </Text>
-            </Text>
-          </View>
-        </Pressable>
-
-        <View style={styles.floatRight}>
-          <Pressable
-            onPress={() => setComboQuickMode(!comboQuickMode)}
-            style={[
-              styles.quickModeBtn,
-              comboQuickMode && styles.quickModeBtnActive,
-            ]}
-          >
-            <Zap
-              size={12}
-              color={comboQuickMode ? "#6ee7b7" : "rgba(255,255,255,0.75)"}
-              strokeWidth={2.5}
-            />
-            <Text
-              style={[
-                styles.quickModeText,
-                comboQuickMode && { color: "#6ee7b7" },
-              ]}
-            >
-              1-clic
-            </Text>
-          </Pressable>
-
-          <Pressable onPress={openCombo} style={styles.openBtn}>
-            <Text style={styles.openBtnText}>Ouvrir</Text>
-          </Pressable>
-
-          <Pressable onPress={clearCombo} style={styles.clearIconBtn}>
-            <X size={14} color="rgba(255,255,255,0.75)" strokeWidth={2.3} />
-          </Pressable>
-        </View>
-      </View>
-    </View>
-  );
-}
 
 export function ComboSheet() {
   const router = useRouter();
@@ -676,125 +570,6 @@ export function ComboSheet() {
 }
 
 const styles = StyleSheet.create({
-  floatWrap: {
-    position: "absolute",
-    left: 8,
-    right: 8,
-    bottom: 66,
-    zIndex: 40,
-  },
-  floatCard: {
-    borderRadius: 14,
-    backgroundColor: COLORS.ink,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    shadowColor: "#000000",
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  floatLeft: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  countBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    backgroundColor: COLORS.betclicRed,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  countBadgeText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#ffffff",
-  },
-  floatTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  floatTitle: {
-    flexShrink: 1,
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  floatBoostBadge: {
-    borderRadius: 6,
-    backgroundColor: "rgba(16, 185, 129, 0.25)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  floatBoostText: {
-    fontSize: 9.5,
-    fontWeight: "500",
-    color: "#6ee7b7",
-  },
-  floatSub: {
-    fontSize: 10,
-    color: "rgba(255,255,255,0.70)",
-  },
-  floatSubStrong: {
-    fontWeight: "500",
-    color: "#ffffff",
-  },
-  floatRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  quickModeBtn: {
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  quickModeBtnActive: {
-    backgroundColor: "rgba(16,185,129,0.25)",
-    borderWidth: 1,
-    borderColor: "rgba(52,211,153,0.4)",
-  },
-  quickModeText: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.75)",
-  },
-  openBtn: {
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  openBtnText: {
-    fontSize: 10.5,
-    fontWeight: "500",
-    color: "#ffffff",
-  },
-  clearIconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   sheetOverlay: {
     flex: 1,
     justifyContent: "flex-end",

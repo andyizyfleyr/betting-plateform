@@ -712,6 +712,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [betsVersion, queryClient, setBalance, user]);
 
   const persistCombo = useCallback((next: ComboSelection[]) => {
+    comboLegsRef.current = next;
     setComboLegs(next);
     void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(
       () => {}

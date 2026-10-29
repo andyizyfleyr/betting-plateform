@@ -15,14 +15,10 @@ import {
   ArrowRight,
   Check,
   Flame,
-  Hash,
   Layers,
-  Trash2,
-  TrendingUp,
-  Trophy,
   X,
 } from "lucide-react-native";
-import { CouponCodeBox } from "@/components/coupon-code-box";
+import { BetslipCouponActions } from "@/components/betslip-coupon-actions";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { OddsLockControls } from "@/components/odds-lock-controls";
 import { mergeSlimIntoMobileMatch } from "@/lib/query-client";
@@ -143,7 +139,6 @@ export default function BetslipScreen() {
     potentialWin: number;
     boostPct: number;
   } | null>(null);
-  const [mobileCouponOpen, setMobileCouponOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const inFlightRef = useRef(false);
@@ -682,42 +677,7 @@ export default function BetslipScreen() {
             ) : null}
           </View>
 
-          {enrichedLegs.length > 0 ? (
-            <View style={styles.headerActions}>
-              <Pressable
-                onPress={() => setMobileCouponOpen((o) => !o)}
-                style={[
-                  styles.actionPill,
-                  mobileCouponOpen && styles.actionPillActive,
-                ]}
-              >
-                <Hash
-                  size={14}
-                  color={COLORS.betclicRed}
-                  strokeWidth={2.4}
-                />
-                <Text
-                  style={[
-                    styles.actionPillText,
-                    mobileCouponOpen && { color: "#ffffff" },
-                  ]}
-                >
-                  Code coupon
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  clearCombo();
-                  setError(null);
-                }}
-                style={styles.clearPill}
-              >
-                <Trash2 size={14} color={COLORS.mist} strokeWidth={2.1} />
-                <Text style={styles.clearPillText}>Vider</Text>
-              </Pressable>
-            </View>
-          ) : null}
+          <BetslipCouponActions onClear={() => { clearCombo(); setError(null); }} />
         </View>
 
         {enrichedLegs.length === 0 ? (
@@ -736,38 +696,9 @@ export default function BetslipScreen() {
               sur n&apos;importe quelle cote dans Matchs ou Prédictions pour
               l&apos;ajouter à votre coupon combiné.
             </Text>
-
-            <View style={styles.emptyBtnsGrid}>
-              <Pressable
-                onPress={() => router.push("/matchs")}
-                style={styles.emptyPrimaryBtn}
-              >
-                <Trophy size={16} color="#ffffff" strokeWidth={2.2} />
-                <Text style={styles.emptyPrimaryText}>Matchs</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push("/predictions")}
-                style={styles.emptySecondaryBtn}
-              >
-                <TrendingUp
-                  size={16}
-                  color={COLORS.betclicRed}
-                  strokeWidth={2.2}
-                />
-                <Text style={styles.emptySecondaryText}>Prédictions</Text>
-              </Pressable>
-            </View>
-
-            <View style={{ width: "100%", marginTop: 16 }}>
-              <CouponCodeBox variant="empty" autoCheckUrlCode />
-            </View>
           </View>
         ) : (
           <View style={styles.legsWrap}>
-            {mobileCouponOpen ? (
-              <CouponCodeBox variant="compact" autoCheckUrlCode />
-            ) : null}
-
             {/* Jauge Bonus Combiné */}
             {isCombo ? (
               <View style={styles.boostCard}>
@@ -1159,6 +1090,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   headerRow: {
+    zIndex: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1185,42 +1117,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "500",
     color: "#ffffff",
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  actionPill: {
-    height: 32,
-    borderRadius: 999,
-    backgroundColor: COLORS.elev,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  actionPillActive: {
-    backgroundColor: COLORS.ink,
-  },
-  actionPillText: {
-    fontSize: 10.5,
-    fontWeight: "500",
-    color: COLORS.ink,
-  },
-  clearPill: {
-    height: 32,
-    borderRadius: 999,
-    backgroundColor: COLORS.elev,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  clearPillText: {
-    fontSize: 10.5,
-    fontWeight: "500",
-    color: COLORS.mist,
   },
   emptyCard: {
     marginTop: 32,
@@ -1253,42 +1149,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: COLORS.mist,
     textAlign: "center",
-  },
-  emptyBtnsGrid: {
-    marginTop: 20,
-    width: "100%",
-    flexDirection: "row",
-    gap: 10,
-  },
-  emptyPrimaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: COLORS.betclicRed,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  emptyPrimaryText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#ffffff",
-  },
-  emptySecondaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: COLORS.elev,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  emptySecondaryText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: COLORS.ink,
   },
   legsWrap: {
     marginTop: 12,

@@ -4,7 +4,7 @@ import { SupportChat } from "@/components/support-chat";
 import { AppHeader } from "@/components/app-header";
 import { BetModal } from "@/components/bet-modal";
 import { BottomNav } from "@/components/bottom-nav";
-import { ComboFloatingBar, ComboSheet } from "@/components/combo-slip";
+import { ComboSheet } from "@/components/combo-slip";
 import { InAppBrowserSheet } from "@/components/in-app-browser-sheet";
 import { MarketSheet } from "@/components/market-sheet";
 import { PredictionBetModal } from "@/components/prediction-bet-modal";
@@ -23,7 +23,6 @@ export function MainShellLayout({ children }: { children: React.ReactNode }) {
     <View style={styles.root}>
       {!isFullscreenGame ? <AppHeader /> : null}
       <View style={styles.body}>{children}</View>
-      {!isFullscreenGame ? <ComboFloatingBar /> : null}
       <BottomNav />
 
       <BetModal />
