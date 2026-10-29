@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
     await db.transaction(async (tx) => {
       // Sérialise les changements de propriétaire pour un même appareil.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${token}))`);
+      // Supprimer aussi la file de l'ancien propriétaire avant transfert du jeton.
+      await tx.execute(sql`DELETE FROM push_outbox WHERE token = ${token} AND EXISTS (
+        SELECT 1 FROM push_devices WHERE token = ${token} AND user_id <> ${uid}
+      )`);
       // Un appareil partagé ne doit jamais recevoir les notifications du compte précédent.
       await tx.execute(sql`DELETE FROM push_devices WHERE token = ${token} AND user_id <> ${uid}`);
       await tx.execute(sql`INSERT INTO push_devices (token, user_id) VALUES (${token}, ${uid})

@@ -6,7 +6,7 @@ import { db } from "@/db";
 export async function enqueueRecentPushEvents(): Promise<void> {
   await db.execute(sql`
     INSERT INTO push_outbox (token, event_key, title, body, data)
-    SELECT token, event_key, title, body, data FROM (
+    SELECT events.token, events.event_key, events.title, events.body, events.data FROM (
       SELECT d.token, 'bet:sport:' || b.id || ':' || b.status AS event_key,
         'Résultat de votre pari' AS title, 'Votre pari sportif a été réglé.' AS body,
         jsonb_build_object('path', '/paris/simple/sport-' || b.id) AS data
@@ -31,6 +31,15 @@ export async function enqueueRecentPushEvents(): Promise<void> {
       FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
       JOIN deposits p ON p.user_id=d.user_id AND p.status='credited'
       WHERE p.updated_at >= GREATEST(d.created_at, now() - interval '1 day')
+      UNION ALL
+      SELECT d.token, 'withdrawal:user:' || w.id || ':' || w.status, 'Suivi de votre retrait',
+        CASE WHEN w.status='approved' THEN 'Votre retrait a été approuvé.'
+             WHEN w.status='rejected' THEN 'Votre retrait a été refusé et remboursé.'
+             ELSE 'Votre retrait a été annulé et remboursé.' END,
+        jsonb_build_object('path', '/parametres/transactions')
+      FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.notifications=true
+      JOIN withdrawals w ON w.user_id=d.user_id AND w.status IN ('approved','rejected','cancelled')
+      WHERE w.processed_at >= GREATEST(d.created_at, now() - interval '1 day')
       UNION ALL
       SELECT d.token, 'match:start:' || m.id, 'Match commencé',
         m.home_team || ' – ' || m.away_team, jsonb_build_object('path', '/matchs/' || m.id)
@@ -95,8 +104,16 @@ export async function enqueueRecentPushEvents(): Promise<void> {
       UNION ALL
       SELECT d.token, 'deposit:admin:' || p.id, 'Nouveau dépôt', 'Un dépôt demande votre attention.', jsonb_build_object('path', '/admin')
       FROM push_devices d JOIN app_user u ON u.id=d.user_id AND u.role='admin' AND u.notifications=true
-      JOIN deposits p ON p.status='pending' AND p.created_at >= GREATEST(d.created_at, now() - interval '1 day')
-    ) events WHERE NOT EXISTS (
+      JOIN deposits p ON p.status IN ('pending','pending_review') AND p.created_at >= GREATEST(d.created_at, now() - interval '1 day')
+    ) events JOIN push_devices device ON device.token=events.token
+    JOIN app_user preferences ON preferences.id=device.user_id
+    WHERE CASE
+      WHEN events.event_key LIKE 'match:%' THEN preferences.notify_matches
+      WHEN events.event_key LIKE 'bet:%' THEN preferences.notify_bets
+      WHEN events.event_key LIKE 'deposit:%' OR events.event_key LIKE 'withdrawal:%' THEN preferences.notify_payments
+      WHEN events.event_key LIKE 'dispute:%' THEN preferences.notify_disputes
+      ELSE true END
+    AND NOT EXISTS (
       SELECT 1 FROM push_outbox existing WHERE existing.token=events.token AND existing.event_key=events.event_key
     ) LIMIT 1000 ON CONFLICT (token, event_key) DO NOTHING
   `);
@@ -109,7 +126,13 @@ export async function flushPushNotifications(): Promise<void> {
     WITH chosen AS (
       SELECT o.id FROM push_outbox o JOIN push_devices d ON d.token=o.token
       JOIN app_user u ON u.id=d.user_id AND u.notifications=true
-      WHERE o.sent_at IS NULL AND o.attempts < 5 AND (o.claimed_until IS NULL OR o.claimed_until < now())
+      WHERE CASE
+        WHEN o.event_key LIKE 'match:%' THEN u.notify_matches
+        WHEN o.event_key LIKE 'bet:%' THEN u.notify_bets
+        WHEN o.event_key LIKE 'deposit:%' OR o.event_key LIKE 'withdrawal:%' THEN u.notify_payments
+        WHEN o.event_key LIKE 'dispute:%' THEN u.notify_disputes
+        ELSE true END
+      AND o.sent_at IS NULL AND o.attempts < 5 AND (o.claimed_until IS NULL OR o.claimed_until < now())
       ORDER BY o.id LIMIT 100 FOR UPDATE OF o SKIP LOCKED
     ) UPDATE push_outbox o SET claimed_until=now() + interval '2 minutes', attempts=o.attempts+1
       FROM chosen WHERE o.id=chosen.id RETURNING o.id, o.token, o.title, o.body, o.data

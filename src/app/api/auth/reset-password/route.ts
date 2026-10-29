@@ -1,3 +1,4 @@
+import { recordSecurityAlert } from "@/lib/security-alerts";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -158,6 +159,7 @@ export async function POST(req: NextRequest) {
         : { user: publicUser(updatedUser) }
     );
     await setAuthCookie(res, jwt, { rememberMe: true });
+    await recordSecurityAlert(updatedUser.id, "password_reset");
     return res;
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/auth/reset-password");

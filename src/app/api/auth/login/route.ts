@@ -1,3 +1,4 @@
+import { recordSecurityAlert } from "@/lib/security-alerts";
 import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
       isAndroidMobile ? { user: publicUser(user), token } : { user: publicUser(user) }
     );
     await setAuthCookie(res, token, { rememberMe });
+    await recordSecurityAlert(user.id, "login");
     return res;
   } catch (err) {
     return formatServerErrorResponse(err, "POST /api/auth/login");

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { SupportChat } from "@/components/support-chat";
 import { AppHeader } from "@/components/app-header";
 import { DesktopBetslipSidebar } from "@/components/desktop-betslip-sidebar";
 import { DesktopLeaguesSidebar } from "@/components/desktop-leagues-sidebar";
@@ -21,6 +22,7 @@ export function MainShell({ children }: { children: ReactNode }) {
   if (isAdminShell) {
     return (
       <div className="flex min-h-dvh w-full bg-deep lg:flex-row">
+        <SupportChat />
         <DesktopSidebar />
         <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
           <AppHeader />
@@ -42,6 +44,7 @@ export function MainShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh w-full flex-col bg-deep">
+      <SupportChat />
       <RouteWarmup />
       <AppHeader />
 

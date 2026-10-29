@@ -251,6 +251,10 @@ export const appUser = pgTable(
     name: text("name").notNull().default("Joueur"),
     balance: doublePrecision("balance").notNull().default(0),
     notifications: boolean("notifications").notNull().default(true),
+    notifyMatches: boolean("notify_matches").notNull().default(true),
+    notifyBets: boolean("notify_bets").notNull().default(true),
+    notifyPayments: boolean("notify_payments").notNull().default(true),
+    notifyDisputes: boolean("notify_disputes").notNull().default(true),
     sound: boolean("sound").notNull().default(false),
     haptics: boolean("haptics").notNull().default(true),
     oddsFormat: text("odds_format").notNull().default("decimal"), // "decimal" | "fractional"

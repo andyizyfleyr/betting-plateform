@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -294,6 +295,7 @@ export async function POST(req: NextRequest) {
 
     if (!txResult.deduplicated) {
       invalidateUserCaches([uid]);
+      schedulePushNotifications();
     }
     return NextResponse.json({
       balance: txResult.balance,

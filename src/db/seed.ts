@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v14";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v16";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -118,6 +118,22 @@ async function runSeedInternal(): Promise<void> {
       UNIQUE ("token", "event_key")
     );
     CREATE INDEX IF NOT EXISTS "push_outbox_pending_idx" ON "push_outbox" ("id") WHERE "sent_at" IS NULL;
+    CREATE TABLE IF NOT EXISTS "support_conversations" (
+      "id" serial PRIMARY KEY, "user_id" integer NOT NULL UNIQUE REFERENCES "app_user"("id"),
+      "created_at" timestamp NOT NULL DEFAULT now(), "updated_at" timestamp NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS "support_messages" (
+      "id" serial PRIMARY KEY, "conversation_id" integer NOT NULL REFERENCES "support_conversations"("id"),
+      "sender_id" integer NOT NULL REFERENCES "app_user"("id"),
+      "sender_role" text NOT NULL CHECK ("sender_role" IN ('admin', 'user')),
+      "client_id" text NOT NULL, "body" text NOT NULL CHECK (char_length("body") BETWEEN 1 AND 2000),
+      "created_at" timestamp NOT NULL DEFAULT now(), "read_at" timestamp,
+      UNIQUE ("sender_id", "client_id")
+    );
+    CREATE INDEX IF NOT EXISTS "support_messages_conversation_idx" ON "support_messages" ("conversation_id", "id" DESC);
+    CREATE TABLE IF NOT EXISTS "support_presence" (
+      "user_id" integer PRIMARY KEY REFERENCES "app_user"("id"), "last_seen_at" timestamp NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS "favorite_teams" (
       "user_id" integer NOT NULL REFERENCES "app_user"("id"),
       "team_key" text NOT NULL,
@@ -252,6 +268,10 @@ async function runSeedInternal(): Promise<void> {
   await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_matches" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_bets" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_payments" boolean NOT NULL DEFAULT true;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_disputes" boolean NOT NULL DEFAULT true;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "country_code" text DEFAULT 'FR' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "currency" text DEFAULT 'EUR' NOT NULL;

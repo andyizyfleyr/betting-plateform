@@ -53,6 +53,10 @@ export async function PATCH(req: NextRequest) {
 
     const patch: Partial<typeof appUser.$inferInsert> = {};
     if (typeof body.notifications === "boolean") patch.notifications = body.notifications;
+    if (typeof body.notifyMatches === "boolean") patch.notifyMatches = body.notifyMatches;
+    if (typeof body.notifyBets === "boolean") patch.notifyBets = body.notifyBets;
+    if (typeof body.notifyPayments === "boolean") patch.notifyPayments = body.notifyPayments;
+    if (typeof body.notifyDisputes === "boolean") patch.notifyDisputes = body.notifyDisputes;
     if (typeof body.sound === "boolean") patch.sound = body.sound;
     if (typeof body.haptics === "boolean") patch.haptics = body.haptics;
     if (typeof body.liveSim === "boolean") patch.liveSim = body.liveSim;

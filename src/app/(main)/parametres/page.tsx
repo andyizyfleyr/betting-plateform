@@ -505,9 +505,33 @@ export default function ParametresPage() {
 
             <SwitchRow
               Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-              label="Notifications de paris"
+              label="Toutes les notifications"
               checked={user?.notifications ?? true}
               onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")}
+            />
+            <SwitchRow
+              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
+              label="Matchs et buts"
+              checked={user?.notifyMatches ?? true}
+              onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
+              label="Résultats des paris"
+              checked={user?.notifyBets ?? true}
+              onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
+              label="Dépôts et retraits"
+              checked={user?.notifyPayments ?? true}
+              onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
+              label="Réclamations"
+              checked={user?.notifyDisputes ?? true}
+              onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")}
             />
             <SwitchRow
               Icon={<Volume2 className="h-4 w-4" strokeWidth={2.1} />}
