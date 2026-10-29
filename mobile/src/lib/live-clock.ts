@@ -86,6 +86,9 @@ export function formatMinuteOnlyLabel(
   if (regMatch) {
     const rawMin = Number(regMatch[1]);
     const sep = regMatch[2];
+    if (periodHint === 1 && (rawMin > 45 || (rawMin === 45 && sep === ":"))) {
+      return `45+${Math.max(1, rawMin - 45 + (sep === ":" ? 1 : 0))}’`;
+    }
     if (periodHint === 2 && rawMin <= 45) {
       if (rawMin < 45) {
         const eff = sep === ":" ? 45 + rawMin + 1 : rawMin === 0 ? 46 : 45 + rawMin;
@@ -168,6 +171,18 @@ export function parseMatchMinuteLabel(
       sep === ":" && regMatch[3] != null
         ? Math.min(59, Number(regMatch[3]))
         : null;
+
+    // Une horloge cumulée peut dépasser 45:00 avant le sifflet de la pause.
+    if (periodHint === 1 && (rawMin > 45 || (rawMin === 45 && sep === ":"))) {
+      const addedMin = Math.max(1, rawMin - 45 + (sep === ":" ? 1 : 0));
+      return {
+        baseMin: 45,
+        addedMin,
+        half: 1,
+        phase: "1H_STOPPAGE",
+        expectedFloorSeconds: secInt == null ? 2700 + (addedMin - 1) * 60 : rawMin * 60 + secInt,
+      };
+    }
 
     if (periodHint === 2 && rawMin <= 45) {
       if (rawMin < 45) {
@@ -477,11 +492,12 @@ function computeRealLiveSnapshot(
     };
   }
 
-  const is2HAnchor =
-    secondHalfHint ||
-    anchor?.phase === "2H" ||
-    anchor?.phase === "2H_STOPPAGE" ||
-    (anchor?.anchorSeconds ?? 0) >= 2700;
+  // La phase explicite prime : 2700 secondes peuvent être du temps additionnel de première période.
+  const is2HAnchor = anchor?.phase === "1H" || anchor?.phase === "1H_STOPPAGE"
+    ? false
+    : anchor?.phase === "2H" || anchor?.phase === "2H_STOPPAGE"
+      ? true
+      : secondHalfHint;
   const periodHint: 1 | 2 = is2HAnchor ? 2 : 1;
 
   if (anchor?.phase === "PAUSED" || isStaticStatusLabel(rawMin)) {
@@ -674,13 +690,19 @@ export function computeLiveClockSnapshot(
     );
   }
 
-  const secondHalfHint =
-    (input?.realStats?.clockPeriod ?? 1) >= 2 ||
-    (input?.realStats?.clockSeconds ?? 0) >= 2700 ||
-    input?.htHomeScore != null ||
-    input?.htAwayScore != null ||
-    input?.realStats?.htHomeScore != null ||
-    input?.realStats?.htAwayScore != null;
+  const period = input?.realStats?.clockPeriod;
+  const firstHalfStoppage = /^45\s*['’]?\s*\+/.test((minute ?? "").trim());
+  const secondHalfHint = period === 1
+    ? false
+    : period != null && period >= 2
+      ? true
+      : !firstHalfStoppage && (
+          parseMatchMinuteLabel(minute)?.half === 2 ||
+          input?.htHomeScore != null ||
+          input?.htAwayScore != null ||
+          input?.realStats?.htHomeScore != null ||
+          input?.realStats?.htAwayScore != null
+        );
 
   if (source === "manual" || !startsAt || id <= 0) {
     return computeRealLiveSnapshot(id, minute, anchor, secondHalfHint, nowMs);

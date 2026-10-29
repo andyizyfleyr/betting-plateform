@@ -110,6 +110,9 @@ export function formatMinuteOnlyLabel(
   if (regMatch) {
     const rawMin = Number(regMatch[1]);
     const sep = regMatch[2];
+    if (periodHint === 1 && (rawMin > 45 || (rawMin === 45 && sep === ":"))) {
+      return `45+${Math.max(1, rawMin - 45 + (sep === ":" ? 1 : 0))}’`;
+    }
     if (periodHint === 2 && rawMin <= 45) {
       if (rawMin < 45) {
         const eff = sep === ":" ? 45 + rawMin + 1 : rawMin === 0 ? 46 : 45 + rawMin;
@@ -192,6 +195,18 @@ export function parseMatchMinuteLabel(
       sep === ":" && regMatch[3] != null
         ? Math.min(59, Number(regMatch[3]))
         : null;
+
+    // Une horloge cumulée peut dépasser 45:00 avant le sifflet de la pause.
+    if (periodHint === 1 && (rawMin > 45 || (rawMin === 45 && sep === ":"))) {
+      const addedMin = Math.max(1, rawMin - 45 + (sep === ":" ? 1 : 0));
+      return {
+        baseMin: 45,
+        addedMin,
+        half: 1,
+        phase: "1H_STOPPAGE",
+        expectedFloorSeconds: secInt == null ? 2700 + (addedMin - 1) * 60 : rawMin * 60 + secInt,
+      };
+    }
 
     // En 2e mi-temps (`periodHint === 2`), toute valeur 0..45 issue d'un flux périodique
     // correspond au temps écoulé depuis la reprise (45:00 = 2700 s -> 46’..90’).
@@ -306,6 +321,7 @@ export function normalizeEspnLiveClockSeconds(
 }
 
 function inferRowSecondHalf(row: {
+  minute?: string | null;
   htHomeScore?: number | null;
   htAwayScore?: number | null;
   events?: ReadonlyArray<{ minute?: number }> | null;
@@ -317,8 +333,11 @@ function inferRowSecondHalf(row: {
     updatedAt?: string | null;
   } | null;
 }): boolean {
-  if ((row.realStats?.clockPeriod ?? 1) >= 2) return true;
-  if ((row.realStats?.clockSeconds ?? 0) >= 2700) return true;
+  const period = row.realStats?.clockPeriod;
+  if (period === 1) return false;
+  if (period != null && period >= 2) return true;
+  if (/^45\s*['’]?\s*\+/.test((row.minute ?? "").trim())) return false;
+  if (parseMatchMinuteLabel(row.minute)?.half === 2) return true;
   if (row.htHomeScore != null || row.htAwayScore != null) return true;
   if (row.realStats?.htHomeScore != null || row.realStats?.htAwayScore != null) {
     return true;
@@ -816,11 +835,13 @@ function computeRealLiveSnapshot(
     };
   }
 
-  const is2HAnchor =
-    secondHalfHint ||
-    anchor?.phase === "2H" ||
-    anchor?.phase === "2H_STOPPAGE" ||
-    (anchor?.anchorSeconds ?? 0) >= 2700;
+  // 2700 secondes peuvent aussi être du temps additionnel de première période.
+  // La phase explicite prime sur l'horloge et les indices indirects.
+  const is2HAnchor = anchor?.phase === "1H" || anchor?.phase === "1H_STOPPAGE"
+    ? false
+    : anchor?.phase === "2H" || anchor?.phase === "2H_STOPPAGE"
+      ? true
+      : secondHalfHint;
   const periodHint: 1 | 2 = is2HAnchor ? 2 : 1;
 
   if (anchor?.phase === "PAUSED" || isStaticStatusLabel(rawMin)) {
@@ -1012,13 +1033,19 @@ export function computeLiveClockSnapshot(
     );
   }
 
-  const secondHalfHint =
-    (input?.realStats?.clockPeriod ?? 1) >= 2 ||
-    (input?.realStats?.clockSeconds ?? 0) >= 2700 ||
-    input?.htHomeScore != null ||
-    input?.htAwayScore != null ||
-    input?.realStats?.htHomeScore != null ||
-    input?.realStats?.htAwayScore != null;
+  const period = input?.realStats?.clockPeriod;
+  const firstHalfStoppage = /^45\s*['’]?\s*\+/.test((minute ?? "").trim());
+  const secondHalfHint = period === 1
+    ? false
+    : period != null && period >= 2
+      ? true
+      : !firstHalfStoppage && (
+          parseMatchMinuteLabel(minute)?.half === 2 ||
+          input?.htHomeScore != null ||
+          input?.htAwayScore != null ||
+          input?.realStats?.htHomeScore != null ||
+          input?.realStats?.htAwayScore != null
+        );
 
   if (source === "manual" || !startsAt || id <= 0) {
     return computeRealLiveSnapshot(id, minute, anchor, secondHalfHint, nowMs);

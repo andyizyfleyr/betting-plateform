@@ -341,6 +341,9 @@ function normalizeDisplayMinute(
     if (regMatch) {
       const rawMin = Number(regMatch[1]);
       const sep = regMatch[2];
+      if (!isSecondHalf && (rawMin > 45 || (rawMin === 45 && sep === ":"))) {
+        return `45+${Math.max(1, rawMin - 45 + (sep === ":" ? 1 : 0))}’`;
+      }
       if (isSecondHalf && rawMin <= 45) {
         if (rawMin < 45) {
           const eff =
@@ -381,6 +384,9 @@ function normalizeDisplayMinute(
     if (isSecondHalf && sec >= 5400) {
       return `90+${Math.max(1, Math.floor((sec - 5400) / 60) + 1)}’`;
     }
+    if (!isSecondHalf && sec >= 2700) {
+      return `45+${Math.max(1, Math.floor((sec - 2700) / 60) + 1)}’`;
+    }
     const gMin = isSecondHalf
       ? Math.min(90, Math.max(46, Math.floor(sec / 60) + 1))
       : Math.min(45, Math.max(1, Math.floor(sec / 60) + 1));
@@ -404,6 +410,9 @@ function normalizeDisplayMinute(
         : rawClockSeconds;
     if (isSecondHalf && sec >= 5400) {
       return `90+${Math.max(1, Math.floor((sec - 5400) / 60) + 1)}’`;
+    }
+    if (!isSecondHalf && sec >= 2700) {
+      return `45+${Math.max(1, Math.floor((sec - 2700) / 60) + 1)}’`;
     }
     const gMin = isSecondHalf
       ? Math.min(90, Math.max(46, Math.floor(sec / 60) + 1))
@@ -1432,7 +1441,8 @@ export function parseEspnScoreboardEvent(
   const statusName = asStr(statusType?.name).toUpperCase();
   const statusDetail = asStr(statusType?.shortDetail || statusType?.detail);
   const completed = statusType?.completed === true;
-  const rawPeriod = asNum(statusObj?.period) ?? 1;
+  const providedPeriod = asNum(statusObj?.period);
+  const rawPeriod = providedPeriod ?? 1;
   const period =
     rawPeriod < 2 &&
     statusName !== "STATUS_HALFTIME" &&
@@ -1526,7 +1536,7 @@ export function parseEspnScoreboardEvent(
   const isSecondHalfLive =
     status === "live" &&
     !isHalfTimeNow &&
-    (period >= 2 || htHomeScore != null || htAwayScore != null);
+    (period >= 2 || (providedPeriod == null && (htHomeScore != null || htAwayScore != null)));
   const effectiveLivePeriod = isSecondHalfLive ? Math.max(2, period) : period;
 
   const minute =
