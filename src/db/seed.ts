@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v18";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v19";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -118,6 +118,21 @@ async function runSeedInternal(): Promise<void> {
       UNIQUE ("token", "event_key")
     );
     CREATE INDEX IF NOT EXISTS "push_outbox_pending_idx" ON "push_outbox" ("id") WHERE "sent_at" IS NULL;
+    CREATE TABLE IF NOT EXISTS "escrow_transfers" (
+      "id" serial PRIMARY KEY, "sender_id" integer NOT NULL REFERENCES "app_user"("id"),
+      "recipient_id" integer NOT NULL REFERENCES "app_user"("id"),
+      "amount_eur" numeric(20,6) NOT NULL CHECK ("amount_eur" > 0),
+      "state" text NOT NULL CHECK ("state" IN ('held','accepted','disputed','released','refunded')),
+      "idempotency_key" text NOT NULL, "created_at" timestamp NOT NULL DEFAULT now(),
+      "updated_at" timestamp NOT NULL DEFAULT now(),
+      CHECK ("sender_id" <> "recipient_id"), UNIQUE ("sender_id", "idempotency_key")
+    );
+    CREATE INDEX IF NOT EXISTS "escrow_transfers_recipient_idx" ON "escrow_transfers" ("recipient_id", "id" DESC);
+    CREATE TABLE IF NOT EXISTS "escrow_actions" (
+      "id" serial PRIMARY KEY, "escrow_id" integer NOT NULL REFERENCES "escrow_transfers"("id"),
+      "actor_id" integer NOT NULL REFERENCES "app_user"("id"),
+      "action" text NOT NULL, "created_at" timestamp NOT NULL DEFAULT now()
+    );
     CREATE TABLE IF NOT EXISTS "user_two_factor" (
       "user_id" integer PRIMARY KEY REFERENCES "app_user"("id"),
       "secret_ciphertext" text NOT NULL, "enabled" boolean NOT NULL DEFAULT false,
