@@ -116,13 +116,15 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
           <Pressable accessibilityRole="button" disabled={!code.trim() || loading || !bettingLimitsReady} onPress={() => void load()} style={[styles.primary, (!code.trim() || loading || !bettingLimitsReady) && styles.disabled]}>{loading ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.primaryText}>Télécharger</Text>}</Pressable>
         </View> : <View style={styles.dialog}>
           {mode === "saving" ? <><ActivityIndicator color={COLORS.betclicRed} /><Text style={styles.title}>Enregistrement du coupon…</Text></> : <>
-            <Text style={styles.title}>Coupon enregistré</Text>
+            <View style={styles.savedHeader}>
+              <Text style={[styles.title, styles.savedTitle]}>Coupon enregistré</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fermer le coupon enregistré" onPress={closeModal} style={styles.savedClose} hitSlop={6}>
+                <X size={17} color={COLORS.mist} />
+              </Pressable>
+            </View>
             <Text style={styles.description}>Copiez ce code pour retrouver votre coupon de pari.</Text>
             <Text selectable accessibilityLabel={`Code du coupon ${savedCode}`} style={styles.savedCode}>{savedCode}</Text>
-            <View style={styles.dialogActions}>
-              <Pressable accessibilityRole="button" onPress={() => void copyCode()} style={styles.copyButton}><Copy size={14} color="white" /><Text style={styles.primaryText}>{copied ? "Code copié" : "Copier le code"}</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={closeModal} style={styles.secondary}><Text style={styles.secondaryText}>Fermer</Text></Pressable>
-            </View>
+            <Pressable accessibilityRole="button" onPress={() => void copyCode()} style={styles.copyButton}><Copy size={14} color="white" /><Text style={styles.primaryText}>{copied ? "Code copié" : "Copier le code"}</Text></Pressable>
           </>}
         </View>}
       </KeyboardAvoidingView>
@@ -155,9 +157,9 @@ const styles = StyleSheet.create({
   primary: { minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: COLORS.betclicRed },
   primaryText: { color: "white", fontSize: 11 },
   dialog: { backgroundColor: "white", borderRadius: 18, padding: 16, gap: 8 },
-  dialogActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  copyButton: { minHeight: 38, paddingHorizontal: 14, borderRadius: 10, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6, backgroundColor: COLORS.betclicRed },
+  savedHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  savedTitle: { flex: 1 },
+  savedClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.elev, alignItems: "center", justifyContent: "center" },
+  copyButton: { width: "100%", minHeight: 44, paddingHorizontal: 14, borderRadius: 10, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6, backgroundColor: COLORS.betclicRed },
   savedCode: { borderRadius: 12, backgroundColor: COLORS.elev, color: COLORS.ink, textAlign: "center", overflow: "hidden", padding: 14, fontSize: 18, letterSpacing: 2 },
-  secondary: { alignItems: "center", justifyContent: "center", minHeight: 38, paddingHorizontal: 12 },
-  secondaryText: { color: COLORS.mist, fontSize: 11 },
 });

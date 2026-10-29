@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     minHeight: 156,
   },
   homeCard: {
-    minHeight: 162,
+    minHeight: 174,
   },
   headerRow: {
     flexDirection: "row",
