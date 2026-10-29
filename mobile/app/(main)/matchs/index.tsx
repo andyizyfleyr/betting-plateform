@@ -180,11 +180,7 @@ export default function MatchsHomeScreen() {
     feedMatches,
     setFeedMatches,
     dataSaverMode,
-    setComboQuickMode,
-    openCombo,
     openRecharge,
-    comboLegs,
-    toast,
   } = useApp();
 
   const [query, setQuery] = useState("");
@@ -263,17 +259,7 @@ export default function MatchsHomeScreen() {
         return;
       }
       if (action.type === "combo") {
-        setComboQuickMode(true);
-        if (comboLegs.length > 0) {
-          openCombo();
-        } else {
-          toast({
-            kind: "info",
-            title: "Mode Combiné activé",
-            description:
-              "Touchez vos cotes préférées pour composer votre combiné.",
-          });
-        }
+        router.push("/betslip");
         return;
       }
       if (action.type === "recharge") {
@@ -281,13 +267,9 @@ export default function MatchsHomeScreen() {
       }
     },
     [
-      comboLegs.length,
-      openCombo,
       openRecharge,
       realMatchesAll,
       router,
-      setComboQuickMode,
-      toast,
     ]
   );
 
