@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db, ensureHealthyDbConnection } from "@/db";
@@ -41,25 +42,26 @@ async function ensureSavedCouponsTable(): Promise<void> {
   tableReady = true;
 }
 
-function generateShortCode(len = 4): string {
-  let out = "BX-";
-  for (let i = 0; i < len; i++) {
-    out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-  }
-  return out;
+function generateShortCode(): string {
+  // 5 caractères, au moins une lettre et un chiffre, tirés sans biais.
+  let code: string;
+  do {
+    code = Array.from({ length: 5 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
+  } while (!/[A-Z]/.test(code) || !/[0-9]/.test(code));
+  return code;
 }
 
 function normalizeServerCode(raw: string): string {
-  const clean = raw.trim().replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  const trimmed = raw.trim().toUpperCase();
+  if (/^[A-Z0-9]{5}$/.test(trimmed)) return trimmed;
+  const clean = trimmed.replace(/[^A-Z0-9]/g, "");
   if (!clean) return "";
-  if (clean.startsWith("BX") && clean.length >= 6) {
-    return `BX-${clean.slice(2, 10)}`;
-  }
+  if (clean.startsWith("BX") && clean.length >= 6) return `BX-${clean.slice(2, 10)}`;
   return `BX-${clean.slice(0, 8)}`;
 }
 
 /**
- * POST /api/coupons — Enregistre un coupon (1 à 8 sélections) et renvoie un code court ex. `BX-84K2`.
+ * POST /api/coupons — Enregistre un coupon et renvoie un code à cinq caractères (ex. `D6M8A`).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -119,7 +121,11 @@ export async function POST(req: NextRequest) {
     }
 
     for (let attempt = 0; attempt < 6; attempt++) {
-      const code = generateShortCode(attempt < 3 ? 4 : 5);
+      const code = generateShortCode();
+      // Les anciennes APK ajoutent BX- : éviter toute collision avec leurs anciens coupons.
+      const [legacy] = await db.select({ code: savedCoupons.code }).from(savedCoupons)
+        .where(eq(savedCoupons.code, `BX-${code}`)).limit(1);
+      if (legacy) continue;
       const inserted = await db
         .insert(savedCoupons)
         .values({
@@ -145,22 +151,25 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * GET /api/coupons?code=BX-84K2 — Charge et réactualise les sélections d'un code coupon.
+ * GET /api/coupons?code=D6M8A — Charge et réactualise les sélections d'un code coupon.
  */
 export async function GET(req: NextRequest) {
   try {
     await ensureSavedCouponsTable();
     const rawCode = req.nextUrl.searchParams.get("code") ?? "";
     const code = normalizeServerCode(rawCode);
-    if (!code || code.length < 6) {
-      return NextResponse.json({ error: "Code coupon invalide (ex. BX-84K2)." }, { status: 400 });
+    if (!code || code.length < 5) {
+      return NextResponse.json({ error: "Code coupon invalide (ex. D6M8A)." }, { status: 400 });
     }
 
-    const [row] = await db
-      .select()
-      .from(savedCoupons)
-      .where(eq(savedCoupons.code, code))
-      .limit(1);
+    // Repli compatible avec les anciennes APK et les anciens codes à cinq caractères.
+    const alternate = /^BX-[A-Z0-9]{5}$/.test(code)
+      ? code.slice(3)
+      : /^[A-Z0-9]{5}$/.test(code) ? `BX-${code}` : null;
+    let [row] = await db.select().from(savedCoupons).where(eq(savedCoupons.code, code)).limit(1);
+    if (!row && alternate) {
+      [row] = await db.select().from(savedCoupons).where(eq(savedCoupons.code, alternate)).limit(1);
+    }
 
     if (!row || !Array.isArray(row.legs) || row.legs.length === 0) {
       return NextResponse.json(

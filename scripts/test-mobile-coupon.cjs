@@ -13,6 +13,8 @@ assert.match(validateLoadedCoupon([{ ...sport(1), odds: NaN }], 30), /invalide/)
 assert.match(validateLoadedCoupon([{ ...sport(1), matchSource: undefined }], 30), /invalide/);
 assert.equal(normalizeCouponCode('https://example.com/betslip?code=bx-84k2'), 'BX-84K2');
 assert.equal(normalizeCouponCode('84k2'), 'BX-84K2');
+assert.equal(normalizeCouponCode('d6m8a'), 'D6M8A');
+assert.equal(normalizeCouponCode('https://example.com/betslip?code=d6m8a'), 'D6M8A');
 const layout = fs.readFileSync('mobile/app/(main)/_layout.tsx', 'utf8');
 const page = fs.readFileSync('mobile/app/(main)/betslip.tsx', 'utf8');
 const actions = fs.readFileSync('mobile/src/components/betslip-coupon-actions.tsx', 'utf8');

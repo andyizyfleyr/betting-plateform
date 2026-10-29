@@ -1,25 +1,26 @@
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable,
-  Share, StyleSheet, Text, TextInput, View,
+  StyleSheet, Text, TextInput, View,
 } from "react-native";
+import { requireOptionalNativeModule } from "expo-modules-core";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Bookmark, CheckCircle2, Download, MoreVertical, Share2, Trash2, X } from "lucide-react-native";
+import { Bookmark, Copy, Download, MoreVertical, Trash2, X } from "lucide-react-native";
 import { useApp, type ComboSelection } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
 import { normalizeCouponCode } from "@/lib/coupon-code";
 import { validateLoadedCoupon } from "@/lib/coupon-load-validation";
 import { COLORS } from "@/theme/tokens";
 
-type ModalMode = "load" | "saving" | "saved" | null;
+type ModalMode = "menu" | "load" | "saving" | "saved" | null;
 
 export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
   const { comboLegs, loadComboLegs, bettingLimits, bettingLimitsReady, toast } = useApp();
   const insets = useSafeAreaInsets();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [mode, setMode] = useState<ModalMode>(null);
   const [code, setCode] = useState("");
   const [savedCode, setSavedCode] = useState("");
+  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -31,13 +32,13 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
 
   const save = async () => {
     if (!comboLegs.length || mode === "saving") return;
-    setMenuOpen(false);
     setError("");
     setMode("saving");
     try {
       const snapshot = [...comboLegs];
       const result = await api.saveCoupon(snapshot);
       setSavedCode(result.code);
+      setCopied(false);
       setMode("saved");
     } catch (err) {
       setMode(null);
@@ -75,49 +76,53 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
     }
   };
 
-  const share = async () => {
-    try { await Share.share({ message: `Mon code coupon Pulse Bet : ${savedCode} — https://be-plateform.vercel.app/betslip?code=${encodeURIComponent(savedCode)}` }); } catch { /* partage annulé */ }
+  const copyCode = async () => {
+    try {
+      // Certaines anciennes APK ne contiennent pas le module natif du presse-papiers.
+      if (!requireOptionalNativeModule("ExpoClipboard")) throw new Error("Presse-papiers indisponible.");
+      const clipboard = require("expo-clipboard") as typeof import("expo-clipboard");
+      if (!(await clipboard.setStringAsync(savedCode))) throw new Error("Copie impossible.");
+      setCopied(true);
+    } catch {
+      Alert.alert("Copie indisponible", "Maintenez le code appuyé pour le sélectionner et le copier.");
+    }
   };
 
   return <>
     <View style={styles.actions}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Vider le Betslip" disabled={!comboLegs.length} onPress={() => { setMenuOpen(false); onClear(); }} style={({pressed}) => [styles.iconButton, !comboLegs.length && styles.disabled, pressed && styles.pressed]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Vider le Betslip" disabled={!comboLegs.length} onPress={onClear} style={({pressed}) => [styles.iconButton, !comboLegs.length && styles.disabled, pressed && styles.pressed]}>
         <Trash2 size={18} color={COLORS.mist} strokeWidth={2} />
       </Pressable>
-      <View style={styles.menuAnchor}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Options du coupon" accessibilityState={{ expanded: menuOpen }} onPress={() => setMenuOpen(v => !v)} style={({pressed}) => [styles.iconButton, menuOpen && styles.iconActive, pressed && styles.pressed]}>
-          <MoreVertical size={20} color={COLORS.ink} strokeWidth={2} />
-        </Pressable>
-        {menuOpen ? <View style={styles.menu}>
-          <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); setError(""); setMode("load"); }} style={styles.menuItem}>
-            <Download size={17} color={COLORS.ink} /><Text style={styles.menuText}>Charger le coupon de pari</Text>
-          </Pressable>
-          <View style={styles.menuDivider} />
-          <Pressable accessibilityRole="button" accessibilityState={{disabled: !comboLegs.length}} disabled={!comboLegs.length} onPress={() => void save()} style={[styles.menuItem, !comboLegs.length && styles.disabled]}>
-            <Bookmark size={17} color={COLORS.ink} /><Text style={styles.menuText}>Enregistrer le coupon de pari</Text>
-          </Pressable>
-        </View> : null}
-      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Options du coupon" onPress={() => setMode("menu")} style={({pressed}) => [styles.iconButton, pressed && styles.pressed]}>
+        <MoreVertical size={20} color={COLORS.ink} strokeWidth={2} />
+      </Pressable>
     </View>
-    <Modal visible={mode !== null} transparent animationType={mode === "load" ? "slide" : "fade"} onRequestClose={closeModal} statusBarTranslucent>
-      <KeyboardAvoidingView style={[styles.overlay, mode === "load" ? styles.bottomOverlay : styles.centerOverlay]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <Modal visible={mode !== null} transparent animationType={mode === "load" || mode === "menu" ? "slide" : "fade"} onRequestClose={closeModal} statusBarTranslucent>
+      <KeyboardAvoidingView style={[styles.overlay, mode === "load" || mode === "menu" ? styles.bottomOverlay : styles.centerOverlay]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <Pressable accessibilityLabel="Fermer" style={StyleSheet.absoluteFill} onPress={closeModal} />
-        {mode === "load" ? <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        {mode === "menu" ? <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={styles.handle} />
+          <View style={styles.modalHeader}><Text style={[styles.title, styles.modalHeading]}>Coupon de pari</Text><Pressable accessibilityRole="button" accessibilityLabel="Fermer" onPress={closeModal} style={styles.close}><X size={19} color={COLORS.mist} /></Pressable></View>
+          <Pressable accessibilityRole="button" onPress={() => { setError(""); setMode("load"); }} style={styles.menuItem}><Download size={18} color={COLORS.ink} /><Text style={styles.menuText}>Charger le coupon de pari</Text></Pressable>
+          <View style={styles.menuDivider} />
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: !comboLegs.length }} disabled={!comboLegs.length} onPress={() => void save()} style={[styles.menuItem, !comboLegs.length && styles.disabled]}><Bookmark size={18} color={COLORS.ink} /><Text style={styles.menuText}>Enregistrer le coupon de pari</Text></Pressable>
+        </View> : mode === "load" ? <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />
           <View style={styles.modalHeader}><View style={styles.modalHeading}><Text style={styles.title}>Charger le coupon de pari</Text><Text style={styles.description}>Retrouvez les sélections d’un coupon avec son code.</Text></View><Pressable accessibilityLabel="Fermer" onPress={closeModal} style={styles.close}><X size={19} color={COLORS.mist} /></Pressable></View>
           <Text style={styles.label}>Saisissez le code du coupon de pari</Text>
-          <TextInput accessibilityLabel="Saisissez le code du coupon de pari" value={code} onChangeText={v => { setCode(v); setError(""); }} placeholder="Ex. BX-84K2" placeholderTextColor={COLORS.dim} autoCapitalize="characters" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => void load()} style={styles.input} />
+          <TextInput accessibilityLabel="Saisissez le code du coupon de pari" value={code} onChangeText={v => { setCode(v); setError(""); }} placeholder="Ex. D6M8A" placeholderTextColor={COLORS.dim} autoCapitalize="characters" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => void load()} style={styles.input} />
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
           {!bettingLimitsReady ? <Text style={styles.description}>Chargement des limites du coupon…</Text> : null}
           <Pressable accessibilityRole="button" disabled={!code.trim() || loading || !bettingLimitsReady} onPress={() => void load()} style={[styles.primary, (!code.trim() || loading || !bettingLimitsReady) && styles.disabled]}>{loading ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.primaryText}>Télécharger</Text>}</Pressable>
         </View> : <View style={styles.dialog}>
           {mode === "saving" ? <><ActivityIndicator color={COLORS.betclicRed} /><Text style={styles.title}>Enregistrement du coupon…</Text></> : <>
-            <View style={styles.successIcon}><CheckCircle2 size={23} color={COLORS.win} /></View>
             <Text style={styles.title}>Coupon enregistré</Text>
-            <Text style={styles.description}>Partagez ce code pour retrouver votre coupon de pari.</Text>
+            <Text style={styles.description}>Copiez ce code pour retrouver votre coupon de pari.</Text>
             <Text selectable accessibilityLabel={`Code du coupon ${savedCode}`} style={styles.savedCode}>{savedCode}</Text>
-            <Pressable accessibilityRole="button" onPress={() => void share()} style={styles.primary}><Share2 size={16} color="white" /><Text style={styles.primaryText}>Partager le code</Text></Pressable>
-            <Pressable accessibilityRole="button" onPress={closeModal} style={styles.secondary}><Text style={styles.secondaryText}>Fermer</Text></Pressable>
+            <View style={styles.dialogActions}>
+              <Pressable accessibilityRole="button" onPress={() => void copyCode()} style={styles.copyButton}><Copy size={14} color="white" /><Text style={styles.primaryText}>{copied ? "Code copié" : "Copier le code"}</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={closeModal} style={styles.secondary}><Text style={styles.secondaryText}>Fermer</Text></Pressable>
+            </View>
           </>}
         </View>}
       </KeyboardAvoidingView>
@@ -131,8 +136,6 @@ const styles = StyleSheet.create({
   iconActive: { backgroundColor: COLORS.elev },
   disabled: { opacity: 0.4 },
   pressed: { backgroundColor: COLORS.elev },
-  menuAnchor: { position: "relative", zIndex: 30 },
-  menu: { position: "absolute", right: 0, top: 41, width: 235, borderRadius: 14, backgroundColor: "white", borderWidth: 1, borderColor: COLORS.edge, padding: 4, elevation: 10, shadowColor: "#000", shadowOpacity: 0.14, shadowRadius: 12, shadowOffset: { width: 0, height: 5 } },
   menuItem: { minHeight: 44, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 10 },
   menuText: { flex: 1, fontSize: 11, color: COLORS.ink },
   menuDivider: { height: 1, backgroundColor: COLORS.edge, marginHorizontal: 8 },
@@ -151,9 +154,10 @@ const styles = StyleSheet.create({
   error: { color: COLORS.betclicRed, fontSize: 11 },
   primary: { minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: COLORS.betclicRed },
   primaryText: { color: "white", fontSize: 11 },
-  dialog: { backgroundColor: "white", borderRadius: 20, padding: 20, gap: 12 },
-  successIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: COLORS.winSoft, alignItems: "center", justifyContent: "center" },
+  dialog: { backgroundColor: "white", borderRadius: 18, padding: 16, gap: 8 },
+  dialogActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  copyButton: { minHeight: 38, paddingHorizontal: 14, borderRadius: 10, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6, backgroundColor: COLORS.betclicRed },
   savedCode: { borderRadius: 12, backgroundColor: COLORS.elev, color: COLORS.ink, textAlign: "center", overflow: "hidden", padding: 14, fontSize: 18, letterSpacing: 2 },
-  secondary: { alignItems: "center", justifyContent: "center", minHeight: 38 },
+  secondary: { alignItems: "center", justifyContent: "center", minHeight: 38, paddingHorizontal: 12 },
   secondaryText: { color: COLORS.mist, fontSize: 11 },
 });

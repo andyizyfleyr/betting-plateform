@@ -29,7 +29,6 @@ import {
   TicketTeamRow,
 } from "@/components/bet-ticket";
 import { LiveMatchClock } from "@/components/live-match-clock";
-import { BetDispute } from "@/components/bet-dispute";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
@@ -526,7 +525,6 @@ export default function ComboDetailScreen() {
             </View>
           )}
         </View>
-        {bet ? <BetDispute betId={bet.id} betKind="combo" /> : null}
       </ScrollView>
 
       <ShareTicketModal

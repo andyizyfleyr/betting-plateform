@@ -5,6 +5,7 @@ import { useApp } from "@/context/app-context";
 import { generateIdempotencyKey, requestJson } from "@/lib/http";
 import { loadNotifications } from "@/lib/push-notifications";
 import { COLORS } from "@/theme/tokens";
+import { usePathname } from "@/lib/router";
 
 type Message = { id: number; sender_role: string; body: string; created_at: string; read_at: string | null };
 type Conversation = { id: number; name: string; online: boolean; last_seen_at: string | null; unread: number };
@@ -19,9 +20,10 @@ function lastSeen(value: string) {
 }
 export function SupportChat() {
   const { user } = useApp();
-  return user ? <Chat key={user.id} isAdmin={user.role === "admin"} /> : null;
+  const pathname = usePathname();
+  return user ? <Chat key={user.id} isAdmin={user.role === "admin"} showButton={pathname === "/parametres"} /> : null;
 }
-function Chat({ isAdmin }: { isAdmin: boolean }) {
+function Chat({ isAdmin, showButton }: { isAdmin: boolean; showButton: boolean }) {
   const [open, setOpen] = useState(false); const [selected, setSelected] = useState<number | null>(null);
   const [rows, setRows] = useState<Conversation[]>([]); const [messages, setMessages] = useState<Message[]>([]);
   const [unread, setUnread] = useState(0); const [online, setOnline] = useState(false);
@@ -55,7 +57,7 @@ function Chat({ isAdmin }: { isAdmin: boolean }) {
   };
   const chatOpen = !isAdmin || selected !== null;
   return <>
-    <Pressable accessibilityLabel="Ouvrir la messagerie" onPress={() => setOpen(true)} style={{ position: "absolute", right: 12, bottom: 76, zIndex: 90, width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.betclicRed, elevation: 6 }}><MessageCircle size={23} color="white" />{unread > 0 && <View style={{ position: "absolute", right: -2, top: -2, borderRadius: 12, backgroundColor: COLORS.ink, paddingHorizontal: 5 }}><Text style={{ color: "white", fontSize: 10 }}>{unread > 99 ? "99+" : unread}</Text></View>}</Pressable>
+    {showButton ? <Pressable accessibilityLabel="Ouvrir la messagerie" onPress={() => setOpen(true)} style={{ position: "absolute", right: 12, bottom: 76, zIndex: 90, width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.betclicRed, elevation: 6 }}><MessageCircle size={23} color="white" />{unread > 0 && <View style={{ position: "absolute", right: -2, top: -2, borderRadius: 12, backgroundColor: COLORS.ink, paddingHorizontal: 5 }}><Text style={{ color: "white", fontSize: 10 }}>{unread > 99 ? "99+" : unread}</Text></View>}</Pressable> : null}
     <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
       <View style={{ flex: 1, backgroundColor: "white", paddingTop: 35 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderBottomWidth: 1, borderColor: COLORS.edge }}>

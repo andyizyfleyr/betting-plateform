@@ -18,12 +18,10 @@ import {
   TrendingUp,
 } from "lucide-react-native";
 import {
-  shortMarketBadge,
   StatusPill,
   TicketTeamRow,
 } from "@/components/bet-ticket";
 import { LiveMatchClock } from "@/components/live-match-clock";
-import { BetDispute } from "@/components/bet-dispute";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { SlideToCashOut } from "@/components/slide-to-cashout";
@@ -192,7 +190,6 @@ export default function SingleBetDetailScreen() {
     return null;
   }, [bet]);
 
-  const marketTag = bet ? shortMarketBadge(bet.market) : null;
   const canShare = Boolean(
     bet &&
       bet.status === "pending" &&
@@ -548,13 +545,8 @@ export default function SingleBetDetailScreen() {
                 <View style={styles.pickRow}>
                   <View style={styles.pickLeft}>
                     <Text numberOfLines={1} style={styles.pickLabel}>
-                      {bet.selectionLabel}
+                      Choix : {bet.selectionLabel}
                     </Text>
-                    {marketTag ? (
-                      <View style={styles.marketBadge}>
-                        <Text style={styles.marketBadgeText}>{marketTag}</Text>
-                      </View>
-                    ) : null}
                   </View>
                   <View style={styles.pickOddsBadge}>
                     <Text style={styles.pickOddsText}>
@@ -583,7 +575,6 @@ export default function SingleBetDetailScreen() {
             </View>
           )}
         </View>
-        {bet ? <BetDispute betId={bet.id} betKind={bet.kind === "prediction" ? "prediction" : "sport"} /> : null}
       </ScrollView>
 
       <ShareTicketModal

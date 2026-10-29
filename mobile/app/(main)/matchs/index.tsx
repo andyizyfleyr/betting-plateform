@@ -158,6 +158,7 @@ function RealMatchCarouselRow({
             <MatchCard
               key={m.id}
               match={m}
+              homeCard
               nextUp={Boolean(markFirstAsNextUp && idx === 0)}
               width={cardWidth}
             />
