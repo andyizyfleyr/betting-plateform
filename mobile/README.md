@@ -43,7 +43,7 @@ Les notifications système exigent un **nouvel APK** contenant `expo-notificatio
 Configurer dans le fournisseur de build (EAS ou Codemagic), sans placer de secrets dans Git :
 
 1. Le projet Expo/EAS associé à l'application et `EXPO_PUBLIC_EAS_PROJECT_ID` (identifiant public du projet).
-2. Un projet Firebase pour le paquet Android `app.pulsebets.android`, avec le fichier de configuration fourni comme fichier sécurisé. Définir `GOOGLE_SERVICES_JSON` sur son chemin dans le build : `app.config.js` le transmet à Expo.
+2. Un projet Firebase pour le paquet Android `app.pulsebets.android`. Pour Codemagic, créer le groupe `firebase_credentials` et y enregistrer le contenu complet de `google-services.json` dans la variable sécurisée `FIREBASE_GOOGLE_SERVICES_JSON`. Le script prépare le fichier ignoré par Git et transmet son chemin à Expo. Pour EAS, fournir le fichier par variable de type fichier et définir `GOOGLE_SERVICES_JSON` sur son chemin.
 3. La clé de service FCM v1 dans les identifiants push du projet EAS, via le gestionnaire de credentials Expo. Ne pas copier cette clé dans le dépôt.
 4. Construire et installer l'APK 1.2.6 ou ultérieur, autoriser les notifications, puis tester la réception sur un appareil physique. Un build sans fichier Firebase ou sans identifiant EAS ne permet pas les push.
 5. Un déclencheur régulier de `/api/cron/tick` est nécessaire lorsque personne n'ouvre l'application ; la fréquence du déclencheur détermine le délai des alertes hors ligne. Les événements actifs déclenchent aussi une tentative en arrière-plan. Les reçus Expo indiquent l'acceptation par Expo, pas une garantie de livraison sur le téléphone.

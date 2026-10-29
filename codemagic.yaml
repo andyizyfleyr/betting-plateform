@@ -14,6 +14,8 @@ workflows:
     environment:
       node: 22
       java: 17
+      groups:
+        - firebase_credentials
       vars:
         NODE_ENV: "production"
         EXPO_PUBLIC_API_URL: "https://be-plateform.vercel.app"
@@ -30,6 +32,8 @@ workflows:
       - name: Génération du projet Android natif (Expo SDK 52 Prebuild)
         script: |
           cd mobile
+          node scripts/prepare-firebase-config.js
+          export GOOGLE_SERVICES_JSON="$PWD/google-services.json"
           npx expo prebuild --platform android --no-install
       - name: Configuration Android SDK & compilation APK Release (ARM compressé)
         script: |
