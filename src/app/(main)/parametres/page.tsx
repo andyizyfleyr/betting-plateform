@@ -1,5 +1,6 @@
 "use client";
 
+import { TwoFactorSettings } from "@/components/two-factor-settings";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -503,6 +504,7 @@ export default function ParametresPage() {
               </div>
             </div>
 
+            <TwoFactorSettings />
             <SwitchRow
               Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
               label="Toutes les notifications"

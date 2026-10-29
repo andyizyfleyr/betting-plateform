@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TwoFactorSettings } from "@/components/two-factor-settings";
 import {
   ActivityIndicator,
   Pressable,
@@ -596,6 +597,7 @@ export default function ParametresScreen() {
               </View>
             </View>
 
+            <TwoFactorSettings />
             <SwitchRow
               icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
               label="Toutes les notifications"

@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v17";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v18";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -118,6 +118,12 @@ async function runSeedInternal(): Promise<void> {
       UNIQUE ("token", "event_key")
     );
     CREATE INDEX IF NOT EXISTS "push_outbox_pending_idx" ON "push_outbox" ("id") WHERE "sent_at" IS NULL;
+    CREATE TABLE IF NOT EXISTS "user_two_factor" (
+      "user_id" integer PRIMARY KEY REFERENCES "app_user"("id"),
+      "secret_ciphertext" text NOT NULL, "enabled" boolean NOT NULL DEFAULT false,
+      "pending_until" timestamp, "last_step" bigint NOT NULL DEFAULT -1,
+      "attempts" integer NOT NULL DEFAULT 0, "locked_until" timestamp, "recovery_hashes" jsonb NOT NULL DEFAULT '[]'::jsonb
+    );
     CREATE TABLE IF NOT EXISTS "payment_incident_reviews" (
       "kind" text NOT NULL CHECK ("kind" IN ('deposit', 'withdrawal')),
       "payment_id" integer NOT NULL CHECK ("payment_id" > 0),

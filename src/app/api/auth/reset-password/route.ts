@@ -1,3 +1,4 @@
+import { hasSecondFactor } from "@/lib/two-factor";
 import { recordSecurityAlert } from "@/lib/security-alerts";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -112,6 +113,10 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    if (await hasSecondFactor(tokenRow.userId)) {
+      return NextResponse.json({ error: "Compte protégé par double authentification : contactez le support pour récupérer l’accès." }, { status: 403 });
     }
 
     const updatedUser = await db.transaction(async (tx) => {

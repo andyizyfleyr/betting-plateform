@@ -506,7 +506,7 @@ export const api = {
       }),
     login: async (
       emailOrPayload:
-        | { email: string; password: string; rememberMe?: boolean }
+        | { email: string; password: string; rememberMe?: boolean; totpCode?: string }
         | string,
       maybePassword?: string,
       maybeRememberMe?: boolean
