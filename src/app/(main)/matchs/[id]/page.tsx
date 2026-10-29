@@ -1,4 +1,5 @@
 "use client";
+import { FavoriteTeamButton } from "@/components/favorite-teams";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -329,6 +330,7 @@ export default function MatchDetailPage() {
                   <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
                     {match.homeTeam}
                   </span>
+                  <FavoriteTeamButton teamName={match.homeTeam} />
                   {(match.redHome ?? 0) > 0 && (
                     <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-medium text-white">
                       🟥 ×{match.redHome}
@@ -402,6 +404,7 @@ export default function MatchDetailPage() {
                   <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
                     {match.awayTeam}
                   </span>
+                  <FavoriteTeamButton teamName={match.awayTeam} />
                   {(match.redAway ?? 0) > 0 && (
                     <span className="rounded bg-betclic-red px-1 py-0.5 font-display text-[8.5px] font-medium text-white">
                       🟥 ×{match.redAway}

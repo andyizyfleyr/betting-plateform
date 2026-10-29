@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { and, desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
     if (!ticket) return NextResponse.json({ error: "Ticket introuvable" }, { status: 404 });
     const [dispute] = await db.insert(betDisputes).values({ userId: uid, betId: id, betKind: kind, message }).onConflictDoNothing().returning();
     if (!dispute) return NextResponse.json({ error: "Une réclamation est déjà en cours pour ce ticket." }, { status: 409 });
+  schedulePushNotifications();
     return NextResponse.json({ dispute }, { status: 201 });
   } catch (e) { return formatServerErrorResponse(e, "POST /api/disputes"); }
 }

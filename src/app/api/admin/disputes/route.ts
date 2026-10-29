@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -37,6 +38,7 @@ export async function PATCH(req: NextRequest) {
     const [dispute] = await db.update(betDisputes).set({ status, adminReply: reply || null, updatedAt: new Date() })
       .where(eq(betDisputes.id, id)).returning();
     if (!dispute) return NextResponse.json({ error: "Réclamation introuvable" }, { status: 404 });
+  schedulePushNotifications();
     return NextResponse.json({ dispute });
   } catch (e) { return formatServerErrorResponse(e, "PATCH /api/admin/disputes"); }
 }

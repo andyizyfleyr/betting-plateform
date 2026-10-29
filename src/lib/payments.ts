@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { timingSafeEqual } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -528,6 +529,7 @@ export async function creditDeposit(
 
   if (creditedUserId != null) {
     invalidateUserCaches([creditedUserId]);
+    schedulePushNotifications();
   }
   return true;
 }
@@ -580,6 +582,7 @@ export async function processStripeWebhookEvent(
 
   if (creditedUserId != null) {
     invalidateUserCaches([creditedUserId]);
+    schedulePushNotifications();
   }
   return outcome;
 }

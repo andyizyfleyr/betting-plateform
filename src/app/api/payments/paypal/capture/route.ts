@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -126,6 +127,7 @@ export async function POST(req: NextRequest) {
 
     if (creditedNow) {
       invalidateUserCaches([uid]);
+      schedulePushNotifications();
     }
 
     return NextResponse.json({ user: pub });

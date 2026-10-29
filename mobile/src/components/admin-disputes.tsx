@@ -18,7 +18,7 @@ export function AdminDisputes() {
     if (busy !== null) return;
     setBusy(id); setError("");
     try {
-      await requestJson("/api/admin/disputes", { method: "PATCH", body: { id, status, reply: drafts[id] ?? "" } });
+      await requestJson("/api/admin/disputes", { method: "PATCH", body: { id, status, reply: drafts[id] ?? rows.find((r) => r.dispute.id === id)?.dispute.adminReply ?? "" } });
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Enregistrement impossible."); }
     finally { setBusy(null); }

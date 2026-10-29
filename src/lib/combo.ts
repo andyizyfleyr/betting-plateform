@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { eq, inArray, ne, and, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -351,6 +352,7 @@ export async function settlePendingCombos(): Promise<void> {
       ) AS agg
       WHERE u."id" = agg."user_id"
     `);
+  schedulePushNotifications();
     notifyBetsSettledOrMutated();
     invalidateHouseHealthCache();
   } else if (legsOnlyPatches.length > 0) {

@@ -1,3 +1,4 @@
+import { schedulePushNotifications } from "@/lib/push-notifications";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -173,6 +174,7 @@ export async function settleQuestion(
 
   invalidateQuestionScheduleCache();
   invalidatePredictionsCatalogCache(true);
+  schedulePushNotifications();
   notifyBetsSettledOrMutated();
   await settlePendingCombos();
   invalidateHouseHealthCache();

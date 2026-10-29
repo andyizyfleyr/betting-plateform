@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "crypto";
+import { flushPushNotifications } from "@/lib/push-notifications";
 import { count, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -170,11 +171,14 @@ export async function GET(req: NextRequest) {
   try {
     if (isLightMode) {
       const lightResult = await runLightCronTick();
+      await ensureSeeded();
+      await flushPushNotifications().catch((e) => console.error("[push] cron", e));
       return NextResponse.json(lightResult);
     }
 
     await ensureSeeded();
     await syncPlatformStateThrottled(true, { fromCron: true });
+    await flushPushNotifications().catch((e) => console.error("[push] cron", e));
     await pruneExpiredIdempotencyKeys();
     const ml = await retrainAllMlModels();
     invalidatePublicApiCaches(true);

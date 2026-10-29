@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v13";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v14";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -104,6 +104,20 @@ async function runSeedInternal(): Promise<void> {
   `);
 
   await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS "push_devices" (
+      "token" text PRIMARY KEY, "user_id" integer NOT NULL REFERENCES "app_user"("id"),
+      "created_at" timestamp NOT NULL DEFAULT now(), "updated_at" timestamp NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS "push_devices_user_idx" ON "push_devices" ("user_id");
+    CREATE TABLE IF NOT EXISTS "push_outbox" (
+      "id" serial PRIMARY KEY, "token" text NOT NULL REFERENCES "push_devices"("token") ON DELETE CASCADE,
+      "event_key" text NOT NULL, "title" text NOT NULL, "body" text NOT NULL,
+      "data" jsonb NOT NULL DEFAULT '{}'::jsonb,
+      "created_at" timestamp NOT NULL DEFAULT now(), "sent_at" timestamp,
+      "claimed_until" timestamp, "attempts" integer NOT NULL DEFAULT 0,
+      UNIQUE ("token", "event_key")
+    );
+    CREATE INDEX IF NOT EXISTS "push_outbox_pending_idx" ON "push_outbox" ("id") WHERE "sent_at" IS NULL;
     CREATE TABLE IF NOT EXISTS "favorite_teams" (
       "user_id" integer NOT NULL REFERENCES "app_user"("id"),
       "team_key" text NOT NULL,

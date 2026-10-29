@@ -1,4 +1,5 @@
 "use client";
+import { BetDispute } from "@/components/bet-dispute";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -920,6 +921,7 @@ export default function SingleBetDetailPage() {
         )}
       </div>
 
+      {bet ? <BetDispute betId={bet.id} betKind={bet.kind === "prediction" ? "prediction" : "sport"} /> : null}
       <ShareTicketModal
         bet={sharing && bet ? bet : null}
         onClose={() => setSharing(false)}

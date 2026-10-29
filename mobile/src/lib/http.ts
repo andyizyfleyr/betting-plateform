@@ -36,6 +36,44 @@ export interface CashoutChangedDetails {
 }
 
 const TOKEN_STORE_KEY = "pulse_android_jwt_v1";
+const BIOMETRIC_TOKEN_KEY = "pulse_android_jwt_biometric_v1";
+const BIOMETRIC_ENABLED_KEY = "pulse_android_biometric_enabled_v1";
+const BIOMETRIC_OPTIONS: SecureStore.SecureStoreOptions = {
+  requireAuthentication: true,
+  authenticationPrompt: "Confirmez votre identité pour accéder à Pulse Bet",
+};
+let biometricMode = false;
+
+export async function isBiometricLoginEnabled(): Promise<boolean> {
+  try { return (await SecureStore.getItemAsync(BIOMETRIC_ENABLED_KEY)) === "1"; }
+  catch { return false; }
+}
+
+export function isBiometricModeActive(): boolean { return biometricMode; }
+export async function verifyBiometricUnlock(): Promise<boolean> {
+  if (!biometricMode || !memoryAuthToken) return false;
+  const verified = await SecureStore.getItemAsync(BIOMETRIC_TOKEN_KEY, BIOMETRIC_OPTIONS);
+  return !!verified && verified === memoryAuthToken;
+}
+
+export async function setBiometricLoginEnabled(enabled: boolean): Promise<void> {
+  if (enabled) {
+    if (!SecureStore.canUseBiometricAuthentication()) throw new Error("Aucune biométrie disponible ou configurée sur cet appareil.");
+    if (!memoryAuthToken) throw new Error("Connectez-vous avant d’activer la biométrie.");
+    // Créer et vérifier la clé protégée avant de supprimer le jeton non protégé.
+    await SecureStore.setItemAsync(BIOMETRIC_TOKEN_KEY, memoryAuthToken, BIOMETRIC_OPTIONS);
+    const verified = await SecureStore.getItemAsync(BIOMETRIC_TOKEN_KEY, BIOMETRIC_OPTIONS);
+    if (verified !== memoryAuthToken) throw new Error("La vérification biométrique a échoué.");
+    await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "1");
+    biometricMode = true;
+    await SecureStore.deleteItemAsync(TOKEN_STORE_KEY);
+  } else {
+    if (memoryAuthToken) await SecureStore.setItemAsync(TOKEN_STORE_KEY, memoryAuthToken);
+    await SecureStore.deleteItemAsync(BIOMETRIC_ENABLED_KEY);
+    biometricMode = false;
+    await SecureStore.deleteItemAsync(BIOMETRIC_TOKEN_KEY);
+  }
+}
 
 function resolveApiBaseUrl(): string {
   const envUrl =
@@ -68,6 +106,7 @@ export const API_BASE_URL = resolveApiBaseUrl();
 
 let memoryAuthToken: string | null = null;
 let tokenHydrated = false;
+let hydrationPromise: Promise<string | null> | null = null;
 let unauthorizedListeners: Array<() => void> = [];
 
 export function onUnauthorizedResponse(cb: () => void): () => void {
@@ -79,14 +118,22 @@ export function onUnauthorizedResponse(cb: () => void): () => void {
 
 export async function hydrateAuthToken(): Promise<string | null> {
   if (tokenHydrated) return memoryAuthToken;
-  try {
-    const stored = await SecureStore.getItemAsync(TOKEN_STORE_KEY);
-    memoryAuthToken = stored && stored.trim().length > 0 ? stored.trim() : null;
-  } catch {
-    memoryAuthToken = null;
-  }
-  tokenHydrated = true;
-  return memoryAuthToken;
+  if (hydrationPromise) return hydrationPromise;
+  hydrationPromise = (async () => {
+    try {
+      biometricMode = await isBiometricLoginEnabled();
+      const stored = biometricMode
+        ? await SecureStore.getItemAsync(BIOMETRIC_TOKEN_KEY, BIOMETRIC_OPTIONS)
+        : await SecureStore.getItemAsync(TOKEN_STORE_KEY);
+      memoryAuthToken = stored && stored.trim().length > 0 ? stored.trim() : null;
+    } catch {
+      // Annulation ou biométrie changée : aucune session n'est restaurée ; mot de passe requis.
+      memoryAuthToken = null;
+    }
+    tokenHydrated = true;
+    return memoryAuthToken;
+  })();
+  try { return await hydrationPromise; } finally { hydrationPromise = null; }
 }
 
 export function getMemoryAuthToken(): string | null {
@@ -99,9 +146,17 @@ export async function persistAuthToken(token: string | null): Promise<void> {
   clearEtagCache();
   try {
     if (memoryAuthToken) {
-      await SecureStore.setItemAsync(TOKEN_STORE_KEY, memoryAuthToken);
+      if (biometricMode) {
+        await SecureStore.setItemAsync(BIOMETRIC_TOKEN_KEY, memoryAuthToken, BIOMETRIC_OPTIONS);
+        await SecureStore.deleteItemAsync(TOKEN_STORE_KEY);
+      } else {
+        await SecureStore.setItemAsync(TOKEN_STORE_KEY, memoryAuthToken);
+      }
     } else {
       await SecureStore.deleteItemAsync(TOKEN_STORE_KEY);
+      await SecureStore.deleteItemAsync(BIOMETRIC_TOKEN_KEY);
+      await SecureStore.deleteItemAsync(BIOMETRIC_ENABLED_KEY);
+      biometricMode = false;
     }
   } catch {
     // Silencieux si Keystore indisponible
