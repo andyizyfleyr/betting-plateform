@@ -1,6 +1,7 @@
 "use client";
 import { AdminDisputes } from "@/components/admin-disputes";
 import { AdminMonitoring } from "@/components/admin-monitoring";
+import { PaymentIncidents } from "@/components/payment-incidents";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -724,6 +725,7 @@ export default function AdminPage() {
           {tab === "dashboard" && <>
             <Dashboard stats={panel.stats} />
             <AdminMonitoring />
+            <PaymentIncidents />
             <AdminDisputes />
             {panel.bettingLimits && <BettingLimitsForm key={JSON.stringify(panel.bettingLimits)} limits={panel.bettingLimits} busy={Boolean(busy.bettingLimits)} act={act} />}
           </>}

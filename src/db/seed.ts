@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v16";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v17";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -118,6 +118,19 @@ async function runSeedInternal(): Promise<void> {
       UNIQUE ("token", "event_key")
     );
     CREATE INDEX IF NOT EXISTS "push_outbox_pending_idx" ON "push_outbox" ("id") WHERE "sent_at" IS NULL;
+    CREATE TABLE IF NOT EXISTS "payment_incident_reviews" (
+      "kind" text NOT NULL CHECK ("kind" IN ('deposit', 'withdrawal')),
+      "payment_id" integer NOT NULL CHECK ("payment_id" > 0),
+      "state" text NOT NULL CHECK ("state" IN ('open', 'investigating', 'resolved')),
+      "note" text NOT NULL DEFAULT '', "updated_by" integer NOT NULL REFERENCES "app_user"("id"),
+      "updated_at" timestamp NOT NULL DEFAULT now(), PRIMARY KEY ("kind", "payment_id")
+    );
+    CREATE TABLE IF NOT EXISTS "payment_incident_actions" (
+      "id" serial PRIMARY KEY, "kind" text NOT NULL, "payment_id" integer NOT NULL,
+      "state" text NOT NULL, "note" text NOT NULL DEFAULT '',
+      "actor_id" integer NOT NULL REFERENCES "app_user"("id"), "created_at" timestamp NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS "payment_incident_actions_lookup_idx" ON "payment_incident_actions" ("kind", "payment_id", "id" DESC);
     CREATE TABLE IF NOT EXISTS "support_conversations" (
       "id" serial PRIMARY KEY, "user_id" integer NOT NULL UNIQUE REFERENCES "app_user"("id"),
       "created_at" timestamp NOT NULL DEFAULT now(), "updated_at" timestamp NOT NULL DEFAULT now()
