@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
-  AlertTriangle,
   Check,
   ChevronRight,
   Layers,
@@ -12,12 +11,7 @@ import {
 } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import {
-  api,
-  ApiHttpError,
-  CASHOUT_CHANGED_CODE,
-  generateIdempotencyKey,
   type BetStatus,
-  type CashoutChangedDetails,
   type ClientBet,
   type ClientComboLeg,
 } from "@/lib/api";
@@ -26,9 +20,8 @@ import { seedSingleBetSnapshot } from "@/lib/entity-cache";
 import { eur, formatKickoff, formatOdds, formatPlacedAt } from "@/lib/format";
 import type { LiveClockSource } from "@/lib/live-clock";
 import { useRouter } from "@/lib/router";
-import { COLORS, triggerHaptic } from "@/theme/tokens";
+import { COLORS } from "@/theme/tokens";
 import { LiveMatchClock } from "./live-match-clock";
-import { SlideToCashOut } from "./slide-to-cashout";
 import { SportIcon } from "./sport-icon";
 import { TeamAvatar } from "./team-avatar";
 
@@ -303,11 +296,9 @@ function LegMiniStatus({
 export function BetTicket({
   bet,
   onShare,
-  onCashedOut,
 }: {
   bet: ClientBet;
   onShare?: (bet: ClientBet) => void;
-  onCashedOut?: () => void;
 }) {
   if (bet.kind === "combo") {
     return (
@@ -315,12 +306,11 @@ export function BetTicket({
         bet={bet}
         legs={bet.legs ?? []}
         onShare={onShare}
-        onCashedOut={onCashedOut}
       />
     );
   }
   return (
-    <SingleBetTicket bet={bet} onShare={onShare} onCashedOut={onCashedOut} />
+    <SingleBetTicket bet={bet} onShare={onShare} />
   );
 }
 
@@ -328,42 +318,17 @@ function ComboBetTicket({
   bet,
   legs,
   onShare,
-  onCashedOut,
 }: {
   bet: ClientBet;
   legs: ClientComboLeg[];
   onShare?: (bet: ClientBet) => void;
-  onCashedOut?: () => void;
 }) {
   const router = useRouter();
-  const { oddsFormat, setBalance, bumpBets, openShareTicket, toast, hapticsEnabled } =
-    useApp();
-  const [cashing, setCashing] = useState(false);
-  const [cashoutChanged, setCashoutChanged] =
-    useState<CashoutChangedDetails | null>(null);
-  const [serverOverrideCashout, setServerOverrideCashout] = useState<
-    number | null
-  >(null);
-  const inFlightRef = useRef(false);
-  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
-
-  useEffect(() => {
-    if (serverOverrideCashout == null) return;
-    const t = setTimeout(() => setServerOverrideCashout(null), 10_000);
-    return () => clearTimeout(t);
-  }, [serverOverrideCashout]);
-
+  const { oddsFormat, openShareTicket } = useApp();
   const won = bet.status === "won";
   const lost = bet.status === "lost";
   const cashed = bet.status === "cashed";
   const voided = bet.status === "void";
-
-  const effectiveCashOut =
-    bet.cashOut != null
-      ? serverOverrideCashout ?? Math.round(bet.cashOut * 100) / 100
-      : null;
-  const canCashOut =
-    bet.status === "pending" && effectiveCashOut != null && effectiveCashOut > 0;
 
   const sortedLegs = useMemo(
     () => sortComboBetLegsChronologically(legs),
@@ -396,63 +361,6 @@ function ComboBetTicket({
     return `${wonCount}/${totalLegs} sélection${totalLegs > 1 ? "s" : ""} validée${wonCount > 1 ? "s" : ""}`;
   })();
 
-  const doCashOut = async () => {
-    if (cashing || inFlightRef.current || effectiveCashOut == null) return;
-    inFlightRef.current = true;
-    const sig = `combo:${bet.id}:${effectiveCashOut}`;
-    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
-      idempotencySlotRef.current = {
-        key: generateIdempotencyKey("co"),
-        sig,
-      };
-    }
-    setCashing(true);
-    try {
-      const r = await api.cashOut({
-        betId: bet.id,
-        kind: "combo",
-        expectedCashout: effectiveCashOut,
-        idempotencyKey: idempotencySlotRef.current.key,
-      });
-      idempotencySlotRef.current = null;
-      setCashoutChanged(null);
-      setServerOverrideCashout(null);
-      setBalance(r.balance);
-      bumpBets();
-      onCashedOut?.();
-      triggerHaptic("success", hapticsEnabled);
-      toast({
-        kind: "success",
-        title: "Coupon vendu",
-        description: `+${eur(r.value)} crédités sur votre solde`,
-      });
-    } catch (e) {
-      if (e instanceof ApiHttpError && e.status >= 400 && e.status < 500) {
-        idempotencySlotRef.current = null;
-      }
-      if (
-        e instanceof ApiHttpError &&
-        e.status === 409 &&
-        e.code === CASHOUT_CHANGED_CODE &&
-        e.cashoutDetails
-      ) {
-        setCashoutChanged(e.cashoutDetails);
-        setServerOverrideCashout(e.cashoutDetails.currentCashout);
-        bumpBets();
-        return;
-      }
-      setCashoutChanged(null);
-      toast({
-        kind: "error",
-        title: "Vente du coupon impossible",
-        description:
-          e instanceof Error ? e.message : "Réessayez dans un instant",
-      });
-    } finally {
-      inFlightRef.current = false;
-      setCashing(false);
-    }
-  };
 
   const openComboDetail = () => {
     seedSingleBetSnapshot(bet);
@@ -640,25 +548,6 @@ function ComboBetTicket({
         </View>
       </Pressable>
 
-      {canCashOut ? (
-        <View style={styles.cashoutSection}>
-          {cashoutChanged ? (
-            <View style={styles.cashoutAlert}>
-              <AlertTriangle size={14} color="#b45309" strokeWidth={2.3} />
-              <Text style={styles.cashoutAlertText}>
-                Montant mis à jour : {eur(cashoutChanged.previousCashout)} →{" "}
-                {eur(cashoutChanged.currentCashout)}. Confirmez à nouveau.
-              </Text>
-            </View>
-          ) : null}
-          <SlideToCashOut
-            amount={effectiveCashOut!}
-            stake={bet.stake}
-            loading={cashing}
-            onConfirm={doCashOut}
-          />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -666,31 +555,13 @@ function ComboBetTicket({
 function SingleBetTicket({
   bet,
   onShare,
-  onCashedOut,
 }: {
   bet: ClientBet;
   onShare?: (bet: ClientBet) => void;
-  onCashedOut?: () => void;
 }) {
   const router = useRouter();
-  const { oddsFormat, setBalance, bumpBets, openShareTicket, toast, hapticsEnabled } =
-    useApp();
+  const { oddsFormat, openShareTicket } = useApp();
   const detailHref = singleBetHref(bet);
-
-  const [cashing, setCashing] = useState(false);
-  const [cashoutChanged, setCashoutChanged] =
-    useState<CashoutChangedDetails | null>(null);
-  const [serverOverrideCashout, setServerOverrideCashout] = useState<
-    number | null
-  >(null);
-  const inFlightRef = useRef(false);
-  const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
-
-  useEffect(() => {
-    if (serverOverrideCashout == null) return;
-    const t = setTimeout(() => setServerOverrideCashout(null), 10_000);
-    return () => clearTimeout(t);
-  }, [serverOverrideCashout]);
 
   const isPrediction = bet.kind === "prediction";
   const won = bet.status === "won";
@@ -699,70 +570,6 @@ function SingleBetTicket({
   const voided = bet.status === "void";
   const live = bet.matchStatus === "live" && bet.status === "pending";
 
-  const effectiveCashOut =
-    bet.cashOut != null
-      ? serverOverrideCashout ?? Math.round(bet.cashOut * 100) / 100
-      : null;
-  const canCashOut =
-    bet.status === "pending" && effectiveCashOut != null && effectiveCashOut > 0;
-
-  const doCashOut = async () => {
-    if (cashing || inFlightRef.current || effectiveCashOut == null) return;
-    inFlightRef.current = true;
-    const sig = `${bet.kind ?? "sport"}:${bet.id}:${effectiveCashOut}`;
-    if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
-      idempotencySlotRef.current = {
-        key: generateIdempotencyKey("co"),
-        sig,
-      };
-    }
-    setCashing(true);
-    try {
-      const r = await api.cashOut({
-        betId: bet.id,
-        kind: bet.kind,
-        expectedCashout: effectiveCashOut,
-        idempotencyKey: idempotencySlotRef.current.key,
-      });
-      idempotencySlotRef.current = null;
-      setCashoutChanged(null);
-      setServerOverrideCashout(null);
-      setBalance(r.balance);
-      bumpBets();
-      onCashedOut?.();
-      triggerHaptic("success", hapticsEnabled);
-      toast({
-        kind: "success",
-        title: "Coupon vendu",
-        description: `+${eur(r.value)} crédités sur votre solde`,
-      });
-    } catch (e) {
-      if (e instanceof ApiHttpError && e.status >= 400 && e.status < 500) {
-        idempotencySlotRef.current = null;
-      }
-      if (
-        e instanceof ApiHttpError &&
-        e.status === 409 &&
-        e.code === CASHOUT_CHANGED_CODE &&
-        e.cashoutDetails
-      ) {
-        setCashoutChanged(e.cashoutDetails);
-        setServerOverrideCashout(e.cashoutDetails.currentCashout);
-        bumpBets();
-        return;
-      }
-      setCashoutChanged(null);
-      toast({
-        kind: "error",
-        title: "Vente du coupon impossible",
-        description:
-          e instanceof Error ? e.message : "Réessayez dans un instant",
-      });
-    } finally {
-      inFlightRef.current = false;
-      setCashing(false);
-    }
-  };
 
   const hasScore = bet.matchHomeScore != null && bet.matchAwayScore != null;
   const matchLive = bet.matchStatus === "live" && hasScore;
@@ -941,25 +748,6 @@ function SingleBetTicket({
         </View>
       </Pressable>
 
-      {canCashOut ? (
-        <View style={styles.cashoutSection}>
-          {cashoutChanged ? (
-            <View style={styles.cashoutAlert}>
-              <AlertTriangle size={14} color="#b45309" strokeWidth={2.3} />
-              <Text style={styles.cashoutAlertText}>
-                Montant mis à jour : {eur(cashoutChanged.previousCashout)} →{" "}
-                {eur(cashoutChanged.currentCashout)}. Confirmez à nouveau.
-              </Text>
-            </View>
-          ) : null}
-          <SlideToCashOut
-            amount={effectiveCashOut!}
-            stake={bet.stake}
-            loading={cashing}
-            onConfirm={doCashOut}
-          />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -1230,29 +1018,5 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: "500",
     fontVariant: ["tabular-nums"],
-  },
-  cashoutSection: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(228,230,235,0.8)",
-    paddingTop: 12,
-    gap: 8,
-  },
-  cashoutAlert: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(245,158,11,0.35)",
-    backgroundColor: "rgba(245,158,11,0.10)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  cashoutAlertText: {
-    flex: 1,
-    fontSize: 10.5,
-    color: "#78350f",
-    lineHeight: 16,
   },
 });
