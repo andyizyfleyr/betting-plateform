@@ -358,10 +358,12 @@ function MatchCardInner({
   match,
   nextUp,
   width,
+  homeCard,
 }: {
   match: ClientMatch;
   nextUp?: boolean;
   width?: number;
+  homeCard?: boolean;
 }) {
   const router = useRouter();
   const isLive = match.status === "live";
@@ -382,6 +384,7 @@ function MatchCardInner({
       style={[
         styles.card,
         !isFinished && styles.cardActiveMinHeight,
+        homeCard && styles.homeCard,
         width ? { width } : null,
       ]}
     >
@@ -499,6 +502,9 @@ const styles = StyleSheet.create({
   },
   cardActiveMinHeight: {
     minHeight: 156,
+  },
+  homeCard: {
+    minHeight: 162,
   },
   headerRow: {
     flexDirection: "row",

@@ -10,6 +10,9 @@ export function normalizeCouponCode(raw: string): string {
     return `BX1-${payload}`;
   }
 
+  // Les nouveaux codes ont cinq caractères sans préfixe ; les anciens restent valides.
+  if (/^[A-Za-z0-9]{5}$/.test(candidate)) return candidate.toUpperCase();
+
   const embeddedCode = /\bBX-?([A-Z0-9]{4,8})\b/i.exec(candidate);
   if (embeddedCode) {
     return `BX-${embeddedCode[1].toUpperCase()}`;

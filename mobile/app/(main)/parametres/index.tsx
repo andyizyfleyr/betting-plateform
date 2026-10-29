@@ -531,7 +531,9 @@ export default function ParametresScreen() {
         </View>
       ) : (
         <View style={styles.sectionStack}>
-          <View style={styles.listCard}>
+          <View style={{ gap: 6 }}>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Compte</Text><Text style={styles.settingsSubtitle}>Pays et devise</Text></View>
+            <View style={styles.listCard}>
             {/* Pays & devise officielle verrouillés à l'inscription */}
             <View style={styles.prefRow}>
               <View style={[styles.prefLeft, { flex: 1 }]}>
@@ -553,6 +555,11 @@ export default function ParametresScreen() {
               </View>
             </View>
 
+            </View>
+          </View>
+          <View style={{ gap: 6 }}>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Préférences de jeu</Text><Text style={styles.settingsSubtitle}>Cotes, sons et connexion</Text></View>
+            <View style={styles.listCard}>
             {/* Format des cotes */}
             <View style={styles.prefRow}>
               <View style={styles.prefLeft}>
@@ -597,57 +604,6 @@ export default function ParametresScreen() {
             </View>
 
             <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Toutes les notifications"
-              checked={user.notifications ?? true}
-              onChange={(v) =>
-                patch({ notifications: v }, "Notifications mises à jour")
-              }
-            />
-            <Pressable onPress={() => void (async () => {
-              try {
-                await registerPushDevice(true);
-                const result = await api.patchSettings({ notifications: true });
-                applyUser(result.user);
-                toast({ kind: "success", title: "Notifications système activées" });
-              } catch (e) {
-                toast({ kind: "error", title: "Notifications indisponibles", description: e instanceof Error ? e.message : "Réessayez plus tard." });
-              }
-            })()} style={styles.prefRow}>
-              <Text style={styles.prefLabel}>Activer les notifications système</Text>
-              <ChevronRight size={16} color={COLORS.dim} />
-            </Pressable>
-            <SwitchRow
-              icon={<ShieldCheck size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Connexion biométrique"
-              checked={biometricEnabled}
-              onChange={(v) => void changeBiometrics(v)}
-            />
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Début des matchs"
-              checked={user.notifyMatches ?? true}
-              onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Résultats des paris"
-              checked={user.notifyBets ?? true}
-              onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Dépôts et retraits"
-              checked={user.notifyPayments ?? true}
-              onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Réclamations"
-              checked={user.notifyDisputes ?? true}
-              onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
               icon={<Volume2 size={16} color={COLORS.ink} strokeWidth={2.1} />}
               label="Effets sonores"
               checked={user.sound ?? true}
@@ -674,8 +630,70 @@ export default function ParametresScreen() {
               }}
               last
             />
+            </View>
           </View>
-
+          <View style={{ gap: 6 }}>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Notifications</Text><Text style={styles.settingsSubtitle}>Choisissez les alertes à recevoir</Text></View>
+            <View style={styles.listCard}>
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Toutes les notifications"
+              checked={user.notifications ?? true}
+              onChange={(v) =>
+                patch({ notifications: v }, "Notifications mises à jour")
+              }
+            />
+            <Pressable onPress={() => void (async () => {
+              try {
+                await registerPushDevice(true);
+                const result = await api.patchSettings({ notifications: true });
+                applyUser(result.user);
+                toast({ kind: "success", title: "Notifications système activées" });
+              } catch (e) {
+                toast({ kind: "error", title: "Notifications indisponibles", description: e instanceof Error ? e.message : "Réessayez plus tard." });
+              }
+            })()} style={styles.prefRow}>
+              <Text style={styles.prefLabel}>Activer les notifications système</Text>
+              <ChevronRight size={16} color={COLORS.dim} />
+            </Pressable>
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Début des matchs"
+              checked={user.notifyMatches ?? true}
+              onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Résultats des paris"
+              checked={user.notifyBets ?? true}
+              onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Dépôts et retraits"
+              checked={user.notifyPayments ?? true}
+              onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")}
+            />
+            <SwitchRow
+              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Réclamations"
+              checked={user.notifyDisputes ?? true}
+              onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")}
+            />
+            </View>
+          </View>
+          <View style={{ gap: 6 }}>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Sécurité</Text><Text style={styles.settingsSubtitle}>Accès à votre compte</Text></View>
+            <View style={styles.listCard}>
+            <SwitchRow
+              icon={<ShieldCheck size={16} color={COLORS.ink} strokeWidth={2.1} />}
+              label="Connexion biométrique"
+              checked={biometricEnabled}
+              onChange={(v) => void changeBiometrics(v)}
+            />
+            </View>
+          </View>
+          <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Application</Text><Text style={styles.settingsSubtitle}>Version et session</Text></View>
           <Pressable
             disabled={checkingOta}
             onPress={() => void handleManualOtaCheck()}
@@ -861,6 +879,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
     gap: 12,
   },
+  settingsHeading: { paddingHorizontal: 4, gap: 2 },
+  settingsTitle: { color: COLORS.ink, fontSize: 12, fontWeight: "700" },
+  settingsSubtitle: { color: COLORS.dim, fontSize: 10 },
   cardPad: {
     borderRadius: 16,
     borderWidth: 1,
