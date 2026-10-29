@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sdk52Meta from "@/lib/expo-sdk52-meta.json";
 
 const MULTIPART_BOUNDARY = "pulse-expo-ota-v1";
+const EAS_PROJECT_ID = "eccf1ced-02f9-44bd-84a9-50e9c0e4197f";
 const STANDALONE_RUNTIME = sdk52Meta.runtimeVersion || "pulse-sdk52-v1";
 const EXPO_GO_RUNTIME = sdk52Meta.expoGoRuntimeVersion || "exposdk:52.0.0";
 const APP_VERSION = sdk52Meta.appVersion || "1.2.4";
@@ -245,6 +246,7 @@ export async function GET(req: NextRequest) {
       extra: {
         apiBaseUrl: origin,
         partykitHost: "pulse-bet.matiasanauld.workers.dev",
+        eas: { projectId: EAS_PROJECT_ID },
       },
     };
 
@@ -268,7 +270,7 @@ export async function GET(req: NextRequest) {
       })),
       metadata: {},
       extra: {
-        eas: {},
+        eas: { projectId: EAS_PROJECT_ID },
         expoClient: expoClientConfig,
         ...(isBareStandalone
           ? {}

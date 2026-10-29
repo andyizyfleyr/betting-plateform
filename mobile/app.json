@@ -89,7 +89,10 @@
     ],
     "extra": {
       "apiBaseUrl": "https://be-plateform.vercel.app",
-      "partykitHost": "pulse-bet.matiasanauld.workers.dev"
+      "partykitHost": "pulse-bet.matiasanauld.workers.dev",
+      "eas": {
+        "projectId": "eccf1ced-02f9-44bd-84a9-50e9c0e4197f"
+      }
     }
   }
 }
