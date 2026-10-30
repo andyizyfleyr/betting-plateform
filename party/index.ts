@@ -1,3 +1,4 @@
+import { hyperdriveHistory } from "./history-hyperdrive";
 import { getPublicResults } from "./public-results";
 import { buildLiveDelta, isLiveSnapshot, type LiveSnapshot } from "./live-delta";
 import {
@@ -288,6 +289,7 @@ export class Main extends Server<Env> {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/internal/hyperdrive/history-v1") return hyperdriveHistory(request, env.HYPERDRIVE, env.PARTYKIT_SECRET, ctx);
     if (url.pathname === "/public/hyperdrive/results") return getPublicResults(request, env.HYPERDRIVE, ctx);
     if (url.pathname === "/" || url.pathname === "/health") {
       return Response.json({
