@@ -2,6 +2,8 @@ import { virtualTeamIdentity } from "./team-logos";
 
 /** Une affiche est identique même si domicile et extérieur sont inversés. */
 export const VIRTUAL_MAX_LIVE = 4;
+/** Intervalle entre deux coups d’envoi, indépendamment de la durée du match. */
+export const VIRTUAL_KICKOFF_GAP_MS = 30 * 60_000;
 export const VIRTUAL_REMATCH_GAP_MS = 7 * 24 * 60 * 60_000;
 export interface VirtualFixtureWindow { home: string; away: string; start: number; end: number }
 const team = virtualTeamIdentity;
@@ -50,4 +52,25 @@ export function buildVirtualFixturePool(classics: readonly VirtualFixtureTemplat
     }
   }
   return fixtures;
+}
+
+/** Planifie une file mondiale, sans laisser une revanche tardive bloquer les autres affiches. */
+export function planVirtualQueue<T>(items: readonly T[], cursor: number, fixtureOf: (item: T) => Pick<VirtualFixtureWindow, "home" | "away">, durationOf: (item: T) => number, existing: readonly VirtualFixtureWindow[]): Array<{ item: T; start: number; duration: number }> {
+  const remaining = [...items];
+  const windows = [...existing];
+  const planned: Array<{ item: T; start: number; duration: number }> = [];
+  while (remaining.length) {
+    let bestIndex = 0;
+    let bestStart = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < remaining.length; i++) {
+      const proposed = nextVirtualStart(fixtureOf(remaining[i]), cursor, durationOf(remaining[i]), windows);
+      if (proposed < bestStart) { bestStart = proposed; bestIndex = i; }
+    }
+    const [item] = remaining.splice(bestIndex, 1);
+    const duration = durationOf(item);
+    planned.push({ item, start: bestStart, duration });
+    windows.push({ ...fixtureOf(item), start: bestStart, end: bestStart + duration });
+    cursor = bestStart + VIRTUAL_KICKOFF_GAP_MS;
+  }
+  return planned;
 }
