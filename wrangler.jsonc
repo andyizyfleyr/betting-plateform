@@ -33,6 +33,16 @@
           "class_name": "Main"
         }
       ]
+    },
+    "hyperdrive": []
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "b02d5785f63b4fecbbf36b45c883b4bc"
     }
-  }
+  ]
 }

@@ -1,3 +1,4 @@
+import { getPublicResults } from "./public-results";
 import { buildLiveDelta, isLiveSnapshot, type LiveSnapshot } from "./live-delta";
 import {
   routePartykitRequest,
@@ -23,6 +24,7 @@ import {
 
 export interface Env {
   Main: DurableObjectNamespace<Main>;
+  HYPERDRIVE?: Hyperdrive;
   PARTYKIT_SECRET?: string;
   APP_URL?: string;
   NEXT_PUBLIC_APP_URL?: string;
@@ -284,8 +286,9 @@ export class Main extends Server<Env> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/public/hyperdrive/results") return getPublicResults(request, env.HYPERDRIVE, ctx);
     if (url.pathname === "/" || url.pathname === "/health") {
       return Response.json({
         ok: true,
