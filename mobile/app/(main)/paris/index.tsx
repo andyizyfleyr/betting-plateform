@@ -422,7 +422,7 @@ export default function ParisScreen() {
         <View style={styles.stickyFilterWrap}>
           <View style={styles.tabRow} accessibilityRole="tablist">
             {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
-              <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }}
+              <Pressable key={value} hitSlop={4} accessibilityRole="tab" accessibilityState={{ selected: tab === value }}
                 onPress={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
                 style={[styles.tab, tab === value && styles.tabSelected]}>
                 <Text style={[styles.tabText, tab === value && styles.tabTextSelected]}>
@@ -431,7 +431,7 @@ export default function ParisScreen() {
               </Pressable>
             ))}
           </View>
-          <FilterDropdownRow
+          <FilterDropdownRow compact
             filters={[
               {
                 id: "kind",
@@ -690,8 +690,8 @@ const styles = StyleSheet.create({
   stickyFilterWrap: {
     backgroundColor: COLORS.deep,
   },
-  tabRow: { flexDirection: "row", gap: 8, paddingTop: 12 },
-  tab: { flex: 1, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "#e7e9ed" },
+  tabRow: { flexDirection: "row", gap: 6, paddingTop: 8 },
+  tab: { height: 32, paddingHorizontal: 12, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "#e7e9ed" },
   tabSelected: { backgroundColor: COLORS.betclicRed },
   tabText: { fontSize: 11.5, fontWeight: "500", color: "#374151" },
   tabTextSelected: { color: "#ffffff" },

@@ -32,12 +32,14 @@ export function FilterDropdownRow({
   onReset,
   resultCountText,
   hasActiveFilters,
+  compact = false,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filters: FilterDropdownDef<any>[];
   onReset?: () => void;
   resultCountText?: string | null;
   hasActiveFilters?: boolean;
+  compact?: boolean;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const activeDef = filters.find((f) => f.id === openId) ?? null;
@@ -51,11 +53,11 @@ export function FilterDropdownRow({
 
   return (
     <>
-      <View style={styles.barWrap}>
+      <View style={[styles.barWrap, compact && styles.barWrapCompact]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.rowContent}
+          contentContainerStyle={[styles.rowContent, compact && styles.rowContentCompact]}
         >
           {filters.map((f) => {
             const defVal = f.defaultValue ?? f.options[0]?.value;
@@ -73,8 +75,10 @@ export function FilterDropdownRow({
               <Pressable
                 key={f.id}
                 onPress={() => setOpenId(isOpen ? null : f.id)}
+                hitSlop={compact ? 4 : undefined}
                 style={({ pressed }) => [
                   styles.pill,
+                  compact && styles.pillCompact,
                   isActive ? styles.pillActive : styles.pillDefault,
                   pressed && { transform: [{ scale: 0.98 }] },
                 ]}
@@ -89,7 +93,7 @@ export function FilterDropdownRow({
                   {displayLabel}
                 </Text>
                 <ChevronDown
-                  size={16}
+                  size={compact ? 14 : 16}
                   strokeWidth={2.25}
                   color={
                     isActive
@@ -112,6 +116,7 @@ export function FilterDropdownRow({
               }}
               style={({ pressed }) => [
                 styles.resetBtn,
+                compact && styles.resetBtnCompact,
                 pressed && { backgroundColor: "rgba(225,0,20,0.08)" },
               ]}
             >
@@ -122,7 +127,7 @@ export function FilterDropdownRow({
       </View>
 
       {resultCountText != null ? (
-        <Text style={styles.countText}>{resultCountText}</Text>
+        <Text style={[styles.countText, compact && styles.countTextCompact]}>{resultCountText}</Text>
       ) : null}
 
       <Modal
@@ -198,6 +203,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.deep,
     paddingVertical: 12,
   },
+  barWrapCompact: { paddingVertical: 6 },
+  rowContentCompact: { gap: 6 },
+  pillCompact: { height: 32, flexGrow: 0, paddingHorizontal: 12, gap: 4 },
+  resetBtnCompact: { height: 32 },
+  countTextCompact: { marginBottom: 6 },
   rowContent: {
     flexGrow: 1,
     flexDirection: "row",
