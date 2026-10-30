@@ -111,3 +111,44 @@ une activation partielle. Après exécution contrôlée, supprimer ce drapeau po
 ne pas relancer l'opération à chaque déploiement. Il ne configure pas les URL
 du site et n'active pas `r2.dev` comme origine de production. Les clés restent
 des variables sensibles Vercel ; ne pas les recopier dans les logs ou le chat.
+
+## Prototype d'archives privées : copie manuelle, aucun effacement
+
+`scripts/r2-private-archive.cjs` est un outil d'opérateur distinct du site. Il
+copie les lignes **réglées et datées** des trois tables de paris d'un utilisateur
+avant une date donnée. Il ne copie ni transactions, ni messages, ni profil, ni
+les données liées des matchs/questions : **ce n'est pas une sauvegarde complète**.
+Il ne modifie pas Neon, ne déplace pas les lignes, ne raccorde pas la lecture de
+l'historique au bucket et ne réduit donc pas le trafic Neon. Il ne s'exécute pas
+automatiquement ni pendant les builds. Ne pas supprimer les données d'origine.
+
+La copie utilise une transaction PostgreSQL en lecture seule et un chiffrement
+AES-256-GCM avec nonce aléatoire. La clé d'objet est aléatoire ; l'objet est
+relu, comparé puis déchiffré avant de signaler la réussite. Les données restent
+sensibles, y compris dans un fichier restauré. La clé doit être dédiée,
+aléatoire et conservée dans une sauvegarde sécurisée séparée : sa perte rend
+les archives illisibles. Prévoir sauvegarde, rotation versionnée et politique
+légale de conservation avant une utilisation durable.
+
+Sur un environnement d'opérateur sécurisé, installer les dépendances de dev et
+renseigner `DATABASE_URL`, `R2_ACCOUNT_ID`, `R2_PRIVATE_BUCKET=pulsebet`,
+`R2_PRIVATE_ACCESS_KEY_ID`, `R2_PRIVATE_SECRET_ACCESS_KEY` et
+`R2_ARCHIVE_ENCRYPTION_KEY` (64 caractères hexadécimaux). Utiliser un jeton
+R2 distinct limité au bucket privé ; les clés du bucket public ne garantissent
+pas cet accès. Ne jamais enregistrer ces secrets dans le dépôt ni les journaux.
+
+```sh
+node scripts/r2-private-archive.cjs --copy-user ID_UTILISATEUR AAAA-MM-JJ
+node scripts/r2-private-archive.cjs --restore-file archives/v1/IDENTIFIANT.json.enc chemin-prive.json
+node scripts/test-r2-private-archive.cjs
+```
+
+La date est exclusive. Le script refuse plus de 100 lignes par table ou 8 Mio
+par copie plutôt que de tronquer silencieusement. La commande de restauration
+crée un fichier privé sans écraser un fichier existant ; elle ne réinjecte pas
+les données dans PostgreSQL. Stocker et supprimer ce fichier selon la politique
+locale de sécurité. Une coupure réseau après l'écriture peut laisser un objet
+orphelin : un message d'échec ne prouve pas son absence. Aucune suppression
+automatique d'objets n'est effectuée. Les tests fournis utilisent PGlite et un
+R2 simulé ; ils ne prouvent ni les permissions du bucket réel, ni la restauration
+dans Neon, ni l'intégration aux écrans utilisateurs.
