@@ -28,6 +28,7 @@ interface FilterDropdownRowProps {
   sticky?: boolean;
   bleedHorizontal?: boolean;
   className?: string;
+  compactMobile?: boolean;
 }
 
 interface MenuPosition {
@@ -44,6 +45,7 @@ export function FilterDropdownRow({
   sticky = true,
   bleedHorizontal = true,
   className,
+  compactMobile = false,
 }: FilterDropdownRowProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
@@ -134,7 +136,7 @@ export function FilterDropdownRow({
       <div
         className={cn(
           bleedHorizontal ? "-mx-2 px-2 lg:mx-0 lg:px-0" : "",
-          "py-3",
+          compactMobile ? "py-1.5 lg:py-3" : "py-3",
           sticky && "sticky top-[48px] z-30 bg-deep/95 backdrop-blur-md lg:top-[52px]",
           className
         )}
@@ -159,7 +161,8 @@ export function FilterDropdownRow({
                 aria-expanded={isOpen}
                 onClick={() => toggleMenu(filter.id)}
                 className={cn(
-                  "inline-flex h-10 grow shrink-0 items-center justify-center gap-1.5 rounded-full border-0 px-3.5 text-[11.5px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
+                  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border-0 text-[11.5px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
+                  compactMobile ? "h-8 grow-0 px-3 lg:h-10 lg:grow lg:px-3.5" : "h-10 grow px-3.5",
                   isActive
                     ? "bg-betclic-red text-white shadow-[0_2px_8px_rgba(225,0,20,0.22)]"
                     : "bg-[#e7e9ed] text-[#374151] hover:bg-[#dde0e6]"
@@ -186,7 +189,7 @@ export function FilterDropdownRow({
                 setOpenId(null);
                 onReset();
               }}
-              className="h-10 shrink-0 rounded-full border-0 px-3 text-[11px] font-medium whitespace-nowrap text-betclic-red transition-colors hover:bg-betclic-red/8 active:scale-[0.98]"
+              className={cn("shrink-0 rounded-full border-0 px-3 text-[11px] font-medium whitespace-nowrap text-betclic-red transition-colors hover:bg-betclic-red/8 active:scale-[0.98]", compactMobile ? "h-8 lg:h-10" : "h-10")}
             >
               Réinitialiser
             </button>
@@ -195,7 +198,7 @@ export function FilterDropdownRow({
       </div>
 
       {resultCountText != null && (
-        <p className="mb-2.5 text-[11px] font-medium tabular-nums text-dim">
+        <p className={cn("text-[11px] font-medium tabular-nums text-dim", compactMobile ? "mb-1.5 lg:mb-2.5" : "mb-2.5")}>
           {resultCountText}
         </p>
       )}
