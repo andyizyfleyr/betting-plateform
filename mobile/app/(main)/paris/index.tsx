@@ -420,18 +420,18 @@ export default function ParisScreen() {
 
         {/* 3 : Onglets et filtres */}
         <View style={styles.stickyFilterWrap}>
-          <View style={styles.tabRow} accessibilityRole="tablist">
-            {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
-              <Pressable key={value} hitSlop={4} accessibilityRole="tab" accessibilityState={{ selected: tab === value }}
-                onPress={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
-                style={[styles.tab, tab === value && styles.tabSelected]}>
-                <Text style={[styles.tabText, tab === value && styles.tabTextSelected]}>
-                  {label}{bets !== null ? ` (${value === "ongoing" ? ongoingAll.length : finishedAll.length})` : ""}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
           <FilterDropdownRow compact
+            leading={<View style={styles.tabRow} accessibilityRole="tablist">
+              {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
+                <Pressable key={value} hitSlop={4} accessibilityRole="tab" accessibilityState={{ selected: tab === value }}
+                  onPress={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
+                  style={[styles.tab, tab === value && styles.tabSelected]}>
+                  <Text style={[styles.tabText, tab === value && styles.tabTextSelected]}>
+                    {label}{bets !== null ? ` (${value === "ongoing" ? ongoingAll.length : finishedAll.length})` : ""}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>}
             filters={[
               {
                 id: "kind",
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
   stickyFilterWrap: {
     backgroundColor: COLORS.deep,
   },
-  tabRow: { flexDirection: "row", gap: 6, paddingTop: 8 },
+  tabRow: { flexDirection: "row", gap: 6, alignItems: "center" },
   tab: { height: 32, paddingHorizontal: 12, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "#e7e9ed" },
   tabSelected: { backgroundColor: COLORS.betclicRed },
   tabText: { fontSize: 11.5, fontWeight: "500", color: "#374151" },

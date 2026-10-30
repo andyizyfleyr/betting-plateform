@@ -33,6 +33,7 @@ export function FilterDropdownRow({
   resultCountText,
   hasActiveFilters,
   compact = false,
+  leading,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filters: FilterDropdownDef<any>[];
@@ -40,6 +41,7 @@ export function FilterDropdownRow({
   resultCountText?: string | null;
   hasActiveFilters?: boolean;
   compact?: boolean;
+  leading?: React.ReactNode;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const activeDef = filters.find((f) => f.id === openId) ?? null;
@@ -59,6 +61,7 @@ export function FilterDropdownRow({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={[styles.rowContent, compact && styles.rowContentCompact]}
         >
+          {leading}
           {filters.map((f) => {
             const defVal = f.defaultValue ?? f.options[0]?.value;
             const isActive = defVal !== undefined && f.value !== defVal;
