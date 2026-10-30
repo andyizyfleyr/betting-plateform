@@ -31,8 +31,8 @@ import { isKnownMarket, marketSettle, minuteNumber } from "@/lib/markets";
 import { buildServerClockAnchor } from "@/lib/live-clock";
 import { ensureMlLoaded, recordMatchesFinishedBatchMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
-import { teamLogo } from "@/lib/team-logos";
-import { nextVirtualStart, sharesVirtualTeam, virtualPairKey, VIRTUAL_REMATCH_GAP_MS, VIRTUAL_MAX_LIVE, type VirtualFixtureWindow } from "@/lib/virtual-fixtures";
+import { teamLogo, virtualClubNames, virtualTeamAliases, virtualTeamIdentity } from "@/lib/team-logos";
+import { nextVirtualStart, sharesVirtualTeam, virtualPairKey, coprimeStride, buildVirtualFixturePool, VIRTUAL_REMATCH_GAP_MS, VIRTUAL_MAX_LIVE, type VirtualFixtureWindow } from "@/lib/virtual-fixtures";
 import { claimVirtualKickoff, VIRTUAL_SCHEDULE_LOCK } from "@/db/virtual-kickoff";
 
 /** Suspension brève du marché après un but (~2,2 s). */
@@ -74,13 +74,8 @@ interface FixtureTemplate {
   away: string;
 }
 
-/**
- * Pool élargi de 36 affiches européennes variées (chocs équilibrés, derbies,
- * déplacements périlleux de cadors chez des outsiders accrocheurs).
- * L'orientation Domicile / Extérieur est en plus tirée cryptographiquement à 50/50
- * à chaque cycle avec équilibrage strict de la file pour éliminer tout biais domicile.
- */
-const FIXTURE_POOL: FixtureTemplate[] = [
+/** Affiches historiques, complétées par une coupe virtuelle de clubs variés. */
+const CLASSIC_FIXTURES: FixtureTemplate[] = [
   { league: "Ligue 1", home: "Marseille", away: "Paris SG" },
   { league: "Premier League", home: "Chelsea", away: "Arsenal" },
   { league: "Ligue des Champions", home: "Bayern Munich", away: "Real Madrid" },
@@ -118,6 +113,8 @@ const FIXTURE_POOL: FixtureTemplate[] = [
   { league: "Ligue 1", home: "Reims", away: "Marseille" },
   { league: "Ligue des Champions", home: "PSV Eindhoven", away: "Manchester City" },
 ];
+
+const FIXTURE_POOL = buildVirtualFixturePool(CLASSIC_FIXTURES, virtualClubNames());
 
 /**
  * Oriente une affiche Domicile / Extérieur sans aucun biais exploitable :
@@ -878,7 +875,8 @@ async function syncUpcomingQueue(
     awayLogo: string | null;
   }
 
-  const recentFinished = await db.select({ homeTeam: matches.homeTeam, awayTeam: matches.awayTeam, startsAt: matches.startsAt, finishedAt: matches.finishedAt }).from(matches).where(sql`${matches.source} = 'virtual' AND ${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 15 * 60_000)}`);
+  const queueTeams = [...new Set(virtualQueue.flatMap(m => [...virtualTeamAliases(m.homeTeam), ...virtualTeamAliases(m.awayTeam)]).map(t => t.toLowerCase().trim()))];
+  const recentFinished = queueTeams.length ? await db.select({ homeTeam: matches.homeTeam, awayTeam: matches.awayTeam, startsAt: matches.startsAt, finishedAt: matches.finishedAt }).from(matches).where(sql`${matches.source} = 'virtual' AND ${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 60 * 60_000)} AND lower(trim(${matches.homeTeam})) IN (${sql.join(queueTeams.map(t => sql`${t}`), sql`, `)}) AND lower(trim(${matches.awayTeam})) IN (${sql.join(queueTeams.map(t => sql`${t}`), sql`, `)})`) : [];
   const windows: VirtualFixtureWindow[] = [
     ...activeLives.map(m => ({ home: m.homeTeam, away: m.awayTeam, start: m.startsAt.getTime(), end: expectedMatchEndMs(m, now) })),
     ...recentFinished.map(m => ({ home: m.homeTeam, away: m.awayTeam, start: m.startsAt.getTime(), end: m.finishedAt?.getTime() ?? m.startsAt.getTime() + 608_000 })),
@@ -886,13 +884,23 @@ async function syncUpcomingQueue(
   const patches: QueuedMatchPatch[] = [];
   const ramUpdatedQueue: MatchRow[] = [];
 
-  for (const m of virtualQueue) {
+  const remaining = [...virtualQueue];
+  while (remaining.length) {
     let minLane = 0;
     for (let i = 1; i < laneCursors.length; i++) {
       if (laneCursors[i] < laneCursors[minLane]) minLane = i;
     }
+    // Une revanche bloquée sept jours ne doit pas bloquer une piste entière.
+    let bestIndex = 0;
+    let bestStart = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < remaining.length; i++) {
+      const candidate = remaining[i];
+      const proposed = nextVirtualStart({ home: candidate.homeTeam, away: candidate.awayTeam }, laneCursors[minLane], matchDurationMs(candidate.id, "virtual"), windows);
+      if (proposed < bestStart) { bestStart = proposed; bestIndex = i; }
+    }
+    const [m] = remaining.splice(bestIndex, 1);
     const duration = matchDurationMs(m.id, "virtual");
-    const desiredStartsAt = nextVirtualStart({ home: m.homeTeam, away: m.awayTeam }, laneCursors[minLane], duration, windows);
+    const desiredStartsAt = bestStart;
     laneCursors[minLane] = desiredStartsAt + duration + INTER_MATCH_GAP_MS;
     windows.push({ home: m.homeTeam, away: m.awayTeam, start: desiredStartsAt, end: desiredStartsAt + duration });
 
@@ -1024,15 +1032,19 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
   await ensureMatchStoreHydrated();
   const activeVirtual = getCachedActiveVirtualMatches();
 
-  if (activeVirtual.length >= MIN_ACTIVE_VIRTUAL - 2) return activeVirtual;
+  // Les affiches lointaines (par exemple des doublons déjà réservés) ne doivent pas
+  // empêcher la création d'une file utilisable à court terme.
+  const nearHorizon = now + 40 * 60_000;
+  const nearCount = activeVirtual.filter(m => m.status === "live" || m.startsAt.getTime() <= nearHorizon).length;
+  if (nearCount >= MIN_ACTIVE_VIRTUAL - 2) return activeVirtual;
 
   const busyTeams = new Set<string>();
   let tailEndMs = now;
   let netHomeStronger = 0;
 
   for (const m of activeVirtual) {
-    busyTeams.add(m.homeTeam);
-    busyTeams.add(m.awayTeam);
+    busyTeams.add(virtualTeamIdentity(m.homeTeam));
+    busyTeams.add(virtualTeamIdentity(m.awayTeam));
     const diff = teamStrength(m.homeTeam) - teamStrength(m.awayTeam);
     if (diff >= 1) netHomeStronger++;
     else if (diff <= -1) netHomeStronger--;
@@ -1040,22 +1052,24 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
       m.status === "live"
         ? expectedMatchEndMs(m, now)
         : m.startsAt.getTime() + matchDurationMs(m.id, "virtual");
-    if (estEnd > tailEndMs) {
+    if ((m.status === "live" || m.startsAt.getTime() <= nearHorizon) && estEnd > tailEndMs) {
       tailEndMs = estEnd;
     }
   }
 
+  const recentFixtures = await db.select({ homeTeam: matches.homeTeam, awayTeam: matches.awayTeam }).from(matches).where(sql`${matches.source} = 'virtual' AND ${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 60 * 60_000)}`);
+  const excludedPairs = new Set(recentFixtures.map(m => virtualPairKey(m.homeTeam, m.awayTeam)));
   const waveSlot = Math.floor(now / 600_000);
   const waveOffset = hmacUint32(`wave-offset|${waveSlot}`) % FIXTURE_POOL.length;
-  const stepStride = 7; // premier avec 36 (PGCD(7, 36) = 1) → parcourt tout le pool sans cycle court
-  const needed = TARGET_ACTIVE_VIRTUAL - activeVirtual.length;
+  const stepStride = coprimeStride(FIXTURE_POOL.length, hmacUint32(`wave-step|${waveSlot}`));
+  const needed = Math.max(0, TARGET_ACTIVE_VIRTUAL - nearCount);
   const chosen: FixtureTemplate[] = [];
 
   for (let i = 0; i < FIXTURE_POOL.length && chosen.length < needed; i++) {
     const raw = FIXTURE_POOL[(waveOffset + i * stepStride) % FIXTURE_POOL.length];
-    if (busyTeams.has(raw.home) || busyTeams.has(raw.away)) continue;
-    busyTeams.add(raw.home);
-    busyTeams.add(raw.away);
+    if (busyTeams.has(virtualTeamIdentity(raw.home)) || busyTeams.has(virtualTeamIdentity(raw.away)) || excludedPairs.has(virtualPairKey(raw.home, raw.away))) continue;
+    busyTeams.add(virtualTeamIdentity(raw.home));
+    busyTeams.add(virtualTeamIdentity(raw.away));
     const oriented = orientFixtureBalanced(raw, `${waveSlot}|${i}`, netHomeStronger);
     const diff = teamStrength(oriented.home) - teamStrength(oriented.away);
     if (diff >= 1) netHomeStronger++;
@@ -1116,7 +1130,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
     const insertedRows = await db.transaction(async tx => {
       await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(${VIRTUAL_SCHEDULE_LOCK})`);
-      const existing = await tx.select().from(matches).where(sql`${matches.source} = 'virtual' AND (${matches.status} IN ('live','upcoming') OR (${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS)}))`);
+      const existing = await tx.select({ status: matches.status, homeTeam: matches.homeTeam, awayTeam: matches.awayTeam }).from(matches).where(sql`${matches.source} = 'virtual' AND (${matches.status} IN ('live','upcoming') OR (${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 60 * 60_000)}))`);
       const accepted: typeof rows = [];
       const occupied = existing.filter(m => m.status !== "finished").map(m => ({ home: m.homeTeam, away: m.awayTeam }));
       const recentPairs = new Set(existing.filter(m => m.status === "finished").map(m => virtualPairKey(m.homeTeam, m.awayTeam)));
@@ -1199,22 +1213,25 @@ async function bridgeIdleGapAndStartLives(
     .where(and(inArray(matches.status, ["upcoming", "live"]), eq(matches.source, "virtual")));
   const busy = new Set<string>();
   for (const r of openNow) {
-    busy.add(r.homeTeam);
-    busy.add(r.awayTeam);
+    busy.add(virtualTeamIdentity(r.homeTeam));
+    busy.add(virtualTeamIdentity(r.awayTeam));
   }
 
+  const recentFixtures = await db.select({ homeTeam: matches.homeTeam, awayTeam: matches.awayTeam }).from(matches).where(sql`${matches.source} = 'virtual' AND ${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 60 * 60_000)}`);
+  const excludedPairs = new Set(recentFixtures.map(m => virtualPairKey(m.homeTeam, m.awayTeam)));
   const slot = Math.floor(now / 600_000);
   const offset = hmacUint32(`bridge-offset|${slot}`) % FIXTURE_POOL.length;
+  const stride = coprimeStride(FIXTURE_POOL.length, hmacUint32(`bridge-step|${slot}`));
   const needPast = now - latestEnd > 20 * 60_000 ? 2 : 0;
   const totalPick = needPast + targetCount;
   const picked: FixtureTemplate[] = [];
   let bridgeNetHome = 0;
 
   for (let i = 0; i < FIXTURE_POOL.length && picked.length < totalPick; i++) {
-    const raw = FIXTURE_POOL[(offset + i * 7) % FIXTURE_POOL.length];
-    if (busy.has(raw.home) || busy.has(raw.away)) continue;
-    busy.add(raw.home);
-    busy.add(raw.away);
+    const raw = FIXTURE_POOL[(offset + i * stride) % FIXTURE_POOL.length];
+    if (busy.has(virtualTeamIdentity(raw.home)) || busy.has(virtualTeamIdentity(raw.away)) || excludedPairs.has(virtualPairKey(raw.home, raw.away))) continue;
+    busy.add(virtualTeamIdentity(raw.home));
+    busy.add(virtualTeamIdentity(raw.away));
     const oriented = orientFixtureBalanced(raw, `bridge|${slot}|${i}`, bridgeNetHome);
     const d = teamStrength(oriented.home) - teamStrength(oriented.away);
     if (d >= 1) bridgeNetHome++;
@@ -1312,7 +1329,7 @@ async function bridgeIdleGapAndStartLives(
   const insertedAll = await db.transaction(async tx => {
     await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${VIRTUAL_SCHEDULE_LOCK})`);
-    const existing = await tx.select().from(matches).where(sql`${matches.source} = 'virtual' AND (${matches.status} IN ('live','upcoming') OR (${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS)}))`);
+    const existing = await tx.select({ status: matches.status, homeTeam: matches.homeTeam, awayTeam: matches.awayTeam }).from(matches).where(sql`${matches.source} = 'virtual' AND (${matches.status} IN ('live','upcoming') OR (${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 60 * 60_000)}))`);
     const open = existing.filter(m => m.status !== "finished");
     if (open.filter(m => m.status === "live").length + liveFxList.length > CONCURRENT_LIVE_VIRTUAL) return [];
     const recentPairs = new Set(existing.filter(m => m.status === "finished").map(m => virtualPairKey(m.homeTeam, m.awayTeam)));
@@ -1733,6 +1750,7 @@ export async function pruneOldFinishedVirtualMatches(): Promise<void> {
     DELETE FROM "matches" m
     WHERE m."source" = 'virtual'
       AND m."status" = 'finished'
+      AND COALESCE(m."finished_at", m."starts_at" + interval '608 seconds') < now() - interval '7 days 1 hour'
       AND m."id" NOT IN (
         SELECT "id"
         FROM "matches"

@@ -248,8 +248,8 @@ export function MarketSheet() {
                       </span>
                     )}
                     <SportIcon sport={match.sport} className="h-3.5 w-3.5 shrink-0 text-dim" />
-                    {match.source === "virtual" && <span className="shrink-0 rounded bg-betclic-red/10 px-1.5 py-0.5 text-[9px] font-medium text-betclic-red">Virtu</span>}
                     <span className="truncate font-medium">{match.league}</span>
+                    {match.source === "virtual" && <span className="shrink-0 rounded bg-emerald-600/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">FIFA</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <span className="inline-flex h-7 items-center rounded-full bg-elev px-2.5 font-display text-[10px] font-medium tabular-nums text-ink">

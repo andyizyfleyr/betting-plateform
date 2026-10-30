@@ -252,10 +252,10 @@ export default function MatchDetailScreen() {
               size={14}
               color={COLORS.betclicRed}
             />
-            {match?.source === "virtual" && <View style={styles.virtuBadge}><Text style={styles.virtuText}>Virtu</Text></View>}
             <Text numberOfLines={1} style={styles.leagueTitle}>
               {match?.league ?? "Rencontre"}
             </Text>
+            {match?.source === "virtual" && <View style={styles.virtuBadge}><Text style={styles.virtuText}>FIFA</Text></View>}
           </View>
         </View>
 
@@ -704,8 +704,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  virtuBadge: { backgroundColor: "#e100141a", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
-  virtuText: { color: "#e10014", fontSize: 9 },
+  virtuBadge: { backgroundColor: "#16a34a1a", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  virtuText: { color: "#15803d", fontSize: 9 },
   leagueTitleRow: {
     flex: 1,
     minWidth: 0,

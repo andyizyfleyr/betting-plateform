@@ -264,10 +264,10 @@ export default function MatchDetailPage() {
               sport={match?.sport ?? "football"}
               className="h-3.5 w-3.5 shrink-0 text-betclic-red"
             />
-            {match?.source === "virtual" && <span className="shrink-0 rounded bg-betclic-red/10 px-1.5 py-0.5 text-[9px] font-medium text-betclic-red">Virtu</span>}
             <h1 className="truncate font-display text-[11.5px] font-bold text-ink lg:text-[13.5px]">
               {match?.league ?? "Match"}
             </h1>
+            {match?.source === "virtual" && <span className="shrink-0 rounded bg-emerald-600/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">FIFA</span>}
           </div>
         </div>
 
