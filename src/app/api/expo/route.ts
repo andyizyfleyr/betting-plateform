@@ -1,3 +1,4 @@
+import { otaAssetUrl } from "@/lib/public-assets";
 import { NextRequest, NextResponse } from "next/server";
 import sdk52Meta from "@/lib/expo-sdk52-meta.json";
 
@@ -259,14 +260,14 @@ export async function GET(req: NextRequest) {
         key: sdk52Meta.launchAsset.key,
         contentType: sdk52Meta.launchAsset.contentType,
         fileExtension: sdk52Meta.launchAsset.fileExtension,
-        url: `${origin}${sdk52Meta.launchAsset.relativePath}`,
+        url: otaAssetUrl(sdk52Meta.launchAsset.relativePath, origin),
       },
       assets: sdk52Meta.assets.map((asset) => ({
         hash: asset.hash,
         key: asset.key,
         contentType: asset.contentType,
         fileExtension: asset.fileExtension,
-        url: `${origin}${asset.relativePath}`,
+        url: otaAssetUrl(asset.relativePath, origin),
       })),
       metadata: {},
       extra: {

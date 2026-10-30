@@ -36,6 +36,16 @@ function sha256Base64Url(buf) {
   return crypto.createHash("sha256").update(buf).digest("base64url");
 }
 
+// Les anciens bundles peuvent encore être demandés par des APK existantes.
+// Un nom à empreinte ne doit jamais être écrasé par des octets différents.
+function writeImmutable(file, data) {
+  if (fs.existsSync(file)) {
+    if (!fs.readFileSync(file).equals(data)) throw new Error(`Asset immuable différent : ${file}`);
+    return;
+  }
+  fs.writeFileSync(file, data);
+}
+
 function md5ToUuidV4(hex) {
   const h = hex.toLowerCase().padEnd(32, "0");
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(
@@ -73,7 +83,6 @@ async function main() {
       throw new Error("metadata.json Android invalide");
     }
 
-    fs.rmSync(PUBLIC_OUT, { recursive: true, force: true });
     fs.mkdirSync(ASSETS_OUT, { recursive: true });
 
     console.log("[2/3] Calcul des empreintes SHA-256 base64url et copie des assets…");
@@ -83,7 +92,7 @@ async function main() {
     const bundleSha256B64Url = sha256Base64Url(bundleBuf);
     const bundleExt = path.extname(androidMeta.bundle) || ".hbc";
     const bundleFileName = `AppEntry-${bundleMd5.slice(0, 12)}${bundleExt}`;
-    fs.writeFileSync(path.join(PUBLIC_OUT, bundleFileName), bundleBuf);
+    writeImmutable(path.join(PUBLIC_OUT, bundleFileName), bundleBuf);
 
     const assetsManifest = [];
     for (const item of androidMeta.assets || []) {
@@ -91,7 +100,7 @@ async function main() {
       const assetBuf = fs.readFileSync(assetSrc);
       const key = path.basename(item.path);
       const ext = String(item.ext || "").replace(/^\./, "");
-      fs.writeFileSync(path.join(ASSETS_OUT, key), assetBuf);
+      writeImmutable(path.join(ASSETS_OUT, key), assetBuf);
 
       assetsManifest.push({
         hash: sha256Base64Url(assetBuf),

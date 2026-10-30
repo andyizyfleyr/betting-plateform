@@ -1,0 +1,49 @@
+name: Synchroniser les médias publics R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      selection:
+        description: Fichiers publics à transférer et vérifier
+        required: true
+        default: web
+        type: choice
+        options:
+          - web
+          - ota-current
+          - ota-all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-public-sync
+  cancel-in-progress: false
+
+jobs:
+  synchronize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Installer les dépendances
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Tester le transfert et la protection des objets immuables
+        run: node scripts/test-r2-storage.cjs && node --import tsx scripts/test-r2-public.cjs && node --import tsx scripts/test-r2-expo.cjs
+      - name: Copier et vérifier les objets publics
+        env:
+          R2_ACCOUNT_ID: 6f3e2c1a84617db0da9cb4bf594446f2
+          R2_PUBLIC_BUCKET: pulsebet-public
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_PUBLIC_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_PUBLIC_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_VERIFY_ORIGIN: https://pub-9fcfd4ec44554836a31192651e3ffaa1.r2.dev
+          SELECTION: ${{ inputs.selection }}
+        run: |
+          case "$SELECTION" in web|ota-current|ota-all) ;; *) exit 1 ;; esac
+          node scripts/r2-public.cjs --upload "--only=$SELECTION"
+          node scripts/r2-public.cjs --verify "--only=$SELECTION"
+          node scripts/r2-public.cjs --verify-public "--only=$SELECTION"
