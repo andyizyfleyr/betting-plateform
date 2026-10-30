@@ -521,10 +521,10 @@ export function MarketSheet() {
                   size={14}
                   color={COLORS.dim}
                 />
-                {effectiveSource.source === "virtual" && <View style={styles.virtuBadge}><Text style={styles.virtuText}>Virtu</Text></View>}
                 <Text numberOfLines={1} style={styles.leagueText}>
                   {effectiveSource.league}
                 </Text>
+                {effectiveSource.source === "virtual" && <View style={styles.virtuBadge}><Text style={styles.virtuText}>FIFA</Text></View>}
               </View>
 
               <View style={styles.topActions}>
@@ -892,8 +892,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  virtuBadge: { backgroundColor: "#e100141a", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
-  virtuText: { color: "#e10014", fontSize: 9 },
+  virtuBadge: { backgroundColor: "#16a34a1a", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  virtuText: { color: "#15803d", fontSize: 9 },
   leagueInfo: {
     flex: 1,
     minWidth: 0,

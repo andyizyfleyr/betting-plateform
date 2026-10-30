@@ -1,14 +1,16 @@
+import { virtualTeamIdentity } from "./team-logos";
+
 /** Une affiche est identique même si domicile et extérieur sont inversés. */
 export const VIRTUAL_MAX_LIVE = 4;
-export const VIRTUAL_REMATCH_GAP_MS = 30 * 60_000;
+export const VIRTUAL_REMATCH_GAP_MS = 7 * 24 * 60 * 60_000;
 export interface VirtualFixtureWindow { home: string; away: string; start: number; end: number }
-const team = (name: string) => name.normalize("NFKC").trim().toLocaleLowerCase("fr").replace(/\s+/g, " ");
+const team = virtualTeamIdentity;
 export const virtualPairKey = (home: string, away: string): string => [team(home), team(away)].sort().join("\u0000");
 export function sharesVirtualTeam(a: Pick<VirtualFixtureWindow, "home" | "away">, b: Pick<VirtualFixtureWindow, "home" | "away">): boolean {
   const names = new Set([team(a.home), team(a.away)]);
   return names.has(team(b.home)) || names.has(team(b.away));
 }
-/** Premier créneau compatible : aucune équipe en simultané, et 30 min entre deux mêmes affiches. */
+/** Premier créneau compatible : aucune équipe en simultané, et sept jours entre deux mêmes affiches. */
 export function nextVirtualStart(fixture: Pick<VirtualFixtureWindow, "home" | "away">, proposed: number, duration: number, windows: readonly VirtualFixtureWindow[]): number {
   let start = proposed;
   const pair = virtualPairKey(fixture.home, fixture.away);
@@ -22,4 +24,30 @@ export function nextVirtualStart(fixture: Pick<VirtualFixtureWindow, "home" | "a
     if (next === start) return start;
     start = next;
   }
+}
+
+/** Parcours complet du catalogue sans cycle court, quel que soit son nombre d'éléments. */
+export function coprimeStride(length: number, seed: number): number {
+  if (length <= 1) return 1;
+  const gcd = (a: number, b: number): number => { while (b) [a, b] = [b, a % b]; return a; };
+  let stride = (seed % (length - 1)) + 1;
+  while (gcd(stride, length) !== 1) stride = (stride % (length - 1)) + 1;
+  return stride;
+}
+
+export interface VirtualFixtureTemplate { league: string; home: string; away: string }
+/** Affiches déjà définies, puis toutes les nouvelles combinaisons sans doublon. */
+export function buildVirtualFixturePool(classics: readonly VirtualFixtureTemplate[], clubs: readonly string[]): VirtualFixtureTemplate[] {
+  const fixtures = [...classics];
+  const seen = new Set(fixtures.map(f => virtualPairKey(f.home, f.away)));
+  for (let i = 0; i < clubs.length; i++) {
+    for (let j = i + 1; j < clubs.length; j++) {
+      if (team(clubs[i]) === team(clubs[j])) continue;
+      const pair = virtualPairKey(clubs[i], clubs[j]);
+      if (seen.has(pair)) continue;
+      seen.add(pair);
+      fixtures.push({ league: "Coupe virtuelle", home: clubs[i], away: clubs[j] });
+    }
+  }
+  return fixtures;
 }

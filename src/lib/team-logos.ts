@@ -1011,6 +1011,17 @@ const CLUB_CATALOG: ClubLogoDef[] = [
   },
 ];
 
+/** Noms canoniques des clubs disposant déjà d'un blason dans l'application. */
+export function virtualClubNames(): string[] {
+  const seen = new Set<string>();
+  return CLUB_CATALOG.map(club => club.names[0]).filter(name => {
+    const key = normalizeTeamKey(name);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** Normalisation sans casse, sans accents et sans ponctuation parasite. */
 export function normalizeTeamKey(raw: string): string {
   return raw
@@ -1084,6 +1095,23 @@ function urlsForDef(def: ClubLogoDef): string[] {
   if (def.espnId != null) out.push(ESPN_CDN(def.espnId));
   if (def.apiSportsId != null) out.push(API_SPORTS_CDN(def.apiSportsId));
   return out;
+}
+
+const VIRTUAL_CLUB_BY_ALIAS = new Map<string, ClubLogoDef>();
+for (const def of CLUB_CATALOG) {
+  for (const alias of def.names) {
+    const key = normalizeTeamKey(alias);
+    if (key && !VIRTUAL_CLUB_BY_ALIAS.has(key)) VIRTUAL_CLUB_BY_ALIAS.set(key, def);
+  }
+}
+/** Identité canonique afin de reconnaître aussi les variantes PSG / Paris SG, etc. */
+export function virtualTeamIdentity(name: string): string {
+  const key = normalizeTeamKey(name);
+  return normalizeTeamKey(VIRTUAL_CLUB_BY_ALIAS.get(key)?.names[0] ?? name);
+}
+export function virtualTeamAliases(name: string): string[] {
+  const def = VIRTUAL_CLUB_BY_ALIAS.get(normalizeTeamKey(name));
+  return def ? [...new Set([name, ...def.names])] : [name];
 }
 
 const EXACT_LOGO_MAP = new Map<string, string[]>();
