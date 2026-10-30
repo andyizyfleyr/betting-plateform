@@ -29,6 +29,7 @@ interface FilterDropdownRowProps {
   bleedHorizontal?: boolean;
   className?: string;
   compactMobile?: boolean;
+  leading?: React.ReactNode;
 }
 
 interface MenuPosition {
@@ -46,6 +47,7 @@ export function FilterDropdownRow({
   bleedHorizontal = true,
   className,
   compactMobile = false,
+  leading,
 }: FilterDropdownRowProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
@@ -141,7 +143,8 @@ export function FilterDropdownRow({
           className
         )}
       >
-        <div className="no-scrollbar flex w-full items-center gap-2 overflow-x-auto">
+        <div className={cn("no-scrollbar flex w-full items-center overflow-x-auto", compactMobile ? "gap-1.5" : "gap-2")}>
+          {leading}
           {filters.map((filter) => {
             const isActive = filter.value !== filter.defaultValue;
             const isOpen = openId === filter.id;
@@ -162,7 +165,7 @@ export function FilterDropdownRow({
                 onClick={() => toggleMenu(filter.id)}
                 className={cn(
                   "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border-0 text-[11.5px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
-                  compactMobile ? "h-8 grow-0 px-3 lg:h-10 lg:grow lg:px-3.5" : "h-10 grow px-3.5",
+                  compactMobile ? "h-8 grow-0 px-3" : "h-10 grow px-3.5",
                   isActive
                     ? "bg-betclic-red text-white shadow-[0_2px_8px_rgba(225,0,20,0.22)]"
                     : "bg-[#e7e9ed] text-[#374151] hover:bg-[#dde0e6]"

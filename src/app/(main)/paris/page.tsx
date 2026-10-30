@@ -393,16 +393,16 @@ export default function ParisPage() {
       )}
 
       <div className="sticky top-[48px] z-30 bg-deep/95 backdrop-blur-md lg:top-[52px]">
-        <div role="tablist" aria-label="Statut des paris" className="flex gap-1.5 pt-2 lg:gap-2 lg:pt-3">
+        <FilterDropdownRow sticky={false} compactMobile bleedHorizontal={false}
+        leading={<div role="tablist" aria-label="Statut des paris" className="flex shrink-0 items-center gap-1.5">
           {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={tab === value}
               onClick={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
-              className={cn("h-8 rounded-full px-3 text-[11.5px] font-medium lg:h-10 lg:flex-1 lg:px-0", tab === value ? "bg-betclic-red text-white" : "bg-[#e7e9ed] text-[#374151]")}>
+              className={cn("h-8 shrink-0 rounded-full px-3 text-[11.5px] font-medium whitespace-nowrap", tab === value ? "bg-betclic-red text-white" : "bg-[#e7e9ed] text-[#374151]")}>
               {label} {bets !== null && `(${value === "ongoing" ? ongoingAll.length : finishedAll.length})`}
             </button>
           ))}
-        </div>
-      <FilterDropdownRow sticky={false} compactMobile
+        </div>}
         filters={[
           {
             id: "kind",
