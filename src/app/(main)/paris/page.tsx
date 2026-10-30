@@ -458,10 +458,6 @@ export default function ParisPage() {
             ],
           }] : []),
         ]}
-        onReset={() => {
-          setKindFilter("all");
-          setOutcomeFilter("all");
-        }}
         resultCountText={
           bets !== null
             ? tab === "ongoing"
