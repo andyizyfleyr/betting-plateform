@@ -487,10 +487,6 @@ export default function ParisScreen() {
                 ],
               }] : []),
             ]}
-            onReset={() => {
-              setKindFilter("all");
-              setOutcomeFilter("all");
-            }}
             resultCountText={
               bets !== null
                 ? tab === "ongoing"

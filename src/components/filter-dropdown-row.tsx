@@ -23,7 +23,7 @@ export interface FilterDropdownItem<T extends string = string> {
 
 interface FilterDropdownRowProps {
   filters: FilterDropdownItem<any>[];
-  onReset: () => void;
+  onReset?: () => void;
   resultCountText?: string | null;
   sticky?: boolean;
   bleedHorizontal?: boolean;
@@ -182,7 +182,7 @@ export function FilterDropdownRow({
             );
           })}
 
-          {hasActiveFilter && (
+          {hasActiveFilter && onReset && (
             <button
               type="button"
               onClick={() => {
