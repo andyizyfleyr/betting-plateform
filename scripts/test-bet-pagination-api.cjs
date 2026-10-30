@@ -29,7 +29,11 @@ const original=Module._load;
  let cursor=null, ids=[];
  do {
   const query='filter=finished&pageSize=20'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+  queries.length=0;
   const response=await GET(new NextRequest('https://example.com/api/bets?'+query));
+  // A sport-only page must not issue detail queries for empty prediction/combo kinds.
+  assert(!queries.some(q=>/from "prediction_bets" (?:left join|where)/i.test(q)));
+  assert(!queries.some(q=>/from "combo_bets" where/i.test(q))); 
   assert.equal(response.status,200,await response.clone().text());
   const body=await response.json(); assert(body.bets.length<=20); assert.equal(body.balance,123); ids.push(...body.bets.map(b=>b.id)); cursor=body.nextCursor;
   assert.match(response.headers.get('Vercel-CDN-Cache-Control'),/private, no-store/);
