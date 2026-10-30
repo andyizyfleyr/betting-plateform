@@ -167,3 +167,26 @@ réglé entre deux pages peut modifier la sélection. Ce mode n'est ni un instan
 complet cohérent sur plusieurs pages ni une sauvegarde restaurable en base. Il
 ne raccorde pas l'historique utilisateur, ne permet aucune suppression Neon et
 ne réduit pas encore les transferts Neon.
+
+## Cache privé court des pages anciennes de paris
+
+L'option serveur `R2_HISTORY_CACHE_ENABLED=true` active un cache chiffré dans
+`pulsebet`, indépendant du prototype de copie d'archives. Il ne concerne que les
+pages paginées après la première et seulement si tous les paris et jambes sont
+réglés et sans match en cours ou à venir. La première page, les paris actifs et
+le rafraîchissement manuel continuent de lire Neon. L'authentification précède
+la lecture ; le solde est toujours relu depuis Neon et n'est jamais écrit dans
+ce cache. L'objet chiffré est lié à l'utilisateur et au curseur et expire après
+10 secondes ; une correction peut donc être visible avec un retard maximal de
+10 secondes. Si R2 ou le déchiffrement échoue, la route relit Neon.
+
+Le cache utilise la clé `R2_ARCHIVE_ENCRYPTION_KEY` et les identifiants privés
+R2 existants. Les objets obsolètes peuvent rester stockés dans le préfixe
+`cache/history/v1/` (ce n'est pas un archivage durable). Pour éviter leur
+accumulation, configurer une règle de cycle de vie limitée strictement à ce
+préfixe, par exemple suppression après un jour ; ne pas appliquer cette règle
+au préfixe `archives/`. Cette fonctionnalité ne supprime aucune ligne Neon,
+n'accélère pas les premières pages et n'est pas une migration d'historiques.
+La baisse de transfert doit être mesurée en production ; le cache R2 ajoute des
+requêtes R2 et peut augmenter la latence. Pour retour arrière, retirer ou mettre
+à `false` `R2_HISTORY_CACHE_ENABLED` et redéployer.
