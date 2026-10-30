@@ -1,3 +1,4 @@
+import { buildLiveDelta, isLiveSnapshot, type LiveSnapshot } from "./live-delta";
 import {
   routePartykitRequest,
   Server,
@@ -95,6 +96,29 @@ export class Main extends Server<Env> {
 
   private lastSnapshotJson: string | null = null;
   private lastSnapshotAt = 0;
+  private snapshotSequence = 0;
+
+  /** Les anciens clients reçoivent toujours les snapshots ; delta = opt-in. */
+  private publishSnapshot(snapshot: LiveSnapshot): void {
+    const previous = this.lastSnapshotJson ? JSON.parse(this.lastSnapshotJson) as LiveSnapshot : null;
+    const base = this.snapshotSequence;
+    const seq = ++this.snapshotSequence;
+    const raw = JSON.stringify(snapshot);
+    const fullV2 = JSON.stringify({ ...snapshot, seq });
+    const delta = previous && isLiveSnapshot(previous)
+      ? JSON.stringify(buildLiveDelta(previous, snapshot, base, seq)) : null;
+    this.lastSnapshotJson = raw;
+    this.lastSnapshotAt = Date.now();
+    for (const conn of this.getConnections<{ deltaV1?: boolean; ready?: boolean }>()) {
+      try {
+        if (!conn.state?.deltaV1) conn.send(raw);
+        else if (!conn.state.ready || !delta || delta.length >= fullV2.length) {
+          conn.send(fullV2);
+          conn.setState({ deltaV1: true, ready: true });
+        } else conn.send(delta);
+      } catch { /* une connexion morte ne doit pas bloquer les autres */ }
+    }
+  }
 
   private hasActiveConnections(): boolean {
     for (const _ of this.getConnections()) {
@@ -152,7 +176,19 @@ export class Main extends Server<Env> {
     if (typeof message !== "string") return;
     if (message === "PING" || message === '{"type":"PING"}') {
       sender.send(JSON.stringify({ type: "PONG", ts: Date.now() }));
+      return;
     }
+    if (this.name !== LIVE_ROOM_ID) return;
+    try {
+      const msg = JSON.parse(message) as { type?: string };
+      if (msg.type !== "LIVE_DELTA_V1" && msg.type !== "LIVE_RESYNC_V1") return;
+      const conn = sender as Connection<{ deltaV1?: boolean; ready?: boolean }>;
+      const ready = Boolean(this.lastSnapshotJson && Date.now() - this.lastSnapshotAt < SNAPSHOT_MAX_AGE_MS);
+      conn.setState({ deltaV1: true, ready });
+      if (ready && this.lastSnapshotJson) {
+        conn.send(JSON.stringify({ ...JSON.parse(this.lastSnapshotJson), seq: this.snapshotSequence }));
+      }
+    } catch { /* ignorer les messages malformés */ }
   }
 
   /**
@@ -182,19 +218,12 @@ export class Main extends Server<Env> {
           serverTime?: string;
         };
         if (Array.isArray(data.matches)) {
-          const msg = JSON.stringify({
+          this.publishSnapshot({
             type: "MATCHES_SNAPSHOT",
-            matches: data.matches,
+            matches: data.matches as LiveSnapshot["matches"],
             serverTime: data.serverTime ?? new Date().toISOString(),
             ts: Date.now(),
           });
-          if (msg !== this.lastSnapshotJson) {
-            this.lastSnapshotJson = msg;
-            this.lastSnapshotAt = Date.now();
-            this.broadcast(msg);
-          } else {
-            this.lastSnapshotAt = Date.now();
-          }
         }
       }
     } catch {
@@ -240,19 +269,16 @@ export class Main extends Server<Env> {
     }
 
     try {
-      const parsed = JSON.parse(rawBody) as { type?: string };
-      if (this.name === LIVE_ROOM_ID && parsed.type === "MATCHES_SNAPSHOT") {
-        this.lastSnapshotJson = rawBody;
-        this.lastSnapshotAt = Date.now();
+      const parsed: unknown = JSON.parse(rawBody);
+      if (this.name === LIVE_ROOM_ID && isLiveSnapshot(parsed)) {
+        this.publishSnapshot(parsed);
+      } else {
+        this.broadcast(rawBody);
       }
     } catch {
-      return Response.json(
-        { ok: false, error: "Invalid JSON" },
-        { status: 400 }
-      );
+      return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
     }
 
-    this.broadcast(rawBody);
     return Response.json({ ok: true });
   }
 }

@@ -19,23 +19,25 @@ let latestBetsList: ClientBet[] | null = null;
 let walletSnapshot: ClientWalletData | null = null;
 let walletSnapshotAt = 0;
 
-const DISK_SNAPSHOT_KEY = "pulse_android_swr_snapshot_v2";
+const LEGACY_DISK_SNAPSHOT_KEY = "pulse_android_swr_snapshot_v2";
+const DISK_SNAPSHOT_KEY = "pulse_android_finished_snapshot_v3";
+const FINISHED_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface PersistedSnapshot {
-  matches?: ClientMatch[];
-  predictions?: ClientPrediction[];
-  finished?: ClientMatchHistoryItem[];
+  savedAt: number;
+  finished: ClientMatchHistoryItem[];
 }
 
+// Le disque ne doit jamais contenir de flux live, de cotes ou de paris en cours.
+// Les résultats terminés restent un aperçu périssable, revalidé par le réseau.
 function scheduleDiskSnapshotPersist() {
   if (persistTimer) return;
   persistTimer = setTimeout(() => {
     persistTimer = null;
     const payload: PersistedSnapshot = {
-      matches: latestMatchesList ? latestMatchesList.slice(0, 60) : undefined,
-      predictions: latestPredictionsList ? latestPredictionsList.slice(0, 40) : undefined,
-      finished: latestFinishedList ? latestFinishedList.slice(0, 40) : undefined,
+      savedAt: Date.now(),
+      finished: (latestFinishedList ?? []).filter((m) => m.status === "finished").slice(0, 40),
     };
     void AsyncStorage.setItem(DISK_SNAPSHOT_KEY, JSON.stringify(payload)).catch(() => {});
   }, 1_200);
@@ -43,20 +45,20 @@ function scheduleDiskSnapshotPersist() {
 
 export async function hydrateEntityCacheFromDisk(): Promise<void> {
   try {
+    // Supprime les anciennes copies qui contenaient des cotes et prédictions live.
+    await AsyncStorage.removeItem(LEGACY_DISK_SNAPSHOT_KEY);
     const raw = await AsyncStorage.getItem(DISK_SNAPSHOT_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as PersistedSnapshot;
-    if (Array.isArray(parsed.matches) && !latestMatchesList) {
-      seedMatchesSnapshot(parsed.matches, false);
-    }
-    if (Array.isArray(parsed.predictions) && !latestPredictionsList) {
-      seedPredictionsSnapshot(parsed.predictions, false);
-    }
-    if (Array.isArray(parsed.finished) && !latestFinishedList) {
-      seedFinishedMatchesSnapshot(parsed.finished, false);
+    if (Number.isFinite(parsed.savedAt) && parsed.savedAt <= Date.now() &&
+        Date.now() - parsed.savedAt < FINISHED_CACHE_TTL_MS &&
+        Array.isArray(parsed.finished) && !latestFinishedList) {
+      seedFinishedMatchesSnapshot(parsed.finished.filter((m) => m.status === "finished"), false);
+    } else {
+      await AsyncStorage.removeItem(DISK_SNAPSHOT_KEY);
     }
   } catch {
-    /* ignore */
+    /* stockage indisponible : le réseau reste la source de vérité */
   }
 }
 
@@ -93,7 +95,7 @@ export function seedMatchSnapshot(m: ClientMatch | null | undefined) {
 export function seedMatchesSnapshot(list: ClientMatch[], persist = true) {
   for (const m of list) seedMatchSnapshot(m);
   latestMatchesList = list.map((m) => matchCache.get(m.id) ?? m);
-  if (persist) scheduleDiskSnapshotPersist();
+  void persist; // Flux live uniquement en mémoire.
 }
 
 export function getCachedMatchSnapshot(id: number): ClientMatch | null {
@@ -175,7 +177,7 @@ export function seedPredictionsSnapshot(
   for (const q of list) {
     if (q && typeof q.id === "number") predictionCache.set(q.id, q);
   }
-  if (persist) scheduleDiskSnapshotPersist();
+  void persist; // Les prédictions peuvent contenir des paris et cotes en cours.
 }
 
 export function getCachedPredictionSnapshot(id: number): ClientPrediction | null {

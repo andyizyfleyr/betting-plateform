@@ -711,7 +711,8 @@ export const api = {
         balance: number | null;
       }>(`/api/bets?filter=${filter}`, { forceRefresh: opts?.forceRefresh });
       const normalized = data.bets.map(normalizeClientBet);
-      seedBetsSnapshot(normalized);
+      if (filter === "all") seedBetsSnapshot(normalized);
+      else for (const bet of normalized) seedSingleBetSnapshot(bet);
       return { bets: normalized, balance: data.balance };
     },
     {
@@ -724,8 +725,18 @@ export const api = {
           balance: number | null;
         }>(`/api/bets?filter=${filter}`, { forceRefresh: opts?.forceRefresh });
         const normalized = data.bets.map(normalizeClientBet);
-        seedBetsSnapshot(normalized);
+        if (filter === "all") seedBetsSnapshot(normalized);
+        else for (const bet of normalized) seedSingleBetSnapshot(bet);
         return { bets: normalized, balance: data.balance };
+      },
+      finishedPage: async (cursor: string | null, opts?: MobileRefreshOpts) => {
+        const data = await requestJson<{ bets: ClientBet[]; balance: number | null; nextCursor: string | null }>(
+          `/api/bets?filter=finished&pageSize=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+          { forceRefresh: opts?.forceRefresh }
+        );
+        const bets = data.bets.map(normalizeClientBet);
+        for (const bet of bets) seedSingleBetSnapshot(bet);
+        return { ...data, bets };
       },
       byId: async (
         kind: "sport" | "prediction" | "combo",

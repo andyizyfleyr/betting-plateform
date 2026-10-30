@@ -233,6 +233,7 @@ export function ComboSheet() {
   const canSubmit =
     phase === "input" &&
     enoughLegs &&
+    orderedLegs.every((leg) => Number.isFinite(leg.odds) && leg.odds > 1) &&
     orderedLegs.length <= bettingLimits.maxComboLegs &&
     bettingLimitsReady &&
     localStake <= currencyConfig.maxComboStakeLocal &&
@@ -482,7 +483,7 @@ export function ComboSheet() {
                         {leg.selectionLabel}
                       </Text>
                       <Text style={styles.legOddsText}>
-                        {formatOdds(leg.odds, oddsFormat)}
+                        {leg.odds > 1 ? formatOdds(leg.odds, oddsFormat) : "Actualisation…"}
                       </Text>
                     </View>
                   </View>

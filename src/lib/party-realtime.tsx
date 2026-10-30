@@ -116,13 +116,24 @@ export function PartyRealtimeBridge({
 
     const WS_SNAPSHOT_LIVENESS_MS = 9_000;
     let lastSnapshotAt = 0;
-
-    const handleOpen = () => {
-      // N'active `wsConnected` qu'à réception effective d'un frame `MATCHES_SNAPSHOT`
-      // afin de ne jamais couper le polling HTTP si le Worker est silencieux.
+    let deltaSnapshot: ClientMatch[] | null = null;
+    let deltaSequence: number | null = null;
+    const requestResync = () => {
+      deltaSnapshot = null;
+      deltaSequence = null;
+      setWsConnected(false);
+      try { socket.send(JSON.stringify({ type: "LIVE_RESYNC_V1" })); } catch { /* HTTP reste disponible */ }
     };
 
+    const handleOpen = () => {
+      deltaSnapshot = null;
+      deltaSequence = null;
+      // Les anciens Workers ignorent ce message et continuent leurs snapshots.
+      try { socket.send(JSON.stringify({ type: "LIVE_DELTA_V1" })); } catch { /* repli HTTP */ }
+    };
     const handleClose = () => {
+      deltaSnapshot = null;
+      deltaSequence = null;
       lastSnapshotAt = 0;
       setWsConnected(false);
     };
@@ -141,7 +152,34 @@ export function PartyRealtimeBridge({
           matches?: ClientMatch[];
           matchIds?: number[];
           serverTime?: string;
+          base?: number;
+          seq?: number;
+          order?: number[];
         };
+        if (msg.type === "MATCHES_DELTA") {
+          if (!deltaSnapshot || !Number.isSafeInteger(msg.base) || msg.base !== deltaSequence ||
+              !Number.isSafeInteger(msg.seq) || msg.seq !== msg.base! + 1 ||
+              !Array.isArray(msg.matches) || !Array.isArray(msg.order)) {
+            requestResync();
+            return;
+          }
+          const byId = new Map(deltaSnapshot.map((match) => [match.id, match]));
+          for (const match of msg.matches) {
+            if (!match || !Number.isSafeInteger(match.id)) { requestResync(); return; }
+            byId.set(match.id, match);
+          }
+          const ids = new Set(msg.order);
+          if (ids.size !== msg.order.length || msg.order.some((id) => !byId.has(id))) {
+            requestResync();
+            return;
+          }
+          msg.matches = msg.order.map((id) => byId.get(id)!);
+          msg.type = "MATCHES_SNAPSHOT";
+        }
+        if (msg.type === "MATCHES_SNAPSHOT" && Array.isArray(msg.matches) && Number.isSafeInteger(msg.seq)) {
+          deltaSnapshot = msg.matches;
+          deltaSequence = msg.seq!;
+        }
 
         if (msg.type === "MATCHES_SNAPSHOT" && Array.isArray(msg.matches)) {
           lastSnapshotAt = Date.now();

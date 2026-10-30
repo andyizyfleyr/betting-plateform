@@ -1,4 +1,4 @@
-import { asc, desc, getTableColumns, sql } from "drizzle-orm";
+import { asc, desc, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { predictionQuestions } from "@/db/schema";
@@ -21,16 +21,28 @@ export const maxDuration = 60;
 
 const CATALOG_EDGE_POLICY = {
   maxAge: 0,
-  sMaxAge: 1,
+  sMaxAge: 15,
   staleWhileRevalidate: 2,
   tags: [EDGE_CACHE_TAGS.predictionsCatalog],
 } as const;
 
-// Sécurité : exclut strictement `seed_value` (graine interne de résolution serveur)
-// et ne contient AUCUNE donnée personnelle ni cookie joueur.
-const { seedValue: _omitSeedValue, ...publicQuestionColumns } =
-  getTableColumns(predictionQuestions);
-void _omitSeedValue;
+// Seules les colonnes utilisées par le catalogue public traversent le réseau.
+// La graine interne et les autres champs serveur ne sont jamais lus ici.
+const publicQuestionColumns = {
+  id: predictionQuestions.id,
+  question: predictionQuestions.question,
+  category: predictionQuestions.category,
+  status: predictionQuestions.status,
+  resolution: predictionQuestions.resolution,
+  oddsYes: predictionQuestions.oddsYes,
+  oddsNo: predictionQuestions.oddsNo,
+  options: predictionQuestions.options,
+  volume: predictionQuestions.volume,
+  yesCount: predictionQuestions.yesCount,
+  noCount: predictionQuestions.noCount,
+  resolvesAt: predictionQuestions.resolvesAt,
+  resolvedAt: predictionQuestions.resolvedAt,
+};
 
 export async function GET(req: NextRequest) {
   try {

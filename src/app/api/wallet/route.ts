@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import {
@@ -63,56 +63,135 @@ export async function GET(req: NextRequest) {
     tapRows,
     accelRows,
     adjRows,
+    depositTotals,
+    withdrawalTotals,
   ] = await Promise.all([
     computeWithdrawalEligibility(uid),
     db
-      .select()
+      .select({
+        id: deposits.id,
+        provider: deposits.provider,
+        providerRef: deposits.providerRef,
+        amount: deposits.amount,
+        status: deposits.status,
+        createdAt: deposits.createdAt,
+      })
       .from(deposits)
       .where(eq(deposits.userId, uid))
       .orderBy(desc(deposits.createdAt))
       .limit(35),
     db
-      .select()
+      .select({
+        id: withdrawals.id,
+        method: withdrawals.method,
+        destination: withdrawals.destination,
+        status: withdrawals.status,
+        adminNote: withdrawals.adminNote,
+        amount: withdrawals.amount,
+        createdAt: withdrawals.createdAt,
+      })
       .from(withdrawals)
       .where(eq(withdrawals.userId, uid))
       .orderBy(desc(withdrawals.createdAt))
       .limit(35),
     db
-      .select()
+      .select({
+        id: bets.id,
+        market: bets.market,
+        selection: bets.selection,
+        homeTeam: bets.homeTeam,
+        awayTeam: bets.awayTeam,
+        selectionLabel: bets.selectionLabel,
+        odds: bets.odds,
+        stake: bets.stake,
+        status: bets.status,
+        placedAt: bets.placedAt,
+        settledAt: bets.settledAt,
+        potentialWin: bets.potentialWin,
+        cashOutAmount: bets.cashOutAmount,
+      })
       .from(bets)
       .where(eq(bets.userId, uid))
       .orderBy(desc(bets.placedAt))
       .limit(30),
     db
-      .select()
+      .select({
+        id: predictionBets.id,
+        question: predictionBets.question,
+        selectionLabel: predictionBets.selectionLabel,
+        stake: predictionBets.stake,
+        status: predictionBets.status,
+        placedAt: predictionBets.placedAt,
+        settledAt: predictionBets.settledAt,
+        potentialWin: predictionBets.potentialWin,
+        cashOutAmount: predictionBets.cashOutAmount,
+      })
       .from(predictionBets)
       .where(eq(predictionBets.userId, uid))
       .orderBy(desc(predictionBets.placedAt))
       .limit(30),
     db
-      .select()
+      .select({
+        id: comboBets.id,
+        totalOdds: comboBets.totalOdds,
+        stake: comboBets.stake,
+        status: comboBets.status,
+        placedAt: comboBets.placedAt,
+        settledAt: comboBets.settledAt,
+        potentialWin: comboBets.potentialWin,
+        cashOutAmount: comboBets.cashOutAmount,
+        legCount: sql<number>`case when jsonb_typeof(${comboBets.legs}) = 'array' then jsonb_array_length(${comboBets.legs}) else 0 end`,
+      })
       .from(comboBets)
       .where(eq(comboBets.userId, uid))
       .orderBy(desc(comboBets.placedAt))
       .limit(30),
     db
-      .select()
+      .select({
+        id: tapHistory.id,
+        win: tapHistory.win,
+        betAmount: tapHistory.betAmount,
+        targetMultiplier: tapHistory.targetMultiplier,
+        crashMultiplier: tapHistory.crashMultiplier,
+        createdAt: tapHistory.createdAt,
+      })
       .from(tapHistory)
       .where(eq(tapHistory.userId, uid))
       .orderBy(desc(tapHistory.createdAt))
       .limit(25),
     db
-      .select()
+      .select({
+        id: acceleratorRounds.id,
+        status: acceleratorRounds.status,
+        cashoutMultiplier: acceleratorRounds.cashoutMultiplier,
+        betAmount: acceleratorRounds.betAmount,
+        crashPoint: acceleratorRounds.crashPoint,
+        endedAt: acceleratorRounds.endedAt,
+        createdAt: acceleratorRounds.createdAt,
+      })
       .from(acceleratorRounds)
       .where(eq(acceleratorRounds.userId, uid))
       .orderBy(desc(acceleratorRounds.createdAt))
       .limit(25),
     db
-      .select()
+      .select({
+        id: walletAdjustments.id,
+        amount: walletAdjustments.amount,
+        reason: walletAdjustments.reason,
+        createdAt: walletAdjustments.createdAt,
+      })
       .from(walletAdjustments)
       .where(eq(walletAdjustments.userId, uid))
       .orderBy(desc(walletAdjustments.createdAt))
       .limit(20),
+    db.select({
+      deposited: sql<number>`coalesce(sum(${deposits.amount}) filter (where ${deposits.status} in ('credited', 'paid')), 0)`,
+      pending: sql<number>`coalesce(sum(${deposits.amount}) filter (where ${deposits.status} = 'pending_review'), 0)`,
+    }).from(deposits).where(eq(deposits.userId, uid)),
+    db.select({
+      withdrawn: sql<number>`coalesce(sum(${withdrawals.amount}) filter (where ${withdrawals.status} = 'approved'), 0)`,
+      pending: sql<number>`coalesce(sum(${withdrawals.amount}) filter (where ${withdrawals.status} = 'pending'), 0)`,
+    }).from(withdrawals).where(eq(withdrawals.userId, uid)),
   ]);
 
   const entries: WalletLedgerEntry[] = [];
@@ -254,7 +333,7 @@ export async function GET(req: NextRequest) {
 
   // 5. Combinés : débit (-Mise) + crédit éventuel (+Gain / +Vente du coupon)
   for (const c of comboRows) {
-    const legCount = (c.legs ?? []).length;
+    const legCount = c.legCount;
     entries.push({
       id: `cb-st-${c.id}`,
       type: "stake",
@@ -350,20 +429,11 @@ export async function GET(req: NextRequest) {
     a.createdAt === b.createdAt ? 0 : a.createdAt < b.createdAt ? 1 : -1
   );
 
-  const totalDeposited = round2(
-    depRows
-      .filter((d) => d.status === "credited" || d.status === "paid")
-      .reduce((s, d) => s + d.amount, 0)
-  );
-  const totalWithdrawn = round2(
-    wdRows.filter((w) => w.status === "approved").reduce((s, w) => s + w.amount, 0)
-  );
-  const pendingWithdrawals = round2(
-    wdRows.filter((w) => w.status === "pending").reduce((s, w) => s + w.amount, 0)
-  );
-  const pendingDeposits = round2(
-    depRows.filter((d) => d.status === "pending_review").reduce((s, d) => s + d.amount, 0)
-  );
+  // Ces totaux couvrent tout l'historique, et non uniquement les 35 dernières lignes.
+  const totalDeposited = round2(Number(depositTotals[0]?.deposited ?? 0));
+  const totalWithdrawn = round2(Number(withdrawalTotals[0]?.withdrawn ?? 0));
+  const pendingWithdrawals = round2(Number(withdrawalTotals[0]?.pending ?? 0));
+  const pendingDeposits = round2(Number(depositTotals[0]?.pending ?? 0));
 
   return jsonWithEtag(req, {
     balance: eligibility.balance,

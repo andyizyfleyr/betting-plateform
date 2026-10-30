@@ -28,7 +28,7 @@ export const maxDuration = 60;
 
 const MATCHES_SLIM_EDGE_POLICY = {
   maxAge: 0,
-  sMaxAge: 1,
+  sMaxAge: 10,
   staleWhileRevalidate: 1,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
