@@ -99,3 +99,15 @@ GitHub. Ne jamais envoyer ces valeurs dans une conversation. Le workflow
 n'effectue aucune suppression, vérifie les octets via S3 puis l'URL publique,
 et ne bascule pas automatiquement la production sur `r2.dev`. Il doit exister
 sur la branche par défaut pour être lancé manuellement.
+
+## Envoi ponctuel avec les variables Vercel
+
+Le pré-build accepte `R2_SYNC_ON_BUILD=public-v1` uniquement pour un build
+Vercel de production, et seulement si le compte et le bucket correspondent au
+bucket public prévu. Il téléverse les médias web et l'OTA courante puis vérifie
+leurs empreintes et types via S3 et le domaine de test. Il ne lit aucun bucket
+privé et ne supprime aucun objet. Une erreur interrompt le build pour éviter
+une activation partielle. Après exécution contrôlée, supprimer ce drapeau pour
+ne pas relancer l'opération à chaque déploiement. Il ne configure pas les URL
+du site et n'active pas `r2.dev` comme origine de production. Les clés restent
+des variables sensibles Vercel ; ne pas les recopier dans les logs ou le chat.
