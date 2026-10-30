@@ -7,7 +7,7 @@ if (mode !== 'v1' || process.env.VERCEL !== '1' || process.env.VERCEL_ENV !== 'p
 }
 (async()=>{
  const response=await fetch('https://pulse-bet.matiasanauld.workers.dev/internal/hyperdrive/history-v1?fresh=1',{headers:{Authorization:`Bearer ${process.env.PARTYKIT_SECRET.trim()}`},redirect:'error',signal:AbortSignal.timeout(10000)});
- if(!response.ok) throw Error('unavailable');
+ if(!response.ok) { console.error(`Sonde Hyperdrive : réponse HTTP ${response.status}.`); throw Error('unavailable'); }
  const data=await response.json();
  if(data.version!==1 || !Array.isArray(data.matches) || data.matches.length>240 || data.matches.some(m=>m.status!=='finished')) throw Error('invalid');
  console.log(`Sonde Hyperdrive : connexion authentifiée et lecture vérifiées (${data.matches.length} résultats).`);
