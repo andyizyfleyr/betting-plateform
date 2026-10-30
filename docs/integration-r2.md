@@ -152,3 +152,18 @@ orphelin : un message d'échec ne prouve pas son absence. Aucune suppression
 automatique d'objets n'est effectuée. Les tests fournis utilisent PGlite et un
 R2 simulé ; ils ne prouvent ni les permissions du bucket réel, ni la restauration
 dans Neon, ni l'intégration aux écrans utilisateurs.
+
+### Copie paginée manuelle
+
+Pour dépasser la limite de 100 lignes par table, l'opérateur peut utiliser
+`--copy-page ID_UTILISATEUR AAAA-MM-JJ`, puis relancer avec le curseur affiché
+en dernier argument jusqu'à ne plus recevoir de curseur. Chaque page est
+chiffrée et vérifiée avant l'affichage du curseur. Conserver ce dernier en lieu
+sûr : il contient des métadonnées d'identification. Un échec peut laisser un
+objet orphelin ; relancer depuis le dernier curseur confirmé.
+
+Les pages sont issues de transactions distinctes : une correction ou un pari
+réglé entre deux pages peut modifier la sélection. Ce mode n'est ni un instantané
+complet cohérent sur plusieurs pages ni une sauvegarde restaurable en base. Il
+ne raccorde pas l'historique utilisateur, ne permet aucune suppression Neon et
+ne réduit pas encore les transferts Neon.

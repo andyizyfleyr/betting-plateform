@@ -16,13 +16,14 @@ const original=Module._load;
  SELECT 1,'football','Test','Alpha','Beta','home','Alpha',2,1,2,'won','2026-01-01 10:00:00.123456','2026-01-02 10:00:00.123456' FROM generate_series(1,45);
  INSERT INTO bets (user_id,sport,league,home_team,away_team,selection,selection_label,odds,stake,potential_win,status)
  VALUES (2,'football','Secret','X','Y','home','X',2,1,2,'won');`);
+ let syncCalls=0, hydrationCalls=0;
  const queries=[]; const db=drizzle(pg,{logger:{logQuery:(query)=>queries.push(query)}});
  Module._load=function(name){
   if(name==='@/db') return {db};
   if(name==='@/db/seed') return {ensureSeeded:async()=>{}};
   if(name==='@/lib/session') return {requireUserId:async()=>1};
-  if(name==='@/lib/sync-throttle') return {syncLiveMatchesThrottled:async()=>{}};
-  if(name==='@/lib/active-state-cache') return {ensureMatchStoreHydrated:async()=>{},getCachedMatchById:()=>null,getCachedUserBetsResponse:()=>null,setCachedUserBetsResponse:(_u,_f,p)=>({json:JSON.stringify(p),etag:'x',at:Date.now()})};
+  if(name==='@/lib/sync-throttle') return {syncLiveMatchesThrottled:async()=>{syncCalls++}};
+  if(name==='@/lib/active-state-cache') return {ensureMatchStoreHydrated:async()=>{hydrationCalls++},getCachedMatchById:()=>null,getCachedUserBetsResponse:()=>null,setCachedUserBetsResponse:(_u,_f,p)=>({json:JSON.stringify(p),etag:'x',at:Date.now()})};
   return original.apply(this,arguments);
  };
  const {GET}=require('../src/app/api/bets/route.ts'); const {NextRequest}=require('next/server');
@@ -40,7 +41,9 @@ const original=Module._load;
  } while(cursor);
  assert.equal(ids.length,45);assert.equal(new Set(ids).size,45);
  const old=await GET(new NextRequest('https://example.com/api/bets?filter=finished')); const oldBody=await old.json();assert.equal(oldBody.bets.length,45);assert(!('nextCursor' in oldBody));
+ const beforeBad=[syncCalls,hydrationCalls];
  const bad=await GET(new NextRequest('https://example.com/api/bets?filter=finished&pageSize=20&cursor=bad!'));assert.equal(bad.status,400);
+ assert.deepEqual([syncCalls,hydrationCalls],beforeBad);
  await pg.exec(`INSERT INTO matches (id,sport,league,home_team,away_team,home_score,away_score,status,starts_at,odds_home,odds_away,events)
  VALUES (900,'football','Test','Alpha','Beta',2,1,'finished',now(),2,3,'[{"huge":"blob"}]');
  INSERT INTO combo_bets (user_id,legs,base_odds,total_odds,stake,potential_win,status,placed_at,settled_at)

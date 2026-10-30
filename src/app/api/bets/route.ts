@@ -95,9 +95,6 @@ export async function GET(req: NextRequest) {
     const uid = auth;
 
     const manualRefresh = isManualRefreshRequest(req);
-    await syncLiveMatchesThrottled(false, { manualRefresh });
-    await ensureMatchStoreHydrated(manualRefresh);
-
   const filter = req.nextUrl.searchParams.get("filter") ?? "all";
   const targetKindParam = req.nextUrl.searchParams.get("kind");
   const targetIdParam = req.nextUrl.searchParams.get("id");
@@ -119,6 +116,10 @@ export async function GET(req: NextRequest) {
   if (!pagedHistory && rawCursor !== null) return NextResponse.json({ error: "Curseur invalide" }, { status: 400 });
   const cursor = rawCursor ? decodeHistoryCursor(rawCursor) : null;
   if (rawCursor !== null && !cursor) return NextResponse.json({ error: "Curseur invalide" }, { status: 400 });
+  // Rejeter les paramètres invalides avant les synchronisations coûteuses.
+  await syncLiveMatchesThrottled(false, { manualRefresh });
+  await ensureMatchStoreHydrated(manualRefresh);
+
   const page = pagedHistory ? await getFinishedBetPageKeys(uid, cursor, 20) : null;
   const sportIds = page?.keys.filter(k => k.kind === "sport").map(k => k.id) ?? [];
   const predictionIds = page?.keys.filter(k => k.kind === "prediction").map(k => k.id) ?? [];

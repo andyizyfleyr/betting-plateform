@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { config, encrypt, decrypt, snapshot, storeAndVerify, restoreFile, TABLES } = require('./r2-private-archive.cjs');
+const { config, encrypt, decrypt, snapshot, snapshotPage, storeAndVerify, restoreFile, TABLES } = require('./r2-private-archive.cjs');
 (async () => {
   const env = { R2_ACCOUNT_ID: '6f3e2c1a84617db0da9cb4bf594446f2', R2_PRIVATE_BUCKET: 'pulsebet', R2_PRIVATE_ACCESS_KEY_ID: 'test', R2_PRIVATE_SECRET_ACCESS_KEY: 'test', R2_ARCHIVE_ENCRYPTION_KEY: '12'.repeat(32) };
   const cfg = config(env);
@@ -43,6 +43,17 @@ const { config, encrypt, decrypt, snapshot, storeAndVerify, restoreFile, TABLES 
   await assert.rejects(() => storeAndVerify(badS3, cfg.bucket, data, cfg.key));
   await pg.exec("INSERT INTO bets SELECT i,1,'won','2020-01-01',1 FROM generate_series(10,110) AS i");
   await assert.rejects(() => snapshot(client, 1, '2021-01-01'), /Trop de lignes/);
+  const first = await snapshotPage(client, 1, '2021-01-01');
+  assert.equal(first.data.tables.bets.length, 100); assert(first.nextCursor);
+  assert.equal(first.data.tables.combo_bets.length, 1);
+  await assert.rejects(() => snapshotPage(client, 2, '2021-01-01', first.nextCursor), /Curseur invalide/);
+  await assert.rejects(() => snapshotPage(client, 1, '2022-01-01', first.nextCursor), /Curseur invalide/);
+  const second = await snapshotPage(client, 1, '2021-01-01', first.nextCursor);
+  assert.equal(second.data.tables.bets.length, 2); assert.equal(second.data.tables.combo_bets.length, 0); assert.equal(second.nextCursor, null);
+  const ids = [...first.data.tables.bets, ...second.data.tables.bets].map(record => JSON.parse(record).id);
+  assert.equal(new Set(ids).size, 102);
+  assert(!ids.includes(3)); // autre utilisateur
+
   assert.equal((await pg.query('SELECT count(*)::int AS n FROM bets')).rows[0].n,105);
   await pg.close();
   console.log('Archives privées : isolation, précision, chiffrement, relecture, altération, limite et absence de suppression OK (PGlite et R2 simulé).');
