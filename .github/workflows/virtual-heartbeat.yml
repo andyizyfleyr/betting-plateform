@@ -1,0 +1,23 @@
+name: Synchronisation des matchs
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: virtual-heartbeat
+  cancel-in-progress: false
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Déclencher le moteur en mode léger
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          args=()
+          if [ -n "$CRON_SECRET" ]; then
+            args=(-H "Authorization: Bearer $CRON_SECRET")
+          fi
+          curl --fail --silent --show-error --retry 2 --max-time 70 "${args[@]}" 'https://be-plateform.vercel.app/api/cron/tick?mode=light'

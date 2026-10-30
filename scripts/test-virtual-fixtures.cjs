@@ -22,7 +22,7 @@ console.log('Affiches virtuelles : conflits de clubs et délai de sept jours, 25
 
 assert.equal(virtualPairKey('PSG', 'Marseille'), virtualPairKey('Paris SG', 'OM'));
 const { virtualClubNames } = require('../src/lib/team-logos.ts');
-const { buildVirtualFixturePool, coprimeStride } = require('../src/lib/virtual-fixtures.ts');
+const { buildVirtualFixturePool, coprimeStride, planVirtualQueue, VIRTUAL_KICKOFF_GAP_MS } = require('../src/lib/virtual-fixtures.ts');
 const pool = buildVirtualFixturePool([], virtualClubNames());
 assert(pool.length > 10000);
 for (const n of [7, 36, 197, pool.length]) {
@@ -30,11 +30,11 @@ for (const n of [7, 36, 197, pool.length]) {
   for (let i=0; i<n; i++) indices.add((i*step)%n);
   assert.equal(indices.size,n);
 }
-// Simulation de 8 jours à quatre directs décalés : chaque paire est distincte à 7 jours.
+// Simulation de 8 jours avec un départ toutes les 30 minutes.
 const recent = new Map(); const live = [];
 let rand = 123456;
-for (let i=0; i<8*24*24; i++) {
-  const now = i * 150000;
+for (let i=0; i<8*24*2; i++) {
+  const now = i * VIRTUAL_KICKOFF_GAP_MS;
   while (live.length && live[0].end <= now) live.shift();
   rand = (Math.imul(rand,1664525)+1013904223) >>> 0;
   const offset=rand % pool.length; const step=coprimeStride(pool.length,rand >>> 4);
@@ -51,3 +51,13 @@ for (let i=0; i<8*24*24; i++) {
   recent.set(key,now+600000); live.push({...chosen,end:now+600000});
 }
 console.log(`Catalogue : ${virtualClubNames().length} clubs, ${pool.length} affiches, huit jours simulés OK`);
+
+// Le planificateur respecte l'intervalle même si la première affiche est bloquée 7 jours.
+const q = [{home:'A',away:'B'}, {home:'C',away:'D'}, {home:'E',away:'F'}];
+const planned = planVirtualQueue(q, 1000000, x => x, () => 600000,
+  [{home:'B',away:'A',start:0,end:600000}]);
+assert.equal(planned[0].item.home, 'C');
+assert.equal(planned[1].start - planned[0].start, VIRTUAL_KICKOFF_GAP_MS);
+assert(planned[2].start >= 600000 + VIRTUAL_REMATCH_GAP_MS);
+assert(planned[2].start - planned[1].start >= VIRTUAL_KICKOFF_GAP_MS);
+console.log('Planification : départs espacés de 30 minutes, revanche reportée OK');
