@@ -55,15 +55,21 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
     try {
       // Toujours vérifier auprès du serveur : une copie locale peut contenir des marchés clôturés.
       const result = await api.loadCoupon(normalized);
-      const problem = validateLoadedCoupon(result.legs, bettingLimits.maxComboLegs);
-      if (problem) { setError(problem); return; }
       const apply = () => {
+        const problem = validateLoadedCoupon(result.legs, bettingLimits.maxComboLegs);
+        if (problem) { setError(problem); return; }
         loadComboLegs(result.legs as ComboSelection[]);
-        setCode("");
-        setMode(null);
-        toast({ kind: "success", title: "Coupon chargé", description: result.skippedClosedCount ? `${result.legs.length} sélection(s) chargée(s), ${result.skippedClosedCount} clôturée(s) ignorée(s).` : `${result.legs.length} sélection(s) chargée(s) dans le Betslip.` });
+        setCode(""); setMode(null);
+        toast({ kind: "success", title: "Coupon chargé", description: `${result.legs.length} sélection(s) chargée(s) dans le Betslip.` });
       };
-      if (comboLegs.length) {
+      if (result.skippedClosedCount) {
+        const names = (result.unavailable ?? []).map(x => `• ${x.title} (${x.reason})`).join("\n");
+        const replace = comboLegs.length && result.legs.length ? "\nLe coupon chargé remplacera aussi vos sélections actuelles." : "";
+        Alert.alert("Sélections indisponibles", `${result.skippedClosedCount} sélection(s) commencée(s) ou indisponible(s).\n${names}\n\nLes retirer du coupon chargé ?${replace}`, [
+          { text: "Annuler", style: "cancel" },
+          { text: "Retirer", onPress: apply },
+        ]);
+      } else if (comboLegs.length) {
         Alert.alert("Remplacer le coupon ?", "Le coupon chargé remplacera les sélections actuelles.", [
           { text: "Annuler", style: "cancel" },
           { text: "Remplacer", onPress: apply },
