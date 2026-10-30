@@ -17,14 +17,17 @@ async function sendSnapshot(matches) {
   assert.equal(res.status,200, await res.text());
 }
 (async()=>{
+ const first=Array.from({length:50},(_,i)=>({id:i+1,odds:2,league:'Test long league name'}));
+ // Une copie initiale avant la connexion fournit un accusé de négociation
+ // séquencé : l'envoi HTTP ne court plus contre le message WebSocket.
+ await sendSnapshot(first);
  const a=connect(), b=connect();
  try {
-   await Promise.all([a.next(), b.next()]);
+   const [old1, initial]=await Promise.all([a.next(), b.next()]);
+   assert.equal(old1.type,'MATCHES_SNAPSHOT'); assert.equal(initial.type,'MATCHES_SNAPSHOT');
    b.socket.send(JSON.stringify({type:'LIVE_DELTA_V1'}));
-   const first=Array.from({length:50},(_,i)=>({id:i+1,odds:2,league:'Test long league name'}));
-   await sendSnapshot(first);
-   const [old1,new1]=await Promise.all([a.next(),b.next()]);
-   assert.equal(old1.type,'MATCHES_SNAPSHOT'); assert.equal(new1.type,'MATCHES_SNAPSHOT'); assert.equal(typeof new1.seq,'number');
+   const new1=await b.next();
+   assert.equal(new1.type,'MATCHES_SNAPSHOT'); assert.equal(typeof new1.seq,'number');
    const second=first.map(m=>m.id===1?{...m,odds:3}:m).filter(m=>m.id!==2);
    await sendSnapshot(second);
    const [old2,new2]=await Promise.all([a.next(),b.next()]);
