@@ -21,7 +21,8 @@ import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur } from "@/lib/format";
 
 type Tab = "ongoing" | "finished";
-type OutcomeFilter = "all" | "won" | "lost" | "cashed" | "void";
+type OutcomeFilter = "all" | "won" | "lost" | "void";
+type KindFilter = "all" | "simple" | "combo";
 
 const POLL_LIVE_MS = 2_500;
 const POLL_PENDING_MS = 5_000;
@@ -38,7 +39,13 @@ function dayLabel(iso: string) {
     weekday: "long",
     day: "numeric",
     month: "long",
+    ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {}),
   }).format(d);
+}
+
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
 function settledOrPlacedIso(b: ClientBet): string {
@@ -53,7 +60,7 @@ export default function ParisPage() {
   const pendingPollMs = getAdaptiveIntervalMs(POLL_PENDING_MS, isConstrained);
   const idlePollMs = getAdaptiveIntervalMs(POLL_IDLE_MS, isConstrained);
   const [tabChoice, setTabChoice] = useState<Tab | null>(null);
-  const [kindFilter, setKindFilter] = useState<"all" | "sport" | "prediction" | "combo">("all");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("all");
   const [query, setQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -210,18 +217,17 @@ export default function ParisPage() {
     return {
       all: baseByStatus.length,
       combo: baseByStatus.filter((b) => b.kind === "combo").length,
-      sport: baseByStatus.filter((b) => b.kind === "sport").length,
-      prediction: baseByStatus.filter((b) => b.kind === "prediction").length,
+      simple: baseByStatus.filter((b) => b.kind !== "combo").length,
     };
   }, [baseByStatus]);
 
   const byKind = useMemo(
-    () => (kindFilter === "all" ? baseByStatus : baseByStatus.filter((b) => b.kind === kindFilter)),
+    () => (kindFilter === "all" ? baseByStatus : baseByStatus.filter((b) => kindFilter === "simple" ? b.kind !== "combo" : b.kind === "combo")),
     [baseByStatus, kindFilter]
   );
 
   const finishedForOutcomeCounts = useMemo(
-    () => (kindFilter === "all" ? finishedAll : finishedAll.filter((b) => b.kind === kindFilter)),
+    () => (kindFilter === "all" ? finishedAll : finishedAll.filter((b) => kindFilter === "simple" ? b.kind !== "combo" : b.kind === "combo")),
     [finishedAll, kindFilter]
   );
 
@@ -230,16 +236,15 @@ export default function ParisPage() {
       all: byKind.length,
       won: finishedForOutcomeCounts.filter((b) => b.status === "won").length,
       lost: finishedForOutcomeCounts.filter((b) => b.status === "lost").length,
-      cashed: finishedForOutcomeCounts.filter((b) => b.status === "cashed").length,
       void: finishedForOutcomeCounts.filter((b) => b.status === "void").length,
     }),
     [byKind.length, finishedForOutcomeCounts]
   );
 
   const visibleBets = useMemo(() => {
-    if (outcomeFilter === "all") return byKind;
+    if (tab === "ongoing" || outcomeFilter === "all") return byKind;
     return byKind.filter((b) => b.status === outcomeFilter);
-  }, [byKind, outcomeFilter]);
+  }, [tab, byKind, outcomeFilter]);
 
   const betsResetKey = `${tab}|${kindFilter}|${outcomeFilter}|${query
     .trim()
@@ -253,7 +258,7 @@ export default function ParisPage() {
   const dayTotalCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const b of visibleBets) {
-      const key = dayLabel(settledOrPlacedIso(b));
+      const key = dayKey(settledOrPlacedIso(b));
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
@@ -262,7 +267,7 @@ export default function ParisPage() {
   const finishedGroups = useMemo(() => {
     const map = new Map<string, ClientBet[]>();
     for (const b of pagedBets) {
-      const key = dayLabel(settledOrPlacedIso(b));
+      const key = dayKey(settledOrPlacedIso(b));
       map.set(key, [...(map.get(key) ?? []), b]);
     }
     return [...map.entries()];
@@ -387,31 +392,18 @@ export default function ParisPage() {
         </div>
       )}
 
-      {/* Rangée unique collante de 3 pastilles dropdown */}
-      <FilterDropdownRow
+      <div className="sticky top-[48px] z-30 bg-deep/95 backdrop-blur-md lg:top-[52px]">
+        <div role="tablist" aria-label="Statut des paris" className="flex gap-2 pt-3">
+          {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
+            <button key={value} type="button" role="tab" aria-selected={tab === value}
+              onClick={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
+              className={cn("h-10 flex-1 rounded-full text-[11.5px] font-medium", tab === value ? "bg-betclic-red text-white" : "bg-[#e7e9ed] text-[#374151]")}>
+              {label} {bets !== null && `(${value === "ongoing" ? ongoingAll.length : finishedAll.length})`}
+            </button>
+          ))}
+        </div>
+      <FilterDropdownRow sticky={false}
         filters={[
-          {
-            id: "status",
-            placeholder: "Statut",
-            value: tab,
-            defaultValue: smartDefaultTab,
-            onChange: (next) => {
-              setTabChoice(next === smartDefaultTab ? null : next);
-              if (next === "ongoing") setOutcomeFilter("all");
-            },
-            options: [
-              {
-                value: "ongoing",
-                label: "En cours",
-                count: bets !== null ? ongoingAll.length : undefined,
-              },
-              {
-                value: "finished",
-                label: "Terminés",
-                count: bets !== null ? finishedAll.length : undefined,
-              },
-            ],
-          },
           {
             id: "kind",
             placeholder: "Type",
@@ -421,37 +413,27 @@ export default function ParisPage() {
             options: [
               {
                 value: "all",
-                label: "Tous types",
+                label: "Tous",
                 count: bets !== null ? kindCounts.all : undefined,
               },
               {
+                value: "simple",
+                label: "Simple",
+                count: bets !== null ? kindCounts.simple : undefined,
+              },
+              {
                 value: "combo",
-                label: "Combinés",
+                label: "Combiné",
                 count: bets !== null ? kindCounts.combo : undefined,
-              },
-              {
-                value: "sport",
-                label: "Sport",
-                count: bets !== null ? kindCounts.sport : undefined,
-              },
-              {
-                value: "prediction",
-                label: "Prédictions",
-                count: bets !== null ? kindCounts.prediction : undefined,
               },
             ],
           },
-          {
+          ...(tab === "finished" ? [{
             id: "outcome",
             placeholder: "Résultat",
             value: outcomeFilter,
             defaultValue: "all",
-            onChange: (next) => {
-              setOutcomeFilter(next);
-              if (next !== "all" && tab === "ongoing") {
-                setTabChoice("finished");
-              }
-            },
+            onChange: setOutcomeFilter,
             options: [
               {
                 value: "all",
@@ -469,20 +451,14 @@ export default function ParisPage() {
                 count: bets !== null ? outcomeCounts.lost : undefined,
               },
               {
-                value: "cashed",
-                label: "Vendus",
-                count: bets !== null ? outcomeCounts.cashed : undefined,
-              },
-              {
                 value: "void",
                 label: "Remboursés",
                 count: bets !== null ? outcomeCounts.void : undefined,
               },
             ],
-          },
+          }] : []),
         ]}
         onReset={() => {
-          setTabChoice(null);
           setKindFilter("all");
           setOutcomeFilter("all");
         }}
@@ -494,6 +470,7 @@ export default function ParisPage() {
             : null
         }
       />
+      </div>
 
       {/* Liste des tickets */}
       {bets === null ? (
@@ -560,12 +537,12 @@ export default function ParisPage() {
               ))}
             </div>
           ) : (
-            finishedGroups.map(([label, group]) => (
-              <div key={label} className="mb-5 last:mb-0">
+            finishedGroups.map(([key, group]) => (
+              <div key={key} className="mb-5 last:mb-0">
                 <p className="mb-2 px-0.5 text-[10.5px] font-medium capitalize text-mist">
-                  {label}
+                  {dayLabel(settledOrPlacedIso(group[0]))}
                   <span className="ml-1.5 text-dim">
-                    ({dayTotalCounts.get(label) ?? group.length})
+                    ({dayTotalCounts.get(key) ?? group.length})
                   </span>
                 </p>
                 <div className="grid grid-cols-1 items-start gap-3">
