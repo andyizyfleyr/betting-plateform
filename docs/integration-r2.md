@@ -87,3 +87,15 @@ des clubs ne sont pas copiés par ce script : vérifier leurs droits d'utilisati
 et leur provenance avant toute importation. Le domaine public R2 doit être séparé
 de tout futur stockage privé. Surveiller coûts et quotas (stockage, requêtes et
 trafic de l'éventuel proxy) ainsi que les octets sortants Neon avant et après.
+
+## Envoi depuis GitHub Actions
+
+Le workflow manuel `Synchroniser les médias publics R2` cible exclusivement le
+bucket `pulsebet-public` du compte configuré et son URL de développement. Il
+requiert deux secrets de dépôt : `R2_PUBLIC_ACCESS_KEY_ID` et
+`R2_PUBLIC_SECRET_ACCESS_KEY`. Utiliser un jeton R2 limité au seul bucket
+public, sans accès au bucket privé, puis enregistrer ses clés dans les secrets
+GitHub. Ne jamais envoyer ces valeurs dans une conversation. Le workflow
+n'effectue aucune suppression, vérifie les octets via S3 puis l'URL publique,
+et ne bascule pas automatiquement la production sur `r2.dev`. Il doit exister
+sur la branche par défaut pour être lancé manuellement.
