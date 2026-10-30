@@ -888,7 +888,7 @@ export const api = {
   saveCoupon: (legs: ClientSavedCouponLeg[]) =>
     requestJson<{ code: string }>("/api/coupons", {
       method: "POST",
-      body: { legs },
+      body: { legs: legs.map(({ kind, matchId, questionId, market, selection }) => ({ kind, matchId, questionId, market, selection })) },
     }),
 
   loadCoupon: (code: string) =>
@@ -896,6 +896,7 @@ export const api = {
       code: string;
       legs: ClientSavedCouponLeg[];
       skippedClosedCount?: number;
+      unavailable?: { title: string; reason: string }[];
     }>(`/api/coupons?code=${encodeURIComponent(code)}`, {
       bypassEtag: true,
     }),

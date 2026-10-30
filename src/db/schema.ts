@@ -506,9 +506,12 @@ export interface SavedCouponLegRecord {
   isLive?: boolean;
 }
 
+/** Les nouveaux codes ne stockent que l'identifiant de l'événement et le choix ;
+ * les champs supplémentaires restent facultatifs pour les anciens coupons. */
+export type StoredCouponLeg = Pick<SavedCouponLegRecord, "kind" | "market" | "selection"> & Partial<Omit<SavedCouponLegRecord, "kind" | "market" | "selection">>;
 export const savedCoupons = pgTable("saved_coupons", {
   code: text("code").primaryKey(),
-  legs: jsonb("legs").$type<SavedCouponLegRecord[]>().notNull(),
+  legs: jsonb("legs").$type<StoredCouponLeg[]>().notNull(),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 

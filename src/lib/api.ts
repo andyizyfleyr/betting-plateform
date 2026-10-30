@@ -816,10 +816,10 @@ export const api = {
     request<{ code: string }>("/api/coupons", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ legs }),
+      body: JSON.stringify({ legs: legs.map(({ kind, matchId, questionId, market, selection }) => ({ kind, matchId, questionId, market, selection })) }),
     }),
   loadCoupon: (code: string) =>
-    request<{ code: string; legs: ClientSavedCouponLeg[]; skippedClosedCount: number }>(
+    request<{ code: string; legs: ClientSavedCouponLeg[]; skippedClosedCount: number; unavailable?: { title: string; reason: string }[] }>(
       `/api/coupons?code=${encodeURIComponent(code)}`
     ),
   wallet: (opts?: RequestExtraOptions) =>

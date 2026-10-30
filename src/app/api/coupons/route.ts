@@ -10,6 +10,7 @@ import {
   type MatchRow,
   type PredictionQuestionRow,
   type SavedCouponLegRecord,
+  type StoredCouponLeg,
 } from "@/db/schema";
 import {
   MAX_COMBO_LEGS,
@@ -17,10 +18,8 @@ import {
 } from "@/lib/combo-math";
 import { classifyServerError } from "@/lib/db-error";
 import {
-  liveMarketOddsFor,
   marketLabelFor,
   marketOddsFor,
-  minuteNumber,
   realMatchOddsFor,
 } from "@/lib/markets";
 
@@ -82,31 +81,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const sanitizedLegs: SavedCouponLegRecord[] = [];
-    for (const l of rawLegs) {
-      if (!l || (l.kind !== "sport" && l.kind !== "prediction")) continue;
-      if (!l.selection || !l.market) continue;
-      const odds = Number(l.odds);
-      if (!Number.isFinite(odds) || odds < 1.01) continue;
-      sanitizedLegs.push({
-        uid: String(l.uid || (l.kind === "sport" ? `sport-${l.matchId}` : `pred-${l.questionId}`)),
-        kind: l.kind,
-        ...(l.matchId ? { matchId: Number(l.matchId) } : {}),
-        ...(l.matchSource === "manual" || l.matchSource === "virtual"
-          ? { matchSource: l.matchSource }
-          : {}),
-        ...(l.questionId ? { questionId: Number(l.questionId) } : {}),
-        title: String(l.title || "").slice(0, 140),
-        ...(l.homeTeam ? { homeTeam: String(l.homeTeam).slice(0, 80) } : {}),
-        ...(l.awayTeam ? { awayTeam: String(l.awayTeam).slice(0, 80) } : {}),
-        ...(l.homeLogo ? { homeLogo: String(l.homeLogo).slice(0, 260) } : {}),
-        ...(l.awayLogo ? { awayLogo: String(l.awayLogo).slice(0, 260) } : {}),
-        league: String(l.league || "").slice(0, 80),
-        market: String(l.market).slice(0, 48),
-        selection: String(l.selection).slice(0, 64),
-        selectionLabel: String(l.selectionLabel || l.selection).slice(0, 100),
-        odds: Math.round(odds * 100) / 100,
-      });
+    const sanitizedLegs: StoredCouponLeg[] = [];
+    for (const leg of rawLegs) {
+      if (!leg || typeof leg !== "object") return NextResponse.json({ error: "Sélection invalide." }, { status: 400 });
+      const id = Number(leg.kind === "sport" ? leg.matchId : leg.questionId);
+      if ((leg.kind !== "sport" && leg.kind !== "prediction") || !Number.isSafeInteger(id) || id <= 0 || typeof leg.market !== "string" || !leg.market || typeof leg.selection !== "string" || !leg.selection) {
+        return NextResponse.json({ error: "Sélection invalide." }, { status: 400 });
+      }
+      sanitizedLegs.push({ kind: leg.kind, ...(leg.kind === "sport" ? { matchId: id } : { questionId: id }), market: leg.market.slice(0, 48), selection: leg.selection.slice(0, 64) });
     }
 
     if (sanitizedLegs.length === 0) {
@@ -202,13 +184,14 @@ export async function GET(req: NextRequest) {
     const predMap = new Map(qRows.map((q) => [q.id, q]));
 
     const hydrated: SavedCouponLegRecord[] = [];
-    let skippedClosedCount = 0;
+    const unavailable: { title: string; reason: string }[] = [];
+    const skip = (title: string, reason: string) => unavailable.push({ title, reason });
 
     for (const leg of row.legs) {
       if (leg.kind === "sport" && leg.matchId) {
         const m = matchMap.get(Number(leg.matchId));
-        if (!m || m.status === "finished") {
-          skippedClosedCount++;
+        if (!m || m.status !== "upcoming" || m.startsAt.getTime() <= nowLoadMs || m.suspended) {
+          skip(m ? `${m.homeTeam} – ${m.awayTeam}` : (leg.title || `Match ${leg.matchId}`), !m ? "introuvable" : m.suspended && m.status === "upcoming" && m.startsAt.getTime() > nowLoadMs ? "marché suspendu" : "match commencé ou terminé");
           continue;
         }
         const market = leg.market || "result";
@@ -222,37 +205,18 @@ export async function GET(req: NextRequest) {
             resolvedLabel = realHit.label;
           }
         } else {
-          const h = m.homeScore ?? 0;
-          const a = m.awayScore ?? 0;
-          const min = minuteNumber(m.minute);
           const formOpts = {
-            homeForm: m.homeForm ?? 1,
-            awayForm: m.awayForm ?? 1,
-            redHome: m.redHome ?? 0,
-            redAway: m.redAway ?? 0,
-            events: m.events ?? [],
-            regime: m.regime ?? null,
-            league: m.league ?? null,
-            matchId: m.id,
+            homeForm: m.homeForm ?? 1, awayForm: m.awayForm ?? 1,
+            redHome: m.redHome ?? 0, redAway: m.redAway ?? 0,
+            events: m.events ?? [], regime: m.regime ?? null,
+            league: m.league ?? null, matchId: m.id,
           };
-          resolvedOdds =
-            m.status === "live"
-              ? liveMarketOddsFor(
-                  market,
-                  leg.selection,
-                  m.homeTeam,
-                  m.awayTeam,
-                  h,
-                  a,
-                  min,
-                  formOpts
-                )
-              : marketOddsFor(market, leg.selection, m.homeTeam, m.awayTeam, formOpts);
+          resolvedOdds = marketOddsFor(market, leg.selection, m.homeTeam, m.awayTeam, formOpts);
           resolvedLabel = marketLabelFor(market, leg.selection, m.homeTeam, m.awayTeam);
         }
 
         if (resolvedOdds == null) {
-          skippedClosedCount++;
+          skip(`${m.homeTeam} – ${m.awayTeam}`, "marché indisponible");
           continue;
         }
         hydrated.push({
@@ -268,28 +232,29 @@ export async function GET(req: NextRequest) {
           league: m.league,
           market,
           selection: leg.selection,
-          selectionLabel: resolvedLabel || leg.selectionLabel,
+          selectionLabel: resolvedLabel || leg.selectionLabel || leg.selection,
           odds: resolvedOdds,
           startsAt: m.startsAt ? m.startsAt.toISOString() : null,
-          isLive: m.status === "live",
+          isLive: false,
         });
       } else if (leg.kind === "prediction" && leg.questionId) {
         const q = predMap.get(Number(leg.questionId));
-        if (!q || q.status !== "open") {
-          skippedClosedCount++;
+        if (!q || q.status !== "open" || q.resolvesAt.getTime() <= nowLoadMs) {
+          skip(q?.question || leg.title || `Prédiction ${leg.questionId}`, "prédiction clôturée");
           continue;
         }
-        let freshOdds = leg.odds;
-        let freshLabel = leg.selectionLabel;
+        let freshOdds: number;
+        let freshLabel: string;
         if (Array.isArray(q.options) && q.options.length >= 2) {
           const opt = q.options.find((o) => o.key === leg.selection);
           if (!opt) {
-            skippedClosedCount++;
+            skip(q.question, "choix indisponible");
             continue;
           }
           freshOdds = opt.odds;
           freshLabel = opt.label;
         } else {
+          if (leg.selection !== "yes" && leg.selection !== "no") { skip(q.question, "choix indisponible"); continue; }
           freshOdds = leg.selection === "yes" ? q.oddsYes : q.oddsNo;
           freshLabel = leg.selection === "yes" ? "Oui" : "Non";
         }
@@ -306,20 +271,16 @@ export async function GET(req: NextRequest) {
           startsAt: q.resolvesAt ? q.resolvesAt.toISOString() : null,
           isLive: false,
         });
+      } else {
+        skip(leg.title || "Sélection", "événement introuvable");
       }
-    }
-
-    if (hydrated.length === 0) {
-      return NextResponse.json(
-        { error: "Toutes les sélections de ce coupon sont déjà terminées ou clôturées." },
-        { status: 410 }
-      );
     }
 
     return NextResponse.json({
       code: row.code,
       legs: sortSlipSelectionsChronologically(hydrated),
-      skippedClosedCount,
+      skippedClosedCount: unavailable.length,
+      unavailable,
     });
   } catch (err) {
     const info = classifyServerError(err);

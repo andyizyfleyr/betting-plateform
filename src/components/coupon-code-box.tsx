@@ -4,12 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Download, Hash, Loader2, Share2 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
-  cacheCouponLocally,
-  decodeSharePayload,
-  encodeSharePayload,
-  getLocalCachedCoupon,
   normalizeCouponCode,
 } from "@/lib/coupon-code";
+import { validateLoadedCoupon } from "@/lib/coupon-load-validation";
 import { triggerHaptic } from "@/lib/feedback";
 import type { ComboSelection } from "./combo-slip";
 import { useApp } from "./providers";
@@ -24,7 +21,7 @@ export function CouponCodeBox({
   autoCheckUrlCode?: boolean;
   className?: string;
 }) {
-  const { comboLegs, loadComboLegs, toast, user } = useApp();
+  const { comboLegs, loadComboLegs, toast, user, bettingLimits, bettingLimitsReady } = useApp();
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [generatedSignature, setGeneratedSignature] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -43,10 +40,9 @@ export function CouponCodeBox({
   const hapticsEnabled = user?.haptics;
 
   const applyLoadedCode = useCallback(
-    async (rawInput: string, urlPayloadToken?: string | null) => {
-      const embeddedC = /[?&]c=([A-Za-z0-9_-]+)/.exec(rawInput)?.[1] ?? urlPayloadToken ?? null;
+    async (rawInput: string) => {
       const normalized = normalizeCouponCode(rawInput);
-      if (!normalized || normalized.length < 6) {
+      if (!normalized || normalized.length < 5) {
         toast({
           kind: "error",
           title: "Code coupon invalide",
@@ -57,30 +53,20 @@ export function CouponCodeBox({
 
       setLoadingCode(true);
       try {
-        let loadedLegs: ComboSelection[] | null = null;
-        let skipped = 0;
-        let finalCode = normalized;
-
-        try {
-          const res = await api.loadCoupon(normalized);
-          loadedLegs = res.legs as ComboSelection[];
-          skipped = res.skippedClosedCount ?? 0;
-          finalCode = res.code;
-        } catch (apiErr) {
-          const fallback = getLocalCachedCoupon(normalized) ?? decodeSharePayload(embeddedC);
-          if (fallback && fallback.length > 0) {
-            loadedLegs = fallback;
-          } else {
-            throw apiErr;
-          }
+        if (!bettingLimitsReady) throw new Error("Chargement des limites du coupon, veuillez réessayer.");
+        const res = await api.loadCoupon(normalized);
+        const loadedLegs = res.legs as ComboSelection[];
+        const skipped = res.skippedClosedCount ?? 0;
+        const finalCode = res.code;
+        if (skipped > 0) {
+          const names = (res.unavailable ?? []).map(x => `• ${x.title} (${x.reason})`).join("\n");
+          if (!window.confirm(`${skipped} sélection(s) commencée(s) ou indisponible(s) :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
         }
-
-        if (!loadedLegs || loadedLegs.length === 0) {
-          throw new Error("Aucune sélection ouverte trouvée pour ce code.");
-        }
-
+        if (!loadedLegs.length) throw new Error("Aucune sélection disponible dans ce coupon.");
+        const problem = validateLoadedCoupon(loadedLegs, bettingLimits.maxComboLegs);
+        if (problem) throw new Error(problem);
+        if (comboLegs.length && !window.confirm("Le coupon chargé remplacera les sélections actuelles. Continuer ?")) return;
         loadComboLegs(loadedLegs);
-        cacheCouponLocally(finalCode, loadedLegs);
         triggerHaptic(hapticsEnabled, [15, 25]);
         setCodeInput("");
         setLoadOpen(false);
@@ -103,40 +89,28 @@ export function CouponCodeBox({
         setLoadingCode(false);
       }
     },
-    [loadComboLegs, toast, hapticsEnabled]
+    [loadComboLegs, toast, hapticsEnabled, bettingLimits, bettingLimitsReady, comboLegs.length]
   );
 
   // Chargement automatique si l'utilisateur ouvre un lien partagé `/betslip?code=BX-84K2`
   useEffect(() => {
-    if (!autoCheckUrlCode || typeof window === "undefined") return;
+    if (!autoCheckUrlCode || !bettingLimitsReady || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const urlCode = params.get("code");
-    const urlPayload = params.get("c");
     if (!urlCode) return;
     const norm = normalizeCouponCode(urlCode);
     if (!norm || autoLoadedRef.current === norm) return;
     autoLoadedRef.current = norm;
     const cleanUrl = window.location.pathname;
     window.history.replaceState({}, "", cleanUrl);
-    void applyLoadedCode(norm, urlPayload);
-  }, [autoCheckUrlCode, applyLoadedCode]);
+    void applyLoadedCode(norm);
+  }, [autoCheckUrlCode, applyLoadedCode, bettingLimitsReady]);
 
   const handleGenerateCode = async () => {
     if (comboLegs.length === 0 || saving) return;
     setSaving(true);
     try {
-      let code: string;
-      try {
-        const res = await api.saveCoupon(comboLegs);
-        code = res.code;
-      } catch {
-        // Repli local déterministe si hors-ligne temporaire
-        const rand = Array.from({ length: 4 }, () =>
-          "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"[Math.floor(Math.random() * 32)]
-        ).join("");
-        code = `BX-${rand}`;
-      }
-      cacheCouponLocally(code, comboLegs);
+      const { code } = await api.saveCoupon(comboLegs);
       setGeneratedCode(code);
       setGeneratedSignature(currentSignature);
       triggerHaptic(user?.haptics, [12, 22]);
@@ -151,6 +125,8 @@ export function CouponCodeBox({
         title: `Code du coupon : ${code}`,
         description: "Copié ! Partagez-le sur WhatsApp ou Telegram.",
       });
+    } catch (err) {
+      toast({ kind: "error", title: "Enregistrement impossible", description: err instanceof Error ? err.message : "Veuillez réessayer." });
     } finally {
       setSaving(false);
     }
@@ -170,10 +146,9 @@ export function CouponCodeBox({
   const handleShareCode = async () => {
     if (!activeCode) return;
     triggerHaptic(user?.haptics, 10);
-    const compact = encodeSharePayload(comboLegs);
     const shareUrl =
       typeof window !== "undefined"
-        ? `${window.location.origin}/betslip?code=${encodeURIComponent(activeCode)}${compact ? `&c=${compact}` : ""}`
+        ? `${window.location.origin}/betslip?code=${encodeURIComponent(activeCode)}`
         : "";
     const shareText = `Voici mon code coupon (${comboLegs.length} sélection${comboLegs.length > 1 ? "s" : ""}) : ${activeCode}`;
 
