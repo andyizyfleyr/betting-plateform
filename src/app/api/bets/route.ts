@@ -200,7 +200,7 @@ export async function GET(req: NextRequest) {
               )
             )
         : Promise.resolve([])
-      : filter === "ongoing"
+      : filter === "ongoing" || (pagedHistory && sportIds.length === 0)
         ? Promise.resolve([])
         : db
             .select({ bet: bets, match: settledMatchScalarCols })
@@ -251,7 +251,7 @@ export async function GET(req: NextRequest) {
               )
             )
         : Promise.resolve([])
-      : filter === "ongoing"
+      : filter === "ongoing" || (pagedHistory && predictionIds.length === 0)
         ? Promise.resolve([])
         : db
             .select({ bet: predictionBets, question: predictionQuestions })
@@ -296,7 +296,7 @@ export async function GET(req: NextRequest) {
               )
             )
         : Promise.resolve([])
-      : filter === "ongoing"
+      : filter === "ongoing" || (pagedHistory && comboIds.length === 0)
         ? Promise.resolve([])
         : db
             .select()
