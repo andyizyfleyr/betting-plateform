@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
+const { PGlite } = require('@electric-sql/pglite');
+const { PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { runPilot } = require('./r2-private-pilot.cjs');
+const { decrypt } = require('./r2-private-archive.cjs');
+(async () => {
+ const env = { ...process.env }; delete env.R2_PRIVATE_PILOT_ON_BUILD;
+ const run = e => spawnSync(process.execPath, ['scripts/r2-private-pilot.cjs'], {env:e,encoding:'utf8'});
+ assert.equal(run(env).status,0);
+ assert.equal(run({...env,R2_PRIVATE_PILOT_ON_BUILD:'one-page-v1',VERCEL:'1',VERCEL_ENV:'preview'}).status,1);
+ const pg = new PGlite();
+ for (const table of ['bets','prediction_bets','combo_bets']) await pg.exec(`CREATE TABLE ${table} (id int, user_id int, status text, settled_at timestamp);`);
+ await pg.exec("INSERT INTO bets VALUES (1,5,'won','2020-01-01'),(2,5,'pending',NULL),(3,6,'won','2020-01-01')");
+ const client = {query: (q, args) => pg.query(q,args)}; let saved, object;
+ const s3 = {send: async c => {if(c instanceof PutObjectCommand){saved=c.input.Body;object=c.input.Key;return {}} assert(c instanceof GetObjectCommand);return {Body:{transformToByteArray:async()=>saved}}}};
+ const cfg={bucket:'pulsebet',key:Buffer.alloc(32,1)};
+ const result=await runPilot(client,s3,cfg,'2021-01-01');
+ assert(result.copied); assert.equal(result.count,1); assert.equal(result.objectKey,object);
+ const archive=decrypt(saved,cfg.key); assert.equal(archive.userId,5); assert.equal(archive.tables.bets.length,1);
+ assert.equal((await pg.query('SELECT COUNT(*)::int AS n FROM bets')).rows[0].n,3);
+ await pg.close(); console.log('Pilote : isolation, copie vérifiée et aucune suppression (PGlite/R2 simulé).');
+})().catch(e=>{console.error(e);process.exitCode=1});
