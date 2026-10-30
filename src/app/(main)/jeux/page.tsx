@@ -1,5 +1,6 @@
 "use client";
 
+import { publicAssetUrl } from "@/lib/public-assets";
 import Image from "next/image";
 import Link from "next/link";
 import { Play } from "lucide-react";
@@ -42,7 +43,8 @@ export default function JeuxPage() {
           >
             <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
               <Image
-                src={image}
+                src={publicAssetUrl(image)}
+                unoptimized={Boolean(process.env.NEXT_PUBLIC_R2_PUBLIC_ORIGIN)}
                 alt={imageAlt}
                 width={1280}
                 height={720}

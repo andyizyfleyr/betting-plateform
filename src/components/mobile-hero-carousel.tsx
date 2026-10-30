@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { publicAssetUrl } from "@/lib/public-assets";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -209,7 +210,8 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
               {/* Scène visuelle dédiée à droite (47 % de la largeur) : joueur dégagé, net et sans superposition de texte */}
               <div className="pointer-events-none absolute inset-y-0 right-0 w-[47%] overflow-hidden">
                 <Image
-                  src={slide.image}
+                  src={publicAssetUrl(slide.image)}
+                  unoptimized={Boolean(process.env.NEXT_PUBLIC_R2_PUBLIC_ORIGIN)}
                   alt={`${slide.player} — ${slide.club}`}
                   fill
                   sizes="(max-width: 1024px) 50vw, 220px"

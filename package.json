@@ -11,7 +11,11 @@
     "ota:export": "npm --prefix mobile run export:sdk52",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc -p party/tsconfig.json --noEmit",
-    "test:concurrency": "node scripts/test-concurrency.mjs"
+    "test:concurrency": "node scripts/test-concurrency.mjs",
+    "r2:inventory": "node scripts/r2-public.cjs --dry-run",
+    "r2:upload-public": "node scripts/r2-public.cjs --upload",
+    "r2:verify-public-storage": "node scripts/r2-public.cjs --verify",
+    "r2:verify-public": "node scripts/r2-public.cjs --verify-public"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.105.0",
@@ -29,6 +33,7 @@
     "react-dom": "19.2.6"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1160.0",
     "@cloudflare/workers-types": "^5.20261027.1",
     "@electric-sql/pglite": "0.5.13",
     "@tailwindcss/postcss": "4.1.17",

@@ -1,5 +1,6 @@
 "use client";
 
+import { publicAssetUrl } from "@/lib/public-assets";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -310,9 +311,9 @@ export default function AcceleratorPage() {
   const unlockAudio = useCallback(async () => {
     if (audioUnlockedRef.current) return;
     try {
-      if (!sndHoldRef.current) sndHoldRef.current = new Audio("/maintien.mp3");
-      if (!sndCrashRef.current) sndCrashRef.current = new Audio("/crashed.mp3");
-      if (!sfxWinRef.current) sfxWinRef.current = new Audio("/cashout.mp3");
+      if (!sndHoldRef.current) sndHoldRef.current = new Audio(publicAssetUrl("/maintien.mp3"));
+      if (!sndCrashRef.current) sndCrashRef.current = new Audio(publicAssetUrl("/crashed.mp3"));
+      if (!sfxWinRef.current) sfxWinRef.current = new Audio(publicAssetUrl("/cashout.mp3"));
       const h = sndHoldRef.current;
       h.muted = true;
       await h.play().catch(() => undefined);
