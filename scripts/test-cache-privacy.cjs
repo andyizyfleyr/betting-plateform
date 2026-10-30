@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+
+const source = fs.readFileSync('mobile/src/lib/entity-cache.ts', 'utf8');
+const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
+const data = new Map([['pulse_android_swr_snapshot_v2', JSON.stringify({matches:[{id:1, oddsHome:9}], predictions:[{id:2,myBet:{status:'pending'}}]})]]);
+const storage = { getItem: async k => data.get(k) ?? null, setItem: async (k,v) => { data.set(k,v); }, removeItem: async k => { data.delete(k); } };
+const moduleExports = {};
+const sandbox = { exports: moduleExports, require: name => name === '@react-native-async-storage/async-storage' ? storage : require(name), setTimeout: fn => { fn(); return 1; }, Date, JSON, Map, Number };
+vm.runInNewContext(code, sandbox);
+(async () => {
+  await moduleExports.hydrateEntityCacheFromDisk();
+  assert.equal(data.has('pulse_android_swr_snapshot_v2'), false);
+  assert.equal(moduleExports.getCachedMatchesList(), null);
+  moduleExports.seedMatchesSnapshot([{id:1, oddsHome:9}]);
+  moduleExports.seedPredictionsSnapshot([{id:2, myBet:{status:'pending'}}]);
+  assert.equal(data.has('pulse_android_finished_snapshot_v3'), false);
+  moduleExports.seedFinishedMatchesSnapshot([{id:3,status:'finished'}, {id:4,status:'live'}]);
+  const snapshot = JSON.parse(data.get('pulse_android_finished_snapshot_v3'));
+  assert.deepEqual(snapshot.finished.map(x => x.id), [3]);
+  assert.ok(snapshot.savedAt > 0);
+  const context = fs.readFileSync('mobile/src/context/app-context.tsx', 'utf8');
+  assert.match(context, /odds: 0/);
+  assert.doesNotMatch(context, /setItem\(USER_STORAGE_KEY,\s*JSON\.stringify/);
+  assert.match(fs.readFileSync('mobile/src/lib/http.ts','utf8'), /SecureStore\.setItemAsync\(TOKEN_STORE_KEY/);
+  const slip = fs.readFileSync('mobile/src/components/combo-slip.tsx','utf8');
+  assert.match(slip, /orderedLegs\.every\(\(leg\).*leg\.odds > 1/);
+  const worker = fs.readFileSync('public/sw-static.js','utf8');
+  assert.match(worker, /request\.method !== "GET"/);
+  assert.match(worker, /url\.origin !== self\.location\.origin/);
+  assert.match(worker, /brand\|icons\|images/);
+  console.log('Cache : purge ancien live, résultats terminés uniquement, coupon sans cote persistée, SecureStore et garde-fous OK.');
+})().catch(e => { console.error(e); process.exitCode = 1; });

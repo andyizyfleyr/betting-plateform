@@ -96,6 +96,11 @@ export interface ComboSelection {
   isLive?: boolean;
 }
 
+// Persiste les sélections, jamais les cotes ; elles sont rechargées avant validation.
+function serializeComboSelections(legs: ComboSelection[]): string {
+  return JSON.stringify(legs.map((leg) => ({ ...leg, odds: 0 })));
+}
+
 export type ComboSlipLeg = ComboSelection;
 
 export type ComboToggleResult =
@@ -356,10 +361,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!prev) return prev;
         if (Math.abs(prev.balance - clean) < 1e-6) return prev;
         const updated = { ...prev, balance: clean };
-        void AsyncStorage.setItem(
-          USER_STORAGE_KEY,
-          JSON.stringify(updated)
-        ).catch(() => {});
         return updated;
       });
     }
@@ -377,9 +378,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (u) {
       setSessionRestoring(false);
       setBalanceState(roundEurPivot(u.balance));
-      void AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(u)).catch(
-        () => {}
-      );
     } else {
       setSessionRestoring(false);
       setBalanceState(0);
@@ -451,7 +449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return leg;
       });
       if (!changed) return prevLegs;
-      void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+      void AsyncStorage.setItem(COMBO_STORAGE_KEY, serializeComboSelections(next)).catch(() => {});
       return next;
     });
   }, []);
@@ -464,7 +462,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     (async () => {
-      let cachedUserFromDisk: ClientUser | null = null;
+      void AsyncStorage.removeItem(USER_STORAGE_KEY).catch(() => {});
       const withStorageTimeout = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
         Promise.race([
           p,
@@ -477,12 +475,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         withStorageTimeout(
           (async () => {
             try {
-              const [rawCombo, rawPolicy, rawSaver, rawUser, rawGuestCountry] =
+              const [rawCombo, rawPolicy, rawSaver, rawGuestCountry] =
                 await Promise.all([
                   AsyncStorage.getItem(COMBO_STORAGE_KEY),
                   AsyncStorage.getItem(POLICY_STORAGE_KEY),
                   AsyncStorage.getItem(DATASAVER_STORAGE_KEY),
-                  AsyncStorage.getItem(USER_STORAGE_KEY),
                   AsyncStorage.getItem(GUEST_COUNTRY_STORAGE_KEY),
                 ]);
               if (
@@ -508,20 +505,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   })
                   .catch(() => {});
               }
-              if (rawUser) {
-                const parsedU = JSON.parse(rawUser) as ClientUser;
-                if (
-                  parsedU &&
-                  typeof parsedU.id === "number" &&
-                  typeof parsedU.balance === "number"
-                ) {
-                  cachedUserFromDisk = parsedU;
-                }
-              }
               if (mounted && rawCombo) {
                 const parsed = JSON.parse(rawCombo) as ComboSelection[];
                 if (Array.isArray(parsed)) {
-                  setComboLegs(parsed.slice(0, MAX_COMBO_LEGS));
+                  const restored = parsed.slice(0, MAX_COMBO_LEGS).map((leg) => ({ ...leg, odds: 0 }));
+                  setComboLegs(restored);
+                  void AsyncStorage.setItem(COMBO_STORAGE_KEY, serializeComboSelections(restored)).catch(() => {});
                 }
               }
               if (
@@ -552,14 +541,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (token) {
-        // Hydrate immédiatement le profil en cache disque dès qu'un jeton valide existe :
-        // zéro bouton « Connexion » ni message « Connectez-vous » pendant le bootstrap réseau.
-        if (mounted && cachedUserFromDisk) {
-          applyUser(cachedUserFromDisk);
-          setAuthReady(true);
-        } else if (mounted) {
-          setSessionRestoring(true);
-        }
+        // Le solde ne doit pas être restauré depuis le disque.
+        if (mounted) setSessionRestoring(true);
 
         const runNetworkBootstrap = async () => {
           try {
@@ -586,7 +569,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               const me = await api.auth.me();
               if (mounted) applyUser(me.user);
             } catch {
-              if (mounted && !cachedUserFromDisk && getMemoryAuthToken()) {
+              if (mounted && getMemoryAuthToken()) {
                 const retryAuth = async () => {
                   if (!mounted || !getMemoryAuthToken()) {
                     if (mounted) setSessionRestoring(false);
@@ -612,17 +595,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         };
 
-        if (cachedUserFromDisk) {
-          void runNetworkBootstrap();
-        } else {
-          await Promise.race([
-            runNetworkBootstrap(),
-            new Promise<void>((resolve) => setTimeout(resolve, 2_800)),
-          ]);
-        }
-      } else if (cachedUserFromDisk) {
-        void AsyncStorage.removeItem(USER_STORAGE_KEY).catch(() => {});
+        await Promise.race([
+          runNetworkBootstrap(),
+          new Promise<void>((resolve) => setTimeout(resolve, 2_800)),
+        ]);
       }
+
 
       if (mounted) setAuthReady(true);
     })();
@@ -673,7 +651,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const persistCombo = useCallback((next: ComboSelection[]) => {
     comboLegsRef.current = next;
     setComboLegs(next);
-    void AsyncStorage.setItem(COMBO_STORAGE_KEY, JSON.stringify(next)).catch(
+    void AsyncStorage.setItem(COMBO_STORAGE_KEY, serializeComboSelections(next)).catch(
       () => {}
     );
   }, []);

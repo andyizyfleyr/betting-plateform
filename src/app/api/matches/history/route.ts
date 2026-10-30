@@ -35,7 +35,7 @@ export const dynamic = "force-dynamic";
 
 const HISTORY_EDGE_POLICY = {
   maxAge: 0,
-  sMaxAge: 1,
+  sMaxAge: 15,
   staleWhileRevalidate: 2,
   tags: [EDGE_CACHE_TAGS.history],
 } as const;

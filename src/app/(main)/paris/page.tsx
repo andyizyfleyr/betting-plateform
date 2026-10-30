@@ -13,10 +13,9 @@ import {
 } from "@/components/infinite-scroll-loader";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useApp } from "@/components/providers";
 import { pulseQueryKeys } from "@/lib/query-client";
-import { getAllCachedBets } from "@/lib/client-entity-cache";
 import { getAdaptiveIntervalMs, useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur } from "@/lib/format";
 
@@ -67,19 +66,12 @@ export default function ParisPage() {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [sharingBet, setSharingBet] = useState<ClientBet | null>(null);
 
-  const initialCachedBets = useMemo(() => {
-    const cached = getAllCachedBets();
-    return cached.length > 0 ? { bets: cached, balance: null } : undefined;
-  }, []);
-
-  // Liste complète des paris gérée par TanStack Query + invalidation instantanée PartyKit (`user-<id>`)
+  // Les paris actifs restent réactifs sans retransférer l'historique à chaque tick.
   // Maintient un rafraîchissement continu (3.5 s en live pour le Cash Out, 6 s en avant-match, 18 s au repos).
   const allBetsQuery = useQuery({
-    queryKey: [...pulseQueryKeys.userBets(user?.id, "all"), betsVersion],
-    queryFn: () => api.allBets(),
+    queryKey: [...pulseQueryKeys.userBets(user?.id, "ongoing"), betsVersion],
+    queryFn: () => api.bets("ongoing"),
     enabled: !isOffline,
-    initialData: initialCachedBets,
-    initialDataUpdatedAt: initialCachedBets ? () => Date.now() - 2_000 : undefined,
     staleTime: 1_500,
     refetchInterval: (q) => {
       if (isOffline) return false;
@@ -101,7 +93,26 @@ export default function ParisPage() {
     refetchIntervalInBackground: false,
   });
 
-  const refetchAllBets = allBetsQuery.refetch;
+  const finishedQuery = useInfiniteQuery({
+    queryKey: [...pulseQueryKeys.userBets(user?.id, "finished"), betsVersion, "paged"],
+    queryFn: ({ pageParam }) => api.finishedBetsPage(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: !isOffline,
+    staleTime: 30_000,
+    refetchIntervalInBackground: false,
+  });
+  const previousPending = useRef<{ user: number | undefined; ids: Set<string> } | null>(null);
+  const refetchFinished = finishedQuery.refetch;
+  useEffect(() => {
+    if (!allBetsQuery.data) return;
+    const ids = new Set(allBetsQuery.data.bets.map(b => `${b.kind}:${b.id}`));
+    const previous = previousPending.current;
+    previousPending.current = { user: user?.id, ids };
+    if (previous && previous.user === user?.id && [...previous.ids].some(id => !ids.has(id))) {
+      void refetchFinished();
+    }
+  }, [allBetsQuery.data, user?.id, refetchFinished]);
 
   useEffect(() => {
     if (typeof allBetsQuery.data?.balance === "number") {
@@ -109,29 +120,36 @@ export default function ParisPage() {
     }
   }, [allBetsQuery.data?.balance, setBalance]);
 
-  const bets = useMemo(
-    () => allBetsQuery.data?.bets ?? (allBetsQuery.isError ? [] : null),
-    [allBetsQuery.data, allBetsQuery.isError]
-  );
+  const bets = useMemo(() => {
+    if ((!allBetsQuery.data && !allBetsQuery.isError) || (!finishedQuery.data && !finishedQuery.isError)) return null;
+    if (!allBetsQuery.data && !finishedQuery.data) return [];
+    const byId = new Map<string, ClientBet>();
+    const sources = [
+      { at: allBetsQuery.dataUpdatedAt, bets: allBetsQuery.data?.bets ?? [] },
+      { at: finishedQuery.dataUpdatedAt, bets: finishedQuery.data?.pages.flatMap(page => page.bets) ?? [] },
+    ].sort((a, b) => a.at - b.at);
+    // En cas de réouverture ou de règlement simultané, le snapshot le plus récent gagne.
+    for (const source of sources) for (const b of source.bets) byId.set(`${b.kind}:${b.id}`, b);
+    return [...byId.values()];
+  }, [allBetsQuery.data, allBetsQuery.dataUpdatedAt, allBetsQuery.isError, finishedQuery.data, finishedQuery.dataUpdatedAt, finishedQuery.isError]);
 
   const loadError =
-    !allBetsQuery.data && allBetsQuery.error instanceof Error
-      ? allBetsQuery.error.message
-      : allBetsQuery.isError && !allBetsQuery.data
-        ? "Impossible de charger vos paris pour le moment."
-        : null;
+    (!allBetsQuery.data && allBetsQuery.isError) || (!finishedQuery.data && finishedQuery.isError) || finishedQuery.isFetchNextPageError
+      ? "Impossible de charger tous vos paris pour le moment."
+      : null;
 
   const currentUserId = user?.id;
   const handlePullRefresh = useCallback(async () => {
-    try {
-      const fresh = await api.allBets({ forceRefresh: true });
-      queryClient.setQueryData(
-        [...pulseQueryKeys.userBets(currentUserId, "all"), betsVersion],
-        fresh
-      );
-      if (typeof fresh.balance === "number") setBalance(fresh.balance);
-    } catch {
-      /* conserve la liste affichée si la 3G coupe brièvement */
+    const [active, finished] = await Promise.allSettled([
+      api.bets("ongoing", { forceRefresh: true }),
+      api.finishedBetsPage(null, { forceRefresh: true }),
+    ]);
+    if (active.status === "fulfilled") {
+      queryClient.setQueryData([...pulseQueryKeys.userBets(currentUserId, "ongoing"), betsVersion], active.value);
+      if (typeof active.value.balance === "number") setBalance(active.value.balance);
+    }
+    if (finished.status === "fulfilled") {
+      queryClient.setQueryData([...pulseQueryKeys.userBets(currentUserId, "finished"), betsVersion, "paged"], { pages: [finished.value], pageParams: [null] });
     }
   }, [betsVersion, currentUserId, queryClient, setBalance]);
 
@@ -197,17 +215,9 @@ export default function ParisPage() {
         ),
     [searchedBets]
   );
+  // Les pages API sont déjà ordonnées avec les microsecondes PostgreSQL.
   const finishedAll = useMemo(
-    () =>
-      searchedBets
-        .filter((b) => b.status !== "pending")
-        .sort(
-          (a, b) =>
-            new Date(settledOrPlacedIso(b)).getTime() -
-              new Date(settledOrPlacedIso(a)).getTime() ||
-            new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() ||
-            b.id - a.id
-        ),
+    () => searchedBets.filter((b) => b.status !== "pending"),
     [searchedBets]
   );
 
@@ -245,6 +255,17 @@ export default function ParisPage() {
     if (tab === "ongoing" || outcomeFilter === "all") return byKind;
     return byKind.filter((b) => b.status === outcomeFilter);
   }, [tab, byKind, outcomeFilter]);
+
+  // La recherche et les filtres doivent porter sur tout l'historique, pas
+  // seulement sur les 20 dernières lignes. Charger les pages restantes si
+  // nécessaire ; pendant ce temps aucun compteur partiel n'est présenté comme global.
+  const filteredHistory = tab === "finished" && (Boolean(query.trim()) || kindFilter !== "all" || outcomeFilter !== "all");
+  const { hasNextPage, isFetching, isFetchNextPageError, fetchNextPage } = finishedQuery;
+  useEffect(() => {
+    if (filteredHistory && hasNextPage && !isFetching && !isFetchNextPageError) {
+      void fetchNextPage();
+    }
+  }, [filteredHistory, hasNextPage, isFetching, isFetchNextPageError, fetchNextPage]);
 
   const betsResetKey = `${tab}|${kindFilter}|${outcomeFilter}|${query
     .trim()
@@ -337,7 +358,7 @@ export default function ParisPage() {
       </div>
 
       {/* Synthèse contextuelle uniquement s'il y a des paris */}
-      {bets !== null && (staked > 0 || settled > 0) && (
+      {bets !== null && (staked > 0 || (settled > 0 && !finishedQuery.hasNextPage)) && (
         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-edge bg-white px-3 py-2 text-[10.5px] shadow-2xs">
           {staked > 0 && (
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
@@ -355,7 +376,7 @@ export default function ParisPage() {
               </span>
             </div>
           )}
-          {settled > 0 && (
+          {settled > 0 && !finishedQuery.hasNextPage && (
             <span className="text-mist">
               Réussite :{" "}
               <strong className="font-display font-medium tabular-nums text-ink">
@@ -399,7 +420,7 @@ export default function ParisPage() {
             <button key={value} type="button" role="tab" aria-selected={tab === value}
               onClick={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
               className={cn("h-8 shrink-0 rounded-full px-3 text-[11.5px] font-medium whitespace-nowrap", tab === value ? "bg-betclic-red text-white" : "bg-[#e7e9ed] text-[#374151]")}>
-              {label} {bets !== null && `(${value === "ongoing" ? ongoingAll.length : finishedAll.length})`}
+              {label} {bets !== null && (value === "ongoing" || !finishedQuery.hasNextPage) && `(${value === "ongoing" ? ongoingAll.length : finishedAll.length})`}
             </button>
           ))}
         </div>}
@@ -414,17 +435,17 @@ export default function ParisPage() {
               {
                 value: "all",
                 label: "Tous",
-                count: bets !== null ? kindCounts.all : undefined,
+                count: bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage) ? kindCounts.all : undefined,
               },
               {
                 value: "simple",
                 label: "Simple",
-                count: bets !== null ? kindCounts.simple : undefined,
+                count: bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage) ? kindCounts.simple : undefined,
               },
               {
                 value: "combo",
                 label: "Combiné",
-                count: bets !== null ? kindCounts.combo : undefined,
+                count: bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage) ? kindCounts.combo : undefined,
               },
             ],
           },
@@ -438,28 +459,28 @@ export default function ParisPage() {
               {
                 value: "all",
                 label: "Tous résultats",
-                count: bets !== null ? outcomeCounts.all : undefined,
+                count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.all : undefined,
               },
               {
                 value: "won",
                 label: "Gagnés",
-                count: bets !== null ? outcomeCounts.won : undefined,
+                count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.won : undefined,
               },
               {
                 value: "lost",
                 label: "Perdus",
-                count: bets !== null ? outcomeCounts.lost : undefined,
+                count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.lost : undefined,
               },
               {
                 value: "void",
                 label: "Remboursés",
-                count: bets !== null ? outcomeCounts.void : undefined,
+                count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.void : undefined,
               },
             ],
           }] : []),
         ]}
         resultCountText={
-          bets !== null
+          bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage)
             ? tab === "ongoing"
               ? `${visibleBets.length} pari${visibleBets.length > 1 ? "s" : ""} en cours`
               : `${visibleBets.length} pari${visibleBets.length > 1 ? "s" : ""} terminé${visibleBets.length > 1 ? "s" : ""}`
@@ -471,7 +492,7 @@ export default function ParisPage() {
       {/* Liste des tickets */}
       {bets === null ? (
         <PulseFlashLoader compact />
-      ) : loadError && (bets?.length ?? 0) === 0 ? (
+      ) : loadError ? (
         <div className="mt-8 flex flex-col items-center rounded-2xl border border-amber-500/30 bg-white p-5 text-center shadow-xs">
           <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/12 text-amber-600">
             <AlertTriangle className="h-5 w-5" strokeWidth={2.1} />
@@ -486,6 +507,8 @@ export default function ParisPage() {
             type="button"
             onClick={() => {
               void allBetsQuery.refetch();
+              if (finishedQuery.isFetchNextPageError) void finishedQuery.fetchNextPage();
+              else void finishedQuery.refetch();
             }}
             className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white shadow-xs active:scale-95"
           >
@@ -493,6 +516,8 @@ export default function ParisPage() {
             Réessayer
           </button>
         </div>
+      ) : visibleBets.length === 0 && filteredHistory && finishedQuery.hasNextPage && !finishedQuery.isFetchNextPageError ? (
+        <PulseFlashLoader />
       ) : visibleBets.length === 0 ? (
         <div className="mt-10 flex flex-col items-center text-center">
           <div className="glass-card grid h-14 w-14 place-items-center rounded-full text-dim">
@@ -537,9 +562,9 @@ export default function ParisPage() {
               <div key={key} className="mb-5 last:mb-0">
                 <p className="mb-2 px-0.5 text-[10.5px] font-medium capitalize text-mist">
                   {dayLabel(settledOrPlacedIso(group[0]))}
-                  <span className="ml-1.5 text-dim">
+                  {!finishedQuery.hasNextPage && <span className="ml-1.5 text-dim">
                     ({dayTotalCounts.get(key) ?? group.length})
-                  </span>
+                  </span>}
                 </p>
                 <div className="grid grid-cols-1 items-start gap-3">
                   {group.map((b) => (
@@ -550,9 +575,12 @@ export default function ParisPage() {
             ))
           )}
           <InfiniteScrollSentinel
-            hasMore={betsBatch.hasMore}
-            isLoadingMore={betsBatch.isLoadingMore}
-            onLoadMore={betsBatch.loadMore}
+            hasMore={betsBatch.hasMore || (tab === "finished" && Boolean(finishedQuery.hasNextPage))}
+            isLoadingMore={betsBatch.isLoadingMore || finishedQuery.isFetchingNextPage}
+            onLoadMore={() => {
+              if (betsBatch.hasMore) betsBatch.loadMore();
+              else if (tab === "finished" && finishedQuery.hasNextPage && !finishedQuery.isFetching) void finishedQuery.fetchNextPage();
+            }}
           />
         </div>
       )}

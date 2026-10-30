@@ -8,6 +8,8 @@ import {
   Text,
   TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import {
   AlertTriangle,
@@ -25,7 +27,7 @@ import {
   InfiniteScrollLoader,
   useInfiniteBatch,
 } from "@/components/infinite-scroll-loader";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { useApp } from "@/context/app-context";
 import { api, type UnifiedBet } from "@/lib/api";
@@ -99,8 +101,8 @@ export default function ParisScreen() {
   const [sharingBet, setSharingBet] = useState<UnifiedBet | null>(null);
 
   const betsQuery = useQuery({
-    queryKey: [...mobileQueryKeys.userBets(user?.id, "all"), betsVersion],
-    queryFn: () => api.bets.list(),
+    queryKey: [...mobileQueryKeys.userBets(user?.id, "ongoing"), betsVersion],
+    queryFn: () => api.bets.list("ongoing"),
     enabled: Boolean(user) || sessionRestoring,
     staleTime: 1_500,
     refetchInterval: (q) => {
@@ -126,35 +128,64 @@ export default function ParisScreen() {
     refetchIntervalInBackground: false,
   });
 
+  const finishedQuery = useInfiniteQuery({
+    queryKey: [...mobileQueryKeys.userBets(user?.id, "finished"), betsVersion, "paged"],
+    queryFn: ({ pageParam }) => api.bets.finishedPage(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: Boolean(user) || sessionRestoring,
+    staleTime: 30_000,
+    refetchIntervalInBackground: false,
+  });
+  const previousPending = useRef<{ user: number | undefined; ids: Set<string> } | null>(null);
+  const refetchFinished = finishedQuery.refetch;
+  useEffect(() => {
+    if (!betsQuery.data) return;
+    const ids = new Set(betsQuery.data.bets.map(b => `${b.kind}:${b.id}`));
+    const previous = previousPending.current;
+    previousPending.current = { user: user?.id, ids };
+    if (previous && previous.user === user?.id && [...previous.ids].some(id => !ids.has(id))) {
+      void refetchFinished();
+    }
+  }, [betsQuery.data, user?.id, refetchFinished]);
+
   useEffect(() => {
     if (betsQuery.data?.balance != null) {
       setBalance(betsQuery.data.balance);
     }
   }, [betsQuery.data?.balance, setBalance]);
 
-  const bets = useMemo(
-    () => betsQuery.data?.bets ?? (betsQuery.isError ? [] : null),
-    [betsQuery.data, betsQuery.isError]
-  );
+  const bets = useMemo(() => {
+    if ((!betsQuery.data && !betsQuery.isError) || (!finishedQuery.data && !finishedQuery.isError)) return null;
+    if (!betsQuery.data && !finishedQuery.data) return [];
+    const byId = new Map<string, UnifiedBet>();
+    const sources = [
+      { at: betsQuery.dataUpdatedAt, bets: betsQuery.data?.bets ?? [] },
+      { at: finishedQuery.dataUpdatedAt, bets: finishedQuery.data?.pages.flatMap(page => page.bets) ?? [] },
+    ].sort((a, b) => a.at - b.at);
+    for (const source of sources) for (const b of source.bets) byId.set(`${b.kind}:${b.id}`, b);
+    return [...byId.values()];
+  }, [betsQuery.data, betsQuery.dataUpdatedAt, betsQuery.isError, finishedQuery.data, finishedQuery.dataUpdatedAt, finishedQuery.isError]);
 
   const loadError =
-    !betsQuery.data && betsQuery.error instanceof Error
-      ? betsQuery.error.message
-      : betsQuery.isError && !betsQuery.data
-        ? "Impossible de charger vos paris."
-        : null;
+    (!betsQuery.data && betsQuery.isError) || (!finishedQuery.data && finishedQuery.isError) || finishedQuery.isFetchNextPageError
+      ? "Impossible de charger tous vos paris."
+      : null;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const fresh = await api.bets.list("all", { forceRefresh: true });
-      queryClient.setQueryData(
-        [...mobileQueryKeys.userBets(user?.id, "all"), betsVersion],
-        fresh
-      );
-      if (fresh.balance != null) setBalance(fresh.balance);
-    } catch {
-      /* conserve l'affichage en cours */
+      const [active, finished] = await Promise.allSettled([
+        api.bets.list("ongoing", { forceRefresh: true }),
+        api.bets.finishedPage(null, { forceRefresh: true }),
+      ]);
+      if (active.status === "fulfilled") {
+        queryClient.setQueryData([...mobileQueryKeys.userBets(user?.id, "ongoing"), betsVersion], active.value);
+        if (active.value.balance != null) setBalance(active.value.balance);
+      }
+      if (finished.status === "fulfilled") {
+        queryClient.setQueryData([...mobileQueryKeys.userBets(user?.id, "finished"), betsVersion, "paged"], { pages: [finished.value], pageParams: [null] });
+      }
     } finally {
       setRefreshing(false);
     }
@@ -177,12 +208,9 @@ export default function ParisScreen() {
     [searchedBets]
   );
 
+  // Conserver l'ordre fourni par le curseur serveur (microsecondes incluses).
   const finishedAll = useMemo(
-    () =>
-      [...searchedBets.filter((b) => b.status !== "pending")].sort(
-        (a, b) => betDecisionTimestamp(b) - betDecisionTimestamp(a) ||
-          new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() || b.id - a.id
-      ),
+    () => searchedBets.filter((b) => b.status !== "pending"),
     [searchedBets]
   );
 
@@ -234,12 +262,28 @@ export default function ParisScreen() {
     return kindFiltered.filter((b) => b.status === outcomeFilter);
   }, [tab, kindFiltered, outcomeFilter]);
 
+  const filteredHistory = tab === "finished" && (Boolean(qNorm) || kindFilter !== "all" || outcomeFilter !== "all");
+  useEffect(() => {
+    if (filteredHistory && finishedQuery.hasNextPage && !finishedQuery.isFetching && !finishedQuery.isFetchNextPageError) {
+      void finishedQuery.fetchNextPage();
+    }
+  }, [filteredHistory, finishedQuery.hasNextPage, finishedQuery.isFetching, finishedQuery.isFetchNextPageError, finishedQuery.fetchNextPage]);
+
   const resetKey = `${tab}|${kindFilter}|${outcomeFilter}|${qNorm}`;
   const { visibleItems: pagedBets, hasMore, onScrollCheck } = useInfiniteBatch(
     visibleBets,
     10,
     resetKey
   );
+
+  const onPageScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    onScrollCheck(event);
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    if (!hasMore && tab === "finished" && finishedQuery.hasNextPage && !finishedQuery.isFetching && !finishedQuery.isFetchNextPageError &&
+        layoutMeasurement.height + contentOffset.y >= contentSize.height - 260) {
+      void finishedQuery.fetchNextPage();
+    }
+  }, [onScrollCheck, hasMore, tab, finishedQuery.hasNextPage, finishedQuery.isFetching, finishedQuery.isFetchNextPageError, finishedQuery.fetchNextPage]);
 
   const dayTotalCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -330,7 +374,7 @@ export default function ParisScreen() {
         contentContainerStyle={styles.content}
         stickyHeaderIndices={[3]}
         showsVerticalScrollIndicator={false}
-        onScroll={onScrollCheck}
+        onScroll={onPageScroll}
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
@@ -366,7 +410,7 @@ export default function ParisScreen() {
 
         {/* 1 : Synthèse contextuelle */}
         <View>
-          {bets !== null && (staked > 0 || settled > 0) ? (
+          {bets !== null && (staked > 0 || (settled > 0 && !finishedQuery.hasNextPage)) ? (
             <View style={styles.summaryStrip}>
               {staked > 0 ? (
                 <View style={styles.summaryLeft}>
@@ -382,7 +426,7 @@ export default function ParisScreen() {
                   </Text>
                 </View>
               ) : null}
-              {settled > 0 ? (
+              {settled > 0 && !finishedQuery.hasNextPage ? (
                 <Text style={styles.summaryMuted}>
                   Réussite :{" "}
                   <Text style={styles.summaryStrong}>{winRate}%</Text>
@@ -427,7 +471,7 @@ export default function ParisScreen() {
                   onPress={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
                   style={[styles.tab, tab === value && styles.tabSelected]}>
                   <Text style={[styles.tabText, tab === value && styles.tabTextSelected]}>
-                    {label}{bets !== null ? ` (${value === "ongoing" ? ongoingAll.length : finishedAll.length})` : ""}
+                    {label}{bets !== null && (value === "ongoing" || !finishedQuery.hasNextPage) ? ` (${value === "ongoing" ? ongoingAll.length : finishedAll.length})` : ""}
                   </Text>
                 </Pressable>
               ))}
@@ -443,17 +487,17 @@ export default function ParisScreen() {
                   {
                     value: "all",
                     label: "Tous",
-                    count: bets !== null ? kindCounts.all : undefined,
+                    count: bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage) ? kindCounts.all : undefined,
                   },
                   {
                     value: "simple",
                     label: "Simple",
-                    count: bets !== null ? kindCounts.simple : undefined,
+                    count: bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage) ? kindCounts.simple : undefined,
                   },
                   {
                     value: "combo",
                     label: "Combiné",
-                    count: bets !== null ? kindCounts.combo : undefined,
+                    count: bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage) ? kindCounts.combo : undefined,
                   },
                 ],
               },
@@ -467,28 +511,28 @@ export default function ParisScreen() {
                   {
                     value: "all",
                     label: "Tous résultats",
-                    count: bets !== null ? outcomeCounts.all : undefined,
+                    count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.all : undefined,
                   },
                   {
                     value: "won",
                     label: "Gagnés",
-                    count: bets !== null ? outcomeCounts.won : undefined,
+                    count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.won : undefined,
                   },
                   {
                     value: "lost",
                     label: "Perdus",
-                    count: bets !== null ? outcomeCounts.lost : undefined,
+                    count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.lost : undefined,
                   },
                   {
                     value: "void",
                     label: "Remboursés",
-                    count: bets !== null ? outcomeCounts.void : undefined,
+                    count: bets !== null && !finishedQuery.hasNextPage ? outcomeCounts.void : undefined,
                   },
                 ],
               }] : []),
             ]}
             resultCountText={
-              bets !== null
+              bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage)
                 ? tab === "ongoing"
                   ? `${visibleBets.length} pari${
                       visibleBets.length > 1 ? "s" : ""
@@ -504,7 +548,7 @@ export default function ParisScreen() {
         {/* 4 : Liste des tickets */}
         {bets === null ? (
           <PulseFlashLoader compact />
-        ) : loadError && bets.length === 0 ? (
+        ) : loadError ? (
           <View style={styles.errorCard}>
             <View style={styles.errorIconCircle}>
               <AlertTriangle size={20} color="#d97706" strokeWidth={2.1} />
@@ -515,7 +559,8 @@ export default function ParisScreen() {
             <Text style={styles.errorSub}>{loadError}</Text>
             <Pressable
               onPress={() => {
-                void onRefresh();
+                if (finishedQuery.isFetchNextPageError) void finishedQuery.fetchNextPage();
+                else void onRefresh();
               }}
               style={styles.retryBtn}
             >
@@ -523,6 +568,8 @@ export default function ParisScreen() {
               <Text style={styles.retryBtnText}>Réessayer</Text>
             </Pressable>
           </View>
+        ) : visibleBets.length === 0 && filteredHistory && finishedQuery.hasNextPage && !finishedQuery.isFetchNextPageError ? (
+          <PulseFlashLoader compact />
         ) : visibleBets.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyCircle}>
@@ -572,10 +619,10 @@ export default function ParisScreen() {
                   <View key={key}>
                     <Text style={styles.dayHeading}>
                       {dayLabel(group[0].settledAt ?? group[0].placedAt)}
-                      <Text style={styles.dayCount}>
+                      {!finishedQuery.hasNextPage && <Text style={styles.dayCount}>
                         {" "}
                         ({dayTotalCounts.get(key) ?? group.length})
-                      </Text>
+                      </Text>}
                     </Text>
                     <View style={styles.ticketStack}>
                       {group.map((b) => (
@@ -590,7 +637,7 @@ export default function ParisScreen() {
                 ))}
               </View>
             )}
-            <InfiniteScrollLoader hasMore={hasMore} />
+            <InfiniteScrollLoader hasMore={hasMore || (tab === "finished" && Boolean(finishedQuery.hasNextPage))} />
           </View>
         )}
       </ScrollView>

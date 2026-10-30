@@ -717,6 +717,11 @@ export const api = {
       rememberBets(res.bets);
       return res;
     }),
+  finishedBetsPage: (cursor: string | null, opts?: RequestExtraOptions) =>
+    request<{ bets: ClientBet[]; balance: number | null; nextCursor: string | null }>(
+      `/api/bets?filter=finished&pageSize=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+      undefined, opts
+    ).then((res) => { rememberBets(res.bets); return res; }),
   allBets: (opts?: RequestExtraOptions) =>
     request<{ bets: ClientBet[]; balance: number | null }>(
       "/api/bets?filter=all",

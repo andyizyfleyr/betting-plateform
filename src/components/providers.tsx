@@ -186,32 +186,25 @@ function readUidHintFromDocumentCookie(): string | null {
   return null;
 }
 
-function readStoredWebUser(): ClientUser | null {
-  if (typeof window === "undefined") return null;
+// Ne stocker qu'un indicateur de session, jamais le profil ni le solde.
+function removeLegacyWebBalance(): void {
+  if (typeof window === "undefined") return;
   try {
     const raw = window.localStorage.getItem(USER_CACHE_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ClientUser;
-    if (parsed && typeof parsed.id === "number" && typeof parsed.balance === "number") {
-      return parsed;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { id?: unknown; balance?: unknown };
+    if (typeof parsed.id === "number") {
+      if ("balance" in parsed) window.localStorage.setItem(USER_CACHE_STORAGE_KEY, JSON.stringify({ id: parsed.id }));
+    } else window.localStorage.removeItem(USER_CACHE_STORAGE_KEY);
+  } catch { /* stockage indisponible */ }
 }
 
 function writeStoredWebUser(u: ClientUser | null): void {
   if (typeof window === "undefined") return;
   try {
-    if (u) {
-      window.localStorage.setItem(USER_CACHE_STORAGE_KEY, JSON.stringify(u));
-    } else {
-      window.localStorage.removeItem(USER_CACHE_STORAGE_KEY);
-    }
-  } catch {
-    /* ignore */
-  }
+    if (u) window.localStorage.setItem(USER_CACHE_STORAGE_KEY, JSON.stringify({ id: u.id }));
+    else window.localStorage.removeItem(USER_CACHE_STORAGE_KEY);
+  } catch { /* stockage indisponible */ }
 }
 
 let clientAuthHydrated = false;
@@ -228,20 +221,12 @@ function ensureClientAuthHydrated(): void {
   if (clientAuthHydrated || typeof window === "undefined") return;
   clientAuthHydrated = true;
   const uidCookie = readUidHintFromDocumentCookie();
-  const cachedUser = readStoredWebUser();
-
+  removeLegacyWebBalance();
   if (uidCookie) {
-    if (cachedUser && String(cachedUser.id) === uidCookie) {
-      clientAuthSnapshot = { user: cachedUser, authReady: true };
-    } else {
-      // Session authentifiée confirmée par cookie, en attente du profil `/api/settings`
-      clientAuthSnapshot = { user: null, authReady: false };
-    }
+    // Ne pas afficher un solde sauvegardé : attendre le profil serveur.
+    clientAuthSnapshot = { user: null, authReady: false };
   } else {
-    // Aucun cookie de session : visiteur non connecté confirmé par `proxy.ts`
-    if (cachedUser) {
-      writeStoredWebUser(null);
-    }
+    writeStoredWebUser(null);
     clientAuthSnapshot = { user: null, authReady: true };
   }
 }
@@ -297,6 +282,11 @@ function updateWebAuthBalance(cleanBalance: number): void {
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => getBrowserQueryClient());
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw-static.js").catch(() => {});
+    }
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <ProvidersInner>{children}</ProvidersInner>
@@ -608,9 +598,10 @@ function ProvidersInner({ children }: { children: ReactNode }) {
 
     const onStorage = (e: StorageEvent) => {
       if (e.key !== USER_CACHE_STORAGE_KEY) return;
-      const updated = readStoredWebUser();
-      clientAuthSnapshot = { user: updated, authReady: true };
-      notifyAuthStore();
+      // Un autre onglet a changé de session : revalider auprès du serveur,
+      // sans restaurer de solde périmé depuis localStorage.
+      if (readUidHintFromDocumentCookie()) void syncSettings(0);
+      else setWebAuthUser(null, true);
     };
     const onAuthExpired = () => {
       if (active) setWebAuthUser(null, true);

@@ -77,6 +77,7 @@ import { formatServerErrorResponse } from "@/lib/db-error";
 import { isManualRefreshRequest, jsonWithEtag } from "@/lib/response-cache";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
+import { decodeHistoryCursor, getFinishedBetPageKeys } from "@/lib/bet-pagination";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -108,7 +109,22 @@ export async function GET(req: NextRequest) {
     Number.isInteger(targetId) &&
     targetId > 0;
 
-  if (!hasTarget && !manualRefresh) {
+  // Opt-in : les anciennes APK conservent intégralement le contrat historique.
+  const pageSizeParam = req.nextUrl.searchParams.get("pageSize");
+  const pagedHistory = pageSizeParam !== null;
+  const rawCursor = req.nextUrl.searchParams.get("cursor");
+  if (pagedHistory && (pageSizeParam !== "20" || filter !== "finished" || hasTarget)) {
+    return NextResponse.json({ error: "Pagination invalide" }, { status: 400 });
+  }
+  if (!pagedHistory && rawCursor !== null) return NextResponse.json({ error: "Curseur invalide" }, { status: 400 });
+  const cursor = rawCursor ? decodeHistoryCursor(rawCursor) : null;
+  if (rawCursor !== null && !cursor) return NextResponse.json({ error: "Curseur invalide" }, { status: 400 });
+  const page = pagedHistory ? await getFinishedBetPageKeys(uid, cursor, 20) : null;
+  const sportIds = page?.keys.filter(k => k.kind === "sport").map(k => k.id) ?? [];
+  const predictionIds = page?.keys.filter(k => k.kind === "prediction").map(k => k.id) ?? [];
+  const comboIds = page?.keys.filter(k => k.kind === "combo").map(k => k.id) ?? [];
+
+  if (!hasTarget && !manualRefresh && !pagedHistory) {
     const cachedResp = getCachedUserBetsResponse(uid, filter);
     if (cachedResp) {
       return jsonWithEtag(req, null, cachedResp);
@@ -190,7 +206,7 @@ export async function GET(req: NextRequest) {
             .select({ bet: bets, match: settledMatchScalarCols })
             .from(bets)
             .leftJoin(matches, eq(bets.matchId, matches.id))
-            .where(and(eq(bets.userId, uid), ne(bets.status, "pending")))
+            .where(and(eq(bets.userId, uid), ne(bets.status, "pending"), pagedHistory ? inArray(bets.id, sportIds) : undefined))
             .orderBy(sql`${bets.settledAt} DESC NULLS LAST`, desc(bets.placedAt))
             .limit(SETTLED_HISTORY_LIMIT),
     hasTarget
@@ -241,7 +257,7 @@ export async function GET(req: NextRequest) {
             .select({ bet: predictionBets, question: predictionQuestions })
             .from(predictionBets)
             .leftJoin(predictionQuestions, eq(predictionBets.questionId, predictionQuestions.id))
-            .where(and(eq(predictionBets.userId, uid), ne(predictionBets.status, "pending")))
+            .where(and(eq(predictionBets.userId, uid), ne(predictionBets.status, "pending"), pagedHistory ? inArray(predictionBets.id, predictionIds) : undefined))
             .orderBy(
               sql`${predictionBets.settledAt} DESC NULLS LAST`,
               desc(predictionBets.placedAt)
@@ -285,7 +301,7 @@ export async function GET(req: NextRequest) {
         : db
             .select()
             .from(comboBets)
-            .where(and(eq(comboBets.userId, uid), ne(comboBets.status, "pending")))
+            .where(and(eq(comboBets.userId, uid), ne(comboBets.status, "pending"), pagedHistory ? inArray(comboBets.id, comboIds) : undefined))
             .orderBy(sql`${comboBets.settledAt} DESC NULLS LAST`, desc(comboBets.placedAt))
             .limit(SETTLED_HISTORY_LIMIT),
     db
@@ -454,19 +470,37 @@ export async function GET(req: NextRequest) {
   const comboQuestionMap = new Map<number, PredictionQuestionRow>();
 
   if (comboRows.length > 0) {
-    for (const r of rows) {
+    const requiredFullMatchIds = new Set<number>();
+    for (const combo of comboRows) {
+      for (const leg of combo.legs ?? []) {
+        if (leg.kind === "sport" && leg.matchId && (combo.status === "pending" || leg.status === "pending")) {
+          requiredFullMatchIds.add(leg.matchId);
+        }
+      }
+    }
+    for (const r of hydratedPendingSportRows) {
       if (r.match) comboMatchMap.set(r.match.id, r.match);
+    }
+    for (const r of settledSportRows) {
+      if (r.match && !comboMatchMap.has(r.match.id) && !requiredFullMatchIds.has(r.match.id)) {
+        comboMatchMap.set(r.match.id, r.match);
+      }
     }
     for (const pr of predRows) {
       if (pr.question) comboQuestionMap.set(pr.question.id, pr.question);
     }
 
     const missingMatchIds = new Set<number>();
+    // Les jambes déjà réglées n'ont besoin que du score et des métadonnées
+    // d'affichage. Les jambes encore actives gardent le match complet pour le
+    // règlement anticipé et le cash-out (événements, marchés, statistiques).
+    const fullMatchIds = new Set<number>();
     const missingQuestionIds = new Set<number>();
     for (const c of comboRows) {
       for (const l of c.legs ?? []) {
         if (l.kind === "sport" && l.matchId && !comboMatchMap.has(l.matchId)) {
           missingMatchIds.add(l.matchId);
+          if (c.status === "pending" || l.status === "pending") fullMatchIds.add(l.matchId);
         }
         if (l.kind === "prediction" && l.questionId && !comboQuestionMap.has(l.questionId)) {
           missingQuestionIds.add(l.questionId);
@@ -486,10 +520,15 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const [mRows, qRows] = await Promise.all([
-        stillMissingMatches.length > 0
-          ? db.select().from(matches).where(inArray(matches.id, stillMissingMatches))
+      const fullIds = stillMissingMatches.filter(id => fullMatchIds.has(id));
+      const scalarIds = stillMissingMatches.filter(id => !fullMatchIds.has(id));
+      const [mRows, scalarRows, qRows] = await Promise.all([
+        fullIds.length > 0
+          ? db.select().from(matches).where(inArray(matches.id, fullIds))
           : Promise.resolve([] as MatchRow[]),
+        scalarIds.length > 0
+          ? db.select(settledMatchScalarCols).from(matches).where(inArray(matches.id, scalarIds))
+          : Promise.resolve([]),
         missingQuestionIds.size > 0
           ? db
               .select()
@@ -498,6 +537,7 @@ export async function GET(req: NextRequest) {
           : Promise.resolve([] as PredictionQuestionRow[]),
       ]);
       for (const m of mRows) comboMatchMap.set(m.id, hydrateLiveMatchRow(m, nowMs));
+      for (const m of scalarRows) comboMatchMap.set(m.id, m as unknown as MatchRow);
       for (const q of qRows) comboQuestionMap.set(q.id, q);
     }
   }
@@ -625,6 +665,10 @@ export async function GET(req: NextRequest) {
     (a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime()
   );
 
+  if (page) {
+    const position = new Map(page.keys.map((k, index) => [`${k.kind}:${k.id}`, index]));
+    combined.sort((a, b) => (position.get(`${a.kind}:${a.id}`) ?? Infinity) - (position.get(`${b.kind}:${b.id}`) ?? Infinity));
+  }
   const filtered =
     filter === "ongoing"
       ? combined.filter((b) => b.status === "pending")
@@ -636,8 +680,9 @@ export async function GET(req: NextRequest) {
     bets: filtered,
     balance: user?.balance ?? null,
     serverTime: new Date().toISOString(),
+    ...(page ? { nextCursor: page.nextCursor } : {}),
   };
-  if (hasTarget) {
+  if (hasTarget || pagedHistory) {
     return jsonWithEtag(req, payload);
   }
   const entry = setCachedUserBetsResponse(uid, filter, payload);
