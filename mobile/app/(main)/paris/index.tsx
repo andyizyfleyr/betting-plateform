@@ -39,8 +39,19 @@ const POLL_PENDING = 6_000;
 const POLL_IDLE = 18_000;
 
 type Tab = "ongoing" | "finished";
-type KindFilter = "all" | "sport" | "prediction" | "combo";
-type OutcomeFilter = "all" | "won" | "lost" | "cashed" | "void";
+type KindFilter = "all" | "simple" | "combo";
+type OutcomeFilter = "all" | "won" | "lost" | "void";
+
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayLabel(iso: string): string {
+  const date = new Date(iso);
+  const label = formatDayHeading(iso);
+  return date.getFullYear() !== new Date().getFullYear() ? `${label} ${date.getFullYear()}` : label;
+}
 
 function betDecisionTimestamp(b: UnifiedBet): number {
   const iso = b.status === "pending" ? b.placedAt : (b.settledAt ?? b.placedAt);
@@ -169,13 +180,14 @@ export default function ParisScreen() {
   const finishedAll = useMemo(
     () =>
       [...searchedBets.filter((b) => b.status !== "pending")].sort(
-        (a, b) => betDecisionTimestamp(b) - betDecisionTimestamp(a) || b.id - a.id
+        (a, b) => betDecisionTimestamp(b) - betDecisionTimestamp(a) ||
+          new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime() || b.id - a.id
       ),
     [searchedBets]
   );
 
   const smartDefaultTab: Tab =
-    bets !== null && ongoingAll.length === 0 && finishedAll.length > 0
+    bets !== null && !bets.some((b) => b.status === "pending") && bets.some((b) => b.status !== "pending")
       ? "finished"
       : "ongoing";
   const tab: Tab = tabChoice ?? smartDefaultTab;
@@ -186,8 +198,7 @@ export default function ParisScreen() {
     () => ({
       all: statusPool.length,
       combo: statusPool.filter((b) => b.kind === "combo").length,
-      sport: statusPool.filter((b) => b.kind === "sport").length,
-      prediction: statusPool.filter((b) => b.kind === "prediction").length,
+      simple: statusPool.filter((b) => b.kind !== "combo").length,
     }),
     [statusPool]
   );
@@ -196,7 +207,7 @@ export default function ParisScreen() {
     () =>
       kindFilter === "all"
         ? statusPool
-        : statusPool.filter((b) => b.kind === kindFilter),
+        : statusPool.filter((b) => kindFilter === "simple" ? b.kind !== "combo" : b.kind === "combo"),
     [statusPool, kindFilter]
   );
 
@@ -204,7 +215,7 @@ export default function ParisScreen() {
     () =>
       kindFilter === "all"
         ? finishedAll
-        : finishedAll.filter((b) => b.kind === kindFilter),
+        : finishedAll.filter((b) => kindFilter === "simple" ? b.kind !== "combo" : b.kind === "combo"),
     [finishedAll, kindFilter]
   );
 
@@ -213,7 +224,6 @@ export default function ParisScreen() {
       all: finishedKindPool.length,
       won: finishedKindPool.filter((b) => b.status === "won").length,
       lost: finishedKindPool.filter((b) => b.status === "lost").length,
-      cashed: finishedKindPool.filter((b) => b.status === "cashed").length,
       void: finishedKindPool.filter((b) => b.status === "void").length,
     }),
     [finishedKindPool]
@@ -235,7 +245,7 @@ export default function ParisScreen() {
     const counts = new Map<string, number>();
     if (tab !== "finished") return counts;
     for (const b of visibleBets) {
-      const label = formatDayHeading(b.settledAt ?? b.placedAt);
+      const label = dayKey(b.settledAt ?? b.placedAt);
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     return counts;
@@ -245,7 +255,7 @@ export default function ParisScreen() {
     const groups = new Map<string, UnifiedBet[]>();
     if (tab !== "finished") return [];
     for (const b of pagedBets) {
-      const label = formatDayHeading(b.settledAt ?? b.placedAt);
+      const label = dayKey(b.settledAt ?? b.placedAt);
       const list = groups.get(label) ?? [];
       list.push(b);
       groups.set(label, list);
@@ -408,32 +418,21 @@ export default function ParisScreen() {
           ) : null}
         </View>
 
-        {/* 3 : Rangée unique collante de 3 pastilles dropdown */}
+        {/* 3 : Onglets et filtres */}
         <View style={styles.stickyFilterWrap}>
+          <View style={styles.tabRow} accessibilityRole="tablist">
+            {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
+              <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }}
+                onPress={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
+                style={[styles.tab, tab === value && styles.tabSelected]}>
+                <Text style={[styles.tabText, tab === value && styles.tabTextSelected]}>
+                  {label}{bets !== null ? ` (${value === "ongoing" ? ongoingAll.length : finishedAll.length})` : ""}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <FilterDropdownRow
             filters={[
-              {
-                id: "status",
-                placeholder: "Statut",
-                value: tab,
-                defaultValue: smartDefaultTab,
-                onChange: (next) => {
-                  setTabChoice(next === smartDefaultTab ? null : next);
-                  if (next === "ongoing") setOutcomeFilter("all");
-                },
-                options: [
-                  {
-                    value: "ongoing",
-                    label: "En cours",
-                    count: bets !== null ? ongoingAll.length : undefined,
-                  },
-                  {
-                    value: "finished",
-                    label: "Terminés",
-                    count: bets !== null ? finishedAll.length : undefined,
-                  },
-                ],
-              },
               {
                 id: "kind",
                 placeholder: "Type",
@@ -443,37 +442,27 @@ export default function ParisScreen() {
                 options: [
                   {
                     value: "all",
-                    label: "Tous types",
+                    label: "Tous",
                     count: bets !== null ? kindCounts.all : undefined,
                   },
                   {
+                    value: "simple",
+                    label: "Simple",
+                    count: bets !== null ? kindCounts.simple : undefined,
+                  },
+                  {
                     value: "combo",
-                    label: "Combinés",
+                    label: "Combiné",
                     count: bets !== null ? kindCounts.combo : undefined,
-                  },
-                  {
-                    value: "sport",
-                    label: "Sport",
-                    count: bets !== null ? kindCounts.sport : undefined,
-                  },
-                  {
-                    value: "prediction",
-                    label: "Prédictions",
-                    count: bets !== null ? kindCounts.prediction : undefined,
                   },
                 ],
               },
-              {
+              ...(tab === "finished" ? [{
                 id: "outcome",
                 placeholder: "Résultat",
                 value: outcomeFilter,
                 defaultValue: "all",
-                onChange: (next) => {
-                  setOutcomeFilter(next);
-                  if (next !== "all" && tab === "ongoing") {
-                    setTabChoice("finished");
-                  }
-                },
+                onChange: setOutcomeFilter,
                 options: [
                   {
                     value: "all",
@@ -491,20 +480,14 @@ export default function ParisScreen() {
                     count: bets !== null ? outcomeCounts.lost : undefined,
                   },
                   {
-                    value: "cashed",
-                    label: "Vendus",
-                    count: bets !== null ? outcomeCounts.cashed : undefined,
-                  },
-                  {
                     value: "void",
                     label: "Remboursés",
                     count: bets !== null ? outcomeCounts.void : undefined,
                   },
                 ],
-              },
+              }] : []),
             ]}
             onReset={() => {
-              setTabChoice(null);
               setKindFilter("all");
               setOutcomeFilter("all");
             }}
@@ -589,13 +572,13 @@ export default function ParisScreen() {
               </View>
             ) : (
               <View style={{ gap: 20 }}>
-                {finishedGroups.map(([label, group]) => (
-                  <View key={label}>
+                {finishedGroups.map(([key, group]) => (
+                  <View key={key}>
                     <Text style={styles.dayHeading}>
-                      {label}
+                      {dayLabel(group[0].settledAt ?? group[0].placedAt)}
                       <Text style={styles.dayCount}>
                         {" "}
-                        ({dayTotalCounts.get(label) ?? group.length})
+                        ({dayTotalCounts.get(key) ?? group.length})
                       </Text>
                     </Text>
                     <View style={styles.ticketStack}>
@@ -707,6 +690,11 @@ const styles = StyleSheet.create({
   stickyFilterWrap: {
     backgroundColor: COLORS.deep,
   },
+  tabRow: { flexDirection: "row", gap: 8, paddingTop: 12 },
+  tab: { flex: 1, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "#e7e9ed" },
+  tabSelected: { backgroundColor: COLORS.betclicRed },
+  tabText: { fontSize: 11.5, fontWeight: "500", color: "#374151" },
+  tabTextSelected: { color: "#ffffff" },
   loaderBox: {
     paddingVertical: 48,
     alignItems: "center",
