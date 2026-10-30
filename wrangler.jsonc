@@ -17,7 +17,22 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["Main"]
+      "new_sqlite_classes": [
+        "Main"
+      ]
     }
-  ]
+  ],
+  "previews": {
+    "vars": {
+      "APP_URL": ""
+    },
+    "durable_objects": {
+      "bindings": [
+        {
+          "name": "Main",
+          "class_name": "Main"
+        }
+      ]
+    }
+  }
 }
