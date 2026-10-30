@@ -113,6 +113,7 @@ function MatchCardInner({
             </span>
           )}
           <SportIcon sport={match.sport} className="h-4 w-4 shrink-0 text-dim lg:h-3.5 lg:w-3.5" />
+          {match.source === "virtual" && <span className="shrink-0 rounded bg-betclic-red/10 px-1.5 py-0.5 text-[9px] font-medium text-betclic-red">Virtu</span>}
           <span className="truncate font-medium">{match.league}</span>
         </div>
 

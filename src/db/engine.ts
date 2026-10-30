@@ -32,6 +32,8 @@ import { buildServerClockAnchor } from "@/lib/live-clock";
 import { ensureMlLoaded, recordMatchesFinishedBatchMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
 import { teamLogo } from "@/lib/team-logos";
+import { nextVirtualStart, sharesVirtualTeam, virtualPairKey, VIRTUAL_REMATCH_GAP_MS, VIRTUAL_MAX_LIVE, type VirtualFixtureWindow } from "@/lib/virtual-fixtures";
+import { claimVirtualKickoff, VIRTUAL_SCHEDULE_LOCK } from "@/db/virtual-kickoff";
 
 /** Suspension brève du marché après un but (~2,2 s). */
 const GOAL_SUSPEND_MS = 2_200;
@@ -53,7 +55,7 @@ export const VIRTUAL_STEP_MAX_MS = 6_400; // ~10 min 08 s au total (moyenne 10 m
 const TOTAL_CLOCK_STEPS = 95;
 
 /** Nombre de matchs virtuels diffusés en direct simultanément (décalés sur 4 canaux parallèles). */
-export const CONCURRENT_LIVE_VIRTUAL = 4;
+export const CONCURRENT_LIVE_VIRTUAL = VIRTUAL_MAX_LIVE;
 const MIN_ACTIVE_VIRTUAL = 11;
 const TARGET_ACTIVE_VIRTUAL = 12;
 
@@ -714,11 +716,21 @@ async function executeTick(now: number): Promise<void> {
       const effStartMs = cursor > 0 ? Math.max(vm.startsAt.getTime(), cursor) : vm.startsAt.getTime();
       if (effStartMs > now) continue;
 
+      const claimed = await claimVirtualKickoff(vm, effStartMs, now);
+      if (!claimed) {
+        const [fresh] = await db.select().from(matches).where(eq(matches.id, vm.id));
+        if (fresh && fresh.status !== "upcoming") {
+          const staleIndex = upcomingMatches.findIndex(u => u.id === vm.id);
+          if (staleIndex >= 0) upcomingMatches.splice(staleIndex, 1);
+          upsertCachedMatches([fresh]);
+        }
+        continue;
+      }
       const uIdx = upcomingMatches.findIndex((u) => u.id === vm.id);
       if (uIdx >= 0) upcomingMatches.splice(uIdx, 1);
 
-      const stepped = kickOffInMemory(vm, effStartMs, now, pressureFor(vm));
-      recordStepResult(vm, stepped);
+      const stepped = kickOffInMemory(claimed, effStartMs, now, pressureFor(claimed));
+      recordStepResult(claimed, stepped);
       if (stepped.finished) {
         const dur = matchDurationMs(vm.id, "virtual");
         laneReadyMs[laneIdx] = effStartMs + dur + INTER_MATCH_GAP_MS;
@@ -763,16 +775,25 @@ async function executeTick(now: number): Promise<void> {
 
       for (const nextVm of remainingQueued) {
         if (activeLives.length >= CONCURRENT_LIVE_VIRTUAL) break;
-        const uIdx = upcomingMatches.findIndex((u) => u.id === nextVm.id);
-        if (uIdx >= 0) upcomingMatches.splice(uIdx, 1);
-
         const hasBets = (betsByMatch.get(nextVm.id)?.length ?? 0) > 0;
         const frac = pickStaggerFrac(hasBets);
         const dur = matchDurationMs(nextVm.id, "virtual");
         const startMs = now - Math.round(dur * frac);
+        const claimed = await claimVirtualKickoff(nextVm, startMs, now);
+        if (!claimed) {
+          const [fresh] = await db.select().from(matches).where(eq(matches.id, nextVm.id));
+          if (fresh && fresh.status !== "upcoming") {
+            const staleIndex = upcomingMatches.findIndex(u => u.id === nextVm.id);
+            if (staleIndex >= 0) upcomingMatches.splice(staleIndex, 1);
+            upsertCachedMatches([fresh]);
+          }
+          continue;
+        }
+        const uIdx = upcomingMatches.findIndex((u) => u.id === nextVm.id);
+        if (uIdx >= 0) upcomingMatches.splice(uIdx, 1);
 
-        const stepped = kickOffInMemory(nextVm, startMs, now, pressureFor(nextVm));
-        recordStepResult(nextVm, stepped);
+        const stepped = kickOffInMemory(claimed, startMs, now, pressureFor(claimed));
+        recordStepResult(claimed, stepped);
         if (!stepped.finished) {
           activeLives.push(stepped.row);
         }
@@ -857,6 +878,11 @@ async function syncUpcomingQueue(
     awayLogo: string | null;
   }
 
+  const recentFinished = await db.select({ homeTeam: matches.homeTeam, awayTeam: matches.awayTeam, startsAt: matches.startsAt, finishedAt: matches.finishedAt }).from(matches).where(sql`${matches.source} = 'virtual' AND ${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 15 * 60_000)}`);
+  const windows: VirtualFixtureWindow[] = [
+    ...activeLives.map(m => ({ home: m.homeTeam, away: m.awayTeam, start: m.startsAt.getTime(), end: expectedMatchEndMs(m, now) })),
+    ...recentFinished.map(m => ({ home: m.homeTeam, away: m.awayTeam, start: m.startsAt.getTime(), end: m.finishedAt?.getTime() ?? m.startsAt.getTime() + 608_000 })),
+  ];
   const patches: QueuedMatchPatch[] = [];
   const ramUpdatedQueue: MatchRow[] = [];
 
@@ -865,8 +891,10 @@ async function syncUpcomingQueue(
     for (let i = 1; i < laneCursors.length; i++) {
       if (laneCursors[i] < laneCursors[minLane]) minLane = i;
     }
-    const desiredStartsAt = laneCursors[minLane];
-    laneCursors[minLane] += matchDurationMs(m.id, "virtual") + INTER_MATCH_GAP_MS;
+    const duration = matchDurationMs(m.id, "virtual");
+    const desiredStartsAt = nextVirtualStart({ home: m.homeTeam, away: m.awayTeam }, laneCursors[minLane], duration, windows);
+    laneCursors[minLane] = desiredStartsAt + duration + INTER_MATCH_GAP_MS;
+    windows.push({ home: m.homeTeam, away: m.awayTeam, start: desiredStartsAt, end: desiredStartsAt + duration });
 
     let homeTeam = m.homeTeam;
     let awayTeam = m.awayTeam;
@@ -987,7 +1015,7 @@ async function syncUpcomingQueue(
       FROM (VALUES ${tuples}) AS v(
         id, home_team, away_team, home_form, away_form, starts_at, odds_home, odds_draw, odds_away, home_logo, away_logo
       )
-      WHERE m."id" = v.id
+      WHERE m."id" = v.id AND m."status" = 'upcoming'
     `);
   }
 }
@@ -1085,7 +1113,20 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
   });
 
   if (rows.length > 0) {
-    const insertedRows = await db.insert(matches).values(rows).returning();
+    const insertedRows = await db.transaction(async tx => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${VIRTUAL_SCHEDULE_LOCK})`);
+      const existing = await tx.select().from(matches).where(sql`${matches.source} = 'virtual' AND (${matches.status} IN ('live','upcoming') OR (${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS)}))`);
+      const accepted: typeof rows = [];
+      const occupied = existing.filter(m => m.status !== "finished").map(m => ({ home: m.homeTeam, away: m.awayTeam }));
+      const recentPairs = new Set(existing.filter(m => m.status === "finished").map(m => virtualPairKey(m.homeTeam, m.awayTeam)));
+      for (const row of rows) {
+        const fixture = { home: row.homeTeam, away: row.awayTeam };
+        if (occupied.some(other => sharesVirtualTeam(fixture, other)) || recentPairs.has(virtualPairKey(fixture.home, fixture.away))) continue;
+        accepted.push(row); occupied.push(fixture);
+      }
+      return accepted.length ? tx.insert(matches).values(accepted).returning() : [];
+    });
     const mode = await getScenarioMode();
     if (mode === "locked" && insertedRows.length > 0) {
       const neutral: MatchBookPressure = { tickets: [], houseTightness: 1 };
@@ -1268,7 +1309,16 @@ async function bridgeIdleGapAndStartLives(
   });
 
   if (insertBatch.length === 0) return [];
-  const insertedAll = await db.insert(matches).values(insertBatch).returning();
+  const insertedAll = await db.transaction(async tx => {
+    await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${VIRTUAL_SCHEDULE_LOCK})`);
+    const existing = await tx.select().from(matches).where(sql`${matches.source} = 'virtual' AND (${matches.status} IN ('live','upcoming') OR (${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS)}))`);
+    const open = existing.filter(m => m.status !== "finished");
+    if (open.filter(m => m.status === "live").length + liveFxList.length > CONCURRENT_LIVE_VIRTUAL) return [];
+    const recentPairs = new Set(existing.filter(m => m.status === "finished").map(m => virtualPairKey(m.homeTeam, m.awayTeam)));
+    if (insertBatch.some(row => open.some(m => sharesVirtualTeam({ home: row.homeTeam, away: row.awayTeam }, { home: m.homeTeam, away: m.awayTeam })) || recentPairs.has(virtualPairKey(row.homeTeam, row.awayTeam)))) return [];
+    return tx.insert(matches).values(insertBatch).returning();
+  });
   const isLockedMode = (await getScenarioMode()) === "locked";
 
   if (isLockedMode && insertedAll.length > 0) {

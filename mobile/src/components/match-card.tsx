@@ -396,6 +396,7 @@ function MatchCardInner({
         <View style={styles.headerRow}>
           <View style={styles.leagueRow}>
             <SportIcon sport={match.sport} size={16} color={COLORS.dim} />
+            {match.source === "virtual" && <View style={styles.virtuBadge}><Text style={styles.virtuText}>Virtu</Text></View>}
             <Text numberOfLines={1} style={styles.leagueText}>
               {match.league}
             </Text>
@@ -512,6 +513,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
+  virtuBadge: { backgroundColor: "#e100141a", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  virtuText: { color: "#e10014", fontSize: 9 },
   leagueRow: {
     flex: 1,
     minWidth: 0,
