@@ -16,12 +16,13 @@ const original=Module._load;
  SELECT 1,'football','Test','Alpha','Beta','home','Alpha',2,1,2,'won','2026-01-01 10:00:00.123456','2026-01-02 10:00:00.123456' FROM generate_series(1,45);
  INSERT INTO bets (user_id,sport,league,home_team,away_team,selection,selection_label,odds,stake,potential_win,status)
  VALUES (2,'football','Secret','X','Y','home','X',2,1,2,'won');`);
- let syncCalls=0, hydrationCalls=0;
+ let syncCalls=0, hydrationCalls=0, cacheHit=null, cachedWrites=[];
  const queries=[]; const db=drizzle(pg,{logger:{logQuery:(query)=>queries.push(query)}});
  Module._load=function(name){
   if(name==='@/db') return {db};
   if(name==='@/db/seed') return {ensureSeeded:async()=>{}};
   if(name==='@/lib/session') return {requireUserId:async()=>1};
+  if(name==='@/lib/private-history-cache') return {readPrivateHistoryCache:async()=>cacheHit,writePrivateHistoryCache:async(...args)=>{cachedWrites.push(args)}};
   if(name==='@/lib/sync-throttle') return {syncLiveMatchesThrottled:async()=>{syncCalls++}};
   if(name==='@/lib/active-state-cache') return {ensureMatchStoreHydrated:async()=>{hydrationCalls++},getCachedMatchById:()=>null,getCachedUserBetsResponse:()=>null,setCachedUserBetsResponse:(_u,_f,p)=>({json:JSON.stringify(p),etag:'x',at:Date.now()})};
   return original.apply(this,arguments);
@@ -40,6 +41,16 @@ const original=Module._load;
   assert.match(response.headers.get('Vercel-CDN-Cache-Control'),/private, no-store/);
  } while(cursor);
  assert.equal(ids.length,45);assert.equal(new Set(ids).size,45);
+ assert.equal(cachedWrites.length,2); assert(cachedWrites.every(a=>a[0]===1 && !('balance' in a[2])));
+ const firstResponse=await GET(new NextRequest('https://example.com/api/bets?filter=finished&pageSize=20'));
+ const firstPage=await firstResponse.json();
+ cacheHit={bets:[{id:42,status:'won'}],nextCursor:null}; queries.length=0;
+ const cachedResponse=await GET(new NextRequest('https://example.com/api/bets?filter=finished&pageSize=20&cursor='+encodeURIComponent(firstPage.nextCursor)));
+ const cachedBody=await cachedResponse.json();
+ assert.equal(cachedBody.bets[0].id,42); assert.equal(cachedBody.balance,123);
+ assert(!queries.some(q=>/UNION ALL/i.test(q))); assert.match(cachedResponse.headers.get('Vercel-CDN-Cache-Control'),/private, no-store/);
+ cacheHit=null;
+
  const old=await GET(new NextRequest('https://example.com/api/bets?filter=finished')); const oldBody=await old.json();assert.equal(oldBody.bets.length,45);assert(!('nextCursor' in oldBody));
  const beforeBad=[syncCalls,hydrationCalls];
  const bad=await GET(new NextRequest('https://example.com/api/bets?filter=finished&pageSize=20&cursor=bad!'));assert.equal(bad.status,400);

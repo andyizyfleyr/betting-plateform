@@ -78,6 +78,7 @@ import { isManualRefreshRequest, jsonWithEtag } from "@/lib/response-cache";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 import { decodeHistoryCursor, getFinishedBetPageKeys } from "@/lib/bet-pagination";
+import { readPrivateHistoryCache, writePrivateHistoryCache } from "@/lib/private-history-cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -120,6 +121,15 @@ export async function GET(req: NextRequest) {
   await syncLiveMatchesThrottled(false, { manualRefresh });
   await ensureMatchStoreHydrated(manualRefresh);
 
+  // La première page reste fraîche ; seules les pages anciennes peuvent être mises
+  // en cache. Le solde est toujours relu en base et jamais écrit dans R2.
+  if (pagedHistory && rawCursor && !manualRefresh) {
+    const cached = await readPrivateHistoryCache(uid, rawCursor);
+    if (cached) {
+      const [freshUser] = await db.select({ balance: appUser.balance }).from(appUser).where(eq(appUser.id, uid));
+      return jsonWithEtag(req, { ...cached, balance: freshUser?.balance ?? null, serverTime: new Date().toISOString() });
+    }
+  }
   const page = pagedHistory ? await getFinishedBetPageKeys(uid, cursor, 20) : null;
   const sportIds = page?.keys.filter(k => k.kind === "sport").map(k => k.id) ?? [];
   const predictionIds = page?.keys.filter(k => k.kind === "prediction").map(k => k.id) ?? [];
@@ -683,6 +693,9 @@ export async function GET(req: NextRequest) {
     serverTime: new Date().toISOString(),
     ...(page ? { nextCursor: page.nextCursor } : {}),
   };
+  if (page && rawCursor && !manualRefresh) {
+    await writePrivateHistoryCache(uid, rawCursor, { bets: filtered, nextCursor: page.nextCursor });
+  }
   if (hasTarget || pagedHistory) {
     return jsonWithEtag(req, payload);
   }
