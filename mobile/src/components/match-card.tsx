@@ -369,7 +369,6 @@ function MatchCardInner({
   const isLive = match.status === "live";
   const isFinished = match.status === "finished";
   const isReal = match.source === "manual";
-  const marketCount = match.marketCount ?? match.markets?.length ?? 0;
 
   const navigateDetail = () => {
     if (isFinished) {
@@ -392,7 +391,7 @@ function MatchCardInner({
         onPress={navigateDetail}
         style={({ pressed }) => [pressed && { opacity: 0.82 }]}
       >
-        {/* En-tête : ligue + statut + compteur marchés */}
+        {/* En-tête : ligue + statut */}
         <View style={styles.headerRow}>
           <View style={styles.leagueRow}>
             <SportIcon sport={match.sport} size={16} color={COLORS.dim} />
@@ -435,17 +434,6 @@ function MatchCardInner({
                 <KickoffCountdown startsAt={match.startsAt} />
               </>
             )}
-
-            {!isFinished && marketCount > 1 ? (
-              <View style={styles.marketCountPill}>
-                <Text style={styles.marketCountText}>+{marketCount - 1}</Text>
-                <ChevronRight
-                  size={10}
-                  color={COLORS.betclicRed}
-                  strokeWidth={2.6}
-                />
-              </View>
-            ) : null}
           </View>
         </View>
 
@@ -604,21 +592,6 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontWeight: "500",
     color: COLORS.ink,
-  },
-  marketCountPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 1,
-    borderRadius: 999,
-    backgroundColor: COLORS.elev,
-    paddingHorizontal: 6,
-    paddingVertical: 2.5,
-  },
-  marketCountText: {
-    fontSize: 9.5,
-    fontWeight: "500",
-    color: COLORS.ink,
-    fontVariant: ["tabular-nums"],
   },
   teamsBlock: {
     marginTop: 9,
