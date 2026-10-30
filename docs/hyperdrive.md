@@ -26,3 +26,25 @@ requêtes Hyperdrive : surveiller le quota quotidien et prévoir le repli avant
 de transférer du trafic applicatif. Les previews doivent rester isolées de la
 base de production. Le retour arrière consiste à ne plus appeler la route et,
 si nécessaire, retirer son binding lors d'un déploiement suivant.
+
+## Raccordement de l'historique web et mobile
+
+L'API existante `/api/matches/history` conserve son contrat pour le web et les
+APK existantes. Si `HYPERDRIVE_HISTORY_ENABLED=true` en production, elle tente
+une requête serveur authentifiée au Worker pour les 120 derniers résultats par
+source puis applique le même mapping. Le cache Worker dure 10 s ; le cache CDN
+Vercel existant peut ajouter sa propre durée. Un rafraîchissement manuel ignore
+le cache Worker. Le secret `PARTYKIT_SECRET` doit être identique sur Vercel et
+Cloudflare, sans secret de développement implicite. L'accès est borné et
+retombe sur Neon en cas de secret absent, erreur, délai ou réponse invalide ;
+les détails de matchs hors de la liste restent sur le parcours existant.
+L'aperçu ne se connecte pas à Hyperdrive production. Aucun parcours financier,
+cote live ou pari utilisateur n'est déplacé. Le transfert Neon n'est pas encore
+mesuré et le Worker peut ajouter un coût et une latence réseau.
+
+Une sonde ponctuelle `HYPERDRIVE_HISTORY_PROBE=v1` peut être activée pour un
+build Vercel Production afin de vérifier le lien authentifié, sans imprimer le
+secret ni les données, puis supprimée. En cas d'échec, le build échoue avant
+promotion. Pour revenir au parcours précédent, définir
+`HYPERDRIVE_HISTORY_ENABLED=false` et redéployer le site ; le Worker et les
+anciennes API restent disponibles.

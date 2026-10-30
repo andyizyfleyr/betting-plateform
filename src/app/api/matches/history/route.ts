@@ -29,6 +29,7 @@ import {
 } from "@/lib/response-cache";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
+import { fetchHyperdriveHistory } from "@/lib/hyperdrive-history";
 import type { ClientMatchHistoryItem } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -179,7 +180,8 @@ async function getOrBuildBaseHistory(manualRefresh = false): Promise<{
       await ensureMlLoaded();
       await syncLiveMatchesThrottled(false, { manualRefresh });
 
-    const [manualFinished, virtualFinished] = await Promise.all([
+    const hyperdriveRows = await fetchHyperdriveHistory(manualRefresh);
+    const [manualFinished, virtualFinished] = hyperdriveRows ? [hyperdriveRows, []] : await Promise.all([
       db
         .select(historyMatchColumns)
         .from(matches)
