@@ -178,12 +178,6 @@ function MatchCardInner({
             </>
           )}
 
-          {!isFinished && marketCount > 1 && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-elev px-1.5 py-0.5 font-display text-[9.5px] font-medium text-ink lg:hidden">
-              +{marketCount - 1}
-              <ChevronRight className="h-2.5 w-2.5 text-betclic-red" strokeWidth={2.6} />
-            </span>
-          )}
         </div>
       </div>
 
@@ -239,7 +233,6 @@ function MatchCardInner({
                 Total, Double chance, Handicap, Score exact…
               </span>
               <span className="inline-flex shrink-0 items-center gap-0.5 font-display font-medium text-ink">
-                +{marketCount - 1} marchés
                 <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
               </span>
             </div>
