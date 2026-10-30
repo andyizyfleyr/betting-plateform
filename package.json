@@ -15,7 +15,8 @@
     "r2:inventory": "node scripts/r2-public.cjs --dry-run",
     "r2:upload-public": "node scripts/r2-public.cjs --upload",
     "r2:verify-public-storage": "node scripts/r2-public.cjs --verify",
-    "r2:verify-public": "node scripts/r2-public.cjs --verify-public"
+    "r2:verify-public": "node scripts/r2-public.cjs --verify-public",
+    "prebuild": "node scripts/r2-vercel-build.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.105.0",
