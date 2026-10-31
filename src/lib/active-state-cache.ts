@@ -1,11 +1,6 @@
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
-import {
-  activeMatchHydrationColumns,
-  finishedRealHydrationColumns,
-  finishedVirtualHydrationColumns,
-  fullHydrationColumns,
-} from "@/lib/match-hydration-projection";
+import { finishedRealHydrationColumns, fullHydrationColumns } from "@/lib/match-hydration-projection";
 import { db } from "@/db";
 import {
   bets,
@@ -191,7 +186,7 @@ export async function ensureMatchStoreHydrated(force = false): Promise<void> {
   st.hydratePromise = (async () => {
     try {
       const qActive = db
-        .select(activeMatchHydrationColumns)
+        .select(fullHydrationColumns)
         .from(matches)
         .where(ne(matches.status, "finished"))
         .orderBy(
@@ -213,7 +208,7 @@ export async function ensureMatchStoreHydrated(force = false): Promise<void> {
           .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
           .limit(MAX_FINISHED_MANUAL_RAM);
         const qFinVirtual = db
-          .select(finishedVirtualHydrationColumns)
+          .select(fullHydrationColumns)
           .from(matches)
           .where(and(ne(matches.source, "manual"), eq(matches.status, "finished"), sql<boolean>`${enabled}`))
           .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
