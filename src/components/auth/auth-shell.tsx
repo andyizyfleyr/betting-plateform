@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_LANGUAGE, translate } from "@/lib/i18n/catalog";
 import {
   Suspense,
   useCallback,
@@ -679,7 +680,7 @@ function AuthShellInner({
                     htmlFor="login-email"
                     className="block text-[10.5px] font-medium text-ink"
                   >
-                    Adresse e-mail
+                    {translate(DEFAULT_LANGUAGE, "emailAddress")}
                   </label>
                   <div className="flex h-12 items-center gap-3 rounded-2xl border border-edge bg-deep/45 px-3.5 transition-colors focus-within:border-ink focus-within:bg-white">
                     <Mail className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.1} />
@@ -706,13 +707,13 @@ function AuthShellInner({
                       htmlFor="login-password"
                       className="text-[10.5px] font-medium text-ink"
                     >
-                      Mot de passe
+                      {translate(DEFAULT_LANGUAGE, "password")}
                     </label>
                     <Link
                       href={forgotHref}
                       className="font-display text-[10.5px] font-medium text-betclic-red transition-opacity hover:opacity-80"
                     >
-                      Mot de passe oublié ?
+                      {translate(DEFAULT_LANGUAGE, "forgotPassword")}
                     </Link>
                   </div>
                   <div className="flex h-12 items-center gap-3 rounded-2xl border border-edge bg-deep/45 pl-3.5 pr-1.5 transition-colors focus-within:border-ink focus-within:bg-white">
@@ -791,7 +792,7 @@ function AuthShellInner({
                     </>
                   ) : (
                     <>
-                      <span>Se connecter</span>
+                      <span>{translate(DEFAULT_LANGUAGE, "signIn")}</span>
                       <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
                     </>
                   )}
@@ -977,7 +978,7 @@ function AuthShellInner({
                     htmlFor="reg-email"
                     className="block text-[10.5px] font-medium text-ink"
                   >
-                    Adresse e-mail
+                    {translate(DEFAULT_LANGUAGE, "emailAddress")}
                   </label>
                   <div className="flex h-12 items-center gap-3 rounded-2xl border border-edge bg-deep/45 px-3.5 transition-colors focus-within:border-ink focus-within:bg-white">
                     <Mail className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.1} />
@@ -1009,7 +1010,7 @@ function AuthShellInner({
                     htmlFor="reg-password"
                     className="block text-[10.5px] font-medium text-ink"
                   >
-                    Mot de passe
+                    {translate(DEFAULT_LANGUAGE, "password")}
                   </label>
                   <div className="flex h-12 items-center gap-3 rounded-2xl border border-edge bg-deep/45 pl-3.5 pr-1.5 transition-colors focus-within:border-ink focus-within:bg-white">
                     <Lock className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.1} />
@@ -1181,7 +1182,7 @@ function AuthShellInner({
                     replace
                     className="font-display font-medium text-ink underline decoration-edge underline-offset-4 hover:text-betclic-red"
                   >
-                    Se connecter
+                    {translate(DEFAULT_LANGUAGE, "signIn")}
                   </Link>
                 </p>
               </form>

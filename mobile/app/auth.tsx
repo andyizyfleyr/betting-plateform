@@ -1,3 +1,4 @@
+import { DEFAULT_LANGUAGE, translate } from "@/lib/i18n/catalog";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -551,7 +552,7 @@ export default function AuthScreen() {
               {resolvedView === "login" ? (
                 <View style={styles.form}>
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Adresse e-mail</Text>
+                    <Text style={styles.label}>{translate(DEFAULT_LANGUAGE, "emailAddress")}</Text>
                     <View
                       style={[
                         styles.inputBox,
@@ -582,13 +583,13 @@ export default function AuthScreen() {
 
                   <View style={styles.fieldGroup}>
                     <View style={styles.labelRow}>
-                      <Text style={styles.label}>Mot de passe</Text>
+                      <Text style={styles.label}>{translate(DEFAULT_LANGUAGE, "password")}</Text>
                       <Pressable
                         hitSlop={8}
                         onPress={() => switchView("forgot", true)}
                       >
                         <Text style={styles.forgotLink}>
-                          Mot de passe oublié ?
+                          {translate(DEFAULT_LANGUAGE, "forgotPassword")}
                         </Text>
                       </Pressable>
                     </View>
@@ -679,7 +680,7 @@ export default function AuthScreen() {
                       </>
                     ) : (
                       <>
-                        <Text style={styles.submitText}>Se connecter</Text>
+                        <Text style={styles.submitText}>{translate(DEFAULT_LANGUAGE, "signIn")}</Text>
                         <ArrowRight size={16} color="#ffffff" strokeWidth={2.5} />
                       </>
                     )}
@@ -887,7 +888,7 @@ export default function AuthScreen() {
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Adresse e-mail</Text>
+                    <Text style={styles.label}>{translate(DEFAULT_LANGUAGE, "emailAddress")}</Text>
                     <View
                       style={[
                         styles.inputBox,
@@ -924,7 +925,7 @@ export default function AuthScreen() {
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Mot de passe</Text>
+                    <Text style={styles.label}>{translate(DEFAULT_LANGUAGE, "password")}</Text>
                     <View
                       style={[
                         styles.inputBox,
