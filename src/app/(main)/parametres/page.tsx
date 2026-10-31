@@ -652,7 +652,7 @@ export default function ParametresPage() {
         </div>
       </div>
 
-      {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
+      {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
       <p className="mt-3 flex items-start gap-2 rounded-xl bg-white p-3 text-[10px] leading-relaxed text-mist lg:mt-6 lg:block lg:bg-transparent lg:p-0 lg:text-center lg:text-dim">
         <Info className="h-4 w-4 shrink-0 lg:hidden" /> <span>18+ · Jouer comporte des risques : endettement, isolement, dépendance.</span>
       </p>
