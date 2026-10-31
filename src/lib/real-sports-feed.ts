@@ -973,7 +973,18 @@ function extractLiveFeedSignals(params: {
     const ts = Date.parse(value);
     return Number.isFinite(ts) ? new Date(ts).toISOString() : null;
   };
-  let bookLive: { pH: number; pD: number; pA: number; sourceUpdatedAt: string | null } | null = null;
+  // A scoreboard score is not proof that a separate odds quote was priced at that score.
+  const sourceScore = (rec: JsonRec): { scoreHome: number | null; scoreAway: number | null } => {
+    const score = asRec(rec.score);
+    const parse = (value: unknown): number | null => {
+      if (typeof value !== "number" && (typeof value !== "string" || !/^\d+$/.test(value))) return null;
+      const n = Number(value);
+      return Number.isSafeInteger(n) && n >= 0 && n <= 50 ? n : null;
+    };
+    return { scoreHome: parse(rec.homeScore ?? score?.home), scoreAway: parse(rec.awayScore ?? score?.away) };
+  };
+  type FeedSignal = { pH: number; pD: number; pA: number; sourceUpdatedAt: string | null; scoreHome: number | null; scoreAway: number | null };
+  let bookLive: FeedSignal | null = null;
   for (const rawOddsItem of asArr(params.comp.odds)) {
     const oddsRec = asRec(rawOddsItem);
     if (!oddsRec) continue;
@@ -1005,13 +1016,13 @@ function extractLiveFeedSignals(params: {
         movedVsPre &&
         isLiveTripletCoherentWithScore(pH, pD, pA, params.preOdds, hScore, aScore, minInt)
       ) {
-        bookLive = { pH, pD, pA, sourceUpdatedAt: sourceTime(oddsRec) };
+        bookLive = { pH, pD, pA, sourceUpdatedAt: sourceTime(oddsRec), ...sourceScore(oddsRec) };
         break;
       }
     }
   }
 
-  let espnLive: { pH: number; pD: number; pA: number; sourceUpdatedAt: string | null } | null = null;
+  let espnLive: FeedSignal | null = null;
   const probCandidates: unknown[] = [];
   const situationProb = asRec(asRec(params.comp.situation)?.lastPlay)?.probability;
   if (situationProb) probCandidates.push(situationProb);
@@ -1036,7 +1047,7 @@ function extractLiveFeedSignals(params: {
         const pD = dVal / s;
         const pA = rawA / s;
         if (isLiveTripletCoherentWithScore(pH, pD, pA, params.preOdds, hScore, aScore, minInt)) {
-          espnLive = { pH, pD, pA, sourceUpdatedAt: sourceTime(rec) };
+          espnLive = { pH, pD, pA, sourceUpdatedAt: sourceTime(rec), ...sourceScore(rec) };
           break;
         }
       }
@@ -1059,7 +1070,8 @@ function extractLiveFeedSignals(params: {
       sourceUpdatedAt: bookLive.sourceUpdatedAt && espnLive.sourceUpdatedAt
         ? new Date(Math.min(Date.parse(bookLive.sourceUpdatedAt), Date.parse(espnLive.sourceUpdatedAt))).toISOString()
         : null,
-      scoreHome: params.homeScore, scoreAway: params.awayScore,
+      scoreHome: bookLive.scoreHome === espnLive.scoreHome ? bookLive.scoreHome : null,
+      scoreAway: bookLive.scoreAway === espnLive.scoreAway ? bookLive.scoreAway : null,
       updatedAtSec,
     };
   }
@@ -1070,7 +1082,7 @@ function extractLiveFeedSignals(params: {
       pAway: Math.round(bookLive.pA * 1000) / 1000,
       source: "bookmaker_live",
       sourceUpdatedAt: bookLive.sourceUpdatedAt,
-      scoreHome: params.homeScore, scoreAway: params.awayScore,
+      scoreHome: bookLive.scoreHome, scoreAway: bookLive.scoreAway,
       updatedAtSec,
     };
   }
@@ -1080,7 +1092,7 @@ function extractLiveFeedSignals(params: {
     pAway: Math.round(espnLive!.pA * 1000) / 1000,
     source: "espn_live",
     sourceUpdatedAt: espnLive!.sourceUpdatedAt,
-    scoreHome: params.homeScore, scoreAway: params.awayScore,
+    scoreHome: espnLive!.scoreHome, scoreAway: espnLive!.scoreAway,
     updatedAtSec,
   };
 }
@@ -2869,8 +2881,9 @@ export function isRealMatchFeedStale(
 ): boolean {
   if (m.source !== "manual" || m.status !== "live") return false;
   if (!m.externalId || !m.autoSync) return false;
-  if (!m.feedSyncedAt) return false;
-  return nowMs - m.feedSyncedAt.getTime() > STALE_LIVE_FEED_MAX_MS;
+  if (!m.feedSyncedAt) return true;
+  const lastSync = m.feedSyncedAt.getTime();
+  return !Number.isFinite(lastSync) || lastSync > nowMs + 5_000 || nowMs - lastSync > STALE_LIVE_FEED_MAX_MS;
 }
 
 /**

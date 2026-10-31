@@ -76,7 +76,7 @@ async function cashoutChangedResponse(
  * Applique exactement le même protocole anti-but & anti-carton rouge hors transaction
  * que `POST /api/bets` et `POST /api/bets/combo` avant d'ouvrir la transaction PostgreSQL :
  *  1. Checkpoint mémoire -> SQL des matchs virtuels ciblés ;
- *  2. Vérification immédiate `suspended`, `isRealMatchPostIncidentSuspended` (but/rouge < 18 s),
+ *  2. Vérification immédiate `suspended`, `isRealMatchPostIncidentSuspended` (but/rouge < 25 s),
  *     `isRealMatchFeedStale` et verrou de fin de match (`85'` virtuel / `88'` réel) ;
  *  3. Empreinte `{ homeScore, awayScore, redHome, redAway }` de chaque match live ;
  *  4. Délai d'acceptation live (`verifyLiveRealMatchesBeforeBet` 3 s sur réel,
