@@ -383,7 +383,7 @@ export default function ParametresScreen() {
               <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtn}><ArrowLeftRight size={16} color="#ffffff" /><Text style={styles.withdrawBtnText}>Transférer</Text></Pressable>
             </View>
           </LinearGradient>
-          {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
+          {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
 
           {/* Retraits en attente avec annulation immédiate */}
           {pendingWithdrawalEntries.length > 0 ? (
