@@ -2,6 +2,7 @@
 // Essai ponctuel de rotation simulée, uniquement en preview sur cette branche.
 // Transactions annulées, tables TEMP uniquement ; aucune donnée applicative lue.
 const PILOT_BRANCH = 'arena/65f0a495-betting-plateform';
+let stage = 'configuration';
 
 function endpointId(value) {
   const u = new URL(value);
@@ -18,7 +19,12 @@ function validateEnv(env) {
   // Ce test ne doit jamais s'exécuter dans un build de production ou une autre branche.
   if (env.VERCEL !== '1' || env.VERCEL_ENV !== 'preview' || env.VERCEL_GIT_COMMIT_REF !== PILOT_BRANCH) return false;
   if (!env.DATABASE_URL || !env.NEON_PILOT_URL) throw Error('missing');
-  if (endpointId(env.DATABASE_URL) === endpointId(env.NEON_PILOT_URL)) throw Error('same endpoint');
+  stage = 'validation source';
+  const sourceId = endpointId(env.DATABASE_URL);
+  stage = 'validation cible';
+  const targetId = endpointId(env.NEON_PILOT_URL);
+  stage = 'comparaison endpoints';
+  if (sourceId === targetId) throw Error('same endpoint');
   return true;
 }
 
@@ -66,14 +72,14 @@ async function main(env = process.env) {
   const source = new Client({ connectionString: env.DATABASE_URL, connectionTimeoutMillis: 8000, query_timeout: 8000 });
   const target = new Client({ connectionString: env.NEON_PILOT_URL, connectionTimeoutMillis: 8000, query_timeout: 8000 });
   try {
-    await source.connect();
-    await target.connect();
-    await simulate(source, target);
+    stage = 'connexion source'; await source.connect();
+    stage = 'connexion cible'; await target.connect();
+    stage = 'simulation'; await simulate(source, target);
     console.log('NEON_ROTATION_PILOT_V1 OK : connexion aux deux endpoints, copie et annulation fictives ; tables temporaires nettoyées.');
   } finally {
     await target.end().catch(() => {});
     await source.end().catch(() => {});
   }
 }
-if (require.main === module) main().catch(() => { console.error('NEON_ROTATION_PILOT_V1 FAILED : test isolé indisponible, aucune donnée ni URL affichée.'); process.exitCode = 1; });
+if (require.main === module) main().catch(() => { console.error(`NEON_ROTATION_PILOT_V1 FAILED : étape ${stage}, aucune donnée ni URL affichée.`); process.exitCode = 1; });
 module.exports = { endpointId, validateEnv, simulate, main, PILOT_BRANCH };
