@@ -14,6 +14,18 @@ const { endpointId, validateEnv, simulate, main, PILOT_BRANCH } = require('./neo
  assert.throws(()=>validateEnv({...env,NEON_PILOT_URL:''}));
  await main({}); // Local et production ne se connectent jamais.
  const src=new PGlite(), dst=new PGlite();
- try { await simulate(src,dst); } finally { await src.close(); await dst.close(); }
+ try {
+   await simulate(src,dst);
+   let injected = false;
+   const failing = { query: async (...args) => {
+     if (!injected && args[0].startsWith('INSERT INTO rotation_pilot_bet VALUES')) { injected = true; throw Error('injected'); }
+     return dst.query(...args);
+   }};
+   await assert.rejects(simulate(src, failing), /injected/);
+   for (const db of [src,dst]) {
+     const result = await db.query("SELECT to_regclass('pg_temp.rotation_pilot_account') AS account, to_regclass('pg_temp.rotation_pilot_bet') AS bet");
+     assert.equal(result.rows[0].account, null); assert.equal(result.rows[0].bet, null);
+   }
+ } finally { await src.close(); await dst.close(); }
  console.log('Rotation Neon : garde preview, endpoints distincts, copie synthétique et annulation OK (PGlite).');
 })().catch(()=>{console.error('Test de rotation échoué.');process.exitCode=1});

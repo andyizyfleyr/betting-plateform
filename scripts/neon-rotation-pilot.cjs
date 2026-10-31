@@ -56,12 +56,48 @@ async function simulate(source, target) {
     for (const r of bet.rows) await target.query('INSERT INTO rotation_pilot_bet VALUES ($1, $2, $3)', [r.id, r.account_id, r.stake]);
     const copied = await target.query('SELECT a.cents, b.stake FROM rotation_pilot_account a JOIN rotation_pilot_bet b ON b.account_id=a.id');
     if (copied.rows.length !== 1 || copied.rows[0].cents !== 9000 || copied.rows[0].stake !== 1000) throw Error('copy mismatch');
-    // Simule une écriture après bascule puis son annulation suite à une erreur.
+    // Routeur fictif en mémoire : il ne change aucune configuration applicative.
+    let active = 'source';
+    let paused = true;
+    const writeBet = async (side, id, stake) => {
+      if (paused || side !== active) throw Error('write fenced');
+      const db = side === 'source' ? source : target;
+      await db.query('UPDATE rotation_pilot_account SET cents = cents - $1 WHERE id = 1', [stake]);
+      await db.query('INSERT INTO rotation_pilot_bet VALUES ($1, 1, $2)', [id, stake]);
+    };
+    const expectFenced = async (side) => {
+      try { await writeBet(side, 99, 1); } catch (err) {
+        if (err.message === 'write fenced') return;
+        throw err;
+      }
+      throw Error('fence failed');
+    };
+    await expectFenced('source');
+    active = 'target'; paused = false;
+    await expectFenced('source');
+    await writeBet('target', 2, 200);
+    // L'échec d'une opération après bascule ne doit laisser aucune écriture partielle.
     await target.query('SAVEPOINT simulated_failure');
-    await target.query('UPDATE rotation_pilot_account SET cents = cents - 200 WHERE id = 1');
+    await target.query('UPDATE rotation_pilot_account SET cents = cents - 300 WHERE id = 1');
     await target.query('ROLLBACK TO SAVEPOINT simulated_failure');
-    const restored = await target.query('SELECT cents FROM rotation_pilot_account WHERE id = 1');
-    if (restored.rows.length !== 1 || restored.rows[0].cents !== 9000) throw Error('rollback mismatch');
+    const after = await target.query('SELECT cents FROM rotation_pilot_account WHERE id = 1');
+    if (after.rows.length !== 1 || after.rows[0].cents !== 8800) throw Error('rollback mismatch');
+    // Retour fictif : pause, recopier les nouvelles données avant réactivation source.
+    paused = true;
+    await expectFenced('target');
+    const finalAccount = await target.query('SELECT id, cents FROM rotation_pilot_account ORDER BY id');
+    const finalBets = await target.query('SELECT id, account_id, stake FROM rotation_pilot_bet ORDER BY id');
+    await source.query('DELETE FROM rotation_pilot_bet');
+    await source.query('DELETE FROM rotation_pilot_account');
+    for (const r of finalAccount.rows) await source.query('INSERT INTO rotation_pilot_account VALUES ($1, $2)', [r.id, r.cents]);
+    for (const r of finalBets.rows) await source.query('INSERT INTO rotation_pilot_bet VALUES ($1, $2, $3)', [r.id, r.account_id, r.stake]);
+    const returned = await source.query('SELECT a.cents, count(b.id)::integer AS bets, sum(b.stake)::integer AS stakes FROM rotation_pilot_account a JOIN rotation_pilot_bet b ON b.account_id=a.id GROUP BY a.cents');
+    if (returned.rows.length !== 1 || returned.rows[0].cents !== 8800 || returned.rows[0].bets !== 2 || returned.rows[0].stakes !== 1200) throw Error('return mismatch');
+    active = 'source'; paused = false;
+    await expectFenced('target');
+    await writeBet('source', 3, 100);
+    const verified = await source.query('SELECT a.cents, count(b.id)::integer AS bets, sum(b.stake)::integer AS stakes FROM rotation_pilot_account a JOIN rotation_pilot_bet b ON b.account_id=a.id GROUP BY a.cents');
+    if (verified.rows.length !== 1 || verified.rows[0].cents !== 8700 || verified.rows[0].bets !== 3 || verified.rows[0].stakes !== 1300) throw Error('final mismatch');
   } finally {
     if (targetTx) await target.query('ROLLBACK').catch(() => {});
     if (sourceTx) await source.query('ROLLBACK').catch(() => {});
@@ -81,7 +117,7 @@ async function main(env = process.env) {
     stage = 'connexion source'; await source.connect();
     stage = 'connexion cible'; await target.connect();
     stage = 'simulation'; await simulate(source, target);
-    console.log('NEON_ROTATION_PILOT_V1 OK : connexion aux deux endpoints, copie et annulation fictives ; tables temporaires nettoyées.');
+    console.log('NEON_ROTATION_PILOT_V1 OK : copie, bascule, écritures, annulation et retour fictifs ; tables temporaires nettoyées.');
   } finally {
     await target.end().catch(() => {});
     await source.end().catch(() => {});
