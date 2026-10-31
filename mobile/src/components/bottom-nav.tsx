@@ -10,14 +10,15 @@ import {
 } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { usePathname, useRouter } from "@/lib/router";
+import { DEFAULT_LANGUAGE, translate } from "@/lib/i18n/catalog";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 
 const ITEMS = [
-  { href: "/matchs", label: "Matchs", Icon: Trophy },
-  { href: "/predictions", label: "Prédictions", Icon: TrendingUp },
-  { href: "/betslip", label: "Betslip", Icon: Layers },
-  { href: "/paris", label: "Mes paris", Icon: Ticket },
-  { href: "/parametres", label: "Compte", Icon: SlidersHorizontal },
+  { href: "/matchs", label: translate(DEFAULT_LANGUAGE, "matches"), Icon: Trophy },
+  { href: "/predictions", label: translate(DEFAULT_LANGUAGE, "predictions"), Icon: TrendingUp },
+  { href: "/betslip", label: translate(DEFAULT_LANGUAGE, "betslip"), Icon: Layers },
+  { href: "/paris", label: translate(DEFAULT_LANGUAGE, "myBets"), Icon: Ticket },
+  { href: "/parametres", label: translate(DEFAULT_LANGUAGE, "account"), Icon: SlidersHorizontal },
 ] as const;
 
 export function BottomNav() {

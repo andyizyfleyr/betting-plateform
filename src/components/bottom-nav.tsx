@@ -4,14 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Layers, SlidersHorizontal, Ticket, TrendingUp, Trophy } from "lucide-react";
 import { useApp } from "./providers";
+import { DEFAULT_LANGUAGE, translate } from "@/lib/i18n/catalog";
 import { cn } from "@/lib/format";
 
 const ITEMS = [
-  { href: "/matchs", label: "Matchs", Icon: Trophy },
-  { href: "/predictions", label: "Prédictions", Icon: TrendingUp },
-  { href: "/betslip", label: "Betslip", Icon: Layers },
-  { href: "/paris", label: "Mes paris", Icon: Ticket },
-  { href: "/parametres", label: "Compte", Icon: SlidersHorizontal },
+  { href: "/matchs", label: translate(DEFAULT_LANGUAGE, "matches"), Icon: Trophy },
+  { href: "/predictions", label: translate(DEFAULT_LANGUAGE, "predictions"), Icon: TrendingUp },
+  { href: "/betslip", label: translate(DEFAULT_LANGUAGE, "betslip"), Icon: Layers },
+  { href: "/paris", label: translate(DEFAULT_LANGUAGE, "myBets"), Icon: Ticket },
+  { href: "/parametres", label: translate(DEFAULT_LANGUAGE, "account"), Icon: SlidersHorizontal },
 ] as const;
 
 export function BottomNav() {
