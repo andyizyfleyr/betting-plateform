@@ -4,7 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUpRight,
+  Eye,
+  EyeOff,
+  Info,
   Bell,
   ChevronRight,
   Globe,
@@ -43,6 +48,7 @@ export default function ParametresPage() {
     setBalance,
     toast,
     betsVersion,
+    pendingCount,
     countryConfig,
     currencyConfig,
   } = useApp();
@@ -52,6 +58,7 @@ export default function ParametresPage() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [balanceVisible, setBalanceVisible] = useState(true);
   const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
 
   const reloadWallet = useCallback(() => {
@@ -224,41 +231,24 @@ export default function ParametresPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
-          Compte
-        </h1>
-
-        {/* Mini-badge profil compact sur mobile */}
-        <div className="flex min-w-0 items-center gap-2 lg:hidden">
-          <div className="min-w-0 text-right">
-            <p className="max-w-[140px] truncate font-display text-[11px] font-medium text-ink">
-              {user?.name ?? "—"}
-            </p>
-            <p className="max-w-[140px] truncate text-[10px] text-dim">
-              {user?.email ?? "Session active"}
-            </p>
-          </div>
-          <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl font-display text-[11px] font-medium text-white"
-            style={{
-              background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))`,
-            }}
-          >
-            {initials(user?.name ?? "PU")}
-          </span>
+      <h1 className="hidden font-display text-[16px] font-bold leading-tight tracking-tight text-ink lg:block">Compte</h1>
+      <div className="flex items-center gap-3 rounded-2xl border border-edge bg-white p-3 lg:hidden">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full font-display text-[12px] font-bold text-white" style={{ background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))` }}>{initials(user?.name ?? "PU")}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-[12.5px] font-bold text-ink">{user?.name ?? "—"}</p>
+          <p className="truncate text-[10.5px] text-mist">{user?.email ?? "Session active"}</p>
         </div>
+        {user?.role === "admin" && <span className="rounded-full bg-betclic-red/10 px-2 py-1 text-[10px] text-betclic-red">Admin</span>}
       </div>
-
       {/* Découpage mobile en 2 onglets nets : Portefeuille | Réglages */}
-      <div className="mt-3 grid grid-cols-2 gap-1.5 rounded-2xl border border-edge bg-white p-1 lg:hidden">
+      <div className="mt-2 grid grid-cols-2 gap-1 rounded-2xl bg-elev p-1 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileTab("wallet")}
           className={cn(
             "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[11px] font-medium transition-colors",
             mobileTab === "wallet"
-              ? "bg-betclic-red text-white shadow-2xs"
+              ? "bg-white text-betclic-red shadow-2xs"
               : "text-mist active:bg-elev"
           )}
         >
@@ -271,7 +261,7 @@ export default function ParametresPage() {
           className={cn(
             "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[11px] font-medium transition-colors",
             mobileTab === "settings"
-              ? "bg-betclic-red text-white shadow-2xs"
+              ? "bg-white text-betclic-red shadow-2xs"
               : "text-mist active:bg-elev"
           )}
         >
@@ -283,7 +273,28 @@ export default function ParametresPage() {
       <div className="mt-3 space-y-4 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:space-y-0">
         {/* Colonne gauche : Portefeuille, Solde et accès direct aux mouvements */}
         <div className={cn("space-y-3", mobileTab !== "wallet" && "hidden lg:block")}>
-          <section className="glass-card rounded-2xl p-4 lg:p-5">
+          <section className="rounded-2xl bg-gradient-to-br from-betclic-red to-[#a90018] p-3.5 text-white shadow-sm lg:hidden">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] text-white/85">Solde disponible</p>
+                {balanceVisible ? <AnimatedNumber value={user?.balance ?? 0} format={eur} className="mt-1 block font-display text-[23px] font-bold leading-tight tabular-nums" /> : <span className="mt-1 block text-[23px] font-bold leading-tight" aria-label="Solde masqué">••••••</span>}
+              </div>
+              <button type="button" onClick={() => setBalanceVisible(v => !v)} aria-label={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} aria-pressed={!balanceVisible} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-white active:bg-white/15">{balanceVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button>
+            </div>
+            {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && <p className="mt-1 text-[10px] text-white/85">Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</p>}
+            {wallet && (wallet.summary.pendingWithdrawals > 0 || (wallet.summary.pendingDeposits ?? 0) > 0) && <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-white/85">{wallet.summary.pendingWithdrawals > 0 && <span>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</span>}{(wallet.summary.pendingDeposits ?? 0) > 0 && <span>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</span>}</div>}
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <Link href="/parametres/depot" className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-white text-[10.5px] text-betclic-red active:opacity-90"><Plus size={17} />Déposer</Link>
+              <Link href="/parametres/retrait" className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowUpRight size={17} />Retirer</Link>
+              <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowLeftRight size={17} />Transférer</button>
+            </div>
+          </section>
+          <div className="grid grid-cols-3 gap-2 lg:hidden">
+            <Link href="/paris" className="rounded-xl border border-edge bg-white p-2.5"><span className="block text-[10px] text-mist">Paris en cours</span><span className="mt-1 block text-[14px] font-bold text-ink">{pendingCount}</span></Link>
+            <div className="rounded-xl border border-edge bg-white p-2.5"><span className="block text-[10px] text-mist">Gains du mois</span><span className="mt-1 block text-[14px] text-win" title="Total mensuel indisponible">—</span></div>
+            <div className="rounded-xl border border-edge bg-white p-2.5"><span className="block text-[10px] text-mist">Dépôts du mois</span><span className="mt-1 block text-[14px] text-ink" title="Total mensuel indisponible">—</span></div>
+          </div>
+          <section className="hidden glass-card rounded-2xl p-4 lg:block lg:p-5">
             <div className="hidden items-center gap-3 pb-4 lg:flex">
               <span
                 className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl font-display text-[12px] font-medium text-white"
@@ -367,7 +378,7 @@ export default function ParametresPage() {
                 </Link>
               </div>
               <button type="button" onClick={() => setTransferOpen(true)} className="mt-2 w-full rounded-xl border border-edge bg-white py-2.5 text-xs text-ink">Transférer avec un code</button>
-              {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
+
             </div>
           </section>
 
@@ -407,10 +418,20 @@ export default function ParametresPage() {
             </section>
           )}
 
+          <section className="lg:hidden">
+            <div className="mb-2 flex items-center justify-between gap-2"><h2 className="text-[12px] font-bold text-ink">Dernières opérations</h2><Link href="/parametres/transactions" className="text-[10.5px] font-medium text-betclic-red">Voir tout</Link></div>
+            <div className="overflow-hidden rounded-2xl border border-edge bg-white">
+              {!wallet ? <p className="p-3 text-[10.5px] text-dim">Chargement des opérations…</p> : wallet.entries.length === 0 ? <p className="p-3 text-[10.5px] text-dim">Aucune opération pour le moment.</p> : wallet.entries.slice(0, 3).map(entry => <div key={entry.id} className="flex items-center gap-2.5 border-b border-edge p-2.5 last:border-b-0">
+                <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full", entry.amount >= 0 ? "bg-win/10 text-win" : "bg-betclic-red/10 text-betclic-red")}>{entry.amount >= 0 ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span>
+                <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium text-ink">{entry.title}</p><p className="truncate text-[10px] text-mist">{formatPlacedAt(entry.createdAt)}</p></div>
+                <span className={cn("shrink-0 text-[11px] font-medium tabular-nums", entry.amount >= 0 ? "text-win" : "text-betclic-red")}>{balanceVisible ? `${entry.amount >= 0 ? "+" : "−"} ${eur(Math.abs(entry.amount))}` : "••••"}</span>
+              </div>)}
+            </div>
+          </section>
           {/* Lien direct vers la page dédiée des mouvements */}
           <Link
             href="/parametres/transactions"
-            className="glass-card flex items-center gap-3 rounded-2xl p-3.5 transition-colors hover:bg-elev/40 active:bg-elev"
+            className="glass-card hidden items-center gap-3 rounded-2xl p-3.5 transition-colors hover:bg-elev/40 active:bg-elev lg:flex"
           >
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
               <History className="h-4 w-4" strokeWidth={2.2} />
@@ -637,8 +658,9 @@ export default function ParametresPage() {
         </div>
       </div>
 
-      <p className="mt-6 text-center text-[10px] leading-relaxed text-dim">
-        18+ · Jouer comporte des risques : endettement, isolement, dépendance.
+      {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
+      <p className="mt-3 flex items-start gap-2 rounded-xl bg-white p-3 text-[10px] leading-relaxed text-mist lg:mt-6 lg:block lg:bg-transparent lg:p-0 lg:text-center lg:text-dim">
+        <Info className="h-4 w-4 shrink-0 lg:hidden" /> <span>18+ · Jouer comporte des risques : endettement, isolement, dépendance.</span>
       </p>
     </div>
   );
