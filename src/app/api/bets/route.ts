@@ -1,5 +1,5 @@
 import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, ne, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { ensureSeeded } from "@/db/seed";
@@ -165,6 +165,13 @@ export async function GET(req: NextRequest) {
     oddsAway: matches.oddsAway,
     suspended: matches.suspended,
   };
+  // Projection légère pour les paris actifs : omet tickHistory et scriptedEvents
+  // pour éviter de transférer des mégaoctets de données internes depuis Neon.
+  const pendingBetMatchCols = {
+    ...getTableColumns(matches),
+    tickHistory: sql<MatchRow["tickHistory"]>`'[]'::jsonb`,
+    scriptedEvents: sql<MatchRow["scriptedEvents"]>`NULL::jsonb`,
+  };
 
   // Exécution groupée en 1 seule vague parallèle
   const [
@@ -179,7 +186,7 @@ export async function GET(req: NextRequest) {
     hasTarget
       ? targetKindParam === "sport"
         ? db
-            .select({ bet: bets, match: matches })
+            .select({ bet: bets, match: pendingBetMatchCols })
             .from(bets)
             .leftJoin(matches, eq(bets.matchId, matches.id))
             .where(
@@ -193,7 +200,7 @@ export async function GET(req: NextRequest) {
       : filter === "finished"
         ? Promise.resolve([])
         : db
-            .select({ bet: bets, match: matches })
+            .select({ bet: bets, match: pendingBetMatchCols })
             .from(bets)
             .leftJoin(matches, eq(bets.matchId, matches.id))
             .where(and(eq(bets.userId, uid), eq(bets.status, "pending")))

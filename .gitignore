@@ -64,3 +64,5 @@ next-env.d.ts
 # Observations sportives locales : données externes, non versionnées
 /observations/
 *.live-odds.jsonl
+
+.vercel/
