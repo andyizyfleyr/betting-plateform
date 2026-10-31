@@ -33,7 +33,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { PulseLogo, PulseMark } from "@/components/pulse-logo";
+import { PulseLogo } from "@/components/pulse-logo";
 import { useApp } from "@/components/providers";
 import { api, type ClientUser } from "@/lib/api";
 import {
@@ -560,7 +560,7 @@ function AuthShellInner({
       </aside>
 
       {/* ─── Colonne formulaire (Mobile < lg 1:1 Android & Desktop droite) ─── */}
-      <main className={cn("pt-safe pb-safe relative isolate flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6", resolvedView === "login" && "before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[214px] before:bg-gradient-to-br before:from-betclic-red before:to-[#ae0017] lg:before:hidden")}>
+      <main className={cn("pt-safe pb-safe relative isolate flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6", resolvedView === "login" && "before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[100px] before:bg-gradient-to-br before:from-betclic-red before:to-[#ae0017] lg:before:hidden")}>
         {/* Barre haute navigation */}
         <header className={cn("flex items-center justify-between gap-3", resolvedView === "login" && "lg:justify-between")}>
           <Link
@@ -590,7 +590,6 @@ function AuthShellInner({
           )}
         </header>
 
-        {resolvedView === "login" && <div className="flex flex-col items-center gap-3 pb-1 pt-2 lg:hidden"><PulseMark size={56} inverted /><div className="flex items-center gap-1 font-display text-[23px] font-bold italic leading-none text-white"><span>PULSE</span><span className="rounded-full bg-white px-2 py-1 text-[10px] text-betclic-red">BET</span></div></div>}
         {/* Carte centrale d'authentification */}
         <div className={cn("my-auto py-4 lg:py-6", resolvedView === "login" && "my-0 pt-3 lg:my-auto lg:py-6")}>
           <div className="mx-auto w-full rounded-3xl border border-edge bg-white p-3.5 shadow-[0_2px_12px_rgba(17,24,39,0.04)] sm:p-5 lg:max-w-[468px] lg:p-6 lg:shadow-[0_16px_44px_-16px_rgba(17,24,39,0.09)]">
@@ -635,7 +634,7 @@ function AuthShellInner({
                       ? "Connexion à votre compte"
                       : "Créer un compte joueur"}
                   </h1>
-                  <p className="mt-1 text-[11px] leading-relaxed text-mist">
+                  <p className="mt-1 hidden text-[11px] leading-relaxed text-mist lg:block">
                     {resolvedView === "login"
                       ? "Accédez à vos paris, vos prédictions et votre portefeuille."
                       : "Inscription gratuite pour parier sur les matchs officiels et virtuels."}
@@ -796,8 +795,8 @@ function AuthShellInner({
                   )}
                 </button>
 
-                <div className="pt-1 text-center text-[11px] text-mist">
-                  <p>Nouveau sur Pulse Bet ?</p>
+                <div className="hidden pt-1 text-center text-[11px] text-mist lg:block">
+                  <p className="hidden lg:block">Nouveau sur Pulse Bet ?</p>
                   <Link href={registerHref} replace className="mt-2 flex h-11 items-center justify-center rounded-xl border border-betclic-red font-display text-[11px] font-medium text-betclic-red lg:mt-0 lg:inline lg:h-auto lg:border-0 lg:text-ink lg:underline lg:decoration-edge lg:underline-offset-4">Ouvrir un compte</Link>
                 </div>
               </form>
@@ -1173,7 +1172,7 @@ function AuthShellInner({
                   )}
                 </button>
 
-                <p className="pt-1 text-center text-[11px] text-mist">
+                <p className="hidden pt-1 text-center text-[11px] text-mist lg:block">
                   Vous avez déjà un compte ?{" "}
                   <Link
                     href={loginHref}
