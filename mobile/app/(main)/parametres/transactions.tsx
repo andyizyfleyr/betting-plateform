@@ -22,7 +22,6 @@ import {
   ArrowUpRight,
   X,
 } from "lucide-react-native";
-import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import {
   InfiniteScrollLoader,
@@ -43,16 +42,11 @@ import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
-type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits";
+type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits" | "stakes" | "wins";
 
 function walletTxSignature(w: ClientWalletData | null): string {
   if (!w) return "";
-  const first = w.entries[0];
-  return [
-    w.balance.toFixed(6),
-    w.entries.length,
-    first ? `${first.id}:${first.status}:${first.amount.toFixed(6)}` : "",
-  ].join("|");
+  return JSON.stringify([w.balance, w.entries]);
 }
 
 const TransactionRow = memo(function TransactionRow({
@@ -81,7 +75,7 @@ const TransactionRow = memo(function TransactionRow({
           {positive ? (
             <ArrowDownLeft size={14} color={COLORS.win} strokeWidth={2.3} />
           ) : (
-            <ArrowUpRight size={14} color={COLORS.mist} strokeWidth={2.3} />
+            <ArrowUpRight size={14} color={COLORS.betclicRed} strokeWidth={2.3} />
           )}
         </View>
 
@@ -96,7 +90,7 @@ const TransactionRow = memo(function TransactionRow({
       </View>
 
       <View style={styles.txRight}>
-        <Text style={[styles.txAmount, positive && { color: COLORS.win }]}>
+        <Text style={[styles.txAmount, { color: positive ? COLORS.win : COLORS.betclicRed }]}>
           {positive ? `+${eur(item.amount)}` : `-${eur(Math.abs(item.amount))}`}
         </Text>
         {canCancel ? (
@@ -112,7 +106,7 @@ const TransactionRow = memo(function TransactionRow({
             )}
             <Text style={styles.cancelBtnText}>Annuler</Text>
           </Pressable>
-        ) : null}
+        ) : isPendingPayment(item) ? <Text style={styles.pendingBadge}>En attente</Text> : null}
       </View>
     </View>
   );
@@ -224,15 +218,17 @@ export default function TransactionsScreen() {
     const list = [...src].sort((a, b) =>
       a.createdAt === b.createdAt ? 0 : a.createdAt < b.createdAt ? 1 : -1
     );
+    if (kindFilter === "stakes") return list.filter((t) => t.type === "stake").sort(pendingFirst);
+    if (kindFilter === "wins") return list.filter((t) => t.type === "win").sort(pendingFirst);
     if (kindFilter === "credits") return list.filter((t) => t.amount > 0);
     if (kindFilter === "debits") return list.filter((t) => t.amount < 0);
     if (kindFilter === "withdrawals") {
-      return list.filter((t) => t.type === "withdrawal");
+      return list.filter((t) => t.type === "withdrawal").sort(pendingFirst);
     }
     if (kindFilter === "deposits") {
-      return list.filter((t) => t.type === "deposit");
+      return list.filter((t) => t.type === "deposit").sort(pendingFirst);
     }
-    return list;
+    return list.sort(pendingFirst);
   }, [wallet, kindFilter]);
 
   const { visibleItems: visibleTx, hasMore, onScrollCheck } = useInfiniteBatch(
@@ -296,39 +292,13 @@ export default function TransactionsScreen() {
         >
           <ArrowLeft size={14} color={COLORS.ink} strokeWidth={2.3} />
         </Pressable>
-        <Text numberOfLines={1} style={styles.headerTitle}>
-          Mouvements
-        </Text>
+        <View style={{ flex: 1 }}><Text numberOfLines={1} style={styles.headerTitle}>Mouvements</Text>{wallet ? <Text style={styles.headerSubtitle}>{wallet.entries.length} mouvement{wallet.entries.length > 1 ? "s" : ""} chargé{wallet.entries.length > 1 ? "s" : ""}</Text> : null}</View>
       </View>
 
-      {/* 1 : Filtre dropdown collant */}
       <View style={styles.stickyFilterWrap}>
-        <FilterDropdownRow
-          filters={[
-            {
-              id: "kind",
-              placeholder: "Mouvement",
-              value: kindFilter,
-              defaultValue: "all",
-              onChange: (v) => setKindFilter(v as TxKindFilter),
-              options: [
-                { value: "all", label: "Tous les mouvements" },
-                { value: "credits", label: "Crédits & gains (+)" },
-                { value: "debits", label: "Mises & débits (-)" },
-                { value: "deposits", label: "Dépôts" },
-                { value: "withdrawals", label: "Retraits" },
-              ],
-            },
-          ]}
-          onReset={() => setKindFilter("all")}
-          resultCountText={
-            wallet
-              ? `${filteredTx.length} ${
-                  filteredTx.length > 1 ? "mouvements" : "mouvement"
-                }`
-              : null
-          }
-        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {([ ["all", "Tout"], ["deposits", "Dépôts"], ["withdrawals", "Retraits"], ["stakes", "Mises"], ["wins", "Gains"] ] as const).map(([value, label]) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: kindFilter === value }} onPress={() => setKindFilter(value)} style={[styles.filterPill, kindFilter === value && styles.filterPillActive]}><Text style={[styles.filterText, kindFilter === value && { color: "#ffffff" }]}>{label}</Text></Pressable>)}
+        </ScrollView>
       </View>
 
       {/* 2 : Liste */}
@@ -342,13 +312,11 @@ export default function TransactionsScreen() {
         </View>
       ) : (
         <View style={{ gap: 6 }}>
-          {visibleTx.map((t) => (
-            <TransactionRow
-              key={t.id}
-              item={t}
-              cancelling={cancellingId === t.rawId}
-              onCancel={cancelWithdrawal}
-            />
+          {visibleTx.map((t, index) => (
+            <View key={t.id}>
+              {(index === 0 || movementGroup(visibleTx[index - 1]) !== movementGroup(t)) && <Text style={styles.groupTitle}>{movementGroup(t)}</Text>}
+              <TransactionRow item={t} cancelling={cancellingId === t.rawId} onCancel={cancelWithdrawal} />
+            </View>
           ))}
           <InfiniteScrollLoader hasMore={hasMore} />
         </View>
@@ -392,6 +360,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.ink,
   },
+  headerSubtitle: { marginTop: 2, fontSize: 10, color: COLORS.mist },
+  filterRow: { gap: 6, paddingVertical: 8 },
+  filterPill: { height: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: COLORS.edge, backgroundColor: "#ffffff", justifyContent: "center" },
+  filterPillActive: { borderColor: COLORS.betclicRed, backgroundColor: COLORS.betclicRed },
+  filterText: { fontSize: 10.5, color: COLORS.ink },
+  groupTitle: { marginTop: 12, marginBottom: 6, paddingHorizontal: 2, fontSize: 9.5, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase", color: COLORS.mist },
+  pendingBadge: { overflow: "hidden", borderRadius: 12, backgroundColor: "#fef3c7", color: "#92400e", paddingHorizontal: 8, paddingVertical: 2, fontSize: 9 },
   stickyFilterWrap: {
     backgroundColor: COLORS.deep,
   },
@@ -455,7 +430,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(21,128,61,0.12)",
   },
   txIconNeg: {
-    backgroundColor: COLORS.elev,
+    backgroundColor: "rgba(225,0,20,0.12)",
   },
   txTitle: {
     fontSize: 11,
@@ -493,3 +468,17 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
   },
 });
+
+function isPendingPayment(t: { type: string; status: string }) {
+  return (t.type === "deposit" || t.type === "withdrawal") && t.status === "pending";
+}
+function pendingFirst(a: ClientWalletEntry, b: ClientWalletEntry) {
+  return Number(isPendingPayment(b)) - Number(isPendingPayment(a));
+}
+function movementGroup(t: { type: string; status: string; createdAt: string }) {
+  if (isPendingPayment(t)) return "En attente";
+  const date = new Date(t.createdAt);
+  if (!Number.isFinite(date.getTime())) return "Date inconnue";
+  if (Date.now() - date.getTime() < 24 * 60 * 60 * 1000) return "Récents";
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+}

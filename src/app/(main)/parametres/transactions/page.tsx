@@ -26,7 +26,7 @@ import { useApp } from "@/components/providers";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { cn, eur, formatPlacedAt } from "@/lib/format";
 
-type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits";
+type TxKindFilter = "all" | "credits" | "debits" | "withdrawals" | "deposits" | "stakes" | "wins";
 
 export default function TransactionsPage() {
   const router = useRouter();
@@ -104,6 +104,8 @@ export default function TransactionsPage() {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+    if (kindFilter === "stakes") return list.filter((t) => t.type === "stake");
+    if (kindFilter === "wins") return list.filter((t) => t.type === "win");
     if (kindFilter === "credits") return list.filter((t) => t.amount > 0);
     if (kindFilter === "debits") return list.filter((t) => t.amount < 0);
     if (kindFilter === "withdrawals") {
@@ -116,6 +118,8 @@ export default function TransactionsPage() {
   }, [wallet, kindFilter]);
 
   const batch = useInfiniteBatch(filteredTx.length, kindFilter);
+  const mobileTx = useMemo(() => [...filteredTx].sort((a, b) => Number(isPendingPayment(b)) - Number(isPendingPayment(a))), [filteredTx]);
+  const visibleMobileTx = mobileTx.slice(0, batch.visibleCount);
   const visibleTx = useMemo(
     () => filteredTx.slice(0, batch.visibleCount),
     [filteredTx, batch.visibleCount]
@@ -169,13 +173,16 @@ export default function TransactionsPage() {
         >
           <ArrowLeft className="h-3.5 w-3.5 lg:h-4 lg:w-4" strokeWidth={2.3} />
         </button>
-        <h1 className="truncate font-display text-[12px] font-bold leading-tight text-ink lg:text-[13.5px]">
-          Mouvements
-        </h1>
+        <div><h1 className="truncate font-display text-[12px] font-bold leading-tight text-ink lg:text-[13.5px]">Mouvements</h1>
+          <p className="mt-0.5 text-[10px] text-mist lg:hidden">{wallet?.entries.length ?? 0} mouvement{(wallet?.entries.length ?? 0) > 1 ? "s" : ""} chargé{(wallet?.entries.length ?? 0) > 1 ? "s" : ""}</p>
+        </div>
       </div>
 
       <div className="mt-1">
-        <FilterDropdownRow
+        <div className="no-scrollbar -mx-2 flex gap-1.5 overflow-x-auto px-2 py-2 lg:hidden" aria-label="Filtrer les mouvements">
+          {([ ["all", "Tout"], ["deposits", "Dépôts"], ["withdrawals", "Retraits"], ["stakes", "Mises"], ["wins", "Gains"] ] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={kindFilter === value} onClick={() => setKindFilter(value)} className={cn("h-9 shrink-0 rounded-full border px-3 text-[10.5px] transition-colors", kindFilter === value ? "border-betclic-red bg-betclic-red text-white" : "border-edge bg-white text-ink")}>{label}</button>)}
+        </div>
+        <div className="hidden lg:block"><FilterDropdownRow
           filters={[
             {
               id: "kind",
@@ -200,7 +207,7 @@ export default function TransactionsPage() {
                 }`
               : null
           }
-        />
+        /></div>
 
         {wallet === null ? (
           <div className="space-y-1.5">
@@ -216,7 +223,25 @@ export default function TransactionsPage() {
           </div>
         ) : (
           <>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 lg:hidden">
+              {visibleMobileTx.map((t, index) => {
+                const group = movementGroup(t);
+                const showGroup = index === 0 || movementGroup(visibleMobileTx[index - 1]) !== group;
+                const positive = t.amount >= 0;
+                const canCancel = t.type === "withdrawal" && t.canCancel && t.rawId != null;
+                return <div key={t.id}>
+                  {showGroup && <h2 className="mb-1.5 mt-3 px-0.5 text-[9.5px] font-bold uppercase tracking-wide text-mist">{group}</h2>}
+                  <div className="glass-card flex items-center gap-2.5 rounded-xl px-2.5 py-2.5">
+                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full", positive ? "bg-win/12 text-win" : "bg-betclic-red/12 text-betclic-red")}>{positive ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}</span>
+                    <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium text-ink">{t.title}</p><p className="truncate text-[10px] text-mist">{t.subtitle} · {formatPlacedAt(t.createdAt)}</p></div>
+                    <div className="flex shrink-0 flex-col items-end gap-1"><span className={cn("text-[11px] font-medium tabular-nums", positive ? "text-win" : "text-betclic-red")}>{positive ? `+${eur(t.amount)}` : eur(t.amount)}</span>
+                      {canCancel ? <button type="button" disabled={cancellingId === t.rawId} onClick={() => t.rawId != null && cancelWithdrawal(t.rawId)} className="inline-flex h-6 items-center gap-1 rounded-lg border border-edge bg-white px-2 text-[10px] text-ink disabled:opacity-50">{cancellingId === t.rawId ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3 text-betclic-red" />}Annuler</button> : isPendingPayment(t) ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] text-amber-800">En attente</span> : null}
+                    </div>
+                  </div>
+                </div>;
+              })}
+            </div>
+            <div className="hidden space-y-1.5 lg:block">
               {visibleTx.map((t) => {
                 const positive = t.amount >= 0;
                 const canCancel = Boolean(
@@ -297,4 +322,16 @@ export default function TransactionsPage() {
     </div>
     </PullToRefresh>
   );
+}
+
+function isPendingPayment(t: { type: string; status: string }) {
+  return (t.type === "deposit" || t.type === "withdrawal") && t.status === "pending";
+}
+
+function movementGroup(t: { type: string; status: string; createdAt: string }) {
+  if (isPendingPayment(t)) return "En attente";
+  const date = new Date(t.createdAt);
+  if (!Number.isFinite(date.getTime())) return "Date inconnue";
+  if (Date.now() - date.getTime() < 24 * 60 * 60 * 1000) return "Récents";
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
