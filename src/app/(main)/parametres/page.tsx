@@ -453,7 +453,58 @@ export default function ParametresPage() {
 
         {/* Colonne droite : Préférences & Déconnexion */}
         <div className={cn("space-y-3", mobileTab !== "settings" && "hidden lg:block")}>
-          <div className="glass-card overflow-hidden rounded-2xl">
+          {/* Sur mobile, les mêmes réglages sont regroupés comme dans l'application. */}
+          <div className="space-y-3 lg:hidden">
+            <SettingsGroup title="Compte" subtitle="Pays et devise">
+              <div className="flex items-center justify-between gap-3 p-3.5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <IconBox><Globe className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+                  <div className="min-w-0">
+                    <p className="font-display text-[11.5px] font-medium text-ink">Pays &amp; devise du compte</p>
+                    <p className="truncate text-[10px] text-dim">{countryConfig.flag} {countryConfig.name} · {currencyConfig.name}</p>
+                  </div>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-elev px-2.5 py-1 text-[10px] font-medium text-ink">
+                  <Lock className="h-3 w-3 text-dim" strokeWidth={2.2} />{currencyConfig.code} ({currencyConfig.symbol})
+                </span>
+              </div>
+            </SettingsGroup>
+            <SettingsGroup title="Préférences de jeu" subtitle="Cotes, sons et connexion">
+              <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <IconBox><SlidersHorizontal className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+                  <p className="font-display text-[11.5px] font-medium text-ink">Format des cotes</p>
+                </div>
+                <div className="flex shrink-0 rounded-xl bg-elev p-0.5">
+                  {(["decimal", "fractional"] as const).map((fmt) => (
+                    <button key={fmt} type="button" onClick={() => patch({ oddsFormat: fmt }, "Format des cotes mis à jour")}
+                      aria-pressed={(user?.oddsFormat ?? "decimal") === fmt}
+                      className={cn("rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors", (user?.oddsFormat ?? "decimal") === fmt ? "bg-white text-ink shadow-2xs" : "text-mist")}>
+                      {fmt === "decimal" ? "1.85" : "17/20"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <SwitchRow Icon={<Volume2 className="h-4 w-4" />} label="Effets sonores" checked={user?.sound ?? true} onChange={(v) => patch({ sound: v }, "Sons mis à jour")} />
+              <SwitchRow Icon={<Vibrate className="h-4 w-4" />} label="Retour haptique" checked={user?.haptics ?? true} onChange={(v) => patch({ haptics: v }, "Vibrations mises à jour")} />
+              <SwitchRow Icon={<Zap className="h-4 w-4" />} label="Mode économie 3G" checked={manualDataSaver || autoConstrained} onChange={(v) => {
+                setManualDataSaver(v);
+                toast({ kind: "success", title: v ? "Mode économie 3G activé" : "Rafraîchissement rapide restauré" });
+              }} last />
+            </SettingsGroup>
+            <SettingsGroup title="Notifications" subtitle="Choisissez les alertes à recevoir">
+              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")} />
+              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Début des matchs" checked={user?.notifyMatches ?? true} onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")} />
+              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Résultats des paris" checked={user?.notifyBets ?? true} onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")} />
+              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Dépôts et retraits" checked={user?.notifyPayments ?? true} onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")} />
+              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Réclamations" checked={user?.notifyDisputes ?? true} onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")} last />
+            </SettingsGroup>
+            <div className="px-1">
+              <h2 className="text-[12px] font-bold text-ink">Application</h2>
+              <p className="mt-0.5 text-[10px] text-dim">Gérer votre session</p>
+            </div>
+          </div>
+          <div className="glass-card hidden overflow-hidden rounded-2xl lg:block">
             {/* Pays & devise officielle verrouillés à l'inscription */}
             <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
               <div className="flex min-w-0 items-center gap-3">
@@ -593,6 +644,18 @@ export default function ParametresPage() {
   );
 }
 
+function SettingsGroup({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+  return (
+    <section className="space-y-1.5">
+      <div className="px-1">
+        <h2 className="text-[12px] font-bold text-ink">{title}</h2>
+        <p className="mt-0.5 text-[10px] text-dim">{subtitle}</p>
+      </div>
+      <div className="glass-card overflow-hidden rounded-2xl">{children}</div>
+    </section>
+  );
+}
+
 function IconBox({ children }: { children: ReactNode }) {
   return (
     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-elev text-ink">
@@ -620,7 +683,7 @@ function SwitchRow({
       <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">
         {label}
       </p>
-      <Toggle checked={checked} onChange={onChange} />
+      <Toggle checked={checked} onChange={onChange} label={label} />
     </div>
   );
 }

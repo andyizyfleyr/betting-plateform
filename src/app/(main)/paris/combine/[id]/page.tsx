@@ -524,7 +524,11 @@ export default function ComboDetailPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 font-display text-[11px] font-medium text-ink">
+                  <span className="inline-flex items-center gap-1.5 font-display text-[11px] text-ink lg:hidden">
+                    <span>Progression</span>
+                    <span className="text-dim">{wonCount}/{totalLegs} validée{wonCount > 1 ? "s" : ""}</span>
+                  </span>
+                  <span className="hidden items-center gap-1.5 font-display text-[11px] font-medium text-ink lg:inline-flex">
                     <Layers className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
                     {progressSummary}
                   </span>
