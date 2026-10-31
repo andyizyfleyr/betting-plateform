@@ -16,7 +16,8 @@
     "r2:upload-public": "node scripts/r2-public.cjs --upload",
     "r2:verify-public-storage": "node scripts/r2-public.cjs --verify",
     "r2:verify-public": "node scripts/r2-public.cjs --verify-public",
-    "prebuild": "node scripts/r2-vercel-build.cjs && node scripts/r2-private-vercel-check.cjs && node scripts/r2-private-pilot.cjs && node scripts/hyperdrive-history-probe.cjs"
+    "prebuild": "node scripts/r2-vercel-build.cjs && node scripts/r2-private-vercel-check.cjs && node scripts/r2-private-pilot.cjs && node scripts/hyperdrive-history-probe.cjs && node scripts/neon-transfer-profile.cjs",
+    "test:neon-transfer-profile": "node scripts/test-neon-transfer-profile.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1160.0",
