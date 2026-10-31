@@ -108,6 +108,18 @@ async function simulate(source, target) {
   }
 }
 
+// Compteurs du flux PostgreSQL côté client, après connexion : octets applicatifs,
+// non le trafic réseau facturé (TLS, établissement et comptabilité Neon exclus).
+function streamCounters(client) {
+  const stream = client.connection?.stream;
+  if (!stream || !Number.isSafeInteger(stream.bytesRead) || !Number.isSafeInteger(stream.bytesWritten)) return null;
+  return { read: stream.bytesRead, written: stream.bytesWritten };
+}
+function counterDelta(before, after) {
+  if (!before || !after || after.read < before.read || after.written < before.written) return null;
+  return { read: after.read - before.read, written: after.written - before.written };
+}
+
 async function main(env = process.env) {
   if (!validateEnv(env)) return;
   const { Client } = require('pg');
@@ -116,7 +128,15 @@ async function main(env = process.env) {
   try {
     stage = 'connexion source'; await source.connect();
     stage = 'connexion cible'; await target.connect();
+    const beforeSource = streamCounters(source), beforeTarget = streamCounters(target);
     stage = 'simulation'; await simulate(source, target);
+    const sourceBytes = counterDelta(beforeSource, streamCounters(source));
+    const targetBytes = counterDelta(beforeTarget, streamCounters(target));
+    if (sourceBytes && targetBytes) {
+      console.log(`NEON_ROTATION_PILOT_PROTOCOL_BYTES source reçus=${sourceBytes.read} envoyés=${sourceBytes.written} cible reçus=${targetBytes.read} envoyés=${targetBytes.written} ; octets PostgreSQL client, hors TLS et connexions, pas quota Neon.`);
+    } else {
+      console.log('NEON_ROTATION_PILOT_PROTOCOL_BYTES indisponible ; aucun quota Neon mesuré.');
+    }
     console.log('NEON_ROTATION_PILOT_V1 OK : copie, bascule, écritures, annulation et retour fictifs ; tables temporaires nettoyées.');
   } finally {
     await target.end().catch(() => {});
@@ -124,4 +144,4 @@ async function main(env = process.env) {
   }
 }
 if (require.main === module) main().catch((err) => { const code = ['format','scheme','host','endpoint','ssl','missing','same endpoint'].includes(err?.message) ? err.message : 'connexion ou simulation'; console.error(`NEON_ROTATION_PILOT_V1 FAILED : étape ${stage}, catégorie ${code} ; aucune donnée ni URL affichée.`); process.exitCode = 1; });
-module.exports = { endpointId, validateEnv, simulate, main, PILOT_BRANCH };
+module.exports = { endpointId, validateEnv, simulate, main, PILOT_BRANCH, counterDelta };

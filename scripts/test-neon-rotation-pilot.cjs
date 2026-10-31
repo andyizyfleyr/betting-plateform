@@ -1,10 +1,13 @@
 const assert = require('node:assert/strict');
 const { PGlite } = require('@electric-sql/pglite');
-const { endpointId, validateEnv, simulate, main, PILOT_BRANCH } = require('./neon-rotation-pilot.cjs');
+const { endpointId, validateEnv, simulate, main, PILOT_BRANCH, counterDelta } = require('./neon-rotation-pilot.cjs');
 (async () => {
  const env = { VERCEL:'1', VERCEL_ENV:'preview', VERCEL_GIT_COMMIT_REF:PILOT_BRANCH,
    DATABASE_URL:'postgresql://test:test@ep-source-pooler.us-east-2.aws.neon.tech/test?sslmode=require',
    NEON_PILOT_URL:'postgresql://test:test@ep-target.us-east-2.aws.neon.tech/test?sslmode=require' };
+ assert.deepEqual(counterDelta({read:10,written:20}, {read:40,written:25}), {read:30,written:5});
+ assert.equal(counterDelta(null, {read:1,written:1}), null);
+ assert.equal(counterDelta({read:10,written:0}, {read:1,written:1}), null);
  assert.equal(endpointId(env.DATABASE_URL),'ep-source');
  assert.equal(endpointId("psql '" + env.NEON_PILOT_URL + "'"),'ep-target');
  assert(validateEnv(env));
