@@ -714,6 +714,9 @@ export interface RealMatchLiveStatsInput {
     pAway: number;
     source: "bookmaker_live" | "espn_live" | "blended";
     updatedAtSec: number | null;
+    sourceUpdatedAt?: string | null;
+    scoreHome?: number | null;
+    scoreAway?: number | null;
   } | null;
   feedTotalGoalsExpected?: number | null;
 }
@@ -1259,11 +1262,18 @@ export function realMatchScoreModel(params: {
 
   // 7) Ancrage sans arbitrage sur les cotes live `current` bookmaker & probabilités live ESPN
   const feedProbs = isLive ? st?.liveFeedProbs : null;
+  const sourceUpdatedAtMs = feedProbs?.sourceUpdatedAt ? Date.parse(feedProbs.sourceUpdatedAt) : NaN;
+  const sourceAgeMs = Date.now() - sourceUpdatedAtMs;
   if (
     feedProbs &&
+    Number.isFinite(sourceAgeMs) && sourceAgeMs >= 0 && sourceAgeMs <= 240_000 &&
+    feedProbs.scoreHome === homeScore && feedProbs.scoreAway === awayScore &&
     Number.isFinite(feedProbs.pHome) &&
     Number.isFinite(feedProbs.pDraw) &&
-    Number.isFinite(feedProbs.pAway)
+    Number.isFinite(feedProbs.pAway) &&
+    [feedProbs.pHome, feedProbs.pDraw, feedProbs.pAway].every(p => p >= 0 && p <= 1) &&
+    feedProbs.pHome + feedProbs.pDraw + feedProbs.pAway >= 0.90 &&
+    feedProbs.pHome + feedProbs.pDraw + feedProbs.pAway <= 1.10
   ) {
     const curSec = st?.clockSeconds ?? null;
     const ageSec =
@@ -1271,7 +1281,8 @@ export function realMatchScoreModel(params: {
         ? Math.max(0, curSec - feedProbs.updatedAtSec)
         : 0;
     if (ageSec <= 240) {
-      const freshness = ageSec <= 90 ? 1 : clamp(1 - (ageSec - 90) / 160, 0.25, 1);
+      const effectiveAgeSec = Math.max(ageSec, sourceAgeMs / 1000);
+      const freshness = effectiveAgeSec <= 90 ? 1 : clamp(1 - (effectiveAgeSec - 90) / 160, 0.25, 1);
       const baseWeight =
         feedProbs.source === "bookmaker_live"
           ? 0.62
@@ -1500,7 +1511,11 @@ export function realMatchHalfSplitModel(params: {
     awayScore
   );
 
-  if (!isLive || minute < 45) {
+  // 45' and 45+ belong to the first half until the feed confirms half-time or period 2.
+  const halfLabel = (params.minuteLabel ?? "").trim().toUpperCase();
+  const atHalfTime = halfLabel === "MT" || halfLabel === "HT" || halfLabel.includes("MI-TEMPS");
+  const inFirstHalf = minute < 45 || (minute === 45 && !atHalfTime && params.realStats?.clockPeriod !== 2);
+  if (!isLive || inFirstHalf) {
     const cur1H = isLive ? homeScore : 0;
     const cur1A = isLive ? awayScore : 0;
     const rem1Share = isLive ? Math.max(0.002, htShare - goalTimeCDF(pMin)) : htShare;
