@@ -7,6 +7,10 @@ const MAX_BYTES = 512 * 1024;
 type Page = { items: ClientMatchHistoryItem[]; serverTime: string };
 let pool: Pool | null | undefined;
 
+function normalizeConnection(value: string): string {
+  const text = value.trim();
+  return /^psql\s+'([^'\r\n]+)'\s*$/.exec(text)?.[1] ?? text;
+}
 function endpoint(value: string): string | null {
   try {
     const u = new URL(value);
@@ -19,7 +23,7 @@ function getPool(): Pool | null {
   if (pool !== undefined) return pool;
   const env = process.env;
   if (env.SECONDARY_HISTORY_CACHE_ENABLED !== "true" || env.VERCEL_ENV !== "production") return pool = null;
-  const url = env.SECONDARY_HISTORY_URL?.trim();
+  const url = env.SECONDARY_HISTORY_URL && normalizeConnection(env.SECONDARY_HISTORY_URL);
   const target = url && endpoint(url);
   const sources = Object.entries(env).filter(([key]) => key !== "SECONDARY_HISTORY_URL" && (key === "DATABASE_URL_UNPOOLED" || key.endsWith("DATABASE_URL") || key.endsWith("POSTGRES_URL") || key.endsWith("POSTGRES_PRISMA_URL") || key === "POSTGRES_URL_NON_POOLING"));
   // Refuse toute ambiguïté : l'URL principale et tous les candidats configurés doivent
