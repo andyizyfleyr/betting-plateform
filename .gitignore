@@ -60,3 +60,7 @@ next-env.d.ts
 /Pulse-Bet-Android.apk
 # Firebase client configuration is supplied through the build provider.
 /mobile/google-services.json
+
+# Observations sportives locales : données externes, non versionnées
+/observations/
+*.live-odds.jsonl

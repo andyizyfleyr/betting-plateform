@@ -1,0 +1,21 @@
+const assert = require('node:assert/strict');
+const { parseMatch, decimal, sample } = require('./observe-espn-live.cjs');
+assert.deepEqual(parseMatch('eng.1:401879248'), {league:'eng.1', id:'401879248'});
+assert.throws(() => parseMatch('eng.1:1/../../admin'));
+assert.equal(decimal('6/5'), 2.2); assert.equal(decimal('8/13'), 1.6154);
+assert.equal(decimal('1/0'), null); assert.equal(decimal('2.5'), null);
+const match = parseMatch('eng.1:401879248');
+const summary = (h, a) => ({header:{competitions:[{id:match.id,status:{period:1,displayClock:'4:00',type:{state:'in'}},competitors:[{id:'363',homeAway:'home',score:String(h)},{id:'360',homeAway:'away',score:String(a)}]}]}});
+const odds = {items:[{provider:{id:'2000',name:'Bet 365'},bettingOdds:{homeTeam:{$ref:'https://example/teams/363'},awayTeam:{$ref:'https://example/teams/360'},teamOdds:{liveFullTimeResultHome:{value:'6/5'},liveFullTimeResultDraw:{value:'13/5'},liveFullTimeResultAway:{value:'21/10'},liveGoalLineOver:{value:'8/13'},liveGoalLineUnder:{value:'13/10'},liveOverUnderHandicap:{value:'2.5'}}}}]};
+const run = async (last, data = odds) => { const responses = [summary(0,0), data, last]; return sample(match, async () => ({ok:true,text:async()=>JSON.stringify(responses.shift())})); };
+(async () => {
+  const a = await run(summary(0,0));
+  assert(a.consistent); assert.equal(a.quotes[0].result.home, 2.2); assert.equal(a.quotes[0].result.draw, 3.6);
+  assert.equal(a.quotes[0].total.line, 2.5); assert.equal(a.quotes[0].sourceUpdatedAt, null);
+  const changed = await run(summary(1,0)); assert.equal(changed.consistent, false); assert.equal(changed.quotes.length, 0);
+  const wrong = structuredClone(odds); wrong.items[0].bettingOdds.homeTeam.$ref = 'https://example/teams/999';
+  assert.equal((await run(summary(0,0), wrong)).quotes.length, 0);
+  const beforeKickoff = summary(0,0); beforeKickoff.header.competitions[0].status.type.state = 'pre';
+  const pre = await run(beforeKickoff); assert.equal(pre.consistent, false); assert.deepEqual(pre.quotes, []);
+  console.log('Observation ESPN : fractions, identité, score stable, période et anomalies OK');
+})().catch(e => { console.error(e); process.exitCode = 1; });

@@ -1,0 +1,16 @@
+const assert = require('node:assert/strict');
+const Module = require('node:module');
+const original = Module._load;
+Module._load = function(name) { if (name === '@/db') return {db:{}}; return original.apply(this, arguments); };
+const { isRealMatchFeedStale } = require('../src/lib/real-sports-feed.ts');
+const { isRealMatchPostIncidentSuspended } = require('../src/lib/markets.ts');
+const now = Date.parse('2026-10-31T12:00:00Z');
+const m = {source:'manual', status:'live', externalId:'123', autoSync:true};
+assert.equal(isRealMatchFeedStale({...m, feedSyncedAt:null}, now), true);
+assert.equal(isRealMatchFeedStale({...m, feedSyncedAt:new Date(now - 1000)}, now), false);
+assert.equal(isRealMatchFeedStale({...m, feedSyncedAt:new Date(now - 200000)}, now), true);
+assert.equal(isRealMatchFeedStale({...m, feedSyncedAt:new Date(now + 10000)}, now), true);
+assert.equal(isRealMatchFeedStale({...m, autoSync:false, feedSyncedAt:null}, now), false);
+assert.equal(isRealMatchPostIncidentSuspended({status:'live', lastGoalAt:new Date(now - 24000)}, now), true);
+assert.equal(isRealMatchPostIncidentSuspended({status:'live', lastGoalAt:new Date(now - 25000)}, now), false);
+console.log('Flux réel : synchro absente/périmée et fenêtre incident 25 s OK');

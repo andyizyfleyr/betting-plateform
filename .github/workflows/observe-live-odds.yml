@@ -1,0 +1,38 @@
+name: Observation des cotes live (manuelle)
+on:
+  workflow_dispatch:
+    inputs:
+      matches:
+        description: 'Matchs ESPN ligue:id, séparés par des virgules (5 maximum)'
+        required: true
+      rounds:
+        description: 'Nombre de mesures (1–60)'
+        default: '20'
+      interval:
+        description: 'Intervalle en secondes (15–300)'
+        default: '30'
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Observer sans modifier les cotes de production
+        env:
+          MATCHES: ${{ inputs.matches }}
+          ROUNDS: ${{ inputs.rounds }}
+          INTERVAL: ${{ inputs.interval }}
+        run: node scripts/observe-espn-live.cjs "$MATCHES" observations.live-odds.jsonl "$ROUNDS" "$INTERVAL"
+      - name: Conserver les mesures sept jours
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: espn-live-observations
+          path: observations.live-odds.jsonl
+          if-no-files-found: warn
+          retention-days: 7

@@ -1344,8 +1344,8 @@ export interface RealMatchInput {
   markets?: CustomMarketGroup[] | null;
 }
 
-/** Fenêtre de suspension automatique des cotes live après un but / carton rouge sur match réel (18 s). */
-export const REAL_POST_INCIDENT_SUSPEND_MS = 18_000;
+/** Fenêtre de suspension automatique des cotes live après un but / carton rouge sur match réel (25 s). */
+export const REAL_POST_INCIDENT_SUSPEND_MS = 25_000;
 
 export function isRealMatchPostIncidentSuspended(
   m: Pick<RealMatchInput, "status" | "lastGoalAt">,
