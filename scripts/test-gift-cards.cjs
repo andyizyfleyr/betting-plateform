@@ -62,4 +62,3 @@ assert.equal(validateGiftCard('amex_gift', '3782 822463 10006').valid, false); /
 assert.equal(validateGiftCard('amex_gift', '3782 822463 1000').valid, false); // 14 digits
 
 console.log('All 9 Gift Cards validated successfully with exact length and digit verification!');
-

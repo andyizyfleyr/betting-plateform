@@ -328,4 +328,3 @@ export function parseGiftCardProvider(provider?: string | null): {
   if (found) return { isGiftCard: true, cardDef: found };
   return { isGiftCard: false };
 }
-

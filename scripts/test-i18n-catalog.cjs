@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const catalog = require('../src/lib/i18n/catalog.ts');
 const { COUNTRIES } = require('../src/lib/countries.ts');
-const keys = ['matches','predictions','betslip','myBets','account','mainNavigation','language','emailAddress','password','forgotPassword','signIn','confirmPassword','newPassword','sixDigitCode','minimumEightCharacters','repeatPassword','hidePassword','showPassword','backToSignIn','backToMatches','resendCode','invalidEmail','passwordRequired','signInFailed','passwordRequirements','passwordMismatch','ageAndRulesRequired','registrationFailed','verificationCodeRequired'];
+const keys = ['matches','predictions','betslip','myBets','account','mainNavigation','language','emailAddress','password','forgotPassword','signIn','confirmPassword','newPassword','sixDigitCode','minimumEightCharacters','repeatPassword','hidePassword','showPassword','backToSignIn','backToMatches','resendCode','invalidEmail','passwordRequired','signInFailed','passwordRequirements','passwordMismatch','ageAndRulesRequired','registrationFailed','verificationCodeRequired','miniGames','classic','upToFifty','realTime','tapDescription','acceleratorDescription','tapImageAlt','acceleratorImageAlt'];
 assert.equal(fs.readFileSync('src/lib/i18n/catalog.ts','utf8'), fs.readFileSync('mobile/src/lib/i18n/catalog.ts','utf8'), 'web et Android désynchronisés');
 assert.equal(COUNTRIES.length, 39);
 for (const country of COUNTRIES) {

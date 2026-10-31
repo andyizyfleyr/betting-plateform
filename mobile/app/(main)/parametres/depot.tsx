@@ -1,3 +1,4 @@
+import { PaymentMethodMark } from "@/components/payment-method-mark";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +17,7 @@ import {
   Building2,
   Check,
   CreditCard,
+  Gift,
   History,
   Lock,
   Smartphone,
@@ -414,9 +416,16 @@ export default function DepositScreen() {
                   available: true,
                 },
                 {
+                  id: "gift_card" as const,
+                  label: "Carte cadeau",
+                  sub: "Temporairement indisponible",
+                  Icon: Gift,
+                  available: false,
+                },
+                {
                   id: "stripe" as const,
-                  label: "Carte bancaire",
-                  sub: stripeInfo?.enabled ? "Visa · MC" : "Bientôt actif",
+                  label: "Carte bancaire ou prépayée",
+                  sub: stripeInfo?.enabled ? "Selon l’émetteur et le prestataire" : "Bientôt actif",
                   Icon: CreditCard,
                   available: Boolean(stripeInfo?.enabled),
                 },
@@ -445,11 +454,13 @@ export default function DepositScreen() {
                       !m.available && { opacity: 0.5 },
                     ]}
                   >
+                    <PaymentMethodMark method={m.id} fallback={
                     <m.Icon
                       size={16}
                       color={selected ? COLORS.betclicRed : COLORS.mist}
                       strokeWidth={2.2}
                     />
+                    } />
                     <View style={{ flex: 1 }}>
                       <Text numberOfLines={1} style={styles.methodLabel}>
                         {m.label}
@@ -500,6 +511,7 @@ export default function DepositScreen() {
               )}
             </Pressable>
             <Text style={styles.amountHint}>{isManual ? "Dépôt soumis à validation" : "Paiement sécurisé par le prestataire"}</Text>
+            {method === "stripe" ? <Text style={styles.amountHint}>Les cartes prépayées Visa, Mastercard ou American Express peuvent être refusées selon l’émetteur et le prestataire. La saisie et la validation se font chez le prestataire.</Text> : null}
           </View>
         </View>
       </ScrollView>

@@ -1,5 +1,6 @@
 "use client";
 
+import { PaymentMethodMark } from "@/components/payment-method-mark";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -391,9 +392,16 @@ export default function DepositPage() {
                     available: true,
                   },
                   {
+                    id: "gift_card" as const,
+                    label: "Carte cadeau",
+                    sub: "Temporairement indisponible",
+                    Icon: Gift,
+                    available: false,
+                  },
+                  {
                     id: "stripe" as const,
-                    label: "Carte bancaire",
-                    sub: stripeInfo?.enabled ? "Visa · MC" : "Bientôt actif",
+                    label: "Carte bancaire ou prépayée",
+                    sub: stripeInfo?.enabled ? "Selon l’émetteur et le prestataire" : "Bientôt actif",
                     Icon: CreditCard,
                     available: Boolean(stripeInfo?.enabled),
                   },
@@ -424,12 +432,14 @@ export default function DepositPage() {
                         !m.available && "cursor-not-allowed opacity-50"
                       )}
                     >
+                      <PaymentMethodMark method={m.id} fallback={
                       <m.Icon
                         className={cn(
                           "h-4 w-4 shrink-0",
                           selected ? "text-betclic-red" : "text-mist"
                         )}
                       />
+                      } />
                       <div className="min-w-0">
                         <span className="block truncate font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
                           {m.label}
@@ -474,6 +484,7 @@ export default function DepositPage() {
                 )}
               </button>
               <p className="mt-2 text-center text-[10px] text-dim lg:hidden">{isManual ? "Dépôt soumis à validation" : "Paiement sécurisé par le prestataire"}</p>
+              {method === "stripe" && <p className="mt-2 text-center text-[10px] text-mist">Les cartes prépayées Visa, Mastercard ou American Express peuvent être refusées selon l’émetteur et le prestataire. La saisie et la validation se font chez le prestataire.</p>}
             </section>
           </div>
         </div>

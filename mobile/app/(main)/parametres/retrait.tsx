@@ -1,3 +1,4 @@
+import { PaymentMethodMark } from "@/components/payment-method-mark";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -417,11 +418,13 @@ export default function WithdrawScreen() {
                           active && styles.methodCellSelected,
                         ]}
                       >
+                        <PaymentMethodMark method={m.id} fallback={
                         <m.Icon
                           size={14}
                           color={active ? COLORS.betclicRed : COLORS.mist}
                           strokeWidth={2.2}
                         />
+                        } />
                         <Text numberOfLines={1} style={styles.methodLabel}>
                           {m.label}
                         </Text>

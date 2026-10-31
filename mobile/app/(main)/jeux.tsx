@@ -1,3 +1,4 @@
+import { DEFAULT_LANGUAGE, translate } from "@/lib/i18n/catalog";
 import React from "react";
 import {
   Image,
@@ -20,20 +21,20 @@ const ACC_IMAGE =
 const MINI_GAMES = [
   {
     href: "/tap",
-    badge: "Classique",
-    tag: "Jusqu'à ×50",
+    badge: translate(DEFAULT_LANGUAGE, "classic"),
+    tag: translate(DEFAULT_LANGUAGE, "upToFifty"),
     title: "Tap Win",
     subtitle:
-      "Enchaînez les pressions pour faire grimper le multiplicateur et encaissez avant le crash.",
+      translate(DEFAULT_LANGUAGE, "tapDescription"),
     image: TAP_IMAGE,
   },
   {
     href: "/accelerator",
-    badge: "Temps réel",
+    badge: translate(DEFAULT_LANGUAGE, "realTime"),
     tag: "Turbo Live",
     title: "Accelerator Pro",
     subtitle:
-      "Maintenez l'accélérateur pour pousser l'aiguille dans le rouge et relâchez au bon moment.",
+      translate(DEFAULT_LANGUAGE, "acceleratorDescription"),
     image: ACC_IMAGE,
   },
 ] as const;
@@ -47,7 +48,7 @@ export default function JeuxScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.pageTitle}>Mini-jeux</Text>
+      <Text style={styles.pageTitle}>{translate(DEFAULT_LANGUAGE, "miniGames")}</Text>
 
       <View style={styles.grid}>
         {MINI_GAMES.map(({ href, badge, tag, title, subtitle, image }) => (

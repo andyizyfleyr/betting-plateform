@@ -283,7 +283,8 @@ export function RechargeModal() {
               </Pressable>
 
               <Pressable
-                onPress={() => setMethod("gift_card")}
+                disabled
+                accessibilityState={{ disabled: true }}
                 style={[
                   styles.methodBtn,
                   method === "gift_card" && styles.methodBtnActive,
@@ -295,7 +296,7 @@ export function RechargeModal() {
                     method === "gift_card" ? COLORS.betclicRed : COLORS.mist
                   }
                 />
-                <Text style={styles.methodLabel}>Carte Cadeau</Text>
+                <Text style={styles.methodLabel}>Carte cadeau indisponible</Text>
               </Pressable>
 
               {stripeEnabled ? (

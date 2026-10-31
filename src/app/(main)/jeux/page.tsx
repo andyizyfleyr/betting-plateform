@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_LANGUAGE, translate } from "@/lib/i18n/catalog";
 import { publicAssetUrl } from "@/lib/public-assets";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,22 +9,22 @@ import { Play } from "lucide-react";
 const MINI_GAMES = [
   {
     href: "/tap",
-    badge: "Classique",
-    tag: "Jusqu'à ×50",
+    badge: translate(DEFAULT_LANGUAGE, "classic"),
+    tag: translate(DEFAULT_LANGUAGE, "upToFifty"),
     title: "Tap Win",
-    subtitle: "Enchaînez les pressions pour faire grimper le multiplicateur et encaissez avant le crash.",
+    subtitle: translate(DEFAULT_LANGUAGE, "tapDescription"),
     image: "/images/games/tap-win.jpg",
-    imageAlt: "Miniature du jeu casino Tap Win",
+    imageAlt: translate(DEFAULT_LANGUAGE, "tapImageAlt"),
   },
   {
     href: "/accelerator",
-    badge: "Temps réel",
+    badge: translate(DEFAULT_LANGUAGE, "realTime"),
     tag: "Turbo Live",
     title: "Accelerator Pro",
     subtitle:
-      "Maintenez l'accélérateur pour pousser l'aiguille dans le rouge et relâchez au bon moment.",
+      translate(DEFAULT_LANGUAGE, "acceleratorDescription"),
     image: "/images/games/accelerator-pro.jpg",
-    imageAlt: "Miniature du jeu casino Accelerator Pro",
+    imageAlt: translate(DEFAULT_LANGUAGE, "acceleratorImageAlt"),
   },
 ] as const;
 
@@ -31,7 +32,7 @@ export default function JeuxPage() {
   return (
     <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
       <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
-        Mini-jeux
+        {translate(DEFAULT_LANGUAGE, "miniGames")}
       </h1>
 
       <div className="mt-3.5 grid grid-cols-1 gap-3.5 md:grid-cols-2 lg:mt-4 lg:gap-5">
