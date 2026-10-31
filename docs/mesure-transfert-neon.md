@@ -109,3 +109,17 @@ Ces tailles sont des tailles de stockage PostgreSQL (possiblement compressées),
 Elles servent à cibler les futures projections ; elles ne justifient pas de
 supprimer une colonne ou de changer les données exposées sans tests de parité.
 Retirer la variable après utilisation. Test : `npm run test:neon-transfer-profile`.
+
+## Réconciliation des matchs terminés
+
+Les matchs actifs restent réconciliés toutes les 2,5 s par instance. Une fois
+lue, la fenêtre des 20 résultats réels et 12 virtuels est conservée au maximum
+10 s dans la même instance ; les branches SQL correspondantes ne renvoient
+aucune ligne pendant cette fenêtre. Si un actif disparaît, les résultats sont
+relus immédiatement pour ne pas manquer sa fin. Un refresh forcé ou une
+invalidation réexécute la lecture. Les corrections effectuées ailleurs peuvent
+être visibles jusqu'à 10 s plus tard dans cette mémoire, en plus des délais des
+caches CDN/Worker déjà existants. Aucun pari, solde ou contrôle transactionnel
+ne repose sur cette fenêtre comme source de vérité financière. Test isolé :
+`node --import tsx scripts/test-active-history-reconcile.cjs`. Les résultats du
+test ne sont pas une mesure du trafic Neon de production.

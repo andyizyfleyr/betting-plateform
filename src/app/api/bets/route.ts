@@ -524,7 +524,10 @@ export async function GET(req: NextRequest) {
       const stillMissingMatches: number[] = [];
       for (const mid of missingMatchIds) {
         const fromRam = getCachedMatchById(mid);
-        if (fromRam) {
+        // Un combiné encore en cours peut utiliser le résultat pour son cash-out.
+        // Les matchs terminés du cache d'affichage peuvent avoir quelques secondes
+        // de retard : relire leur ligne complète en base dans ce cas sensible.
+        if (fromRam && !(fullMatchIds.has(mid) && fromRam.status === "finished")) {
           comboMatchMap.set(mid, hydrateLiveMatchRow(fromRam, nowMs));
         } else {
           stillMissingMatches.push(mid);

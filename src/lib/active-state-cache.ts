@@ -47,6 +47,7 @@ export interface UserPulsePayload {
 
 interface PlatformMemoryState {
   matchesHydratedAt: number;
+  finishedHydratedAt: number;
   manualRefreshedAt: number;
   hydratePromise: Promise<void> | null;
   openVirtual: Map<number, MatchRow>;
@@ -72,6 +73,9 @@ interface PlatformMemoryState {
 const MAX_FINISHED_VIRTUAL_RAM = 12;
 const MAX_FINISHED_MANUAL_RAM = 20;
 const MULTI_INSTANCE_RECONCILE_MS = 2_500;
+// Les résultats corrigibles sont relus au plus toutes les 10 s ; les actifs
+// restent réconciliés toutes les 2,5 s et les invalidations forcent la lecture.
+const FINISHED_RECONCILE_MS = 10_000;
 const PENDING_FLAGS_SAFETY_TTL_MS = 15_000;
 const PENDING_BOOK_TTL_MS = 15_000;
 const QUESTION_SCHEDULE_MAX_TTL_MS = 30_000;
@@ -86,6 +90,7 @@ function getState(): PlatformMemoryState {
   if (!globalStore.__pulseMemoryStateV1) {
     globalStore.__pulseMemoryStateV1 = {
       matchesHydratedAt: 0,
+      finishedHydratedAt: 0,
       manualRefreshedAt: 0,
       hydratePromise: null,
       openVirtual: new Map(),
@@ -191,21 +196,41 @@ export async function ensureMatchStoreHydrated(force = false): Promise<void> {
         )
         .limit(120);
 
-      const qFinManual = db
-        .select(finishedRealHydrationColumns)
-        .from(matches)
-        .where(and(eq(matches.source, "manual"), eq(matches.status, "finished")))
-        .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
-        .limit(MAX_FINISHED_MANUAL_RAM);
-
-      const qFinVirtual = db
-        .select(fullHydrationColumns)
-        .from(matches)
-        .where(and(ne(matches.source, "manual"), eq(matches.status, "finished")))
-        .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
-        .limit(MAX_FINISHED_VIRTUAL_RAM);
-
+      // Quand la fenêtre des résultats est encore fraîche, ne pas retransférer
+      // les 32 lignes terminées à chaque réconciliation des matchs actifs.
+      let refreshFinished = force || !st.matchesHydratedAt || !st.finishedHydratedAt ||
+        now - st.finishedHydratedAt >= FINISHED_RECONCILE_MS;
+      const finishedQueries = (enabled: boolean) => {
+        const qFinManual = db
+          .select(finishedRealHydrationColumns)
+          .from(matches)
+          .where(and(eq(matches.source, "manual"), eq(matches.status, "finished"), sql<boolean>`${enabled}`))
+          .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
+          .limit(MAX_FINISHED_MANUAL_RAM);
+        const qFinVirtual = db
+          .select(fullHydrationColumns)
+          .from(matches)
+          .where(and(ne(matches.source, "manual"), eq(matches.status, "finished"), sql<boolean>`${enabled}`))
+          .orderBy(sql`${matches.finishedAt} DESC NULLS LAST`, desc(matches.id))
+          .limit(MAX_FINISHED_VIRTUAL_RAM);
+        return [qFinManual, qFinVirtual] as const;
+      };
+      const [qFinManual, qFinVirtual] = finishedQueries(refreshFinished);
       const rows = await unionAll(qActive, qFinManual, qFinVirtual);
+      if (!refreshFinished) {
+        const activeIds = new Set(rows.map(r => r.id));
+        // Un match qui disparaît des actifs peut venir de se terminer. Relire
+        // immédiatement les résultats, sans attendre le TTL et sans le perdre.
+        const disappeared = [...st.openManual.keys(), ...st.openVirtual.keys()].some(id => !activeIds.has(id));
+        if (disappeared) {
+          const [manual, virtual] = finishedQueries(true);
+          rows.push(...await unionAll(manual, virtual));
+          refreshFinished = true;
+        } else {
+          // Une réouverture manuelle ne doit pas apparaître deux fois.
+          rows.push(...st.finishedManual.filter(r => !activeIds.has(r.id)), ...st.finishedVirtual);
+        }
+      }
 
       const prevOpenVirtual = st.openVirtual;
       const prevFinVirtualById = new Map(
@@ -246,6 +271,7 @@ export async function ensureMatchStoreHydrated(force = false): Promise<void> {
       );
       st.finishedManual = sortFinishedDesc(nextFinManual, MAX_FINISHED_MANUAL_RAM);
       st.matchesHydratedAt = Date.now();
+      if (refreshFinished) st.finishedHydratedAt = st.matchesHydratedAt;
       st.manualRefreshedAt = st.matchesHydratedAt;
     } finally {
       st.hydratePromise = null;
@@ -385,6 +411,7 @@ export function removeCachedMatch(matchId: number): void {
 export function invalidateAllActiveCaches(purgeEdge = true): void {
   const st = getState();
   st.matchesHydratedAt = 0;
+  st.finishedHydratedAt = 0;
   st.manualRefreshedAt = 0;
   st.pendingFlagsHydratedAt = 0;
   st.pendingBookHydratedAt = 0;

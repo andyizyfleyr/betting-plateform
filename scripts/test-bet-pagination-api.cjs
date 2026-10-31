@@ -16,7 +16,7 @@ const original=Module._load;
  SELECT 1,'football','Test','Alpha','Beta','home','Alpha',2,1,2,'won','2026-01-01 10:00:00.123456','2026-01-02 10:00:00.123456' FROM generate_series(1,45);
  INSERT INTO bets (user_id,sport,league,home_team,away_team,selection,selection_label,odds,stake,potential_win,status)
  VALUES (2,'football','Secret','X','Y','home','X',2,1,2,'won');`);
- let syncCalls=0, hydrationCalls=0, cacheHit=null, cachedWrites=[];
+ let syncCalls=0, hydrationCalls=0, cacheHit=null, cachedWrites=[], cachedMatch=null;
  const queries=[]; const db=drizzle(pg,{logger:{logQuery:(query)=>queries.push(query)}});
  Module._load=function(name){
   if(name==='@/db') return {db};
@@ -24,7 +24,7 @@ const original=Module._load;
   if(name==='@/lib/session') return {requireUserId:async()=>1};
   if(name==='@/lib/private-history-cache') return {readPrivateHistoryCache:async()=>cacheHit,writePrivateHistoryCache:async(...args)=>{cachedWrites.push(args)}};
   if(name==='@/lib/sync-throttle') return {syncLiveMatchesThrottled:async()=>{syncCalls++}};
-  if(name==='@/lib/active-state-cache') return {ensureMatchStoreHydrated:async()=>{hydrationCalls++},getCachedMatchById:()=>null,getCachedUserBetsResponse:()=>null,setCachedUserBetsResponse:(_u,_f,p)=>({json:JSON.stringify(p),etag:'x',at:Date.now()})};
+  if(name==='@/lib/active-state-cache') return {ensureMatchStoreHydrated:async()=>{hydrationCalls++},getCachedMatchById:(id)=>cachedMatch?.id===id?cachedMatch:null,getCachedUserBetsResponse:()=>null,setCachedUserBetsResponse:(_u,_f,p)=>({json:JSON.stringify(p),etag:'x',at:Date.now()})};
   return original.apply(this,arguments);
  };
  const {GET}=require('../src/app/api/bets/route.ts'); const {NextRequest}=require('next/server');
@@ -65,5 +65,16 @@ const original=Module._load;
  const comboBody=await comboResponse.json();
  const combo=comboBody.bets.find(b=>b.kind==='combo');assert(combo);assert.equal(combo.legs[0].status,'won');assert.equal(combo.legs[0].matchHomeScore,2);
  const matchQuery=queries.find(q=>/from "matches" where/.test(q));assert(matchQuery);assert(!matchQuery.includes('"events"'));assert(!matchQuery.includes('"markets"'));
- console.log('API pagination : pages isolées, résultat privé, ancien contrat et curseur invalide OK (PGlite).');await pg.close();
+ // Un match terminé gardé en RAM ne doit pas fixer le cash-out d'un combiné actif.
+ cachedMatch = {...(await db.select().from(require('../src/db/schema.ts').matches))[0],homeScore:0};
+ await pg.exec(`INSERT INTO combo_bets (user_id,legs,base_odds,total_odds,stake,potential_win,status,placed_at)
+ VALUES (1,'[{"kind":"sport","matchId":900,"sport":"football","league":"Test","title":"Alpha – Beta","homeTeam":"Alpha","awayTeam":"Beta","market":"result","selection":"home","selectionLabel":"Alpha","odds":2,"status":"pending"}]',2,2,1,2,'pending',now())`);
+ queries.length=0;
+ const pendingResponse=await GET(new NextRequest('https://example.com/api/bets?filter=ongoing'));
+ assert.equal(pendingResponse.status,200,await pendingResponse.clone().text());
+ const pendingBody=await pendingResponse.json();
+ const pendingCombo=pendingBody.bets.find(b=>b.kind==='combo');assert(pendingCombo);
+ assert.equal(pendingCombo.legs[0].matchHomeScore,2);
+ assert(queries.some(q=>/from "matches" where/.test(q) && q.includes('"events"')));
+ console.log('API pagination et combiné actif : isolation et lecture fraîche du match terminé OK (PGlite).');await pg.close();
 })().catch(e=>{console.error(e);process.exitCode=1});
