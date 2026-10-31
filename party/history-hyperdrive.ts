@@ -11,6 +11,10 @@ export const HISTORY_SQL = `(SELECT ${FIELDS} FROM matches WHERE status = 'finis
  UNION ALL
  (SELECT ${FIELDS} FROM matches WHERE status = 'finished' AND source <> 'manual' ORDER BY finished_at DESC, id DESC LIMIT 120)`;
 
+// Coalescence locale aux requêtes simultanées : aucune donnée privée,
+// aucun partage entre origines et jamais pour un rafraîchissement explicite.
+const inFlightHistory = new Map<string, Promise<Response>>();
+
 export async function hyperdriveHistory(request: Request, binding: Hyperdrive | undefined, secret: string | undefined, ctx: ExecutionContext): Promise<Response> {
   if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
   if (!secret || secret.length < 16 || request.headers.get("Authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401, headers: { "Cache-Control": "no-store" } });
@@ -20,6 +24,12 @@ export async function hyperdriveHistory(request: Request, binding: Hyperdrive | 
   const cacheKey = new Request(new URL("/internal/hyperdrive/history-v1", url).toString());
   const cache = caches.default;
   if (!fresh) { try { const hit = await cache.match(cacheKey); if (hit) return new Response(hit.body, { status: hit.status, headers: { "Content-Type": "application/json", "Cache-Control": "private, no-store" } }); } catch { /* accès direct */ } }
+  const flightKey = cacheKey.url;
+  if (!fresh) {
+    const pending = inFlightHistory.get(flightKey);
+    if (pending) return (await pending).clone();
+  }
+  const load = async (): Promise<Response> => {
   const client = new Client({ connectionString: binding.connectionString, connectionTimeoutMillis: 2500, query_timeout: 2500 });
   try {
     await client.connect();
@@ -32,4 +42,10 @@ export async function hyperdriveHistory(request: Request, binding: Hyperdrive | 
     return result;
   } catch { return Response.json({ error: "Service indisponible" }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
   finally { await client.end().catch(() => undefined); }
+  };
+  if (fresh) return load();
+  const pending = load();
+  inFlightHistory.set(flightKey, pending);
+  try { return (await pending).clone(); }
+  finally { if (inFlightHistory.get(flightKey) === pending) inFlightHistory.delete(flightKey); }
 }
