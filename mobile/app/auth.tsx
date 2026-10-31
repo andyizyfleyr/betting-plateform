@@ -13,7 +13,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   AlertCircle,
-  ArrowLeft,
   ArrowRight,
   Check,
   CheckCircle2,
@@ -30,7 +29,7 @@ import {
   User,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { PulseLogo, PulseMark } from "@/components/pulse-logo";
+import { PulseMark } from "@/components/pulse-logo";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, type ClientUser } from "@/lib/api";
 import {
@@ -477,40 +476,7 @@ export default function AuthScreen() {
           showsVerticalScrollIndicator={false}
         >
           {resolvedView === "login" ? <View pointerEvents="none" style={styles.loginHeroBackground} /> : null}
-          {/* Barre supérieure marque + retour */}
-          <View style={[styles.topBar, resolvedView === "login" && {justifyContent: "flex-start"}]}>
-            {resolvedView !== "login" && <Pressable
-              onPress={() => router.replace("/matchs")}
-              style={({ pressed }) => [pressed && { opacity: 0.8 }]}
-            >
-              <PulseLogo size="sm" variant="light" />
-            </Pressable>}
-
-            {resolvedView === "forgot" ? (
-              <Pressable
-                onPress={() => switchView("login")}
-                style={({ pressed }) => [
-                  styles.backPill,
-                  pressed && styles.backPillPressed,
-                ]}
-              >
-                <ArrowLeft size={14} color={COLORS.mist} strokeWidth={2.4} />
-                <Text style={styles.backPillText}>Connexion</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => router.replace("/matchs")}
-                style={({ pressed }) => [
-                  styles.backPill,
-                  resolvedView === "login" && styles.loginBackPill,
-                  pressed && styles.backPillPressed,
-                ]}
-              >
-                <ArrowLeft size={14} color={resolvedView === "login" ? "#ffffff" : COLORS.mist} strokeWidth={2.4} />
-                <Text style={[styles.backPillText, resolvedView === "login" && {color: "#ffffff"}]}>Matchs</Text>
-              </Pressable>
-            )}
-          </View>
+          {resolvedView === "login" ? <View aria-hidden style={{ height: 36 }} /> : null}
 
           {resolvedView === "login" ? <View style={styles.loginHero}><PulseMark size={56} inverted /><View style={styles.loginBrand}><Text style={styles.loginBrandText}>PULSE</Text><Text style={styles.loginBet}>BET</Text></View></View> : null}
           {/* Carte centrale 1:1 Web < lg */}
@@ -1534,6 +1500,9 @@ export default function AuthScreen() {
 
           {/* Pied de page sécurité & jeu responsable */}
           <View style={styles.footer}>
+            <Pressable accessibilityRole="button" onPress={() => resolvedView === "forgot" ? switchView("login") : router.replace("/matchs")} hitSlop={8}>
+              <Text style={styles.authBackLink}>{resolvedView === "forgot" ? "Retour à la connexion" : "Retour aux matchs"}</Text>
+            </Pressable>
             <View style={styles.tlsBadgeRow}>
               <ShieldCheck size={13} color={COLORS.win} strokeWidth={2.3} />
               <Text style={styles.tlsText}>
@@ -1571,6 +1540,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 14,
   },
+  authBackLink: { color: COLORS.mist, fontSize: 11, textAlign: "center", textDecorationLine: "underline" },
   loginHeroBackground: { position: "absolute", top: 0, left: 0, right: 0, height: 214, backgroundColor: COLORS.betclicRed },
   loginHero: { alignItems: "center", gap: 12, paddingTop: 8 },
   loginBrand: { flexDirection: "row", alignItems: "center", gap: 4 },
