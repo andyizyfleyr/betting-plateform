@@ -17,6 +17,7 @@ import {
   Building2,
   Check,
   CreditCard,
+  Gift,
   History,
   Lock,
   Smartphone,
@@ -34,9 +35,15 @@ import {
 import { openInAppUrl } from "@/lib/external-url";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
+import {
+  GIFT_CARDS,
+  GiftCardId,
+  getGiftCardDef,
+  validateGiftCard,
+} from "@/lib/gift-cards";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
 
-type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
+type DepositMethod = "mobile_money" | "sepa" | "gift_card" | "stripe" | "paypal";
 
 export default function DepositScreen() {
   const router = useRouter();
@@ -63,6 +70,10 @@ export default function DepositScreen() {
   }
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
   const [reference, setReference] = useState("");
+  const [selectedGiftCardId, setSelectedGiftCardId] = useState<GiftCardId>("transcash");
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const giftCardDef = getGiftCardDef(selectedGiftCardId);
+  const giftValidation = validateGiftCard(selectedGiftCardId, giftCardCode);
   const [loading, setLoading] = useState(false);
   const [manualSheetOpen, setManualSheetOpen] = useState(false);
   const [manualSheetDone, setManualSheetDone] = useState(false);
@@ -125,7 +136,7 @@ export default function DepositScreen() {
       : 0;
   const amount = localToEur(localAmount, currency);
   const localFormatted = validLocalLabel(localAmount, currency);
-  const isManual = method === "mobile_money" || method === "sepa";
+  const isManual = method === "mobile_money" || method === "sepa" || method === "gift_card";
   const effectiveMinLocal = isManual
     ? currencyConfig.minDepositLocal
     : Math.max(
@@ -196,8 +207,55 @@ export default function DepositScreen() {
     }
   };
 
-  const submitManualInSheet = async () => {
+    const submitManualInSheet = async () => {
     if (loading || inFlightRef.current || !validAmount) return;
+
+    if (method === "gift_card") {
+      if (!giftValidation.valid) {
+        setSheetError(giftValidation.error ?? "Code invalide");
+        return;
+      }
+      inFlightRef.current = true;
+      const sig = `gift_card:${selectedGiftCardId}:${giftValidation.cleaned}:${amount}`;
+      if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+        idempotencySlotRef.current = {
+          key: createIdempotencyKey("dep"),
+          sig,
+        };
+      }
+      const idempotencyKey = idempotencySlotRef.current.key;
+      setLoading(true);
+      setSheetError(null);
+      try {
+        await api.payments.manual({
+          method: "gift_card",
+          cardType: selectedGiftCardId,
+          code: giftValidation.cleaned,
+          amount,
+          idempotencyKey,
+        });
+        idempotencySlotRef.current = null;
+        triggerHaptic("success", hapticsEnabled);
+        bumpBets();
+        setManualSheetDone(true);
+        setGiftCardCode("");
+      } catch (e) {
+        if (e instanceof ApiHttpError && e.status >= 400 && e.status < 500) {
+          idempotencySlotRef.current = null;
+        }
+        setSheetError(e instanceof Error ? e.message : "Dépôt indisponible");
+        toast({
+          kind: "error",
+          title: "Dépôt impossible",
+          description: "Vérifiez les informations saisies",
+        });
+      } finally {
+        inFlightRef.current = false;
+        setLoading(false);
+      }
+      return;
+    }
+
     const cleanRef = reference.trim();
     if (cleanRef.length < 4) {
       setSheetError("Saisissez la référence ou le numéro (4 caractères min.).");
@@ -356,6 +414,13 @@ export default function DepositScreen() {
                   sub: "IBAN / Réf. bancaire",
                   Icon: Building2,
                   available: true,
+                },
+                {
+                  id: "gift_card" as const,
+                  label: "Carte cadeau",
+                  sub: "Temporairement indisponible",
+                  Icon: Gift,
+                  available: false,
                 },
                 {
                   id: "stripe" as const,

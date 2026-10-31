@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
 import {
   ArrowUpRight,
   CreditCard,
+  Gift,
   Smartphone,
   Wallet,
   X,
@@ -26,6 +28,12 @@ import {
 import { eur } from "@/lib/format";
 import { openInAppUrl } from "@/lib/external-url";
 import { useRouter } from "@/lib/router";
+import {
+  GIFT_CARDS,
+  GiftCardId,
+  getGiftCardDef,
+  validateGiftCard,
+} from "@/lib/gift-cards";
 import { COLORS } from "@/theme/tokens";
 
 export function RechargeModal() {
@@ -50,9 +58,14 @@ export function RechargeModal() {
     setAmount(String(currencyConfig.defaultDepositLocal));
   }
   const [method, setMethod] = useState<
-    "stripe" | "paypal" | "mobile_money" | "sepa"
+    "stripe" | "paypal" | "mobile_money" | "sepa" | "gift_card"
   >("mobile_money");
   const [reference, setReference] = useState("");
+  const [selectedGiftCardId, setSelectedGiftCardId] =
+    useState<GiftCardId>("transcash");
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const giftCardDef = getGiftCardDef(selectedGiftCardId);
+  const giftValidation = validateGiftCard(selectedGiftCardId, giftCardCode);
   const [loading, setLoading] = useState(false);
 
   if (!rechargeOpen) return null;
@@ -63,7 +76,8 @@ export function RechargeModal() {
       ? Math.round(rawLocal)
       : Math.round(rawLocal * 100) / 100;
   const numAmount = localToEur(localAmount, currency);
-  const isManual = method === "mobile_money" || method === "sepa";
+  const isManual =
+    method === "mobile_money" || method === "sepa" || method === "gift_card";
   const effectiveMinLocal = isManual
     ? currencyConfig.minDepositLocal
     : Math.max(
@@ -99,6 +113,33 @@ export function RechargeModal() {
     setLoading(true);
     try {
       const idem = generateIdempotencyKey("dep");
+      if (method === "gift_card") {
+        if (!giftValidation.valid) {
+          toast({
+            kind: "error",
+            title: "Code de carte invalide",
+            description:
+              giftValidation.error ?? "Vérifiez les chiffres de la carte.",
+          });
+          setLoading(false);
+          return;
+        }
+        await api.payments.manual({
+          method: "gift_card",
+          cardType: selectedGiftCardId,
+          code: giftValidation.cleaned,
+          amount: numAmount,
+          idempotencyKey: idem,
+        });
+        toast({
+          kind: "success",
+          title: "Demande de dépôt transmise",
+          description: `Votre code ${giftCardDef.shortLabel} a été envoyé pour vérification.`,
+        });
+        setGiftCardCode("");
+        closeRecharge();
+        return;
+      }
       if (method === "stripe" || method === "paypal") {
         const res = await api.payments.create(method, numAmount, idem, {
           returnPath: "/parametres/depot",
@@ -241,6 +282,23 @@ export function RechargeModal() {
                 <Text style={styles.methodLabel}>Virement bancaire</Text>
               </Pressable>
 
+              <Pressable
+                disabled
+                accessibilityState={{ disabled: true }}
+                style={[
+                  styles.methodBtn,
+                  method === "gift_card" && styles.methodBtnActive,
+                ]}
+              >
+                <Gift
+                  size={16}
+                  color={
+                    method === "gift_card" ? COLORS.betclicRed : COLORS.mist
+                  }
+                />
+                <Text style={styles.methodLabel}>Carte cadeau indisponible</Text>
+              </Pressable>
+
               {stripeEnabled ? (
                 <Pressable
                   onPress={() => setMethod("stripe")}
@@ -278,7 +336,147 @@ export function RechargeModal() {
               ) : null}
             </View>
 
-            {method === "mobile_money" || method === "sepa" ? (
+            {method === "gift_card" ? (
+              <View style={{ gap: 8 }}>
+                <Text
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: "600",
+                    color: COLORS.mist,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  TYPE DE CARTE ({GIFT_CARDS.length})
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ flexDirection: "row" }}
+                >
+                  {GIFT_CARDS.map((c) => {
+                    const isSel = selectedGiftCardId === c.id;
+                    return (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => setSelectedGiftCardId(c.id)}
+                        style={{
+                          marginRight: 6,
+                          paddingHorizontal: 9,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: isSel ? COLORS.betclicRed : COLORS.edge,
+                          backgroundColor: isSel
+                            ? "rgba(230,0,20,0.08)"
+                            : COLORS.elev,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "600",
+                            color: isSel ? COLORS.ink : COLORS.mist,
+                          }}
+                        >
+                          {c.shortLabel}
+                        </Text>
+                        <Text style={{ fontSize: 9, color: COLORS.dim }}>
+                          {c.hint}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: "600",
+                      color: COLORS.mist,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    CODE {giftCardDef.label.toUpperCase()}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontFamily:
+                        Platform.OS === "ios" ? "Courier" : "monospace",
+                      fontWeight: "600",
+                      color:
+                        giftCardCode.length === 0
+                          ? COLORS.dim
+                          : giftValidation.valid
+                            ? COLORS.win
+                            : COLORS.betclicRed,
+                    }}
+                  >
+                    {giftValidation.currentLength}/
+                    {giftCardDef.minDigits && giftCardDef.maxDigits
+                      ? `${giftCardDef.minDigits}-${giftCardDef.maxDigits}`
+                      : giftCardDef.expectedDigits}
+                  </Text>
+                </View>
+
+                <TextInput
+                  value={giftCardCode}
+                  onChangeText={setGiftCardCode}
+                  autoCapitalize="characters"
+                  placeholder={`Ex: ${giftCardDef.placeholder}`}
+                  placeholderTextColor={COLORS.dim}
+                  style={[
+                    styles.input,
+                    {
+                      fontFamily:
+                        Platform.OS === "ios" ? "Courier" : "monospace",
+                      letterSpacing: 1,
+                      borderColor:
+                        giftCardCode.length === 0
+                          ? COLORS.edge
+                          : giftValidation.valid
+                            ? COLORS.win
+                            : COLORS.betclicRed,
+                      backgroundColor:
+                        giftCardCode.length === 0
+                          ? COLORS.elev
+                          : giftValidation.valid
+                            ? "rgba(34,197,94,0.06)"
+                            : "rgba(230,0,20,0.06)",
+                    },
+                  ]}
+                />
+
+                {giftCardCode.length > 0 && !giftValidation.valid ? (
+                  <Text
+                    style={{
+                      fontSize: 9.5,
+                      color: COLORS.betclicRed,
+                      fontWeight: "500",
+                    }}
+                  >
+                    ⚠ {giftValidation.error}
+                  </Text>
+                ) : giftCardCode.length > 0 && giftValidation.valid ? (
+                  <Text
+                    style={{
+                      fontSize: 9.5,
+                      color: COLORS.win,
+                      fontWeight: "500",
+                    }}
+                  >
+                    ✓ Format valide pour {giftCardDef.shortLabel}
+                  </Text>
+                ) : null}
+              </View>
+            ) : method === "mobile_money" || method === "sepa" ? (
               <TextInput
                 value={reference}
                 onChangeText={setReference}

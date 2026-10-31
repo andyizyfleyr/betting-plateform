@@ -15,11 +15,19 @@ import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
 import { cn } from "@/lib/format";
+import {
+  GIFT_CARDS,
+  GiftCardId,
+  getGiftCardDef,
+  validateGiftCard,
+} from "@/lib/gift-cards";
+import { Gift } from "lucide-react";
 
 export type DepositCheckoutSheetSession =
   | {
       kind: "manual";
-      method: "mobile_money" | "sepa";
+      method: "mobile_money" | "sepa" | "gift_card";
+      initialCardType?: GiftCardId;
       amountEur: number;
       amountLabel: string;
       initialReference?: string;
@@ -142,6 +150,16 @@ function DepositCheckoutSheetBody({
   const [reference, setReference] = useState(
     session.kind === "manual" ? session.initialReference ?? "" : ""
   );
+  const [selectedGiftCardId, setSelectedGiftCardId] = useState<GiftCardId>(
+    session.kind === "manual" && session.initialCardType
+      ? session.initialCardType
+      : "transcash"
+  );
+  const [giftCardCode, setGiftCardCode] = useState(
+    session.kind === "manual" && session.initialReference ? session.initialReference : ""
+  );
+  const giftCardDef = getGiftCardDef(selectedGiftCardId);
+  const giftValidation = validateGiftCard(selectedGiftCardId, giftCardCode);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completedKind, setCompletedKind] = useState<
@@ -414,8 +432,49 @@ function DepositCheckoutSheetBody({
     window.location.assign(url);
   };
 
-  const submitManual = async () => {
+    const submitManual = async () => {
     if (session.kind !== "manual" || submitting || inFlightRef.current) return;
+
+    if (session.method === "gift_card") {
+      if (!giftValidation.valid) {
+        setError(giftValidation.error ?? "Code invalide selon le format de la carte.");
+        return;
+      }
+      inFlightRef.current = true;
+      const sig = `gift_card:${selectedGiftCardId}:${giftValidation.cleaned}:${session.amountEur}`;
+      if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
+        idempotencySlotRef.current = {
+          key: generateIdempotencyKey("dep"),
+          sig,
+        };
+      }
+      setSubmitting(true);
+      setError(null);
+      try {
+        await api.payments.manual({
+          method: "gift_card",
+          cardType: selectedGiftCardId,
+          code: giftValidation.cleaned,
+          amount: session.amountEur,
+          idempotencyKey: idempotencySlotRef.current.key,
+        });
+        idempotencySlotRef.current = null;
+        playUiSound(user?.sound, "bet");
+        triggerHaptic(user?.haptics, [18, 28]);
+        bumpBets();
+        setCompletedKind("manual_recorded");
+      } catch (e) {
+        if (e instanceof ApiRequestError && e.status >= 400 && e.status < 500) {
+          idempotencySlotRef.current = null;
+        }
+        setError(e instanceof Error ? e.message : "Dépôt indisponible");
+      } finally {
+        inFlightRef.current = false;
+        setSubmitting(false);
+      }
+      return;
+    }
+
     const cleanRef = reference.trim();
     if (cleanRef.length < 4) {
       setError("Saisissez la référence ou le numéro (4 caractères min.).");
@@ -459,7 +518,9 @@ function DepositCheckoutSheetBody({
     session.kind === "manual"
       ? session.method === "mobile_money"
         ? "Dépôt Mobile Money"
-        : "Dépôt par virement bancaire"
+        : session.method === "gift_card"
+          ? "Dépôt Carte Cadeau & Ticket"
+          : "Dépôt par virement bancaire"
       : session.kind === "paypal"
         ? "Paiement PayPal"
         : session.kind === "stripe"
@@ -574,7 +635,134 @@ function DepositCheckoutSheetBody({
               </div>
             </div>
           ) : session.kind === "manual" ? (
-            <div>
+            session.method === "gift_card" ? (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-elev px-3 py-2 text-[10.5px] leading-relaxed text-mist">
+                  Sélectionnez votre carte cadeau ou ticket, puis saisissez son code. Votre demande sera vérifiée par un administrateur avant validation.
+                </div>
+
+                <div>
+                  <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist">
+                    Carte cadeau ({GIFT_CARDS.length})
+                  </label>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-0.5">
+                    {GIFT_CARDS.map((c) => {
+                      const isSel = selectedGiftCardId === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedGiftCardId(c.id);
+                            setError(null);
+                          }}
+                          className={cn(
+                            "flex flex-col items-start rounded-lg border p-1.5 text-left transition-all",
+                            isSel
+                              ? "border-betclic-red bg-betclic-red/10 text-ink shadow-xs"
+                              : "border-edge bg-elev/50 text-mist hover:border-ink/20 hover:text-ink"
+                          )}
+                        >
+                          <span className="truncate font-display text-[10px] font-bold leading-tight">
+                            {c.shortLabel}
+                          </span>
+                          <span className="text-[8.5px] text-dim">
+                            {c.hint}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist">
+                      Code {giftCardDef.label}
+                    </label>
+                    <span
+                      className={cn(
+                        "text-[9px] font-mono tabular-nums font-semibold",
+                        giftCardCode.length === 0
+                          ? "text-dim"
+                          : giftValidation.valid
+                            ? "text-win"
+                            : "text-betclic-red"
+                      )}
+                    >
+                      {giftValidation.currentLength}/
+                      {giftCardDef.minDigits && giftCardDef.maxDigits
+                        ? `${giftCardDef.minDigits}-${giftCardDef.maxDigits}`
+                        : giftCardDef.expectedDigits}{" "}
+                      {giftCardDef.isNumericOnly ? "chiffres" : "car."}
+                    </span>
+                  </div>
+
+                  <div className="relative mt-1">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={giftCardCode}
+                      onChange={(e) => {
+                        setGiftCardCode(e.target.value);
+                        if (error) setError(null);
+                      }}
+                      placeholder={`Ex: ${giftCardDef.placeholder}`}
+                      className={cn(
+                        "h-10 w-full rounded-xl border px-3 pr-8 font-mono text-[11.5px] font-medium tracking-wide uppercase outline-none transition-colors",
+                        giftCardCode.length === 0
+                          ? "border-edge bg-elev/60 text-ink focus:border-betclic-red"
+                          : giftValidation.valid
+                            ? "border-win bg-win/5 text-win focus:border-win"
+                            : "border-betclic-red bg-betclic-red/5 text-betclic-red focus:border-betclic-red"
+                      )}
+                    />
+                    {giftCardCode.length > 0 && giftValidation.valid ? (
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 grid h-4 w-4 place-items-center rounded-full bg-win text-white">
+                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {giftCardCode.length > 0 && !giftValidation.valid ? (
+                    <p className="mt-1 text-[9.5px] font-medium text-betclic-red">
+                      ⚠ {giftValidation.error}
+                    </p>
+                  ) : giftCardCode.length > 0 && giftValidation.valid ? (
+                    <p className="mt-1 text-[9.5px] font-medium text-win">
+                      ✓ Format valide pour {giftCardDef.shortLabel} ({giftValidation.formatted})
+                    </p>
+                  ) : null}
+                </div>
+
+                {error ? (
+                  <p className="rounded-lg bg-betclic-red/10 px-2.5 py-1.5 text-[10px] font-medium text-betclic-red">
+                    {error}
+                  </p>
+                ) : null}
+
+                <button
+                  type="button"
+                  disabled={submitting || !giftValidation.valid}
+                  onClick={() => void submitManual()}
+                  className={cn(
+                    "mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl font-display text-[11px] font-medium transition-all",
+                    !submitting && giftValidation.valid
+                      ? "bg-win text-white shadow-xs active:scale-[0.99]"
+                      : "cursor-not-allowed bg-elev text-dim opacity-70"
+                  )}
+                >
+                  {submitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Lock className="h-3.5 w-3.5" />
+                      Soumettre mon code · {session.amountLabel}
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : <div>
               <div className="rounded-xl bg-elev px-3 py-2.5 text-[10.5px] leading-relaxed text-mist">
                 {session.method === "mobile_money"
                   ? `Opérateurs pris en charge (${countryConfig.name}) : ${
