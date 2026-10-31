@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 8,
     paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: 4,
   },
   searchBar: {
     marginBottom: 12,
