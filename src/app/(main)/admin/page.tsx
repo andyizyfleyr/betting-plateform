@@ -44,6 +44,7 @@ import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { Toggle } from "@/components/toggle";
 import { findLeague } from "@/lib/leagues";
+import { isGiftCardProvider, parseGiftCardProvider } from "@/lib/gift-cards";
 import { OFFERED_SOCCER_LEAGUES } from "@/lib/real-leagues";
 import { teamLogo } from "@/lib/team-logos";
 import {
@@ -4131,7 +4132,7 @@ function DepositsTab({
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-[11.5px] font-medium text-ink">
                     {dCountry.flag} {d.userName ? `${d.userName} · ` : ""}
-                    {d.provider === "mobile_money" ? "Mobile Money" : d.provider} · {localLabel}
+                    {isGiftCardProvider(d.provider) ? `🎁 ${parseGiftCardProvider(d.provider).cardDef?.label ?? "Carte Cadeau"}` : (d.provider === "mobile_money" ? "Mobile Money" : d.provider)} · {localLabel}
                   </p>
                   <p className="truncate text-[10.5px] text-dim">
                     {d.providerRef ? `${d.providerRef} · ` : ""}

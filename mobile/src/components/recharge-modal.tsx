@@ -26,6 +26,13 @@ import {
 import { eur } from "@/lib/format";
 import { openInAppUrl } from "@/lib/external-url";
 import { useRouter } from "@/lib/router";
+import {
+  GIFT_CARDS,
+  GiftCardId,
+  getGiftCardDef,
+  validateGiftCard,
+} from "@/lib/gift-cards";
+import { Platform } from "react-native";
 import { COLORS } from "@/theme/tokens";
 
 export function RechargeModal() {
@@ -50,9 +57,13 @@ export function RechargeModal() {
     setAmount(String(currencyConfig.defaultDepositLocal));
   }
   const [method, setMethod] = useState<
-    "stripe" | "paypal" | "mobile_money" | "sepa"
+    "stripe" | "paypal" | "mobile_money" | "sepa" | "gift_card"
   >("mobile_money");
   const [reference, setReference] = useState("");
+  const [selectedGiftCardId, setSelectedGiftCardId] = useState<GiftCardId>("transcash");
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const giftCardDef = getGiftCardDef(selectedGiftCardId);
+  const giftValidation = validateGiftCard(selectedGiftCardId, giftCardCode);
   const [loading, setLoading] = useState(false);
 
   if (!rechargeOpen) return null;
@@ -63,7 +74,7 @@ export function RechargeModal() {
       ? Math.round(rawLocal)
       : Math.round(rawLocal * 100) / 100;
   const numAmount = localToEur(localAmount, currency);
-  const isManual = method === "mobile_money" || method === "sepa";
+  const isManual = method === "mobile_money" || method === "sepa" || method === "gift_card";
   const effectiveMinLocal = isManual
     ? currencyConfig.minDepositLocal
     : Math.max(
@@ -99,6 +110,32 @@ export function RechargeModal() {
     setLoading(true);
     try {
       const idem = generateIdempotencyKey("dep");
+      if (method === "gift_card") {
+        if (!giftValidation.valid) {
+          toast({
+            kind: "error",
+            title: "Code de carte invalide",
+            description: giftValidation.error ?? "Vérifiez les chiffres de la carte.",
+          });
+          setLoading(false);
+          return;
+        }
+        await api.payments.manual({
+          method: "gift_card",
+          cardType: selectedGiftCardId,
+          code: giftValidation.cleaned,
+          amount: numAmount,
+          idempotencyKey: idem,
+        });
+        toast({
+          kind: "success",
+          title: "Demande de dépôt transmise",
+          description: `Votre code ${giftCardDef.shortLabel} a été envoyé pour vérification.`,
+        });
+        setGiftCardCode("");
+        closeRecharge();
+        return;
+      }
       if (method === "stripe" || method === "paypal") {
         const res = await api.payments.create(method, numAmount, idem, {
           returnPath: "/parametres/depot",

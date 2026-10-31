@@ -18,10 +18,21 @@ import {
   roundEurPivot,
 } from "@/lib/countries";
 import { requireUserId } from "@/lib/session";
+import {
+  GIFT_CARDS,
+  GiftCardId,
+  getGiftCardDef,
+  validateGiftCard,
+} from "@/lib/gift-cards";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_METHODS = new Set(["mobile_money", "sepa"]);
+const ALLOWED_METHODS = new Set([
+  "mobile_money",
+  "sepa",
+  "gift_card",
+  ...GIFT_CARDS.map((c) => c.id),
+]);
 const MAX_PENDING_DEPOSITS = 3;
 
 export async function POST(req: NextRequest) {
@@ -33,6 +44,8 @@ export async function POST(req: NextRequest) {
 
     let body: {
       method?: string;
+      cardType?: string;
+      code?: string;
       reference?: string;
       amount?: number;
       idempotencyKey?: string;
@@ -44,7 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     const method = String(body.method ?? "").trim().toLowerCase();
-    const reference = String(body.reference ?? "").trim();
+    const reference = String(body.reference ?? body.code ?? "").trim();
     const amount = roundEurPivot(Number(body.amount));
     const idempotencyKey = extractIdempotencyKey(
       body.idempotencyKey,
@@ -63,11 +76,36 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (reference.length < 4 || reference.length > 100) {
-      return NextResponse.json(
-        { error: "Veuillez indiquer votre numéro ou référence de transaction" },
-        { status: 400 }
-      );
+
+    const isGiftCard =
+      method === "gift_card" || GIFT_CARDS.some((c) => c.id === method);
+    let finalProvider = method;
+    let finalReference = reference;
+
+    if (isGiftCard) {
+      const cardType = (
+        method !== "gift_card"
+          ? method
+          : String(body.cardType ?? "").trim().toLowerCase()
+      ) as GiftCardId;
+      const cardDef = getGiftCardDef(cardType);
+      const rawCode = String(body.code ?? body.reference ?? "").trim();
+      const validation = validateGiftCard(cardType, rawCode);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.error ?? "Code de carte cadeau invalide" },
+          { status: 400 }
+        );
+      }
+      finalProvider = `gift_card:${cardType}`;
+      finalReference = `${cardDef.label} : ${validation.formatted}`;
+    } else {
+      if (reference.length < 4 || reference.length > 100) {
+        return NextResponse.json(
+          { error: "Veuillez indiquer votre numéro ou référence de transaction" },
+          { status: 400 }
+        );
+      }
     }
 
     const [currencyUser] = await db
@@ -94,7 +132,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const requestHash = computeIdempotencyHash({ method, reference, amount });
+    const requestHash = computeIdempotencyHash({
+      method: finalProvider,
+      reference: finalReference,
+      amount,
+    });
 
     const preIdem = await lookupIdempotencyRecord(
       db,
@@ -161,8 +203,8 @@ export async function POST(req: NextRequest) {
         .limit(1);
       if (existingByCol) {
         if (
-          existingByCol.provider !== method ||
-          existingByCol.providerRef !== reference ||
+          existingByCol.provider !== finalProvider ||
+          existingByCol.providerRef !== finalReference ||
           Math.abs(existingByCol.amount - amount) > 1e-5
         ) {
           return { kind: "idempotency_conflict" };
@@ -188,8 +230,8 @@ export async function POST(req: NextRequest) {
         .insert(deposits)
         .values({
           userId: uid,
-          provider: method,
-          providerRef: reference,
+          provider: finalProvider,
+          providerRef: finalReference,
           amount,
           currency: "EUR",
           status: "pending_review",

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
+  Gift,
   CreditCard,
   History,
   Loader2,
@@ -31,7 +32,7 @@ import {
 } from "@/lib/countries";
 import { cn } from "@/lib/format";
 
-type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
+type DepositMethod = "mobile_money" | "sepa" | "gift_card" | "stripe" | "paypal";
 
 export default function DepositPage() {
   const router = useRouter();
@@ -152,7 +153,7 @@ export default function DepositPage() {
   const amount = localToEur(localAmount, currency);
   const localFormatted =
     localAmount > 0 ? formatLocalAmount(localAmount, currency) : "";
-  const isManual = method === "mobile_money" || method === "sepa";
+  const isManual = method === "mobile_money" || method === "sepa" || method === "gift_card";
   const effectiveMinLocal = isManual
     ? currencyConfig.minDepositLocal
     : Math.max(
@@ -179,7 +180,7 @@ export default function DepositPage() {
     if (!canSubmit || inFlightRef.current) return;
     setError(null);
 
-    if (method === "mobile_money" || method === "sepa") {
+    if (method === "mobile_money" || method === "sepa" || method === "gift_card") {
       setSheetSession({
         kind: "manual",
         method,

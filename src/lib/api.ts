@@ -928,8 +928,10 @@ export const api = {
         body: JSON.stringify({ amount, idempotencyKey, ...options }),
       }),
     manual: (payload: {
-      method: "mobile_money" | "sepa";
-      reference: string;
+      method: "mobile_money" | "sepa" | "gift_card" | string;
+      cardType?: string;
+      code?: string;
+      reference?: string;
       amount: number;
       idempotencyKey: string;
     }) =>

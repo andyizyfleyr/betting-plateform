@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { Building2, Check, CreditCard, Loader2, Lock, Smartphone, Wallet, X } from "lucide-react";
+import { Building2, Check, CreditCard, Gift, Loader2, Lock, Smartphone, Wallet, X } from "lucide-react";
 import { ApiRequestError, api, type PaymentProvider } from "@/lib/api";
 import {
   formatLocalAmount,
@@ -17,8 +17,14 @@ import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
 import { cn, eur } from "@/lib/format";
+import {
+  GIFT_CARDS,
+  GiftCardId,
+  getGiftCardDef,
+  validateGiftCard,
+} from "@/lib/gift-cards";
 
-type DepositMethod = "mobile_money" | "sepa" | "stripe" | "paypal";
+type DepositMethod = "mobile_money" | "sepa" | "gift_card" | "stripe" | "paypal";
 
 interface Props {
   open: boolean;
@@ -51,6 +57,10 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
   }
   const [method, setMethod] = useState<DepositMethod>("mobile_money");
   const [reference, setReference] = useState("");
+  const [selectedGiftCardId, setSelectedGiftCardId] = useState<GiftCardId>("transcash");
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const giftCardDef = getGiftCardDef(selectedGiftCardId);
+  const giftValidation = validateGiftCard(selectedGiftCardId, giftCardCode);
   const [loading, setLoading] = useState(false);
   const [doneManual, setDoneManual] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +95,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
         : Math.round(parsed * 100) / 100
       : 0;
   const amount = localToEur(localAmount, currency);
-  const isManual = method === "mobile_money" || method === "sepa";
+  const isManual = method === "mobile_money" || method === "sepa" || method === "gift_card";
   const effectiveMinLocal = isManual
     ? currencyConfig.minDepositLocal
     : Math.max(
@@ -106,7 +116,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
   const canSubmit =
     !loading &&
     validAmount &&
-    (isManual ? reference.trim().length >= 4 : Boolean(onlineProvider?.enabled));
+    (isManual ? (method === "gift_card" ? giftValidation.valid : reference.trim().length >= 4) : Boolean(onlineProvider?.enabled));
 
   const submit = async () => {
     if (!canSubmit || inFlightRef.current) return;
@@ -124,6 +134,29 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
     setLoading(true);
     setError(null);
     try {
+      if (method === "gift_card") {
+        if (!giftValidation.valid) {
+          setError(giftValidation.error ?? "Code invalide");
+          inFlightRef.current = false;
+          setLoading(false);
+          return;
+        }
+        await api.payments.manual({
+          method: "gift_card",
+          cardType: selectedGiftCardId,
+          code: giftValidation.cleaned,
+          amount,
+          idempotencyKey,
+        });
+        idempotencySlotRef.current = null;
+        playUiSound(user?.sound, "bet");
+        triggerHaptic(user?.haptics, [18, 28]);
+        bumpBets();
+        setDoneManual(true);
+        inFlightRef.current = false;
+        setLoading(false);
+        return;
+      }
       if (method === "mobile_money" || method === "sepa") {
         await api.payments.manual({
           method,
