@@ -6,13 +6,11 @@ import { settleMatchesBetsBatch } from "@/lib/settle";
 import { adminSettings, appUser, bets, comboBets, matches, type MatchRow } from "@/db/schema";
 import {
   expectedGoals,
-  goalTimeCDF,
   hashString,
   liveOddsFor,
   minuteGoalShare,
   oddsFor,
   pickScorerName,
-   poissonPmf,
   teamStrength,
 } from "@/db/fixtures";
 import {
@@ -27,7 +25,7 @@ import {
   invalidateAllActiveCaches,
   upsertCachedMatches,
 } from "@/lib/active-state-cache";
-import { isKnownMarket, marketSettle, minuteNumber } from "@/lib/markets";
+import { minuteNumber } from "@/lib/markets";
 import { buildServerClockAnchor } from "@/lib/live-clock";
 import { ensureMlLoaded, recordMatchesFinishedBatchMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
@@ -344,13 +342,8 @@ interface MatchBookPressure {
   houseTightness: number;
 }
 
-/**
- * Contrôle stochastique optimal sur la grille exacte des scores finaux :
- * Évalue en continu l'espérance de gain versé par la banque `V(h, a)` sur TOUS les
- * marchés ouverts (1N2, Double chance, Over/Under, BTTS, Résultat+Total, Buts par équipe,
- * Clean sheet, Victoire sans encaisser, Score exact, Pair/Impair, Combinés) et module
- * finement l'intensité instantanée `(hTilt, aTilt)` selon le coût marginal exact
- * d'un but domicile `V(h+1, a) - V(h, a)` vs un but extérieur `V(h, a+1) - V(h, a)`.
+/** Les mises et l'exposition ne modifient pas les probabilités de buts.
+ * Les scénarios administrateur et le RNG nécessitent une revue distincte.
  */
 export function computeDynamicStepTilts(
   _pressure: MatchBookPressure,
@@ -362,8 +355,7 @@ export function computeDynamicStepTilts(
   _eventsSoFar?: Array<{ type: string; team: string; minute: number }>
 ): { hTilt: number; aTilt: number } {
   // Découplage strict pour l'équité sportive et l'indépendance RNG :
-  // Le déroulement des matchs virtuels ne doit jamais être influencé par les mises des joueurs
-  // ni par l'exposition financière de la maison (conformité RNG impartial).
+  // La neutralité de cette fonction ne constitue pas une certification RNG.
   return { hTilt: 1, aTilt: 1 };
 }
 
@@ -446,16 +438,6 @@ async function executeTick(now: number): Promise<void> {
   const { sportTickets, comboTickets } = await getCachedPendingBookForMatches(openIds);
   const hasAnyExposure = sportTickets.length > 0 || comboTickets.length > 0;
 
-  const houseHealth = { totalIn24h: 0, totalOut24h: 0, payoutRatio: 0.9, tightness: 1.0 };
-
-  const activeUserIds: number[] = [];
-  for (const b of sportTickets) activeUserIds.push(b.userId);
-  for (const cb of comboTickets) activeUserIds.push(cb.userId);
-  const userRiskMap =
-    activeUserIds.length > 0
-      ? await computeUserPatternRiskWeights(activeUserIds)
-      : new Map<number, number>();
-
   const betsByMatch = new Map<number, PendingMatchTicket[]>();
   for (const b of sportTickets) {
     const arr = betsByMatch.get(b.matchId) ?? [];
@@ -464,7 +446,7 @@ async function executeTick(now: number): Promise<void> {
       selection: b.selection,
       stake: b.stake,
       odds: b.odds,
-      riskWeight: userRiskMap.get(b.userId) ?? 1.0,
+      riskWeight: 1,
     });
     betsByMatch.set(b.matchId, arr);
   }
@@ -475,7 +457,7 @@ async function executeTick(now: number): Promise<void> {
       selection: cb.selection,
       stake: cb.stake,
       odds: cb.odds,
-      riskWeight: userRiskMap.get(cb.userId) ?? 1.0,
+      riskWeight: 1,
     });
     betsByMatch.set(cb.matchId, arr);
   }
