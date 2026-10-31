@@ -512,6 +512,7 @@ export default function AuthScreen() {
             )}
           </View>
 
+          {resolvedView === "login" ? <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: 100 }} /> : null}
           {/* Carte centrale 1:1 Web < lg */}
           <View style={[styles.cardWrap, resolvedView === "login" && {marginTop: 12}]}>
             <View style={styles.card}>
@@ -1570,7 +1571,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 14,
   },
-  loginHeroBackground: { position: "absolute", top: 0, left: 0, right: 0, height: 100, backgroundColor: COLORS.betclicRed },
+  loginHeroBackground: { position: "absolute", top: 0, left: 0, right: 0, height: 214, backgroundColor: COLORS.betclicRed },
   loginHero: { alignItems: "center", gap: 12, paddingTop: 8 },
   loginBrand: { flexDirection: "row", alignItems: "center", gap: 4 },
   loginBrandText: { fontSize: 23, fontWeight: "700", fontStyle: "italic", color: "#ffffff" },

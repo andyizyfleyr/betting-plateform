@@ -560,7 +560,7 @@ function AuthShellInner({
       </aside>
 
       {/* ─── Colonne formulaire (Mobile < lg 1:1 Android & Desktop droite) ─── */}
-      <main className={cn("pt-safe pb-safe relative isolate flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6", resolvedView === "login" && "before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[100px] before:bg-gradient-to-br before:from-betclic-red before:to-[#ae0017] lg:before:hidden")}>
+      <main className={cn("pt-safe pb-safe relative isolate flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6", resolvedView === "login" && "before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[214px] before:bg-gradient-to-br before:from-betclic-red before:to-[#ae0017] lg:before:hidden")}>
         {/* Barre haute navigation */}
         <header className={cn("flex items-center justify-between gap-3", resolvedView === "login" && "lg:justify-between")}>
           <Link
@@ -590,6 +590,7 @@ function AuthShellInner({
           )}
         </header>
 
+        {resolvedView === "login" && <div aria-hidden="true" className="h-[100px] shrink-0 lg:hidden" />}
         {/* Carte centrale d'authentification */}
         <div className={cn("my-auto py-4 lg:py-6", resolvedView === "login" && "my-0 pt-3 lg:my-auto lg:py-6")}>
           <div className="mx-auto w-full rounded-3xl border border-edge bg-white p-3.5 shadow-[0_2px_12px_rgba(17,24,39,0.04)] sm:p-5 lg:max-w-[468px] lg:p-6 lg:shadow-[0_16px_44px_-16px_rgba(17,24,39,0.09)]">
