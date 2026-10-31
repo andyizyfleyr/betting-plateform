@@ -48,7 +48,6 @@ export default function ParametresPage() {
     setBalance,
     toast,
     betsVersion,
-    pendingCount,
     countryConfig,
     currencyConfig,
   } = useApp();
@@ -273,7 +272,7 @@ export default function ParametresPage() {
       <div className="mt-3 space-y-4 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:space-y-0">
         {/* Colonne gauche : Portefeuille, Solde et accès direct aux mouvements */}
         <div className={cn("space-y-3", mobileTab !== "wallet" && "hidden lg:block")}>
-          <section className="rounded-2xl bg-gradient-to-br from-betclic-red to-[#a90018] p-3.5 text-white shadow-sm lg:hidden">
+          <section className="flex min-h-[132px] flex-col justify-between rounded-2xl bg-gradient-to-br from-betclic-red to-[#a90018] p-3.5 text-white shadow-sm lg:hidden">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[10px] text-white/85">Solde disponible</p>
@@ -284,16 +283,11 @@ export default function ParametresPage() {
             {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && <p className="mt-1 text-[10px] text-white/85">Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</p>}
             {wallet && (wallet.summary.pendingWithdrawals > 0 || (wallet.summary.pendingDeposits ?? 0) > 0) && <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-white/85">{wallet.summary.pendingWithdrawals > 0 && <span>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</span>}{(wallet.summary.pendingDeposits ?? 0) > 0 && <span>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</span>}</div>}
             <div className="mt-3 grid grid-cols-3 gap-2">
-              <Link href="/parametres/depot" className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl bg-white text-[10.5px] text-betclic-red active:opacity-90"><Plus size={17} />Déposer</Link>
-              <Link href="/parametres/retrait" className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowUpRight size={17} />Retirer</Link>
-              <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowLeftRight size={17} />Transférer</button>
+              <Link href="/parametres/depot" className="flex min-h-10 items-center justify-center gap-1 rounded-xl bg-white text-[10.5px] text-betclic-red active:opacity-90"><Plus size={17} />Déposer</Link>
+              <Link href="/parametres/retrait" className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowUpRight size={17} />Retirer</Link>
+              <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowLeftRight size={17} />Transférer</button>
             </div>
           </section>
-          <div className="grid grid-cols-3 gap-2 lg:hidden">
-            <Link href="/paris" className="rounded-xl border border-edge bg-white p-2.5"><span className="block text-[10px] text-mist">Paris en cours</span><span className="mt-1 block text-[14px] font-bold text-ink">{pendingCount}</span></Link>
-            <div className="rounded-xl border border-edge bg-white p-2.5"><span className="block text-[10px] text-mist">Gains du mois</span><span className="mt-1 block text-[14px] text-win" title="Total mensuel indisponible">—</span></div>
-            <div className="rounded-xl border border-edge bg-white p-2.5"><span className="block text-[10px] text-mist">Dépôts du mois</span><span className="mt-1 block text-[14px] text-ink" title="Total mensuel indisponible">—</span></div>
-          </div>
           <section className="hidden glass-card rounded-2xl p-4 lg:block lg:p-5">
             <div className="hidden items-center gap-3 pb-4 lg:flex">
               <span

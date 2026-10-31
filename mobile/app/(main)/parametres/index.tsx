@@ -11,12 +11,15 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
+  ArrowDownLeft,
+  ArrowLeftRight,
   ArrowRight,
+  Eye,
+  EyeOff,
   ArrowUpRight,
   Bell,
   ChevronRight,
   Globe,
-  History,
   Lock,
   LogOut,
   Plus,
@@ -88,6 +91,7 @@ export default function ParametresScreen() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [balanceVisible, setBalanceVisible] = useState(true);
   const [checkingOta, setCheckingOta] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
@@ -298,31 +302,15 @@ export default function ParametresScreen() {
         />
       }
     >
-      {/* En-tête + mini-badge profil mobile identiques à src/app/(main)/parametres/page.tsx */}
-      <View style={styles.headerRow}>
-        <Text style={styles.pageTitle}>Compte</Text>
-
-        <View style={styles.profileMini}>
-          <View style={styles.profileTextCol}>
-            <Text numberOfLines={1} style={styles.profileName}>
-              {user.name}
-            </Text>
-            <Text numberOfLines={1} style={styles.profileEmail}>
-              {user.email}
-            </Text>
-          </View>
-          <LinearGradient
-            colors={[
-              `hsl(${hue}, 60%, 44%)`,
-              `hsl(${(hue + 36) % 360}, 68%, 30%)`,
-            ]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.avatarBox}
-          >
-            <Text style={styles.avatarInitials}>{initials(user.name)}</Text>
-          </LinearGradient>
+      <View style={styles.profileCard}>
+        <LinearGradient colors={[`hsl(${hue}, 60%, 44%)`, `hsl(${(hue + 36) % 360}, 68%, 30%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarBox}>
+          <Text style={styles.avatarInitials}>{initials(user.name)}</Text>
+        </LinearGradient>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text numberOfLines={1} style={styles.profileName}>{user.name}</Text>
+          <Text numberOfLines={1} style={styles.profileEmail}>{user.email ?? "Session active"}</Text>
         </View>
+        {user.role === "admin" ? <Text style={styles.adminBadge}>Admin</Text> : null}
       </View>
 
       {/* Sélecteur mobile en 2 onglets nets : Portefeuille | Réglages */}
@@ -336,13 +324,13 @@ export default function ParametresScreen() {
         >
           <Wallet
             size={14}
-            color={mobileTab === "wallet" ? "#ffffff" : COLORS.mist}
+            color={mobileTab === "wallet" ? COLORS.betclicRed : COLORS.mist}
             strokeWidth={2.3}
           />
           <Text
             style={[
               styles.tabBtnText,
-              mobileTab === "wallet" && { color: "#ffffff" },
+              mobileTab === "wallet" && { color: COLORS.betclicRed },
             ]}
           >
             Portefeuille
@@ -358,13 +346,13 @@ export default function ParametresScreen() {
         >
           <SlidersHorizontal
             size={14}
-            color={mobileTab === "settings" ? "#ffffff" : COLORS.mist}
+            color={mobileTab === "settings" ? COLORS.betclicRed : COLORS.mist}
             strokeWidth={2.3}
           />
           <Text
             style={[
               styles.tabBtnText,
-              mobileTab === "settings" && { color: "#ffffff" },
+              mobileTab === "settings" && { color: COLORS.betclicRed },
             ]}
           >
             Réglages
@@ -374,75 +362,28 @@ export default function ParametresScreen() {
 
       {mobileTab === "wallet" ? (
         <View style={styles.sectionStack}>
-          {/* Carte solde + Déposer / Retirer */}
-          <View style={styles.cardPad}>
-            <View style={styles.walletInnerBox}>
+          <LinearGradient colors={[COLORS.betclicRed, "#a90018"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
+            <View>
               <View style={styles.walletTopRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.walletLabel}>Solde disponible</Text>
-                  <Text style={styles.walletAmount}>{eur(user.balance)}</Text>
-                  {wallet &&
-                  wallet.summary.withdrawable != null &&
-                  (wallet.summary.bonusRemaining ?? 0) > 1e-4 &&
-                  wallet.summary.withdrawable < user.balance - 1e-4 ? (
-                    <Text style={styles.withdrawableNote}>
-                      Retirable :{" "}
-                      <Text style={{ fontWeight: "500", color: COLORS.win }}>
-                        {eur(wallet.summary.withdrawable)}
-                      </Text>
-                      {wallet.summary.bonusRemaining != null &&
-                      wallet.summary.bonusRemaining > 0 ? (
-                        <Text style={{ color: COLORS.dim }}>
-                          {" "}
-                          · Bonus {eur(wallet.summary.bonusRemaining)}
-                        </Text>
-                      ) : null}
-                    </Text>
-                  ) : null}
+                  <Text style={styles.walletAmount}>{balanceVisible ? eur(user.balance) : "••••••"}</Text>
                 </View>
-
-                <View style={styles.pendingPillsCol}>
-                  {wallet && wallet.summary.pendingWithdrawals > 0 ? (
-                    <View style={styles.pendingWdPill}>
-                      <Text style={styles.pendingWdText}>
-                        {eur(wallet.summary.pendingWithdrawals)} en retrait
-                      </Text>
-                    </View>
-                  ) : null}
-                  {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? (
-                    <View style={styles.pendingDepPill}>
-                      <Text style={styles.pendingDepText}>
-                        +{eur(wallet.summary.pendingDeposits ?? 0)} en dépôt
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-
-              <View style={styles.walletBtnsGrid}>
-                <Pressable
-                  onPress={() => router.push("/parametres/depot")}
-                  style={styles.depositBtn}
-                >
-                  <Plus size={16} color="#ffffff" strokeWidth={2.6} />
-                  <Text style={styles.depositBtnText}>Déposer</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push("/parametres/retrait")}
-                  style={styles.withdrawBtn}
-                >
-                  <ArrowUpRight
-                    size={16}
-                    color={COLORS.betclicRed}
-                    strokeWidth={2.4}
-                  />
-                  <Text style={styles.withdrawBtnText}>Retirer</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} onPress={() => setBalanceVisible(v => !v)} style={styles.eyeButton}>
+                  {balanceVisible ? <Eye size={18} color="#ffffff" /> : <EyeOff size={18} color="#ffffff" />}
                 </Pressable>
               </View>
-              <Pressable onPress={() => setTransferOpen(true)} style={{ marginTop: 8, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: "#e5e7eb", alignItems: "center" }}><Text style={{ fontSize: 12, color: "#20242a" }}>Transférer avec un code</Text></Pressable>
-              {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
+              {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
+              {wallet && wallet.summary.pendingWithdrawals > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</Text> : null}
+              {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</Text> : null}
             </View>
-          </View>
+            <View style={styles.walletBtnsGrid}>
+              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/depot")} style={styles.depositBtn}><Plus size={16} color={COLORS.betclicRed} /><Text style={styles.depositBtnText}>Déposer</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/retrait")} style={styles.withdrawBtn}><ArrowUpRight size={16} color="#ffffff" /><Text style={styles.withdrawBtnText}>Retirer</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtn}><ArrowLeftRight size={16} color="#ffffff" /><Text style={styles.withdrawBtnText}>Transférer</Text></Pressable>
+            </View>
+          </LinearGradient>
+          {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} />}
 
           {/* Retraits en attente avec annulation immédiate */}
           {pendingWithdrawalEntries.length > 0 ? (
@@ -486,29 +427,21 @@ export default function ParametresScreen() {
             </View>
           ) : null}
 
-          {/* Lien direct vers l'historique des mouvements */}
-          <Pressable
-            onPress={() => router.push("/parametres/transactions")}
-            style={({ pressed }) => [
-              styles.navRowCard,
-              pressed && { backgroundColor: COLORS.elev },
-            ]}
-          >
-            <View style={styles.redIconBox}>
-              <History size={16} color={COLORS.betclicRed} strokeWidth={2.2} />
+          <View>
+            <View style={styles.recentHeader}>
+              <Text style={styles.recentTitle}>Dernières opérations</Text>
+              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/transactions")}><Text style={styles.seeAll}>Voir tout</Text></Pressable>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.navRowTitle}>Historique des mouvements</Text>
-              <Text numberOfLines={1} style={styles.navRowSub}>
-                {wallet
-                  ? `${wallet.entries.length} opération${
-                      wallet.entries.length > 1 ? "s" : ""
-                    }`
-                  : "Dépôts, retraits, mises et gains"}
-              </Text>
+            <View style={styles.listCard}>
+              {!wallet ? <Text style={styles.emptyOperations}>Chargement des opérations…</Text> : wallet.entries.length === 0 ? <Text style={styles.emptyOperations}>Aucune opération pour le moment.</Text> : wallet.entries.slice(0, 3).map((entry, index) => (
+                <View key={entry.id} style={[styles.operationRow, index > 0 && styles.rowDivider]}>
+                  <View style={[styles.operationIcon, { backgroundColor: entry.amount >= 0 ? "rgba(0,150,78,0.1)" : "rgba(225,0,20,0.1)" }]}>{entry.amount >= 0 ? <ArrowDownLeft size={15} color={COLORS.win} /> : <ArrowUpRight size={15} color={COLORS.betclicRed} />}</View>
+                  <View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={styles.navRowTitle}>{entry.title}</Text><Text numberOfLines={1} style={styles.navRowSub}>{formatPlacedAt(entry.createdAt)}</Text></View>
+                  <Text style={[styles.operationAmount, { color: entry.amount >= 0 ? COLORS.win : COLORS.betclicRed }]}>{balanceVisible ? `${entry.amount >= 0 ? "+" : "−"} ${eur(Math.abs(entry.amount))}` : "••••"}</Text>
+                </View>
+              ))}
             </View>
-            <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
-          </Pressable>
+          </View>
 
           {/* Accès Admin (si administrateur) */}
           {user.role === "admin" ? (
@@ -810,6 +743,8 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 32,
   },
+  profileCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: COLORS.edge, backgroundColor: "#ffffff" },
+  adminBadge: { color: COLORS.betclicRed, fontSize: 10 },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -832,8 +767,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   profileName: {
-    fontSize: 11,
-    fontWeight: "500",
+    fontSize: 12.5,
+    fontWeight: "700",
     color: COLORS.ink,
   },
   profileEmail: {
@@ -841,9 +776,9 @@ const styles = StyleSheet.create({
     color: COLORS.dim,
   },
   avatarBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -855,12 +790,10 @@ const styles = StyleSheet.create({
   tabSwitch: {
     marginTop: 12,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.elev,
     padding: 4,
     flexDirection: "row",
-    gap: 6,
+    gap: 4,
   },
   tabBtn: {
     flex: 1,
@@ -872,7 +805,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tabBtnActive: {
-    backgroundColor: COLORS.betclicRed,
+    backgroundColor: "#ffffff",
   },
   tabBtnText: {
     fontSize: 11,
@@ -886,6 +819,16 @@ const styles = StyleSheet.create({
   settingsHeading: { paddingHorizontal: 4, gap: 2 },
   settingsTitle: { color: COLORS.ink, fontSize: 12, fontWeight: "700" },
   settingsSubtitle: { color: COLORS.dim, fontSize: 10 },
+  balanceCard: { minHeight: 132, borderRadius: 16, padding: 14, justifyContent: "space-between" },
+  eyeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  balanceNote: { marginTop: 3, fontSize: 10, color: "rgba(255,255,255,0.85)" },
+  recentHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  recentTitle: { fontSize: 12, fontWeight: "700", color: COLORS.ink },
+  seeAll: { fontSize: 10.5, color: COLORS.betclicRed },
+  emptyOperations: { padding: 12, fontSize: 10.5, color: COLORS.dim },
+  operationRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10 },
+  operationIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  operationAmount: { fontSize: 11, fontWeight: "500", fontVariant: ["tabular-nums"] },
   cardPad: {
     borderRadius: 16,
     borderWidth: 1,
@@ -907,13 +850,13 @@ const styles = StyleSheet.create({
   walletLabel: {
     fontSize: 10,
     fontWeight: "500",
-    color: COLORS.dim,
+    color: "rgba(255,255,255,0.85)",
   },
   walletAmount: {
     marginTop: 2,
-    fontSize: 16,
-    fontWeight: "500",
-    color: COLORS.ink,
+    fontSize: 23,
+    fontWeight: "700",
+    color: "#ffffff",
     fontVariant: ["tabular-nums"],
   },
   withdrawableNote: {
@@ -957,33 +900,33 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     borderRadius: 12,
-    backgroundColor: COLORS.betclicRed,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  depositBtnText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#ffffff",
-  },
-  withdrawBtn: {
-    flex: 1,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  withdrawBtnText: {
-    fontSize: 11,
+  depositBtnText: {
+    fontSize: 10.5,
     fontWeight: "500",
-    color: COLORS.ink,
+    color: COLORS.betclicRed,
+  },
+  withdrawBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.8)",
+    backgroundColor: "transparent",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  withdrawBtnText: {
+    fontSize: 10.5,
+    fontWeight: "500",
+    color: "#ffffff",
   },
   listCard: {
     borderRadius: 16,
