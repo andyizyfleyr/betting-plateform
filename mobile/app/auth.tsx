@@ -30,7 +30,7 @@ import {
   User,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { PulseLogo, PulseMark } from "@/components/pulse-logo";
+import { PulseLogo } from "@/components/pulse-logo";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, type ClientUser } from "@/lib/api";
 import {
@@ -512,7 +512,6 @@ export default function AuthScreen() {
             )}
           </View>
 
-          {resolvedView === "login" ? <View style={styles.loginHero}><PulseMark size={56} inverted /><View style={styles.loginBrand}><Text style={styles.loginBrandText}>PULSE</Text><Text style={styles.loginBet}>BET</Text></View></View> : null}
           {/* Carte centrale 1:1 Web < lg */}
           <View style={[styles.cardWrap, resolvedView === "login" && {marginTop: 12}]}>
             <View style={styles.card}>
@@ -547,11 +546,6 @@ export default function AuthScreen() {
                       {resolvedView === "login"
                         ? "Connexion à votre compte"
                         : "Créer un compte joueur"}
-                    </Text>
-                    <Text style={styles.subtitle}>
-                      {resolvedView === "login"
-                        ? "Accédez à vos paris, vos prédictions et votre portefeuille."
-                        : "Inscription gratuite pour parier sur les matchs officiels et virtuels."}
                     </Text>
                   </View>
                 </>
@@ -725,7 +719,6 @@ export default function AuthScreen() {
                   </Pressable>
 
                   <View style={styles.loginSwitchPrompt}>
-                    <Text style={styles.switchPromptText}>Nouveau sur Pulse Bet ?</Text>
                     <Pressable accessibilityRole="button" onPress={() => switchView("register")} style={styles.loginRegisterBtn}>
                       <Text style={styles.loginRegisterText}>Ouvrir un compte</Text>
                     </Pressable>
@@ -1183,14 +1176,6 @@ export default function AuthScreen() {
                     )}
                   </Pressable>
 
-                  <View style={styles.switchPromptRow}>
-                    <Text style={styles.switchPromptText}>
-                      Vous avez déjà un compte ?{" "}
-                    </Text>
-                    <Pressable hitSlop={8} onPress={() => switchView("login")}>
-                      <Text style={styles.switchPromptLink}>Se connecter</Text>
-                    </Pressable>
-                  </View>
                 </View>
               ) : null}
 
@@ -1585,7 +1570,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 14,
   },
-  loginHeroBackground: { position: "absolute", top: 0, left: 0, right: 0, height: 214, backgroundColor: COLORS.betclicRed },
+  loginHeroBackground: { position: "absolute", top: 0, left: 0, right: 0, height: 100, backgroundColor: COLORS.betclicRed },
   loginHero: { alignItems: "center", gap: 12, paddingTop: 8 },
   loginBrand: { flexDirection: "row", alignItems: "center", gap: 4 },
   loginBrandText: { fontSize: 23, fontWeight: "700", fontStyle: "italic", color: "#ffffff" },
