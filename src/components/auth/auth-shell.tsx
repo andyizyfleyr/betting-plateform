@@ -311,11 +311,11 @@ function AuthShellInner({
     setError(null);
     const cleanEmail = email.trim().toLowerCase();
     if (!isValidAuthEmail(cleanEmail)) {
-      setError("Veuillez saisir une adresse e-mail valide.");
+      setError(translate(DEFAULT_LANGUAGE, "invalidEmail"));
       return;
     }
     if (!password) {
-      setError("Veuillez saisir votre mot de passe.");
+      setError(translate(DEFAULT_LANGUAGE, "passwordRequired"));
       return;
     }
 
@@ -329,7 +329,7 @@ function AuthShellInner({
       completeAuth(r.user, "login");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Impossible de vous connecter."
+        err instanceof Error ? err.message : translate(DEFAULT_LANGUAGE, "signInFailed")
       );
       setLoading(false);
     }
@@ -348,22 +348,22 @@ function AuthShellInner({
       return;
     }
     if (!isValidAuthEmail(cleanEmail)) {
-      setError("Veuillez saisir une adresse e-mail valide.");
+      setError(translate(DEFAULT_LANGUAGE, "invalidEmail"));
       return;
     }
     if (!pwStrength.isValid) {
       setError(
-        "Le mot de passe doit contenir au moins 8 caractères dont une lettre et un chiffre."
+        translate(DEFAULT_LANGUAGE, "passwordRequirements")
       );
       return;
     }
     if (password !== confirmPassword) {
-      setError("La confirmation du mot de passe ne correspond pas.");
+      setError(translate(DEFAULT_LANGUAGE, "passwordMismatch"));
       return;
     }
     if (!acceptedTerms) {
       setError(
-        "Veuillez certifier avoir 18 ans révolus et accepter le règlement Pulse Bet."
+        translate(DEFAULT_LANGUAGE, "ageAndRulesRequired")
       );
       return;
     }
@@ -380,7 +380,7 @@ function AuthShellInner({
       completeAuth(r.user, "register");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Création du compte impossible."
+        err instanceof Error ? err.message : translate(DEFAULT_LANGUAGE, "registrationFailed")
       );
       setLoading(false);
     }
@@ -392,7 +392,7 @@ function AuthShellInner({
     setInfoMessage(null);
     const cleanEmail = email.trim().toLowerCase();
     if (!isValidAuthEmail(cleanEmail)) {
-      setError("Veuillez saisir une adresse e-mail valide.");
+      setError(translate(DEFAULT_LANGUAGE, "invalidEmail"));
       return;
     }
 
@@ -430,7 +430,7 @@ function AuthShellInner({
 
     const cleanCode = otpCode.replace(/\D/g, "").slice(0, 6);
     if (cleanCode.length !== 6) {
-      setError("Veuillez saisir les 6 chiffres du code de vérification.");
+      setError(translate(DEFAULT_LANGUAGE, "verificationCodeRequired"));
       return;
     }
     if (!pwStrength.isValid) {
@@ -586,7 +586,7 @@ function AuthShellInner({
             >
               <ArrowLeft className={cn("h-3.5 w-3.5 text-mist", resolvedView === "login" && "text-white lg:text-mist")} strokeWidth={2.4} />
               <span className="lg:hidden">Matchs</span>
-              <span className="hidden lg:inline">Retour aux matchs</span>
+              <span className="hidden lg:inline">{translate(DEFAULT_LANGUAGE, "backToMatches")}</span>
             </Link>
           )}
         </header>
@@ -735,7 +735,7 @@ function AuthShellInner({
                       type="button"
                       onClick={() => setShowPw((s) => !s)}
                       aria-label={
-                        showPw ? "Masquer le mot de passe" : "Afficher le mot de passe"
+                        showPw ? translate(DEFAULT_LANGUAGE, "hidePassword") : translate(DEFAULT_LANGUAGE, "showPassword")
                       }
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-dim transition-colors hover:bg-elev hover:text-ink active:bg-elev"
                     >
@@ -1023,7 +1023,7 @@ function AuthShellInner({
                       }}
                       type={showPw ? "text" : "password"}
                       autoComplete="new-password"
-                      placeholder="Minimum 8 caractères"
+                      placeholder={translate(DEFAULT_LANGUAGE, "minimumEightCharacters")}
                       required
                       className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
@@ -1031,7 +1031,7 @@ function AuthShellInner({
                       type="button"
                       onClick={() => setShowPw((s) => !s)}
                       aria-label={
-                        showPw ? "Masquer le mot de passe" : "Afficher le mot de passe"
+                        showPw ? translate(DEFAULT_LANGUAGE, "hidePassword") : translate(DEFAULT_LANGUAGE, "showPassword")
                       }
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-dim transition-colors hover:bg-elev hover:text-ink active:bg-elev"
                     >
@@ -1065,7 +1065,7 @@ function AuthShellInner({
                     htmlFor="reg-confirm-password"
                     className="block text-[10.5px] font-medium text-ink"
                   >
-                    Confirmer le mot de passe
+                    {translate(DEFAULT_LANGUAGE, "confirmPassword")}
                   </label>
                   <div
                     className={cn(
@@ -1085,7 +1085,7 @@ function AuthShellInner({
                       }}
                       type={showConfirmPw ? "text" : "password"}
                       autoComplete="new-password"
-                      placeholder="Répétez le mot de passe"
+                      placeholder={translate(DEFAULT_LANGUAGE, "repeatPassword")}
                       required
                       className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
@@ -1305,7 +1305,7 @@ function AuthShellInner({
                       htmlFor="reset-otp-input"
                       className="text-[10.5px] font-medium text-ink"
                     >
-                      Code à 6 chiffres
+                      {translate(DEFAULT_LANGUAGE, "sixDigitCode")}
                     </label>
                     <button
                       type="button"
@@ -1316,7 +1316,7 @@ function AuthShellInner({
                       <RefreshCw className="h-3 w-3" strokeWidth={2.4} />
                       {resendCooldown > 0
                         ? `Renvoyer (${resendCooldown}s)`
-                        : "Renvoyer le code"}
+                        : translate(DEFAULT_LANGUAGE, "resendCode")}
                     </button>
                   </div>
 
@@ -1371,7 +1371,7 @@ function AuthShellInner({
                     htmlFor="reset-new-password"
                     className="block text-[10.5px] font-medium text-ink"
                   >
-                    Nouveau mot de passe
+                    {translate(DEFAULT_LANGUAGE, "newPassword")}
                   </label>
                   <div className="flex h-12 items-center gap-3 rounded-2xl border border-edge bg-deep/45 pl-3.5 pr-1.5 transition-colors focus-within:border-ink focus-within:bg-white">
                     <Lock className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.1} />
@@ -1384,7 +1384,7 @@ function AuthShellInner({
                       }}
                       type={showPw ? "text" : "password"}
                       autoComplete="new-password"
-                      placeholder="Minimum 8 caractères"
+                      placeholder={translate(DEFAULT_LANGUAGE, "minimumEightCharacters")}
                       required
                       className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
@@ -1392,7 +1392,7 @@ function AuthShellInner({
                       type="button"
                       onClick={() => setShowPw((s) => !s)}
                       aria-label={
-                        showPw ? "Masquer le mot de passe" : "Afficher le mot de passe"
+                        showPw ? translate(DEFAULT_LANGUAGE, "hidePassword") : translate(DEFAULT_LANGUAGE, "showPassword")
                       }
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-dim transition-colors hover:bg-elev hover:text-ink"
                     >
@@ -1437,7 +1437,7 @@ function AuthShellInner({
                       }}
                       type={showConfirmPw ? "text" : "password"}
                       autoComplete="new-password"
-                      placeholder="Répétez le mot de passe"
+                      placeholder={translate(DEFAULT_LANGUAGE, "repeatPassword")}
                       required
                       className="h-full w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-dim"
                     />
@@ -1501,7 +1501,7 @@ function AuthShellInner({
         {/* Pied de page sécurité & jeu responsable */}
         <footer className="mx-auto w-full max-w-[468px] space-y-2 pt-3 text-center">
           <Link href={resolvedView === "forgot" ? loginHref : "/matchs"} className="block text-[11px] text-mist underline underline-offset-4 lg:hidden">
-            {resolvedView === "forgot" ? "Retour à la connexion" : "Retour aux matchs"}
+            {resolvedView === "forgot" ? translate(DEFAULT_LANGUAGE, "backToSignIn") : translate(DEFAULT_LANGUAGE, "backToMatches")}
           </Link>
           <div className="inline-flex items-center justify-center gap-1.5 text-[10px] font-medium text-dim">
             <ShieldCheck className="h-3.5 w-3.5 text-win" strokeWidth={2.3} />
