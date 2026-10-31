@@ -1,17 +1,17 @@
 {
-  "id": "0fc3a087-5f88-4d1c-ab6d-2eca2ce3c82c",
-  "createdAt": "2026-10-31T23:25:00.779Z",
+  "id": "b699ffcc-f51d-4bd5-af9d-521ee9c5163d",
+  "createdAt": "2026-10-31T23:47:55.167Z",
   "appVersion": "1.2.6",
   "versionCode": 9,
   "runtimeVersion": "pulse-sdk52-v1",
   "expoGoRuntimeVersion": "exposdk:52.0.0",
   "sdkVersion": "52.0.0",
   "launchAsset": {
-    "hash": "d1vRl6r9aMoyfbGGpCTJ_E0FgAun1088SqmQqGErz-c",
-    "key": "0fc3a0875f880d1c7b6d2eca2ce3c82c",
+    "hash": "E3fHes2jQFFooQUHJJW12bY_qyxu3zK5vRatbHhU7rw",
+    "key": "b699ffccf51d2bd55f9d521ee9c5163d",
     "contentType": "application/javascript",
     "fileExtension": ".hbc",
-    "relativePath": "/expo-sdk52/AppEntry-0fc3a0875f88.hbc"
+    "relativePath": "/expo-sdk52/AppEntry-b699ffccf51d.hbc"
   },
   "assets": [
     {
@@ -62,6 +62,27 @@
       "contentType": "image/webp",
       "fileExtension": ".webp",
       "relativePath": "/expo-sdk52/assets/5f11beec24c62e42637f758cb50192ba"
+    },
+    {
+      "hash": "CySl0kJRHx75Ic370On2cb-WEEX0htiXNKcl2dSOoGU",
+      "key": "71c692f8ee332a144d41a794d9b38892",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/71c692f8ee332a144d41a794d9b38892"
+    },
+    {
+      "hash": "tlHEsZq9YrbU5cFeV9uIeSqJ8hFS3U1BkVgMQ-yuqEI",
+      "key": "bdac85388561c1fe4bd6c155f07d7a29",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/bdac85388561c1fe4bd6c155f07d7a29"
+    },
+    {
+      "hash": "IGc_xhn3jL4ucNVbVklwdptDgf7RNkaFt7kflMsyRmE",
+      "key": "031ab58dc55d4cb4c1cec5006409229d",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/031ab58dc55d4cb4c1cec5006409229d"
     },
     {
       "hash": "EuDaf_fW6VwxY2uT_XshWcJEcWaqXldzXpTy-KUUzdc",
