@@ -292,9 +292,7 @@ export default function DepositScreen() {
           {/* Montant compact */}
           <View style={styles.card}>
             <Text style={styles.fieldCaps}>
-              MONTANT À CRÉDITER (
-              {formatLocalAmount(effectiveMinLocal, currency)} –{" "}
-              {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
+              MONTANT À CRÉDITER
             </Text>
             <View style={styles.amountInputWrap}>
               <TextInput
@@ -310,6 +308,7 @@ export default function DepositScreen() {
               <Text style={styles.euroSymbol}>{currencyConfig.symbol}</Text>
             </View>
 
+            <Text style={styles.amountHint}>Entre {formatLocalAmount(effectiveMinLocal, currency)} et {formatLocalAmount(currencyConfig.maxDepositLocal, currency)}</Text>
             <View style={styles.quickGrid}>
               {currencyConfig.depositPresetsLocal.map((q) => {
                 const active = localAmount === q;
@@ -376,6 +375,8 @@ export default function DepositScreen() {
                 return (
                   <Pressable
                     key={m.id}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected, disabled: !m.available }}
                     disabled={!m.available}
                     onPress={() => {
                       setMethod(m.id);
@@ -400,6 +401,7 @@ export default function DepositScreen() {
                         {m.sub}
                       </Text>
                     </View>
+                    <View style={[styles.radio, selected && styles.radioSelected]}>{selected ? <View style={styles.radioDot} /> : null}</View>
                   </Pressable>
                 );
               })}
@@ -411,6 +413,7 @@ export default function DepositScreen() {
               </View>
             ) : null}
 
+            <View style={styles.summary}><View style={styles.summaryLine}><Text style={styles.summaryLabel}>Montant demandé</Text><Text style={styles.summaryValue}>{localFormatted || "—"}</Text></View><View style={styles.summaryLine}><Text style={styles.summaryLabel}>Frais</Text><Text style={styles.summaryLabel}>À confirmer</Text></View></View>
             <Pressable
               disabled={!canOpenCheckout}
               onPress={() => void openCheckoutSheet()}
@@ -439,6 +442,7 @@ export default function DepositScreen() {
                 </>
               )}
             </Pressable>
+            <Text style={styles.amountHint}>{isManual ? "Dépôt soumis à validation" : "Paiement sécurisé par le prestataire"}</Text>
           </View>
         </View>
       </ScrollView>
@@ -684,10 +688,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  amountHint: { marginTop: 8, textAlign: "center", fontSize: 10, color: COLORS.mist },
+  radio: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: COLORS.dim, alignItems: "center", justifyContent: "center" },
+  radioSelected: { borderColor: COLORS.betclicRed },
+  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.betclicRed },
+  summary: { marginTop: 12, gap: 5 },
+  summaryLine: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  summaryLabel: { fontSize: 10.5, color: COLORS.mist },
+  summaryValue: { fontSize: 10.5, color: COLORS.ink },
   amountInput: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "500",
+    textAlign: "center",
+    fontSize: 23,
+    fontWeight: "700",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
     paddingVertical: 0,
@@ -721,12 +734,10 @@ const styles = StyleSheet.create({
   },
   methodsGrid: {
     marginTop: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: 6,
   },
   methodCell: {
-    width: "48.8%",
+    width: "100%",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.edge,

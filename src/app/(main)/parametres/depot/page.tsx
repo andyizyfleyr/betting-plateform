@@ -324,8 +324,7 @@ export default function DepositPage() {
             {/* Montant compact */}
             <section className="glass-card rounded-xl p-3 lg:rounded-2xl lg:p-4">
               <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">
-                Montant à créditer ({formatLocalAmount(effectiveMinLocal, currency)} –{" "}
-                {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
+                Montant à créditer
               </label>
               <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-edge bg-elev/60 px-3 py-1.5 focus-within:border-betclic-red lg:py-2.5">
                 <input
@@ -335,7 +334,7 @@ export default function DepositPage() {
                   }
                   value={amountText}
                   onChange={(e) => setAmountText(e.target.value)}
-                  className="w-full bg-transparent font-display text-[13.5px] font-medium tabular-nums text-ink outline-none lg:text-[16px]"
+                  className="w-full bg-transparent text-center font-display text-[23px] font-bold tabular-nums text-ink outline-none lg:text-left lg:text-[16px] lg:font-medium"
                   placeholder={String(currencyConfig.defaultDepositLocal)}
                 />
                 <span className="shrink-0 font-display text-[12px] font-medium text-dim lg:text-[13.5px]">
@@ -343,6 +342,7 @@ export default function DepositPage() {
                 </span>
               </div>
 
+              <p className="mt-2 text-center text-[10px] text-mist lg:hidden">Entre {formatLocalAmount(effectiveMinLocal, currency)} et {formatLocalAmount(currencyConfig.maxDepositLocal, currency)}</p>
               <div className="mt-2 grid grid-cols-5 gap-1.5">
                 {currencyConfig.depositPresetsLocal.map((q) => {
                   const active = localAmount === q;
@@ -373,7 +373,7 @@ export default function DepositPage() {
                 Moyen de paiement
               </p>
 
-              <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <div className="mt-2 grid grid-cols-1 gap-1.5 lg:grid-cols-2">
                 {[
                   {
                     id: "mobile_money" as const,
@@ -409,6 +409,7 @@ export default function DepositPage() {
                     <button
                       key={m.id}
                       type="button"
+                      aria-pressed={selected}
                       disabled={!m.available}
                       onClick={() => {
                         setMethod(m.id);
@@ -436,6 +437,9 @@ export default function DepositPage() {
                           {m.sub}
                         </span>
                       </div>
+                      <span aria-hidden="true" className={cn("ml-auto grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 lg:hidden", selected ? "border-betclic-red" : "border-dim")}>
+                        {selected && <span className="h-2 w-2 rounded-full bg-betclic-red" />}
+                      </span>
                     </button>
                   );
                 })}
@@ -447,6 +451,7 @@ export default function DepositPage() {
                 </p>
               ) : null}
 
+              <div className="mt-3 space-y-1 text-[10.5px] text-mist lg:hidden"><div className="flex justify-between gap-2"><span>Montant demandé</span><span className="text-ink">{localFormatted || "—"}</span></div><div className="flex justify-between gap-2"><span>Frais</span><span>À confirmer</span></div></div>
               <button
                 type="button"
                 disabled={!canSubmit}
@@ -467,6 +472,7 @@ export default function DepositPage() {
                   </>
                 )}
               </button>
+              <p className="mt-2 text-center text-[10px] text-dim lg:hidden">{isManual ? "Dépôt soumis à validation" : "Paiement sécurisé par le prestataire"}</p>
             </section>
           </div>
         </div>
