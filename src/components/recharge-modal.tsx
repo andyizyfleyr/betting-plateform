@@ -400,6 +400,18 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                     setError(null);
                   }}
                 />
+                <MethodCard
+                  label="Cartes cadeaux"
+                  sub="Transcash, PCS, Paysafe..."
+                  badge="Nouveau"
+                  Icon={Gift}
+                  enabled
+                  active={method === "gift_card"}
+                  onClick={() => {
+                    setMethod("gift_card");
+                    setError(null);
+                  }}
+                />
                 {stripeInfo?.enabled && (
                   <MethodCard
                     label="Carte bancaire"
@@ -431,7 +443,97 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
-            {isManual && (
+            {method === "gift_card" ? (
+              <div className="mt-3.5 space-y-2.5">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10.5px] font-medium text-mist">
+                      Type de carte ({GIFT_CARDS.length})
+                    </label>
+                    <span className="text-[9.5px] text-dim">{giftCardDef.hint}</span>
+                  </div>
+                  <div className="mt-1.5 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {GIFT_CARDS.map((c) => {
+                      const isSel = selectedGiftCardId === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedGiftCardId(c.id);
+                            setError(null);
+                          }}
+                          className={cn(
+                            "shrink-0 rounded-xl border px-2.5 py-1.5 text-left transition-colors",
+                            isSel
+                              ? "border-betclic-red bg-betclic-red/8 text-ink"
+                              : "border-edge bg-elev text-mist hover:text-ink"
+                          )}
+                        >
+                          <p className="font-display text-[11px] font-semibold">{c.shortLabel}</p>
+                          <p className="text-[9px] text-dim">{c.expectedDigits ? `${c.expectedDigits} ch.` : c.hint}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="recharge-gift-code" className="text-[10.5px] font-medium text-mist">
+                      Code {giftCardDef.label}
+                    </label>
+                    <span
+                      className={cn(
+                        "font-mono text-[10px] font-medium",
+                        giftCardCode.length === 0
+                          ? "text-dim"
+                          : giftValidation.valid
+                          ? "text-win"
+                          : "text-betclic-red"
+                      )}
+                    >
+                      {giftValidation.currentLength}/
+                      {giftCardDef.minDigits && giftCardDef.maxDigits
+                        ? `${giftCardDef.minDigits}-${giftCardDef.maxDigits}`
+                        : giftCardDef.expectedDigits}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-1.5 flex h-11 items-center rounded-2xl border px-3.5 transition-colors",
+                      giftCardCode.length === 0
+                        ? "border-edge bg-white focus-within:border-ink"
+                        : giftValidation.valid
+                        ? "border-win bg-win/5 focus-within:border-win"
+                        : "border-betclic-red bg-betclic-red/5 focus-within:border-betclic-red"
+                    )}
+                  >
+                    <input
+                      id="recharge-gift-code"
+                      type="text"
+                      value={giftCardCode}
+                      onChange={(e) => {
+                        setGiftCardCode(e.target.value.toUpperCase());
+                        setError(null);
+                      }}
+                      placeholder={`Ex : ${giftCardDef.placeholder}`}
+                      className="w-full bg-transparent font-mono text-[13px] font-semibold tracking-wider text-ink outline-none"
+                    />
+                    {giftValidation.valid && (
+                      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-win text-white">
+                        <Check className="h-3 w-3" strokeWidth={3} />
+                      </span>
+                    )}
+                  </div>
+                  {giftCardCode.length > 0 && !giftValidation.valid && (
+                    <p className="mt-1 text-[10px] font-medium text-betclic-red">
+                      {giftValidation.error}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : isManual ? (
               <div className="mt-3.5">
                 <label className="text-[10.5px] font-medium text-mist">
                   {method === "mobile_money"
@@ -453,7 +555,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   className="mt-1.5 h-11 w-full rounded-2xl border border-edge bg-white px-3.5 text-[12px] font-medium text-ink outline-none focus:border-ink"
                 />
               </div>
-            )}
+            ) : null}
 
             {error && (
               <p className="mt-3 rounded-xl bg-betclic-red/8 px-3 py-2 text-[10.5px] font-medium text-betclic-red">

@@ -1,3 +1,4 @@
+import { isGiftCardProvider, parseGiftCardProvider } from "@/lib/gift-cards";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1392,7 +1393,7 @@ export default function AdminScreen() {
                   </Text>
                 </View>
                 <Text style={styles.cardSub}>
-                  {d.provider} · {d.providerRef ?? "—"} ·{" "}
+                  {isGiftCardProvider(d.provider) ? `🎁 ${parseGiftCardProvider(d.provider).cardDef?.label ?? "Carte Cadeau"}` : (d.provider === "mobile_money" ? "Mobile Money" : d.provider === "sepa" ? "Virement bancaire" : d.provider)} · {d.providerRef ?? "—"} ·{" "}
                   {formatPlacedAt(d.createdAt)}
                 </Text>
                 {d.status === "pending" || d.status === "pending_review" ? (

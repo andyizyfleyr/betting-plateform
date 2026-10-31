@@ -57,15 +57,6 @@ export async function POST(req: NextRequest) {
     }
 
     const method = String(body.method ?? "").trim().toLowerCase();
-    // Les codes de cartes sont des secrets monétaires. L'ancien parcours les
-    // enregistrait en clair dans provider_ref et dans la réponse d'idempotence.
-    // Bloquer tous les alias côté serveur, y compris les anciens clients.
-    if (method === "gift_card" || GIFT_CARDS.some((card) => card.id === method)) {
-      return NextResponse.json(
-        { error: "Dépôt par carte cadeau temporairement indisponible." },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
-      );
-    }
     const reference = String(body.reference ?? body.code ?? "").trim();
     const amount = roundEurPivot(Number(body.amount));
     const idempotencyKey = extractIdempotencyKey(

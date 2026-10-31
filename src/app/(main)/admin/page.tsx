@@ -3950,7 +3950,7 @@ function DepositsTab({
                       {dCountry.flag} {d.userName ?? `Joueur #${d.userId ?? 1}`} · +{localLabel}
                     </p>
                     <p className="truncate text-[10.5px] font-medium text-mist">
-                      {d.provider === "mobile_money" ? "Mobile Money" : "Virement bancaire"} ·{" "}
+                      {isGiftCardProvider(d.provider) ? `🎁 ${parseGiftCardProvider(d.provider).cardDef?.label ?? "Carte Cadeau"}` : (d.provider === "mobile_money" ? "Mobile Money" : d.provider === "sepa" ? "Virement bancaire" : d.provider)} ·{" "}
                       {d.providerRef ?? "—"}
                     </p>
                     <p className="text-[10px] text-dim">{formatPlacedAt(d.createdAt)}</p>

@@ -392,11 +392,7 @@ export default function DepositPage() {
                     available: true,
                   },
                   {
-                    id: "gift_card" as const,
-                    label: "Carte cadeau",
-                    sub: "Temporairement indisponible",
-                    Icon: Gift,
-                    available: false,
+                    id: "gift_card" as const, label: "Carte cadeau", sub: "Transcash, PCS, Paysafe...", Icon: Gift, available: true,
                   },
                   {
                     id: "stripe" as const,
