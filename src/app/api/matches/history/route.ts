@@ -30,6 +30,7 @@ import {
 } from "@/lib/response-cache";
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
+import { readSecondaryHistory, writeSecondaryHistory } from "@/lib/secondary-history-cache";
 import { fetchHyperdriveHistory } from "@/lib/hyperdrive-history";
 import type { ClientMatchHistoryItem } from "@/lib/api";
 
@@ -177,6 +178,14 @@ async function getOrBuildBaseHistory(manualRefresh = false): Promise<{
         if (doubleCheck) return doubleCheck;
       }
 
+      if (!manualRefresh) {
+        const secondary = await readSecondaryHistory();
+        if (secondary) {
+          const payload = setHistoryBaseCache(secondary.items, secondary.serverTime);
+          return { payload, items: secondary.items, serverTime: secondary.serverTime };
+        }
+      }
+
       await ensureSeeded();
       await ensureMlLoaded();
       await syncLiveMatchesThrottled(false, { manualRefresh });
@@ -208,6 +217,7 @@ async function getOrBuildBaseHistory(manualRefresh = false): Promise<{
     const mapped = sortedFinished.filter(isPubliclyOfferedMatch).map(mapHistoryItem);
     const serverTime = new Date().toISOString();
     const payload = setHistoryBaseCache(mapped, serverTime);
+    await writeSecondaryHistory({ items: mapped, serverTime });
     return { payload, items: mapped, serverTime };
   });
 }

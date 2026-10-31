@@ -1,0 +1,33 @@
+const assert = require('node:assert/strict');
+const Module = require('node:module');
+const { PGlite } = require('@electric-sql/pglite');
+const fs = require('node:fs');
+(async () => {
+  const pg = new PGlite(); await pg.exec(fs.readFileSync('migrations/secondary-public-history-cache.sql', 'utf8'));
+  let fail = false, pools = 0;
+  const original = Module._load;
+  Module._load = function(name) {
+    if (name === 'pg') return { Pool: class { constructor() { pools++; } on() {} async query(...args) { if (fail) throw Error('unavailable'); return pg.query(...args); } } };
+    return original.apply(this, arguments);
+  };
+  const path = require.resolve('../src/lib/secondary-history-cache.ts');
+  const load = () => { delete require.cache[path]; return require(path); };
+  const url = name => `postgresql://a:b@ep-${name}.us-east-2.aws.neon.tech/db?sslmode=require`;
+  process.env.DATABASE_URL = url('source'); process.env.SECONDARY_HISTORY_URL = url('target');
+  process.env.SECONDARY_HISTORY_CACHE_ENABLED = 'true'; process.env.VERCEL_ENV = 'preview';
+  assert.equal(await load().readSecondaryHistory(), null); assert.equal(pools, 0);
+  process.env.VERCEL_ENV = 'production'; process.env.SECONDARY_HISTORY_URL = url('source');
+  assert.equal(await load().readSecondaryHistory(), null); assert.equal(pools, 0);
+  process.env.SECONDARY_HISTORY_URL = url('target');
+  const cache = load(), now = Date.now();
+  const page = t => ({ serverTime: new Date(t).toISOString(), items: [{id: 1, status: 'finished', homeTeam:'A', awayTeam:'B'}] });
+  assert.equal(await cache.readSecondaryHistory(), null);
+  await cache.writeSecondaryHistory(page(now)); assert.deepEqual(await cache.readSecondaryHistory(), page(now));
+  await cache.writeSecondaryHistory(page(now - 1000)); assert.deepEqual(await cache.readSecondaryHistory(), page(now));
+  await cache.writeSecondaryHistory({ ...page(now + 1), items:[{id:2,status:'live',homeTeam:'A',awayTeam:'B'}] });
+  assert.deepEqual(await cache.readSecondaryHistory(), page(now));
+  await pg.query("UPDATE pulse_public_history_cache SET updated_at = clock_timestamp() - interval '11 seconds'");
+  assert.equal(await cache.readSecondaryHistory(), null);
+  fail = true; assert.equal(await cache.readSecondaryHistory(), null); await cache.writeSecondaryHistory(page(Date.now()));
+  await pg.close(); console.log('Cache secondaire : opt-in, isolation, TTL, ordre des écritures et repli OK (PGlite).');
+})().catch(e => { console.error(e); process.exitCode = 1; });
