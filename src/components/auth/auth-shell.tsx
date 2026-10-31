@@ -33,7 +33,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { PulseLogo } from "@/components/pulse-logo";
+import { PulseLogo, PulseMark } from "@/components/pulse-logo";
 import { useApp } from "@/components/providers";
 import { api, type ClientUser } from "@/lib/api";
 import {
@@ -560,12 +560,12 @@ function AuthShellInner({
       </aside>
 
       {/* ─── Colonne formulaire (Mobile < lg 1:1 Android & Desktop droite) ─── */}
-      <main className="pt-safe pb-safe flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6">
+      <main className={cn("pt-safe pb-safe relative isolate flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6", resolvedView === "login" && "before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[214px] before:bg-gradient-to-br before:from-betclic-red before:to-[#ae0017] lg:before:hidden")}>
         {/* Barre haute navigation */}
-        <header className="flex items-center justify-between gap-3">
+        <header className={cn("flex items-center justify-between gap-3", resolvedView === "login" && "lg:justify-between")}>
           <Link
             href="/matchs"
-            className="inline-flex items-center active:opacity-80 lg:invisible"
+            className={cn("inline-flex items-center active:opacity-80 lg:invisible", resolvedView === "login" && "hidden lg:inline-flex")}
           >
             <PulseLogo size="sm" variant="light" />
           </Link>
@@ -581,17 +581,18 @@ function AuthShellInner({
           ) : (
             <Link
               href="/matchs"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[11px] font-medium text-ink shadow-2xs transition-colors hover:bg-elev active:scale-[0.99]"
+              className={cn("inline-flex h-9 items-center gap-1.5 rounded-full border border-edge bg-white px-3.5 font-display text-[11px] font-medium text-ink shadow-2xs transition-colors hover:bg-elev active:scale-[0.99]", resolvedView === "login" && "border-transparent bg-white/20 text-white lg:border-edge lg:bg-white lg:text-ink")}
             >
-              <ArrowLeft className="h-3.5 w-3.5 text-mist" strokeWidth={2.4} />
+              <ArrowLeft className={cn("h-3.5 w-3.5 text-mist", resolvedView === "login" && "text-white lg:text-mist")} strokeWidth={2.4} />
               <span className="lg:hidden">Matchs</span>
               <span className="hidden lg:inline">Retour aux matchs</span>
             </Link>
           )}
         </header>
 
+        {resolvedView === "login" && <div className="flex flex-col items-center gap-3 pb-1 pt-2 lg:hidden"><PulseMark size={56} inverted /><div className="flex items-center gap-1 font-display text-[23px] font-bold italic leading-none text-white"><span>PULSE</span><span className="rounded-full bg-white px-2 py-1 text-[10px] text-betclic-red">BET</span></div></div>}
         {/* Carte centrale d'authentification */}
-        <div className="my-auto py-4 lg:py-6">
+        <div className={cn("my-auto py-4 lg:py-6", resolvedView === "login" && "my-0 pt-3 lg:my-auto lg:py-6")}>
           <div className="mx-auto w-full rounded-3xl border border-edge bg-white p-3.5 shadow-[0_2px_12px_rgba(17,24,39,0.04)] sm:p-5 lg:max-w-[468px] lg:p-6 lg:shadow-[0_16px_44px_-16px_rgba(17,24,39,0.09)]">
             {resolvedView !== "forgot" ? (
               <>
@@ -607,7 +608,7 @@ function AuthShellInner({
                     className={cn(
                       "flex h-10 items-center justify-center rounded-xl font-display text-[11px] transition-all",
                       resolvedView === "login"
-                        ? "bg-white font-medium text-ink shadow-xs"
+                        ? cn("bg-white font-medium text-ink shadow-xs", resolvedView === "login" && "text-betclic-red lg:text-ink")
                         : "font-medium text-mist hover:text-ink"
                     )}
                   >
@@ -636,7 +637,7 @@ function AuthShellInner({
                   </h1>
                   <p className="mt-1 text-[11px] leading-relaxed text-mist">
                     {resolvedView === "login"
-                      ? "Accédez à vos paris en direct, vos prédictions et votre portefeuille."
+                      ? "Accédez à vos paris, vos prédictions et votre portefeuille."
                       : "Inscription gratuite pour parier sur les matchs officiels et virtuels."}
                   </p>
                 </div>
@@ -795,16 +796,10 @@ function AuthShellInner({
                   )}
                 </button>
 
-                <p className="pt-1 text-center text-[11px] text-mist">
-                  Nouveau sur Pulse Bet ?{" "}
-                  <Link
-                    href={registerHref}
-                    replace
-                    className="font-display font-medium text-ink underline decoration-edge underline-offset-4 hover:text-betclic-red"
-                  >
-                    Ouvrir un compte
-                  </Link>
-                </p>
+                <div className="pt-1 text-center text-[11px] text-mist">
+                  <p>Nouveau sur Pulse Bet ?</p>
+                  <Link href={registerHref} replace className="mt-2 flex h-11 items-center justify-center rounded-xl border border-betclic-red font-display text-[11px] font-medium text-betclic-red lg:mt-0 lg:inline lg:h-auto lg:border-0 lg:text-ink lg:underline lg:decoration-edge lg:underline-offset-4">Ouvrir un compte</Link>
+                </div>
               </form>
             )}
 
