@@ -18,7 +18,7 @@ const fs = require('node:fs');
   assert.equal(await load().readSecondaryHistory(), null); assert.equal(pools, 0);
   process.env.VERCEL_ENV = 'production'; process.env.SECONDARY_HISTORY_URL = url('source');
   assert.equal(await load().readSecondaryHistory(), null); assert.equal(pools, 0);
-  process.env.SECONDARY_HISTORY_URL = url('target');
+  process.env.SECONDARY_HISTORY_URL = `psql '${url('target')}'`;
   const cache = load(), now = Date.now();
   const page = t => ({ serverTime: new Date(t).toISOString(), items: [{id: 1, status: 'finished', homeTeam:'A', awayTeam:'B'}] });
   assert.equal(await cache.readSecondaryHistory(), null);
