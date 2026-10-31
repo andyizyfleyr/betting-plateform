@@ -562,7 +562,7 @@ function AuthShellInner({
       {/* ─── Colonne formulaire (Mobile < lg 1:1 Android & Desktop droite) ─── */}
       <main className={cn("pt-safe pb-safe relative isolate flex min-h-dvh w-full flex-col justify-between px-2 py-3 sm:px-3.5 sm:py-4 lg:px-6 lg:py-6", resolvedView === "login" && "before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-[214px] before:bg-gradient-to-br before:from-betclic-red before:to-[#ae0017] lg:before:hidden")}>
         {/* Barre haute navigation */}
-        <header className={cn("flex items-center justify-between gap-3", resolvedView === "login" && "lg:justify-between")}>
+        <header className="hidden items-center justify-between gap-3 lg:flex">
           <Link
             href="/matchs"
             className={cn("inline-flex items-center active:opacity-80 lg:invisible", resolvedView === "login" && "hidden lg:inline-flex")}
@@ -590,6 +590,7 @@ function AuthShellInner({
           )}
         </header>
 
+        {resolvedView === "login" && <div aria-hidden="true" className="h-9 shrink-0 lg:hidden" />}
         {resolvedView === "login" && <div className="flex flex-col items-center gap-3 pb-1 pt-2 lg:hidden"><PulseMark size={56} inverted /><div className="flex items-center gap-1 font-display text-[23px] font-bold italic leading-none text-white"><span>PULSE</span><span className="rounded-full bg-white px-2 py-1 text-[10px] text-betclic-red">BET</span></div></div>}
         {/* Carte centrale d'authentification */}
         <div className={cn("my-auto py-4 lg:py-6", resolvedView === "login" && "my-0 pt-3 lg:my-auto lg:py-6")}>
@@ -1498,6 +1499,9 @@ function AuthShellInner({
 
         {/* Pied de page sécurité & jeu responsable */}
         <footer className="mx-auto w-full max-w-[468px] space-y-2 pt-3 text-center">
+          <Link href={resolvedView === "forgot" ? loginHref : "/matchs"} className="block text-[11px] text-mist underline underline-offset-4 lg:hidden">
+            {resolvedView === "forgot" ? "Retour à la connexion" : "Retour aux matchs"}
+          </Link>
           <div className="inline-flex items-center justify-center gap-1.5 text-[10px] font-medium text-dim">
             <ShieldCheck className="h-3.5 w-3.5 text-win" strokeWidth={2.3} />
             <span>Connexion chiffrée TLS · Session protégée Pulse Bet</span>
