@@ -6,7 +6,7 @@ const FIELDS = `id, sport, league, home_team AS "homeTeam", away_team AS "awayTe
  starts_at AS "startsAt", odds_home AS "oddsHome", odds_draw AS "oddsDraw", odds_away AS "oddsAway",
  suspended, finished_at AS "finishedAt", red_home AS "redHome", red_away AS "redAway", events,
  regime, home_form AS "homeForm", away_form AS "awayForm", home_logo AS "homeLogo", away_logo AS "awayLogo",
- source, ht_home_score AS "htHomeScore", ht_away_score AS "htAwayScore", real_stats AS "realStats"`;
+ source, external_league AS "externalLeague", ht_home_score AS "htHomeScore", ht_away_score AS "htAwayScore", real_stats AS "realStats"`;
 export const HISTORY_SQL = `(SELECT ${FIELDS} FROM matches WHERE status = 'finished' AND source = 'manual' ORDER BY finished_at DESC, id DESC LIMIT 120)
  UNION ALL
  (SELECT ${FIELDS} FROM matches WHERE status = 'finished' AND source <> 'manual' ORDER BY finished_at DESC, id DESC LIMIT 120)`;

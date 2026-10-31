@@ -1,3 +1,4 @@
+import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
 import { NextRequest } from "next/server";
 import { and, desc, eq, getTableColumns, ne } from "drizzle-orm";
 import { db } from "@/db";
@@ -204,7 +205,7 @@ async function getOrBuildBaseHistory(manualRefresh = false): Promise<{
         return tb - ta || b.id - a.id;
       });
 
-    const mapped = sortedFinished.map(mapHistoryItem);
+    const mapped = sortedFinished.filter(isPubliclyOfferedMatch).map(mapHistoryItem);
     const serverTime = new Date().toISOString();
     const payload = setHistoryBaseCache(mapped, serverTime);
     return { payload, items: mapped, serverTime };

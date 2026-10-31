@@ -1,3 +1,4 @@
+import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
 import { waitUntil } from "@vercel/functions";
 import {
   consumeRecentEngineMilestone,
@@ -48,7 +49,7 @@ let lastPruneAt = 0;
 
 function broadcastCurrentSlimSnapshot(): void {
   const nowMs = Date.now();
-  const rows = getCachedAllMatchesForFeed();
+  const rows = getCachedAllMatchesForFeed().filter(isPubliclyOfferedMatch);
   if (rows.length === 0) return;
   const slim = rows.map((r) =>
     serializeSlimPublicMatch(hydrateLiveMatchRow(r, nowMs), nowMs)

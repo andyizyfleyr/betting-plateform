@@ -1,3 +1,4 @@
+import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -299,6 +300,9 @@ export async function POST(req: NextRequest) {
   }
 
   for (const m of syncedMatchRows) {
+    if (!isPubliclyOfferedMatch(m)) {
+      return NextResponse.json({ error: "Une compétition ne propose plus de nouveaux paris" }, { status: 400 });
+    }
     if (m.suspended) {
       return NextResponse.json(
         { error: `Cotes suspendues sur ${m.homeTeam} – ${m.awayTeam}` },
@@ -527,6 +531,9 @@ export async function POST(req: NextRequest) {
             status: 400,
             error: "L'un des matchs sélectionnés est déjà terminé",
           };
+        }
+        if (!isPubliclyOfferedMatch(m)) {
+          return { kind: "error", status: 400, error: "Une compétition ne propose plus de nouveaux paris" };
         }
         if (m.suspended) {
           return {

@@ -132,15 +132,36 @@ export const OFFICIAL_SOCCER_LEAGUES: OfficialSoccerLeague[] = [
   },
 ];
 
-export const TOP_DISCOVERY_LEAGUE_SLUGS = [
-  "uefa.champions",
-  "uefa.europa",
-  "eng.1",
-  "fra.1",
-  "esp.1",
-  "ita.1",
-  "ger.1",
+// Politique d'offre : ne pas retirer les autres définitions, nécessaires à la
+// synchronisation et au règlement des anciens tickets.
+export const ALLOWED_REAL_LEAGUE_SLUGS = [
+  "eng.1", "esp.1", "ger.1", "ita.1", "fra.1", "por.1", "ned.1",
+  "uefa.champions", "uefa.europa", "uefa.europa.conf", "fifa.cwc",
+  "fifa.world", "caf.nations", "uefa.euro", "conmebol.america",
 ] as const;
+const allowedSlugs = new Set<string>(ALLOWED_REAL_LEAGUE_SLUGS);
+const extraLeagues: OfficialSoccerLeague[] = [
+  { slug: "fifa.cwc", label: "Coupe du monde des clubs", country: "FIFA", aliases: ["fifa club world cup", "club world cup"] },
+  { slug: "uefa.euro", label: "Championnat d'Europe", country: "UEFA", aliases: ["uefa european championship", "european championship", "euro"] },
+  { slug: "conmebol.america", label: "Copa América", country: "Amérique du Sud", aliases: ["copa america", "conmebol copa america"] },
+];
+OFFICIAL_SOCCER_LEAGUES.push(...extraLeagues);
+export const OFFERED_SOCCER_LEAGUES = OFFICIAL_SOCCER_LEAGUES.filter(l => allowedSlugs.has(l.slug));
+export const TOP_DISCOVERY_LEAGUE_SLUGS = ALLOWED_REAL_LEAGUE_SLUGS;
+
+function normalizeCompetition(value: string): string {
+  return value.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+export function isAllowedRealLeague(slug?: string | null, name?: string | null): boolean {
+  // Le slug officiel, quand présent, fait autorité : jamais de rapprochement par sous-chaîne.
+  if (slug?.trim()) return allowedSlugs.has(normalizeCompetition(slug));
+  if (!name?.trim()) return false;
+  const n = normalizeCompetition(name);
+  return OFFERED_SOCCER_LEAGUES.some(l => [l.slug, l.label, ...l.aliases].some(v => normalizeCompetition(v) === n));
+}
+export function isPubliclyOfferedMatch(m: { source?: string | null; externalLeague?: string | null; league?: string | null }): boolean {
+  return m.source !== "manual" || isAllowedRealLeague(m.externalLeague, m.league);
+}
 
 export function resolveEspnSlugForLeague(leagueNameOrSlug: string | null | undefined): string | null {
   if (!leagueNameOrSlug) return null;
@@ -154,21 +175,17 @@ export function resolveEspnSlugForLeague(leagueNameOrSlug: string | null | undef
   const bySlug = OFFICIAL_SOCCER_LEAGUES.find((l) => l.slug === norm);
   if (bySlug) return bySlug.slug;
 
+  let best: { slug: string; length: number } | null = null;
   for (const lg of OFFICIAL_SOCCER_LEAGUES) {
-    const labelNorm = lg.label
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    if (labelNorm === norm) return lg.slug;
-    for (const al of lg.aliases) {
-      const alNorm = al
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
-      if (alNorm === norm || norm.includes(alNorm)) return lg.slug;
+    for (const candidate of [lg.label, ...lg.aliases]) {
+      const value = normalizeCompetition(candidate);
+      if (value === norm) return lg.slug;
+      if (norm.includes(value) && (!best || value.length > best.length)) {
+        best = { slug: lg.slug, length: value.length };
+      }
     }
   }
-  return null;
+  return best?.slug ?? null;
 }
 
 export function officialLeagueLabel(slug: string, fallback = "Football"): string {

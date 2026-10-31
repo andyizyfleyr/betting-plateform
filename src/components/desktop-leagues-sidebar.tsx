@@ -7,7 +7,7 @@ import { SportIcon } from "@/components/sport-icon";
 import { useApp, useFeedMatches } from "@/components/providers";
 import { triggerRouteLoader } from "@/components/pulse-flash-loader";
 import {
-  OFFICIAL_SOCCER_LEAGUES,
+  OFFERED_SOCCER_LEAGUES,
   resolveEspnSlugForLeague,
 } from "@/lib/real-leagues";
 import { cn } from "@/lib/format";
@@ -259,7 +259,7 @@ export function DesktopLeaguesSidebar() {
       }
     }
 
-    const officialEntries: LeagueEntry[] = OFFICIAL_SOCCER_LEAGUES.map((lg) => {
+    const officialEntries: LeagueEntry[] = OFFERED_SOCCER_LEAGUES.map((lg) => {
       const stat = countsBySlug.get(lg.slug);
       return {
         key: lg.slug,

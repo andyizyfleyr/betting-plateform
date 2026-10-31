@@ -42,7 +42,7 @@ import {
   settleQuestion,
   slugifyOptionKey,
 } from "@/lib/predictions";
-import { OFFICIAL_SOCCER_LEAGUES } from "@/lib/real-leagues";
+import { OFFERED_SOCCER_LEAGUES, isAllowedRealLeague } from "@/lib/real-leagues";
 import {
   discoverUpcomingRealMatches,
   getRealMatchSettlementMode,
@@ -206,7 +206,7 @@ export async function GET(req: NextRequest) {
     ml,
     scenarioMode: scenarioInfo.mode,
     realSettlementMode,
-    officialLeagues: OFFICIAL_SOCCER_LEAGUES,
+    officialLeagues: OFFERED_SOCCER_LEAGUES,
     matchForecasts: scenarioInfo.forecasts,
     stats: {
       totalUsers: totalUsers?.value ?? 0,
@@ -471,6 +471,10 @@ async function handleAdminPost(
             : Boolean(body.autoSync)
           : false;
 
+      if (source === "manual" && !isAllowedRealLeague(externalLeague, league)) {
+        return NextResponse.json({ error: "Cette compétition réelle ne fait pas partie des compétitions autorisées" }, { status: 400 });
+      }
+
       if (externalId) {
         const [dup] = await db
           .select({ id: matches.id })
@@ -532,6 +536,9 @@ async function handleAdminPost(
           ? body.leagueSlug.trim()
           : "top";
       const leagueSlug = rawSlug === "all" ? "top" : rawSlug;
+      if (leagueSlug !== "top" && !isAllowedRealLeague(leagueSlug)) {
+        return NextResponse.json({ error: "Compétition non autorisée" }, { status: 400 });
+      }
       const daysAhead =
         typeof body.daysAhead === "number" && Number.isFinite(body.daysAhead)
           ? Math.max(1, Math.min(14, Math.round(body.daysAhead)))
@@ -577,6 +584,7 @@ async function handleAdminPost(
         const homeTeam = String(f.homeTeam ?? "").trim();
         const awayTeam = String(f.awayTeam ?? "").trim();
         if (!externalId || !homeTeam || !awayTeam) continue;
+        if (!externalLeague || !isAllowedRealLeague(externalLeague)) { skipped++; continue; }
         if (importedSet.has(externalId)) {
           skipped++;
           continue;

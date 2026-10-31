@@ -1,3 +1,4 @@
+import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
 import { randomInt } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -192,6 +193,10 @@ export async function GET(req: NextRequest) {
         const m = matchMap.get(Number(leg.matchId));
         if (!m || m.status !== "upcoming" || m.startsAt.getTime() <= nowLoadMs || m.suspended) {
           skip(m ? `${m.homeTeam} – ${m.awayTeam}` : (leg.title || `Match ${leg.matchId}`), !m ? "introuvable" : m.suspended && m.status === "upcoming" && m.startsAt.getTime() > nowLoadMs ? "marché suspendu" : "match commencé ou terminé");
+          continue;
+        }
+        if (!isPubliclyOfferedMatch(m)) {
+          skip(`${m.homeTeam} – ${m.awayTeam}`, "compétition indisponible");
           continue;
         }
         const market = leg.market || "result";

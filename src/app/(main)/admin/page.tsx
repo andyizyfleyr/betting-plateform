@@ -43,8 +43,8 @@ import { TeamAvatar } from "@/components/team-avatar";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { Toggle } from "@/components/toggle";
-import { LEAGUES, findLeague } from "@/lib/leagues";
-import { OFFICIAL_SOCCER_LEAGUES } from "@/lib/real-leagues";
+import { findLeague } from "@/lib/leagues";
+import { OFFERED_SOCCER_LEAGUES } from "@/lib/real-leagues";
 import { teamLogo } from "@/lib/team-logos";
 import {
   formatEurAsCurrency,
@@ -1273,7 +1273,7 @@ function MatchesTab({
                   setForm({ ...form, league: v });
                 }
               }}
-              options={LEAGUES.map((l) => ({ label: l.name, hint: l.country }))}
+              options={OFFERED_SOCCER_LEAGUES.map((l) => ({ label: l.label, hint: l.country }))}
             />
 
             <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1750,7 +1750,7 @@ function OfficialFixtureImporter({
               className="h-10 w-full rounded-xl border border-edge bg-white px-3 text-[11px] font-medium text-ink outline-none focus:border-emerald-600"
             >
               <option value="all">Toutes les grandes compétitions</option>
-              {OFFICIAL_SOCCER_LEAGUES.map((lg) => (
+              {OFFERED_SOCCER_LEAGUES.map((lg) => (
                 <option key={lg.slug} value={lg.slug}>
                   {lg.label} ({lg.country})
                 </option>

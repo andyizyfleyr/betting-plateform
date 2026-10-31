@@ -2,8 +2,8 @@ const assert=require('node:assert/strict'), Module=require('node:module'),fs=req
 const {PGlite}=require('@electric-sql/pglite');const {drizzle}=require('drizzle-orm/pglite');const original=Module._load;
 (async()=>{
  const pg=new PGlite();const seed=fs.readFileSync('src/db/seed.ts','utf8');const ddl=seed.match(/CREATE TABLE IF NOT EXISTS "matches" \([\s\S]*?\n    \);/);assert(ddl);await pg.exec(ddl[0]);
- await pg.exec(`INSERT INTO matches(sport,league,home_team,away_team,status,starts_at,finished_at,odds_home,odds_away,source,home_score,away_score,events)
- VALUES ('football','Test','A','B','finished','2026-01-01','2026-01-02',2,3,'manual',2,1,'[]'),('football','Test','C','D','finished','2026-01-01',NULL,2,3,'virtual',0,0,'[]');`);
+ await pg.exec(`INSERT INTO matches(sport,league,home_team,away_team,status,starts_at,finished_at,odds_home,odds_away,source,home_score,away_score,events,external_league)
+ VALUES ('football','Premier League','A','B','finished','2026-01-01','2026-01-02',2,3,'manual',2,1,'[]','eng.1'),('football','Test','C','D','finished','2026-01-01',NULL,2,3,'virtual',0,0,'[]',NULL),('football','Premier League','E','F','finished','2026-01-01','2026-01-02',2,3,'manual',1,1,'[]','usa.1');`);
  const db=drizzle(pg);let enabled=false,queryCount=0;
  const {HISTORY_SQL}=require('../party/history-hyperdrive.ts');
  const data=await pg.query(HISTORY_SQL);const rows=data.rows.map(m=>({...m,startsAt:new Date(m.startsAt),finishedAt:m.finishedAt?new Date(m.finishedAt):null,markets:null,scriptedEvents:null,tickHistory:[]}));
