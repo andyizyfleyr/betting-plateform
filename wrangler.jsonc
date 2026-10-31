@@ -3,6 +3,8 @@
   "name": "pulse-bet",
   "main": "party/index.ts",
   "compatibility_date": "2026-04-07",
+  // Conserver les secrets et variables configurés dans le tableau de bord.
+  "keep_vars": true,
   "vars": {
     "APP_URL": "https://be-plateform.vercel.app"
   },
