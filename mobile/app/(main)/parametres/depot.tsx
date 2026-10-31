@@ -536,6 +536,8 @@ export default function DepositScreen() {
                 <Text numberOfLines={1} style={styles.sheetTitle}>
                   {method === "mobile_money"
                     ? "Dépôt Mobile Money"
+                    : method === "gift_card"
+                    ? "Dépôt Carte Cadeau"
                     : "Dépôt par virement bancaire"}
                 </Text>
                 <Text numberOfLines={1} style={styles.sheetSub}>
@@ -561,8 +563,10 @@ export default function DepositScreen() {
                   (
                   {method === "mobile_money"
                     ? "Mobile Money"
+                    : method === "gift_card"
+                    ? `Carte ${giftCardDef.label}`
                     : "Virement bancaire"}
-                  ) sera crédité sur votre solde dès validation.
+                  ) sera crédité sur votre solde dès validation par l'administrateur.
                 </Text>
                 <View style={styles.doneBtns}>
                   <Pressable
@@ -581,6 +585,162 @@ export default function DepositScreen() {
                     <Text style={styles.redBtnText}>Fermer</Text>
                   </Pressable>
                 </View>
+              </View>
+            ) : method === "gift_card" ? (
+              <View style={{ marginTop: 12 }}>
+                <View style={styles.sheetHintBox}>
+                  <Text style={styles.sheetHintText}>
+                    Sélectionnez votre type de carte cadeau et saisissez le code exact. Votre code sera vérifié manuellement par l'administrateur avant crédit sur votre solde.
+                  </Text>
+                </View>
+
+                <Text style={[styles.fieldCaps, { marginTop: 12, marginBottom: 6 }]}>
+                  TYPE DE CARTE ({GIFT_CARDS.length})
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 6, paddingBottom: 4 }}
+                >
+                  {GIFT_CARDS.map((c) => {
+                    const isSel = selectedGiftCardId === c.id;
+                    return (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => {
+                          setSelectedGiftCardId(c.id);
+                          if (sheetError) setSheetError(null);
+                        }}
+                        style={[
+                          {
+                            paddingHorizontal: 10,
+                            paddingVertical: 7,
+                            borderRadius: 10,
+                            borderWidth: 1.5,
+                            borderColor: isSel ? COLORS.betclicRed : COLORS.edge,
+                            backgroundColor: isSel ? "rgba(230,0,20,0.08)" : COLORS.elev,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: isSel ? COLORS.ink : COLORS.mist,
+                          }}
+                        >
+                          {c.shortLabel}
+                        </Text>
+                        <Text style={{ fontSize: 9, color: COLORS.dim, marginTop: 1 }}>
+                          {c.expectedDigits ? `${c.expectedDigits} ch.` : c.hint}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginTop: 10,
+                  }}
+                >
+                  <Text style={styles.fieldCaps}>
+                    CODE {giftCardDef.label.toUpperCase()}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: "700",
+                      color:
+                        giftCardCode.length === 0
+                          ? COLORS.dim
+                          : giftValidation.valid
+                          ? COLORS.win
+                          : COLORS.betclicRed,
+                    }}
+                  >
+                    {giftValidation.currentLength}/
+                    {giftCardDef.minDigits && giftCardDef.maxDigits
+                      ? `${giftCardDef.minDigits}-${giftCardDef.maxDigits}`
+                      : giftCardDef.expectedDigits}
+                  </Text>
+                </View>
+
+                <TextInput
+                  value={giftCardCode}
+                  onChangeText={(v) => {
+                    setGiftCardCode(v.toUpperCase());
+                    if (sheetError) setSheetError(null);
+                  }}
+                  autoFocus
+                  autoCapitalize="characters"
+                  placeholder={`Ex : ${giftCardDef.placeholder}`}
+                  placeholderTextColor={COLORS.dim}
+                  style={[
+                    styles.refInput,
+                    {
+                      letterSpacing: 1.2,
+                      borderColor:
+                        giftCardCode.length === 0
+                          ? COLORS.edge
+                          : giftValidation.valid
+                          ? COLORS.win
+                          : COLORS.betclicRed,
+                      backgroundColor:
+                        giftCardCode.length === 0
+                          ? COLORS.white
+                          : giftValidation.valid
+                          ? "rgba(34,197,94,0.06)"
+                          : "rgba(230,0,20,0.06)",
+                    },
+                  ]}
+                />
+
+                {giftCardCode.length > 0 && !giftValidation.valid ? (
+                  <Text style={{ fontSize: 10, color: COLORS.betclicRed, marginTop: 4, fontWeight: "500" }}>
+                    {giftValidation.error}
+                  </Text>
+                ) : null}
+
+                {sheetError ? (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>{sheetError}</Text>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  disabled={loading || !giftValidation.valid}
+                  onPress={() => void submitManualInSheet()}
+                  style={[
+                    styles.submitBtn,
+                    !loading && giftValidation.valid
+                      ? styles.submitBtnReady
+                      : styles.submitBtnDisabled,
+                  ]}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Lock
+                        size={14}
+                        color={giftValidation.valid ? "#ffffff" : COLORS.dim}
+                        strokeWidth={2.3}
+                      />
+                      <Text
+                        style={[
+                          styles.submitBtnText,
+                          !giftValidation.valid && { color: COLORS.dim },
+                        ]}
+                      >
+                        Valider mon dépôt · {localFormatted}
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
             ) : (
               <View style={{ marginTop: 12 }}>
