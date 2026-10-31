@@ -353,138 +353,18 @@ interface MatchBookPressure {
  * d'un but domicile `V(h+1, a) - V(h, a)` vs un but extérieur `V(h, a+1) - V(h, a)`.
  */
 export function computeDynamicStepTilts(
-  pressure: MatchBookPressure,
-  home: number,
-  away: number,
-  minute: number,
-  baseLambdaH: number,
-  baseLambdaA: number,
-  eventsSoFar?: Array<{ type: string; team: string; minute: number }>
+  _pressure: MatchBookPressure,
+  _home: number,
+  _away: number,
+  _minute: number,
+  _baseLambdaH: number,
+  _baseLambdaA: number,
+  _eventsSoFar?: Array<{ type: string; team: string; minute: number }>
 ): { hTilt: number; aTilt: number } {
-  const { tickets, houseTightness } = pressure;
-  if (tickets.length === 0) {
-    return { hTilt: 1, aTilt: 1 };
-  }
-
-  const remShare = Math.max(0.02, 1 - goalTimeCDF(minute));
-  const remH = Math.max(0.02, baseLambdaH * remShare);
-  const remA = Math.max(0.02, baseLambdaA * remShare);
-  const htRemFrac =
-    minute <= 45 ? Math.max(0, Math.min(1, (goalTimeCDF(45) - goalTimeCDF(minute)) / remShare)) : 0;
-
-  const priorGoals = (eventsSoFar ?? []).filter(
-    (e) => e.type === "goal" && (e.team === "home" || e.team === "away")
-  );
-  const priorHtH = priorGoals.filter((g) => g.team === "home" && g.minute <= 45).length;
-  const priorHtA = priorGoals.filter((g) => g.team === "away" && g.minute <= 45).length;
-
-  const MAX_ADD = 4;
-  const pH: number[] = [];
-  const pA: number[] = [];
-  let sumPH = 0;
-  let sumPA = 0;
-  for (let k = 0; k <= MAX_ADD; k++) {
-    const vh = poissonPmf(k, remH);
-    const va = poissonPmf(k, remA);
-    pH.push(vh);
-    pA.push(va);
-    sumPH += vh;
-    sumPA += va;
-  }
-  for (let k = 0; k <= MAX_ADD; k++) {
-    pH[k] /= sumPH || 1;
-    pA[k] /= sumPA || 1;
-  }
-
-  const evalScenarioPayout = (offH: number, offA: number, dh: number, da: number): number => {
-    const fh = home + offH + dh;
-    const fa = away + offA + da;
-    const estHtH =
-      minute <= 45 ? home + offH + Math.round(dh * htRemFrac) : Math.min(fh, priorHtH);
-    const estHtA =
-      minute <= 45 ? away + offA + Math.round(da * htRemFrac) : Math.min(fa, priorHtA);
-
-    const synthEvents: Array<{ type: string; team: string; minute: number }> = [];
-    if (fh + fa > 0) {
-      let firstTeam: "home" | "away" = "home";
-      if (priorGoals.length > 0) {
-        firstTeam = priorGoals[0].team === "home" ? "home" : "away";
-      } else if (offH > 0) {
-        firstTeam = "home";
-      } else if (offA > 0) {
-        firstTeam = "away";
-      } else {
-        firstTeam = dh >= da && dh > 0 ? "home" : da > 0 ? "away" : "home";
-      }
-      let rem1H = estHtH;
-      let rem1A = estHtA;
-      let rem2H = fh - estHtH;
-      let rem2A = fa - estHtA;
-      if (firstTeam === "home") {
-        if (rem1H > 0) {
-          synthEvents.push({ type: "goal", team: "home", minute: 10 });
-          rem1H--;
-        } else if (rem2H > 0) {
-          synthEvents.push({ type: "goal", team: "home", minute: 50 });
-          rem2H--;
-        }
-      } else {
-        if (rem1A > 0) {
-          synthEvents.push({ type: "goal", team: "away", minute: 10 });
-          rem1A--;
-        } else if (rem2A > 0) {
-          synthEvents.push({ type: "goal", team: "away", minute: 50 });
-          rem2A--;
-        }
-      }
-      for (let i = 0; i < rem1H; i++) synthEvents.push({ type: "goal", team: "home", minute: 25 });
-      for (let i = 0; i < rem1A; i++) synthEvents.push({ type: "goal", team: "away", minute: 28 });
-      for (let i = 0; i < rem2H; i++) synthEvents.push({ type: "goal", team: "home", minute: 70 });
-      for (let i = 0; i < rem2A; i++) synthEvents.push({ type: "goal", team: "away", minute: 72 });
-    }
-
-    let payout = 0;
-    for (const t of tickets) {
-      if (isKnownMarket(t.market)) {
-        const res = marketSettle(t.market, t.selection, fh, fa, synthEvents, 0);
-        if (res.voided) {
-          payout += t.stake * t.riskWeight;
-        } else if (res.won) {
-          payout += t.stake * t.odds * t.riskWeight;
-        }
-      } else if (t.market === "result") {
-        const won = t.selection === "home" ? fh > fa : t.selection === "away" ? fa > fh : fh === fa;
-        if (won) payout += t.stake * t.odds * t.riskWeight;
-      }
-    }
-    return payout;
-  };
-
-  const expectedValueAtOffset = (offH: number, offA: number): number => {
-    let ev = 0;
-    for (let dh = 0; dh <= MAX_ADD; dh++) {
-      const wh = pH[dh];
-      for (let da = 0; da <= MAX_ADD; da++) {
-        ev += wh * pA[da] * evalScenarioPayout(offH, offA, dh, da);
-      }
-    }
-    return ev;
-  };
-
-  const vStay = expectedValueAtOffset(0, 0);
-  const vHomeGoal = expectedValueAtOffset(1, 0);
-  const vAwayGoal = expectedValueAtOffset(0, 1);
-
-  const deltaHome = vHomeGoal - vStay;
-  const deltaAway = vAwayGoal - vStay;
-
-  const refBank = Math.max(80, 160 * houseTightness);
-  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-
-  const hTilt = clamp(Math.exp(-0.34 * Math.tanh(deltaHome / refBank)), 0.76, 1.26);
-  const aTilt = clamp(Math.exp(-0.34 * Math.tanh(deltaAway / refBank)), 0.76, 1.26);
-
-  return { hTilt, aTilt };
+  // Découplage strict pour l'équité sportive et l'indépendance RNG :
+  // Le déroulement des matchs virtuels ne doit jamais être influencé par les mises des joueurs
+  // ni par l'exposition financière de la maison (conformité RNG impartial).
+  return { hTilt: 1, aTilt: 1 };
 }
 
 export function regimeFactors(
@@ -566,9 +446,7 @@ async function executeTick(now: number): Promise<void> {
   const { sportTickets, comboTickets } = await getCachedPendingBookForMatches(openIds);
   const hasAnyExposure = sportTickets.length > 0 || comboTickets.length > 0;
 
-  const houseHealth = hasAnyExposure
-    ? await getGlobalHouseHealth()
-    : { totalIn24h: 0, totalOut24h: 0, payoutRatio: 0.9, tightness: 1.0 };
+  const houseHealth = { totalIn24h: 0, totalOut24h: 0, payoutRatio: 0.9, tightness: 1.0 };
 
   const activeUserIds: number[] = [];
   for (const b of sportTickets) activeUserIds.push(b.userId);
@@ -602,13 +480,10 @@ async function executeTick(now: number): Promise<void> {
     betsByMatch.set(cb.matchId, arr);
   }
 
-  const pressureFor = (m: MatchRow): MatchBookPressure =>
-    m.source === "virtual"
-      ? {
-          tickets: betsByMatch.get(m.id) ?? [],
-          houseTightness: houseHealth.tightness,
-        }
-      : { tickets: [], houseTightness: 1 };
+  const pressureFor = (_m: MatchRow): MatchBookPressure => ({
+    tickets: [],
+    houseTightness: 1,
+  });
 
   const liveMatches = openMatches.filter((m) => m.status === "live");
   const upcomingMatches = openMatches.filter((m) => m.status === "upcoming");

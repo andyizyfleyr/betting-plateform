@@ -1,6 +1,6 @@
 import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
 import { NextRequest } from "next/server";
-import { and, desc, eq, getTableColumns, ne } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { hydrateLiveMatchRow } from "@/db/engine";
 import { matches, type MatchRow } from "@/db/schema";
@@ -54,6 +54,10 @@ const {
 void _omitMarkets;
 void _omitScriptedEvents;
 void _omitTickHistory;
+const historyVirtualMatchColumns = {
+  ...historyMatchColumns,
+  realStats: sql<MatchRow["realStats"]>`NULL::jsonb`,
+};
 
 function toIso(v: Date | string | null | undefined): string | null {
   if (!v) return null;
@@ -199,7 +203,7 @@ async function getOrBuildBaseHistory(manualRefresh = false): Promise<{
         .orderBy(desc(matches.finishedAt), desc(matches.id))
         .limit(120),
       db
-        .select(historyMatchColumns)
+        .select(historyVirtualMatchColumns)
         .from(matches)
         .where(and(eq(matches.status, "finished"), ne(matches.source, "manual")))
         .orderBy(desc(matches.finishedAt), desc(matches.id))
