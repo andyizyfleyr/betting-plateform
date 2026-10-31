@@ -30,7 +30,7 @@ import {
   User,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { PulseLogo } from "@/components/pulse-logo";
+import { PulseLogo, PulseMark } from "@/components/pulse-logo";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, type ClientUser } from "@/lib/api";
 import {
@@ -512,7 +512,7 @@ export default function AuthScreen() {
             )}
           </View>
 
-          {resolvedView === "login" ? <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ height: 100 }} /> : null}
+          {resolvedView === "login" ? <View style={styles.loginHero}><PulseMark size={56} inverted /><View style={styles.loginBrand}><Text style={styles.loginBrandText}>PULSE</Text><Text style={styles.loginBet}>BET</Text></View></View> : null}
           {/* Carte centrale 1:1 Web < lg */}
           <View style={[styles.cardWrap, resolvedView === "login" && {marginTop: 12}]}>
             <View style={styles.card}>

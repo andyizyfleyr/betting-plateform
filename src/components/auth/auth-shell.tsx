@@ -33,7 +33,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
-import { PulseLogo } from "@/components/pulse-logo";
+import { PulseLogo, PulseMark } from "@/components/pulse-logo";
 import { useApp } from "@/components/providers";
 import { api, type ClientUser } from "@/lib/api";
 import {
@@ -590,7 +590,7 @@ function AuthShellInner({
           )}
         </header>
 
-        {resolvedView === "login" && <div aria-hidden="true" className="h-[100px] shrink-0 lg:hidden" />}
+        {resolvedView === "login" && <div className="flex flex-col items-center gap-3 pb-1 pt-2 lg:hidden"><PulseMark size={56} inverted /><div className="flex items-center gap-1 font-display text-[23px] font-bold italic leading-none text-white"><span>PULSE</span><span className="rounded-full bg-white px-2 py-1 text-[10px] text-betclic-red">BET</span></div></div>}
         {/* Carte centrale d'authentification */}
         <div className={cn("my-auto py-4 lg:py-6", resolvedView === "login" && "my-0 pt-3 lg:my-auto lg:py-6")}>
           <div className="mx-auto w-full rounded-3xl border border-edge bg-white p-3.5 shadow-[0_2px_12px_rgba(17,24,39,0.04)] sm:p-5 lg:max-w-[468px] lg:p-6 lg:shadow-[0_16px_44px_-16px_rgba(17,24,39,0.09)]">
