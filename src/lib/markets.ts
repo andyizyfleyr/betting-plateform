@@ -1284,6 +1284,22 @@ export const HT_DEPENDENT_MARKETS = new Set([
   "first_team_to_score",
 ]);
 
+/** Fail closed when a half/first-goal market requires facts the feed has not verified. */
+function hasReliableRealMarketHistory(m: RealMatchInput, market: string, minuteLabel: string | null): boolean {
+  if (m.status !== "live" || !HT_DEPENDENT_MARKETS.has(market)) return true;
+  const h = m.homeScore;
+  const a = m.awayScore;
+  if (!Number.isInteger(h) || !Number.isInteger(a) || h! < 0 || a! < 0) return false;
+  if (market === "first_team_to_score") {
+    return h === 0 && a === 0 || hasVerifiedGoalTimeline(h!, a!, m.events ?? null);
+  }
+  if (!isFirstHalfCompleted(minuteLabel, m.status)) return true;
+  if (h === 0 && a === 0) return true;
+  const htH = m.htHomeScore;
+  const htA = m.htAwayScore;
+  return Number.isInteger(htH) && Number.isInteger(htA) && htH! >= 0 && htA! >= 0 && htH! <= h! && htA! <= a!;
+}
+
 const NEUTRAL_SPLIT_MODEL: LiveHalfSplitModel = {
   htResult: { home: 0.33, draw: 0.34, away: 0.33 },
   htOver: () => 0.5,
@@ -1590,6 +1606,7 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
   for (const def of MARKETS) {
     if (def.key === "result") continue;
     if (!hasFeedTimeline && HT_DEPENDENT_MARKETS.has(def.key)) continue;
+    if (!hasReliableRealMarketHistory(m, def.key, effMinuteLabel)) continue;
     // Sur un match réel : on conserve la fermeture 1ère MT à 41', mais pas la coupure virtuelle à 75'
     const safeDef: MarketDef = {
       ...def,
@@ -1615,6 +1632,10 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
   if (m.markets && m.markets.length > 0) {
     const byKey = new Map(generated.map((g) => [g.key, g]));
     for (const cg of m.markets) {
+      if (!hasReliableRealMarketHistory(m, cg.key, effMinuteLabel)) {
+        byKey.delete(cg.key);
+        continue;
+      }
       const openOutcomes = isLive
         ? cg.outcomes.filter(
             (o) => !marketOutcomeSettled(cg.key, o.key, homeScore, awayScore, minute, opts)
@@ -1676,6 +1697,7 @@ export function realMatchLiveProbability(
   const awayScore = m.awayScore ?? 0;
   const effMinuteLabel = isLive ? effectiveRealMinuteLabel(m) : (m.minute ?? null);
   const minute = isLive ? minuteNumber(effMinuteLabel) : 0;
+  if (!hasReliableRealMarketHistory(m, market, effMinuteLabel)) return null;
 
   const model = realMatchScoreModel({
     oddsHome: m.oddsHome,

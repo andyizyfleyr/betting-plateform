@@ -29,6 +29,10 @@ export interface RealLiveFeedProbs {
   pAway: number;
   source: "bookmaker_live" | "espn_live" | "blended";
   updatedAtSec: number | null;
+  /** Heure de mise à jour fournie par la source, pas l’heure de réception. */
+  sourceUpdatedAt?: string | null;
+  scoreHome?: number | null;
+  scoreAway?: number | null;
 }
 
 /** Statistiques officielles d'un match réel récupérées gratuitement depuis le flux sportif public. */

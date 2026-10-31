@@ -966,7 +966,14 @@ function extractLiveFeedSignals(params: {
         ? clamp(Math.floor(params.clockSeconds / 60) + 1, 1, 90)
         : parseClockMinuteInt(params.minute ?? "1", null, null);
 
-  let bookLive: { pH: number; pD: number; pA: number } | null = null;
+  // Une heure de réception ne prouve pas la fraîcheur de la cote chez le fournisseur.
+  const sourceTime = (rec: JsonRec): string | null => {
+    const value = rec.lastUpdated ?? rec.updatedAt ?? rec.lastUpdatedAt;
+    if (typeof value !== "string") return null;
+    const ts = Date.parse(value);
+    return Number.isFinite(ts) ? new Date(ts).toISOString() : null;
+  };
+  let bookLive: { pH: number; pD: number; pA: number; sourceUpdatedAt: string | null } | null = null;
   for (const rawOddsItem of asArr(params.comp.odds)) {
     const oddsRec = asRec(rawOddsItem);
     if (!oddsRec) continue;
@@ -998,13 +1005,13 @@ function extractLiveFeedSignals(params: {
         movedVsPre &&
         isLiveTripletCoherentWithScore(pH, pD, pA, params.preOdds, hScore, aScore, minInt)
       ) {
-        bookLive = { pH, pD, pA };
+        bookLive = { pH, pD, pA, sourceUpdatedAt: sourceTime(oddsRec) };
         break;
       }
     }
   }
 
-  let espnLive: { pH: number; pD: number; pA: number } | null = null;
+  let espnLive: { pH: number; pD: number; pA: number; sourceUpdatedAt: string | null } | null = null;
   const probCandidates: unknown[] = [];
   const situationProb = asRec(asRec(params.comp.situation)?.lastPlay)?.probability;
   if (situationProb) probCandidates.push(situationProb);
@@ -1029,7 +1036,7 @@ function extractLiveFeedSignals(params: {
         const pD = dVal / s;
         const pA = rawA / s;
         if (isLiveTripletCoherentWithScore(pH, pD, pA, params.preOdds, hScore, aScore, minInt)) {
-          espnLive = { pH, pD, pA };
+          espnLive = { pH, pD, pA, sourceUpdatedAt: sourceTime(rec) };
           break;
         }
       }
@@ -1049,6 +1056,10 @@ function extractLiveFeedSignals(params: {
       pDraw: round2((pDraw / s) * 100) / 100,
       pAway: round2((pAway / s) * 100) / 100,
       source: "blended",
+      sourceUpdatedAt: bookLive.sourceUpdatedAt && espnLive.sourceUpdatedAt
+        ? new Date(Math.min(Date.parse(bookLive.sourceUpdatedAt), Date.parse(espnLive.sourceUpdatedAt))).toISOString()
+        : null,
+      scoreHome: params.homeScore, scoreAway: params.awayScore,
       updatedAtSec,
     };
   }
@@ -1058,6 +1069,8 @@ function extractLiveFeedSignals(params: {
       pDraw: Math.round(bookLive.pD * 1000) / 1000,
       pAway: Math.round(bookLive.pA * 1000) / 1000,
       source: "bookmaker_live",
+      sourceUpdatedAt: bookLive.sourceUpdatedAt,
+      scoreHome: params.homeScore, scoreAway: params.awayScore,
       updatedAtSec,
     };
   }
@@ -1066,6 +1079,8 @@ function extractLiveFeedSignals(params: {
     pDraw: Math.round(espnLive!.pD * 1000) / 1000,
     pAway: Math.round(espnLive!.pA * 1000) / 1000,
     source: "espn_live",
+    sourceUpdatedAt: espnLive!.sourceUpdatedAt,
+    scoreHome: params.homeScore, scoreAway: params.awayScore,
     updatedAtSec,
   };
 }
