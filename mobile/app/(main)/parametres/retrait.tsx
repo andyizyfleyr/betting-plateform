@@ -326,8 +326,7 @@ export default function WithdrawScreen() {
             <View style={[styles.card, { gap: 10 }]}>
               <View>
                 <Text style={styles.fieldCaps}>
-                  MONTANT DU RETRAIT (MIN.{" "}
-                  {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)})
+                  MONTANT DU RETRAIT
                 </Text>
                 <View style={styles.amountInputWrap}>
                   <TextInput
@@ -345,6 +344,7 @@ export default function WithdrawScreen() {
                   <Text style={styles.euroSymbol}>{currencyConfig.symbol}</Text>
                 </View>
 
+                <Text style={styles.amountHint}>Minimum {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}</Text>
                 <View style={styles.quickGrid}>
                   {currencyConfig.withdrawalPresetsLocal.map((q) => (
                     <Pressable
@@ -401,7 +401,7 @@ export default function WithdrawScreen() {
                 ) : null}
               </View>
 
-              <View>
+              <View style={styles.subCard}>
                 <Text style={styles.fieldCaps}>CANAL DE RÉCEPTION</Text>
                 <View style={styles.methodsGrid}>
                   {METHODS.map((m) => {
@@ -409,6 +409,8 @@ export default function WithdrawScreen() {
                     return (
                       <Pressable
                         key={m.id}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: active }}
                         onPress={() => setMethod(m.id)}
                         style={[
                           styles.methodCell,
@@ -429,7 +431,7 @@ export default function WithdrawScreen() {
                 </View>
               </View>
 
-              <View>
+              <View style={styles.subCard}>
                 <Text style={styles.fieldCaps}>
                   {currentMethod.hint.toUpperCase()}
                 </Text>
@@ -448,6 +450,7 @@ export default function WithdrawScreen() {
                 </View>
               ) : null}
 
+              <View style={styles.summary}><View style={styles.summaryLine}><Text style={styles.summaryLabel}>Montant demandé</Text><Text style={styles.summaryValue}>{localAmount > 0 ? formatLocalAmount(localAmount, currency) : "—"}</Text></View><View style={styles.summaryLine}><Text style={styles.summaryLabel}>Frais et montant reçu</Text><Text style={styles.summaryLabel}>À confirmer</Text></View></View>
               <Pressable
                 disabled={!canSubmit}
                 onPress={() => void submit()}
@@ -598,10 +601,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  amountHint: { marginTop: 8, textAlign: "center", fontSize: 10, color: COLORS.mist },
+  subCard: { borderWidth: 1, borderColor: COLORS.edge, borderRadius: 12, padding: 12, backgroundColor: "#ffffff" },
+  summary: { gap: 5 },
+  summaryLine: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
+  summaryLabel: { fontSize: 10.5, color: COLORS.mist },
+  summaryValue: { fontSize: 10.5, color: COLORS.ink },
   amountInput: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: "500",
+    textAlign: "center",
+    fontSize: 23,
+    fontWeight: "700",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
     paddingVertical: 0,

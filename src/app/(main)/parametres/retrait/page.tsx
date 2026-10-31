@@ -329,8 +329,7 @@ export default function WithdrawPage() {
             <section className="glass-card space-y-2.5 rounded-xl p-3 lg:space-y-3.5 lg:rounded-2xl lg:p-4">
               <div>
                 <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">
-                  Montant du retrait (min.{" "}
-                  {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)})
+                  Montant du retrait
                 </label>
                 <div className="mt-1 flex items-center gap-2 rounded-xl border border-edge bg-elev/60 px-3 py-1.5 focus-within:border-betclic-red lg:py-2.5">
                   <input
@@ -338,7 +337,7 @@ export default function WithdrawPage() {
                     inputMode={currencyConfig.decimals === 0 ? "numeric" : "decimal"}
                     value={amountText}
                     onChange={(e) => setAmountText(e.target.value)}
-                    className="w-full bg-transparent font-display text-[13.5px] font-medium tabular-nums text-ink outline-none lg:text-[16px]"
+                    className="w-full bg-transparent text-center font-display text-[23px] font-bold tabular-nums text-ink outline-none lg:text-left lg:text-[16px] lg:font-medium"
                     placeholder={String(currencyConfig.defaultWithdrawalLocal)}
                   />
                   <span className="shrink-0 font-display text-[12px] font-medium text-dim lg:text-[13.5px]">
@@ -346,6 +345,7 @@ export default function WithdrawPage() {
                   </span>
                 </div>
 
+                <p className="mt-2 text-center text-[10px] text-mist lg:hidden">Minimum {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}</p>
                 <div className="mt-2 grid grid-cols-4 gap-1.5">
                   {quickWithdrawPresets.map((q) => (
                     <button
@@ -391,7 +391,7 @@ export default function WithdrawPage() {
                 )}
               </div>
 
-              <div>
+              <div className="rounded-xl border border-edge bg-white p-3 lg:border-0 lg:p-0">
                 <p className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">
                   Canal de réception
                 </p>
@@ -402,6 +402,7 @@ export default function WithdrawPage() {
                       <button
                         key={m.id}
                         type="button"
+                        aria-pressed={active}
                         onClick={() => setMethod(m.id)}
                         className={cn(
                           "flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-left transition-all lg:rounded-xl lg:p-2.5",
@@ -425,7 +426,7 @@ export default function WithdrawPage() {
                 </div>
               </div>
 
-              <div>
+              <div className="rounded-xl border border-edge bg-white p-3 lg:border-0 lg:p-0">
                 <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">
                   {currentMethod.hint}
                 </label>
@@ -444,6 +445,7 @@ export default function WithdrawPage() {
                 </p>
               )}
 
+              <div className="space-y-1 text-[10.5px] text-mist lg:hidden"><div className="flex justify-between gap-2"><span>Montant demandé</span><span className="text-ink">{localAmount > 0 ? formatLocalAmount(localAmount, currency) : "—"}</span></div><div className="flex justify-between gap-2"><span>Frais et montant reçu</span><span>À confirmer</span></div></div>
               <button
                 type="submit"
                 disabled={!canSubmit}
