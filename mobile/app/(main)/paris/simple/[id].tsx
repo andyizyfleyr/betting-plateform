@@ -179,10 +179,8 @@ export default function SingleBetDetailScreen() {
 
   const eventHref = useMemo(() => {
     if (!bet) return null;
-    if (bet.kind === "sport" && bet.matchId) {
-      return bet.matchStatus === "finished"
-        ? `/resultats/${bet.matchId}`
-        : `/matchs/${bet.matchId}`;
+    if (bet.kind === "sport" && bet.matchId && bet.matchStatus === "finished") {
+      return `/resultats/${bet.matchId}`;
     }
     if (bet.kind === "prediction" && bet.questionId) {
       return `/predictions/${bet.questionId}`;
@@ -560,9 +558,7 @@ export default function SingleBetDetailScreen() {
                     <Text style={styles.eventLinkText}>
                       {bet.kind === "prediction"
                         ? "Ouvrir la prédiction"
-                        : bet.matchStatus === "finished"
-                          ? "Voir le bilan du match"
-                          : "Ouvrir la fiche du match"}
+                        : "Voir le bilan du match"}
                     </Text>
                     <ChevronRight
                       size={16}
