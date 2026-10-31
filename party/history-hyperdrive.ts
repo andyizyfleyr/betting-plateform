@@ -13,7 +13,7 @@ export const HISTORY_SQL = `(SELECT ${FIELDS} FROM matches WHERE status = 'finis
 
 // Coalescence locale aux requêtes simultanées : aucune donnée privée,
 // aucun partage entre origines et jamais pour un rafraîchissement explicite.
-const inFlightHistory = new Map<string, Promise<Response>>();
+const inFlightHistory = new Map<string, Promise<string | null>>();
 
 export async function hyperdriveHistory(request: Request, binding: Hyperdrive | undefined, secret: string | undefined, ctx: ExecutionContext): Promise<Response> {
   if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
@@ -25,27 +25,32 @@ export async function hyperdriveHistory(request: Request, binding: Hyperdrive | 
   const cache = caches.default;
   if (!fresh) { try { const hit = await cache.match(cacheKey); if (hit) return new Response(hit.body, { status: hit.status, headers: { "Content-Type": "application/json", "Cache-Control": "private, no-store" } }); } catch { /* accès direct */ } }
   const flightKey = cacheKey.url;
+  const makeResponse = (json: string | null): Response => json === null
+    ? Response.json({ error: "Service indisponible" }, { status: 503, headers: { "Cache-Control": "no-store" } })
+    : new Response(json, { headers: { "Content-Type": "application/json", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
   if (!fresh) {
     const pending = inFlightHistory.get(flightKey);
-    if (pending) return (await pending).clone();
+    if (pending) return makeResponse(await pending);
   }
-  const load = async (): Promise<Response> => {
-  const client = new Client({ connectionString: binding.connectionString, connectionTimeoutMillis: 2500, query_timeout: 2500 });
-  try {
-    await client.connect();
-    const { rows } = await client.query(HISTORY_SQL);
-    const result = Response.json({ version: 1, matches: rows }, { headers: { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
-    if (!fresh) {
-      const stored = new Response(result.clone().body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=10" } });
-      ctx.waitUntil(cache.put(cacheKey, stored).catch(() => undefined));
-    }
-    return result;
-  } catch { return Response.json({ error: "Service indisponible" }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
-  finally { await client.end().catch(() => undefined); }
+  // Ne partager qu'une chaîne, jamais un objet Response/stream lié à une autre
+  // requête Worker ; chaque appel construit sa propre réponse.
+  const load = async (): Promise<string | null> => {
+    const client = new Client({ connectionString: binding.connectionString, connectionTimeoutMillis: 2500, query_timeout: 2500 });
+    try {
+      await client.connect();
+      const { rows } = await client.query(HISTORY_SQL);
+      const json = JSON.stringify({ version: 1, matches: rows });
+      if (!fresh) {
+        const stored = new Response(json, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=10" } });
+        ctx.waitUntil(cache.put(cacheKey, stored).catch(() => undefined));
+      }
+      return json;
+    } catch { return null; }
+    finally { await client.end().catch(() => undefined); }
   };
-  if (fresh) return load();
+  if (fresh) return makeResponse(await load());
   const pending = load();
   inFlightHistory.set(flightKey, pending);
-  try { return (await pending).clone(); }
+  try { return makeResponse(await pending); }
   finally { if (inFlightHistory.get(flightKey) === pending) inFlightHistory.delete(flightKey); }
 }
