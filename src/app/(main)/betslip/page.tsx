@@ -8,7 +8,6 @@ import {
   ArrowRight,
   Check,
   Flame,
-  Hash,
   Layers,
   Loader2,
   Trash2,
@@ -39,6 +38,7 @@ import {
 } from "@/lib/odds-lock";
 import { AnimatedNumber } from "@/components/animated-number";
 import { CouponCodeBox } from "@/components/coupon-code-box";
+import { BetslipMobileActions } from "@/components/betslip-mobile-actions";
 import { OddsLockControls } from "@/components/odds-lock-controls";
 import {
   OddsTrendCorner,
@@ -132,7 +132,6 @@ export default function BetslipPage() {
     byUid: Record<string, number>;
   } | null>(null);
   const [receipt, setReceipt] = useState<PlacedReceipt | null>(null);
-  const [mobileCouponOpen, setMobileCouponOpen] = useState(false);
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
@@ -651,33 +650,11 @@ export default function BetslipPage() {
           )}
         </div>
 
+        <BetslipMobileActions onClear={() => { clearCombo(); setError(null); }} />
         {enrichedLegs.length > 0 && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setMobileCouponOpen((o) => !o)}
-              className={cn(
-                "inline-flex h-8 items-center gap-1 rounded-full px-2.5 font-display text-[10.5px] font-medium transition-colors active:scale-95 lg:hidden",
-                mobileCouponOpen
-                  ? "bg-ink text-white"
-                  : "bg-elev text-ink"
-              )}
-            >
-              <Hash className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-              Code coupon
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                clearCombo();
-                setError(null);
-              }}
-              className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10.5px] font-medium text-mist hover:bg-edge/80 hover:text-ink active:bg-edge active:text-ink"
-            >
-              <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />
-              Vider
-            </button>
-          </div>
+          <button type="button" onClick={() => { clearCombo(); setError(null); }} className="hidden h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10.5px] font-medium text-mist hover:bg-edge/80 hover:text-ink lg:inline-flex">
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} /> Vider
+          </button>
         )}
       </div>
 
@@ -691,12 +668,12 @@ export default function BetslipPage() {
             Votre coupon de pari est vide
           </h2>
           <p className="mx-auto mt-1.5 max-w-[290px] text-[11px] leading-relaxed text-mist">
-            Faites un <strong className="font-medium text-ink">appui long</strong> sur
+            Faites un <strong className="font-medium text-ink">appui long</strong>{" "}sur
             n&apos;importe quelle cote dans Matchs ou Prédictions pour l&apos;ajouter à votre
             coupon combiné.
           </p>
 
-          <div className="mt-5 grid grid-cols-2 gap-2.5">
+          <div className="mt-5 hidden grid-cols-2 gap-2.5 lg:grid">
             <Link
               href="/matchs"
               className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[11px] font-medium text-white active:scale-[0.98]"
@@ -713,7 +690,7 @@ export default function BetslipPage() {
             </Link>
           </div>
 
-          <CouponCodeBox variant="empty" autoCheckUrlCode />
+          <div className="hidden lg:block"><CouponCodeBox variant="empty" autoCheckUrlCode /></div>
         </div>
       ) : (
         <div className="mt-3 space-y-3 lg:mt-5 lg:grid lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start lg:gap-6 lg:space-y-0">
@@ -722,7 +699,7 @@ export default function BetslipPage() {
           <CouponCodeBox
             variant="compact"
             autoCheckUrlCode
-            className={cn(!mobileCouponOpen && "hidden lg:block")}
+            className="hidden lg:block"
           />
 
           {/* Jauge Bonus Combiné (uniquement en mode combiné ≥ 2 sélections) */}
