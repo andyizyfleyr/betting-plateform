@@ -1,5 +1,6 @@
 "use client";
 
+import { PaymentMethodMark } from "@/components/payment-method-mark";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -411,12 +412,14 @@ export default function WithdrawPage() {
                             : "border-edge bg-elev/40"
                         )}
                       >
-                        <m.Icon
+                        <PaymentMethodMark method={m.id} fallback={
+                      <m.Icon
                           className={cn(
                             "h-3.5 w-3.5 shrink-0 lg:h-4 lg:w-4",
                             active ? "text-betclic-red" : "text-mist"
                           )}
                         />
+                      } />
                         <span className="truncate font-display text-[10.5px] font-medium text-ink lg:text-[10.5px]">
                           {m.label}
                         </span>
