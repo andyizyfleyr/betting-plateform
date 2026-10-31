@@ -6,6 +6,7 @@ const { endpointId, validateEnv, simulate, main, PILOT_BRANCH } = require('./neo
    DATABASE_URL:'postgresql://test:test@ep-source-pooler.us-east-2.aws.neon.tech/test?sslmode=require',
    NEON_PILOT_URL:'postgresql://test:test@ep-target.us-east-2.aws.neon.tech/test?sslmode=require' };
  assert.equal(endpointId(env.DATABASE_URL),'ep-source');
+ assert.equal(endpointId("psql '" + env.NEON_PILOT_URL + "'"),'ep-target');
  assert(validateEnv(env));
  for (const change of [{VERCEL_ENV:'production'}, {VERCEL_GIT_COMMIT_REF:'main'}, {VERCEL:'0'}]) assert.equal(validateEnv({...env,...change}), false);
  assert.throws(()=>validateEnv({...env,NEON_PILOT_URL:env.DATABASE_URL.replace('-pooler','')}));

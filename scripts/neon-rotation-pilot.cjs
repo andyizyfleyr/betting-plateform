@@ -4,14 +4,20 @@
 const PILOT_BRANCH = 'arena/65f0a495-betting-plateform';
 let stage = 'configuration';
 
+function normalizeConnection(value) {
+  const text = value.trim();
+  const copiedCommand = /^psql\s+'([^'\r\n]+)'\s*$/.exec(text);
+  return copiedCommand ? copiedCommand[1] : text;
+}
 function endpointId(value) {
-  const u = new URL(value);
-  if (!['postgres:', 'postgresql:'].includes(u.protocol)) throw Error('invalid');
+  let u;
+  try { u = new URL(normalizeConnection(value)); } catch { throw Error('format'); }
+  if (!['postgres:', 'postgresql:'].includes(u.protocol)) throw Error('scheme');
   const host = u.hostname.toLowerCase();
-  if (!host.endsWith('.neon.tech')) throw Error('invalid');
+  if (!host.endsWith('.neon.tech')) throw Error('host');
   const endpoint = host.split('.')[0].replace(/-pooler$/, '');
-  if (!/^ep-[a-z0-9-]+$/.test(endpoint)) throw Error('invalid');
-  if (!['require', 'verify-ca', 'verify-full'].includes(u.searchParams.get('sslmode'))) throw Error('invalid');
+  if (!/^ep-[a-z0-9-]+$/.test(endpoint)) throw Error('endpoint');
+  if (!['require', 'verify-ca', 'verify-full'].includes(u.searchParams.get('sslmode'))) throw Error('ssl');
   return endpoint;
 }
 
@@ -69,8 +75,8 @@ async function simulate(source, target) {
 async function main(env = process.env) {
   if (!validateEnv(env)) return;
   const { Client } = require('pg');
-  const source = new Client({ connectionString: env.DATABASE_URL, connectionTimeoutMillis: 8000, query_timeout: 8000 });
-  const target = new Client({ connectionString: env.NEON_PILOT_URL, connectionTimeoutMillis: 8000, query_timeout: 8000 });
+  const source = new Client({ connectionString: normalizeConnection(env.DATABASE_URL), connectionTimeoutMillis: 8000, query_timeout: 8000 });
+  const target = new Client({ connectionString: normalizeConnection(env.NEON_PILOT_URL), connectionTimeoutMillis: 8000, query_timeout: 8000 });
   try {
     stage = 'connexion source'; await source.connect();
     stage = 'connexion cible'; await target.connect();
@@ -81,5 +87,5 @@ async function main(env = process.env) {
     await source.end().catch(() => {});
   }
 }
-if (require.main === module) main().catch(() => { console.error(`NEON_ROTATION_PILOT_V1 FAILED : étape ${stage}, aucune donnée ni URL affichée.`); process.exitCode = 1; });
+if (require.main === module) main().catch((err) => { const code = ['format','scheme','host','endpoint','ssl','missing','same endpoint'].includes(err?.message) ? err.message : 'connexion ou simulation'; console.error(`NEON_ROTATION_PILOT_V1 FAILED : étape ${stage}, catégorie ${code} ; aucune donnée ni URL affichée.`); process.exitCode = 1; });
 module.exports = { endpointId, validateEnv, simulate, main, PILOT_BRANCH };
