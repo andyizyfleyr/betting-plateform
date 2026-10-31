@@ -96,3 +96,16 @@ sont fusionnées en mémoire et les données financières ne sont pas persistée
 Cette séparation évite de transférer les paris réglés à chaque polling live,
 et les écrans récents chargent les historiques par pages de 20. Les anciennes
 APK gardent le contrat historique limité à 60 éléments par type.
+
+## Diagnostic ponctuel des colonnes du cache de matchs
+
+`NEON_TRANSFER_PROFILE=sample-v1` active uniquement sur Vercel Production une
+sonde en lecture seule pendant le prébuild. Elle agrège, sans noms ni identifiants,
+la taille PostgreSQL de cinq colonnes JSON pour au plus 120 matchs actifs et
+32 terminés, selon les mêmes limites et ordre que l'hydratation. La sonde est
+inactive par défaut et échoue fermement si elle est activée hors Production.
+Ces tailles sont des tailles de stockage PostgreSQL (possiblement compressées),
+**pas** des octets transférés sur le réseau ni un relevé de facturation Neon.
+Elles servent à cibler les futures projections ; elles ne justifient pas de
+supprimer une colonne ou de changer les données exposées sans tests de parité.
+Retirer la variable après utilisation. Test : `npm run test:neon-transfer-profile`.
