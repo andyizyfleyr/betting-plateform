@@ -44,7 +44,7 @@ export function MainShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh w-full flex-col bg-deep">
-      <SupportChat />
+      <div className={pathname === "/parametres" ? "" : "hidden lg:block"}><SupportChat /></div>
       <RouteWarmup />
       <AppHeader />
 
