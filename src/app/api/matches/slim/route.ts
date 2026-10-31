@@ -1,3 +1,4 @@
+import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
 import { NextRequest, NextResponse } from "next/server";
 import { hydrateLiveMatchRow } from "@/db/engine";
 import { ensureSeeded } from "@/db/seed";
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
 
         await ensureMatchStoreHydrated(manualRefresh);
         const now = Date.now();
-        const rows = getCachedAllMatchesForFeed();
+        const rows = getCachedAllMatchesForFeed().filter(isPubliclyOfferedMatch);
         const slimMatches = rows.map((rawRow) =>
           serializeSlimPublicMatch(hydrateLiveMatchRow(rawRow, now), now)
         );

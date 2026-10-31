@@ -29,6 +29,7 @@ import {
   Users,
   X,
 } from "lucide-react-native";
+import { OFFERED_SOCCER_LEAGUES } from "@/lib/real-leagues";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { AdminDisputes } from "@/components/admin-disputes";
 import { AdminMonitoring } from "@/components/admin-monitoring";
@@ -829,13 +830,13 @@ export default function AdminScreen() {
                   style={[styles.textField, { flex: 1 }]}
                 />
               </View>
-              <TextInput
-                value={mLeague}
-                onChangeText={setMLeague}
-                placeholder="Compétition (ex. Ligue 1)"
-                placeholderTextColor={COLORS.dim}
-                style={styles.textField}
-              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {OFFERED_SOCCER_LEAGUES.map((league) => (
+                  <Pressable key={league.slug} accessibilityRole="button" accessibilityState={{ selected: mLeague === league.label }} onPress={() => setMLeague(league.label)} style={[styles.smallDarkBtn, mLeague !== league.label && { opacity: 0.55 }]}>
+                    <Text style={styles.smallDarkBtnText}>{league.label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <TextInput
                   value={mO1}

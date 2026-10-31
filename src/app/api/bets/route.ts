@@ -1,3 +1,4 @@
+import { isPubliclyOfferedMatch } from "@/lib/real-leagues";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -841,6 +842,9 @@ export async function POST(req: NextRequest) {
   }
   const checkpointMap = await checkpointVirtualMatchesForBet([rawMatch]);
   const match = checkpointMap.get(rawMatch.id) ?? rawMatch;
+  if (!isPubliclyOfferedMatch(match)) {
+    return NextResponse.json({ error: "Cette compétition ne propose plus de nouveaux paris" }, { status: 400 });
+  }
   if (!isKnownMarket(market) && !(match.source === "manual" && match.markets?.length)) {
     return NextResponse.json({ error: "Marché invalide" }, { status: 400 });
   }
@@ -1128,6 +1132,9 @@ export async function POST(req: NextRequest) {
         ? lockedRaw
         : hydrateLiveMatchRow(lockedRaw, Date.now());
 
+    if (!isPubliclyOfferedMatch(lockedMatch)) {
+      return { kind: "error", status: 400, error: "Cette compétition ne propose plus de nouveaux paris" };
+    }
     if (lockedMatch.status === "finished") {
       return { kind: "error", status: 400, error: "Ce match est terminé" };
     }
