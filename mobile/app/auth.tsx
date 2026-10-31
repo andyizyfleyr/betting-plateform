@@ -285,12 +285,12 @@ export default function AuthScreen() {
     const cleanEmail = email.trim().toLowerCase();
     if (!isValidEmail(cleanEmail)) {
       triggerHaptic("warning", hapticsEnabled);
-      setError("Veuillez saisir une adresse e-mail valide.");
+      setError(translate(DEFAULT_LANGUAGE, "invalidEmail"));
       return;
     }
     if (!password) {
       triggerHaptic("warning", hapticsEnabled);
-      setError("Veuillez saisir votre mot de passe.");
+      setError(translate(DEFAULT_LANGUAGE, "passwordRequired"));
       return;
     }
 
@@ -307,7 +307,7 @@ export default function AuthScreen() {
       setError(
         err instanceof ApiHttpError || err instanceof Error
           ? err.message
-          : "Impossible de vous connecter."
+          : translate(DEFAULT_LANGUAGE, "signInFailed")
       );
       setLoading(false);
     }
@@ -327,25 +327,25 @@ export default function AuthScreen() {
     }
     if (!isValidEmail(cleanEmail)) {
       triggerHaptic("warning", hapticsEnabled);
-      setError("Veuillez saisir une adresse e-mail valide.");
+      setError(translate(DEFAULT_LANGUAGE, "invalidEmail"));
       return;
     }
     if (!pwStrength.isValid) {
       triggerHaptic("warning", hapticsEnabled);
       setError(
-        "Le mot de passe doit contenir au moins 8 caractères dont une lettre et un chiffre."
+        translate(DEFAULT_LANGUAGE, "passwordRequirements")
       );
       return;
     }
     if (password !== confirmPassword) {
       triggerHaptic("warning", hapticsEnabled);
-      setError("La confirmation du mot de passe ne correspond pas.");
+      setError(translate(DEFAULT_LANGUAGE, "passwordMismatch"));
       return;
     }
     if (!acceptedTerms) {
       triggerHaptic("warning", hapticsEnabled);
       setError(
-        "Veuillez certifier avoir 18 ans révolus et accepter le règlement Pulse Bet."
+        translate(DEFAULT_LANGUAGE, "ageAndRulesRequired")
       );
       return;
     }
@@ -365,7 +365,7 @@ export default function AuthScreen() {
       setError(
         err instanceof ApiHttpError || err instanceof Error
           ? err.message
-          : "Création du compte impossible."
+          : translate(DEFAULT_LANGUAGE, "registrationFailed")
       );
       setLoading(false);
     }
@@ -378,7 +378,7 @@ export default function AuthScreen() {
     const cleanEmail = email.trim().toLowerCase();
     if (!isValidEmail(cleanEmail)) {
       triggerHaptic("warning", hapticsEnabled);
-      setError("Veuillez saisir une adresse e-mail valide.");
+      setError(translate(DEFAULT_LANGUAGE, "invalidEmail"));
       return;
     }
 
@@ -413,7 +413,7 @@ export default function AuthScreen() {
     const cleanCode = otpCode.replace(/\D/g, "").slice(0, 6);
     if (cleanCode.length !== 6) {
       triggerHaptic("warning", hapticsEnabled);
-      setError("Veuillez saisir les 6 chiffres du code de vérification.");
+      setError(translate(DEFAULT_LANGUAGE, "verificationCodeRequired"));
       return;
     }
     if (!pwStrength.isValid) {
@@ -942,7 +942,7 @@ export default function AuthScreen() {
                         }}
                         onFocus={() => setFocusedField("reg-pw")}
                         onBlur={() => setFocusedField(null)}
-                        placeholder="Minimum 8 caractères"
+                        placeholder={translate(DEFAULT_LANGUAGE, "minimumEightCharacters")}
                         placeholderTextColor={COLORS.dim}
                         secureTextEntry={!showPass}
                         autoCapitalize="none"
@@ -1032,7 +1032,7 @@ export default function AuthScreen() {
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Confirmer le mot de passe</Text>
+                    <Text style={styles.label}>{translate(DEFAULT_LANGUAGE, "confirmPassword")}</Text>
                     <View
                       style={[
                         styles.inputBox,
@@ -1050,7 +1050,7 @@ export default function AuthScreen() {
                         }}
                         onFocus={() => setFocusedField("reg-cpw")}
                         onBlur={() => setFocusedField(null)}
-                        placeholder="Répétez le mot de passe"
+                        placeholder={translate(DEFAULT_LANGUAGE, "repeatPassword")}
                         placeholderTextColor={COLORS.dim}
                         secureTextEntry={!showConfirmPass}
                         autoCapitalize="none"
@@ -1261,7 +1261,7 @@ export default function AuthScreen() {
 
                   <View style={styles.fieldGroup}>
                     <View style={styles.labelRow}>
-                      <Text style={styles.label}>Code à 6 chiffres</Text>
+                      <Text style={styles.label}>{translate(DEFAULT_LANGUAGE, "sixDigitCode")}</Text>
                       <Pressable
                         disabled={resendCooldown > 0 || loading}
                         onPress={() => void requestResetCode(true)}
@@ -1282,7 +1282,7 @@ export default function AuthScreen() {
                         >
                           {resendCooldown > 0
                             ? `Renvoyer (${resendCooldown}s)`
-                            : "Renvoyer le code"}
+                            : translate(DEFAULT_LANGUAGE, "resendCode")}
                         </Text>
                       </Pressable>
                     </View>
@@ -1337,7 +1337,7 @@ export default function AuthScreen() {
                   </View>
 
                   <View style={styles.fieldGroup}>
-                    <Text style={styles.label}>Nouveau mot de passe</Text>
+                    <Text style={styles.label}>{translate(DEFAULT_LANGUAGE, "newPassword")}</Text>
                     <View
                       style={[
                         styles.inputBox,
@@ -1353,7 +1353,7 @@ export default function AuthScreen() {
                         }}
                         onFocus={() => setFocusedField("reset-pw")}
                         onBlur={() => setFocusedField(null)}
-                        placeholder="Minimum 8 caractères"
+                        placeholder={translate(DEFAULT_LANGUAGE, "minimumEightCharacters")}
                         placeholderTextColor={COLORS.dim}
                         secureTextEntry={!showPass}
                         autoCapitalize="none"
@@ -1430,7 +1430,7 @@ export default function AuthScreen() {
                         }}
                         onFocus={() => setFocusedField("reset-cpw")}
                         onBlur={() => setFocusedField(null)}
-                        placeholder="Répétez le mot de passe"
+                        placeholder={translate(DEFAULT_LANGUAGE, "repeatPassword")}
                         placeholderTextColor={COLORS.dim}
                         secureTextEntry={!showConfirmPass}
                         autoCapitalize="none"
@@ -1502,7 +1502,7 @@ export default function AuthScreen() {
           {/* Pied de page sécurité & jeu responsable */}
           <View style={styles.footer}>
             <Pressable accessibilityRole="button" onPress={() => resolvedView === "forgot" ? switchView("login") : router.replace("/matchs")} hitSlop={8}>
-              <Text style={styles.authBackLink}>{resolvedView === "forgot" ? "Retour à la connexion" : "Retour aux matchs"}</Text>
+              <Text style={styles.authBackLink}>{resolvedView === "forgot" ? translate(DEFAULT_LANGUAGE, "backToSignIn") : translate(DEFAULT_LANGUAGE, "backToMatches")}</Text>
             </Pressable>
             <View style={styles.tlsBadgeRow}>
               <ShieldCheck size={13} color={COLORS.win} strokeWidth={2.3} />
