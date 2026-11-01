@@ -4,6 +4,8 @@ import { virtualTeamIdentity } from "./team-logos";
 export const VIRTUAL_MAX_LIVE = 4;
 /** Intervalle entre deux coups d’envoi, indépendamment de la durée du match. */
 export const VIRTUAL_KICKOFF_GAP_MS = 3 * 60_000;
+/** Horizon maximal pour avancer un match et maintenir les 4 directs simultanés. */
+export const VIRTUAL_LIVE_PRIME_HORIZON_MS = VIRTUAL_MAX_LIVE * VIRTUAL_KICKOFF_GAP_MS;
 export const VIRTUAL_REMATCH_GAP_MS = 7 * 24 * 60 * 60_000;
 export interface VirtualFixtureWindow { home: string; away: string; start: number; end: number }
 const team = virtualTeamIdentity;
