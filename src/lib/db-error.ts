@@ -114,7 +114,7 @@ export function classifyServerError(err: unknown): ClassifiedServerError {
     return {
       code: "DB_QUOTA_EXCEEDED",
       message:
-        "Le quota mensuel de votre base PostgreSQL (Neon — ex. 5 Go Network Transfer du plan Free) est atteint. Passez le projet Neon en plan supérieur pour conserver vos données ou rattachez un nouveau projet Neon dans Vercel → Storage.",
+        "Le quota mensuel de votre base Prisma Postgres est atteint. Passez le projet Prisma Postgres en plan supérieur pour conserver vos données, puis redéployez.",
       detail: rootReason,
       status: 503,
     };
@@ -127,9 +127,9 @@ export function classifyServerError(err: unknown): ClassifiedServerError {
   ) {
     return {
       code: "DB_UNREACHABLE",
-      message: `La base PostgreSQL liée à DATABASE_URL est désactivée ou a été supprimée avec l'ancien projet doublon${
+      message: `La base PostgreSQL liée à DATABASE_URL est désactivée ou a été supprimée${
         rootReason ? ` (${rootReason})` : ""
-      }. Dans Vercel → be-plateform → Storage, connectez une base PostgreSQL active puis redéployez.`,
+      }. Vérifiez le projet Prisma Postgres dans la console Prisma, puis redéployez.`,
       detail: rootReason,
       status: 503,
     };

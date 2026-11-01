@@ -31,7 +31,6 @@ import {
 import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
 import { readSecondaryHistory, writeSecondaryHistory } from "@/lib/secondary-history-cache";
-import { fetchHyperdriveHistory } from "@/lib/hyperdrive-history";
 import type { ClientMatchHistoryItem } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -194,8 +193,9 @@ async function getOrBuildBaseHistory(manualRefresh = false): Promise<{
       await ensureMlLoaded();
       await syncLiveMatchesThrottled(false, { manualRefresh });
 
-    const hyperdriveRows = await fetchHyperdriveHistory(manualRefresh);
-    const [manualFinished, virtualFinished] = hyperdriveRows ? [hyperdriveRows, []] : await Promise.all([
+    // Historique toujours lu depuis la base principale Prisma Postgres.
+    // L'ancien trajet Hyperdrive/Neon est désactivé pour éviter toute lecture stale.
+    const [manualFinished, virtualFinished] = await Promise.all([
       db
         .select(historyMatchColumns)
         .from(matches)

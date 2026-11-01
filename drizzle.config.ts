@@ -3,8 +3,8 @@ import { defineConfig } from "drizzle-kit";
 
 config({ path: ".env.local" });
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required (see .env.local)");
+if (!process.env.DIRECT_URL) {
+  throw new Error("DIRECT_URL is required for migrations (see .env.local)");
 }
 
 export default defineConfig({
@@ -12,6 +12,6 @@ export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    url: process.env.DIRECT_URL,
   },
 });

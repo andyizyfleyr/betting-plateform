@@ -47,8 +47,8 @@ export async function ensureSeeded(): Promise<void> {
 }
 
 async function runSeedInternal(): Promise<void> {
-  // Vérifie la connectivité PostgreSQL et bascule automatiquement sur une variable de secours
-  // (`POSTGRES_URL`, `STORAGE_DATABASE_URL`, etc.) si `DATABASE_URL` pointe vers une base supprimée.
+  // Vérifie la connectivité de la base principale Prisma Postgres.
+  // Aucun repli automatique : une URL absente ou injoignable échoue explicitement.
   await ensureHealthyDbConnection();
 
   // Fast-path serverless en UNE SEULE requête SQL (au lieu de 2 allers-retours séquentiels) :
