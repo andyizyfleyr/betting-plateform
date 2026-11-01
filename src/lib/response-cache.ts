@@ -43,9 +43,9 @@ export interface EdgeCachePolicy {
   tags?: readonly string[];
 }
 
-const MATCHES_CACHE_TTL_MS = 1_000;
-const HISTORY_CACHE_TTL_MS = 2_000;
-const PREDICTIONS_CATALOG_TTL_MS = 2_500;
+const MATCHES_CACHE_TTL_MS = 4_000;
+const HISTORY_CACHE_TTL_MS = 5_000;
+const PREDICTIONS_CATALOG_TTL_MS = 5_000;
 const TAG_PURGE_COOLDOWN_MS = 1_500;
 
 interface GlobalResponseCacheStore {
@@ -314,21 +314,9 @@ export function isManualRefreshRequest(req: Request): boolean {
 }
 
 /**
- * Vérifie si la requête transporte un paramètre anti-cache `?_=<timestamp>`
- * (injecté par `whatwg-fetch` sur React Native lorsque `cache: "no-store"` était utilisé).
- */
-function hasCacheBusterParam(req: Request): boolean {
-  try {
-    const url = new URL(req.url);
-    return url.searchParams.has("_");
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Vérifie que seuls les paramètres d'URL explicitement autorisés (plus `refresh=1`
  * et le cache-buster numérique `?_=<timestamp>` de `whatwg-fetch` React Native) sont présents.
+ * Le cache-buster `_` est toléré mais n'empêche plus le cache Edge public.
  */
 export function hasUnexpectedSearchParams(
   searchParams: URLSearchParams,
@@ -396,10 +384,9 @@ export function publicJsonWithEdgeCache(
   const json = precomputed ? precomputed.json : JSON.stringify(data);
   const etag = precomputed ? precomputed.etag : computeWeakEtag(json);
   const manualRefresh = isManualRefreshRequest(req);
-  const cacheBusted = hasCacheBusterParam(req);
   const ifNoneMatch = manualRefresh ? null : req.headers.get("if-none-match");
 
-  if (manualRefresh || cacheBusted) {
+  if (manualRefresh) {
     const privateEdgeHeaders: Record<string, string> = {
       ETag: etag,
       "Cache-Control": "private, no-store, max-age=0",
@@ -407,12 +394,6 @@ export function publicJsonWithEdgeCache(
       "Vercel-CDN-Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     };
-    if (!manualRefresh && ifNoneMatch && ifNoneMatch === etag) {
-      return new NextResponse(null, {
-        status: 304,
-        headers: privateEdgeHeaders,
-      });
-    }
     return new NextResponse(json, {
       status: 200,
       headers: {

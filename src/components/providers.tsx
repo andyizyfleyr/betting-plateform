@@ -323,10 +323,10 @@ function ProvidersRealtimeQueries({
 }) {
   const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const bgMatchesIntervalMs = getAdaptiveIntervalMs(3_500, isConstrained);
-  const bgWsFullSyncMs = getAdaptiveIntervalMs(5_000, isConstrained);
-  const bgBetsActiveMs = getAdaptiveIntervalMs(4_000, isConstrained);
-  const bgBetsIdleMs = getAdaptiveIntervalMs(12_000, isConstrained);
+  const bgMatchesIntervalMs = getAdaptiveIntervalMs(6_000, isConstrained);
+  const bgWsFullSyncMs = getAdaptiveIntervalMs(12_000, isConstrained);
+  const bgBetsActiveMs = getAdaptiveIntervalMs(8_000, isConstrained);
+  const bgBetsIdleMs = getAdaptiveIntervalMs(20_000, isConstrained);
 
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== "undefined" && window.innerWidth >= 1024
@@ -363,13 +363,13 @@ function ProvidersRealtimeQueries({
 
   // Synchronisation automatique du solde & des règlements de paris (`/api/pulse`) :
   // - Même lorsque le WebSocket privé est connecté ou qu'il y a 0 pari en cours, maintient une
-  //   veille légère (5 s si pari en attente, 15 s au repos) afin que les dépôts/retraits validés
+  //   veille légère (8 s si pari en attente, 20 s au repos) afin que les dépôts/retraits validés
   //   par l'admin ou les mises multi-appareils s'actualisent sans rechargement manuel.
   const pulseQuery = useQuery({
     queryKey: [...pulseQueryKeys.userPulse(user?.id), betsVersion],
     queryFn: () => api.pulse(),
     enabled: loggedIn && !isOffline,
-    staleTime: 1_500,
+    staleTime: 5_000,
     refetchInterval: isParisRoute
       ? bgBetsIdleMs
       : hasPending

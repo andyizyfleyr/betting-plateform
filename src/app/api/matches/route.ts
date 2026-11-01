@@ -27,9 +27,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MATCHES_EDGE_POLICY = {
-  maxAge: 0,
+  maxAge: 2,
   sMaxAge: 10,
-  staleWhileRevalidate: 1,
+  staleWhileRevalidate: 10,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 
@@ -39,6 +39,14 @@ export async function GET(req: NextRequest) {
       return rejectUnexpectedQueryParams();
     }
     const manualRefresh = isManualRefreshRequest(req);
+
+    // Cache hit chaud : ne réveille ni le moteur, ni la réconciliation SQL.
+    if (!manualRefresh) {
+      const freshCached = getMatchesPayloadCache();
+      if (freshCached) {
+        return publicJsonWithEdgeCache(req, null, freshCached, MATCHES_EDGE_POLICY);
+      }
+    }
 
     const { entry: stored, catchingUp } = await runSingleflight(
       manualRefresh ? "api:matches:refresh" : "api:matches",

@@ -422,8 +422,9 @@ async function executeRequest<T>(
   }
   const cached = isGet && !forceRefresh ? clientEtagCache.get(baseKeyUrl) : undefined;
 
+  const cacheMode: RequestCache = isPublicEdge ? "default" : "no-store";
   let mergedInit: RequestInit | undefined = isGet
-    ? { ...init, cache: "no-store" }
+    ? { ...init, cache: cacheMode }
     : init;
   if (isPublicEdge) {
     // Omet strictement les cookies sur les routes publiques afin que le CDN Edge Vercel

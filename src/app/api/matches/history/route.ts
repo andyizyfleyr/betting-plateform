@@ -36,9 +36,9 @@ import type { ClientMatchHistoryItem } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 const HISTORY_EDGE_POLICY = {
-  maxAge: 0,
-  sMaxAge: 15,
-  staleWhileRevalidate: 2,
+  maxAge: 2,
+  sMaxAge: 30,
+  staleWhileRevalidate: 60,
   tags: [EDGE_CACHE_TAGS.history],
 } as const;
 

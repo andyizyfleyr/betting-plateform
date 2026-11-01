@@ -493,9 +493,9 @@ export function useMobileMatchesSlimQuery(options?: {
   initialMatches?: ClientMatch[] | null;
 }) {
   const { wsConnected } = useMobileRealtimeStatus();
-  const baseMs = options?.baseIntervalMs ?? 3_000;
+  const baseMs = options?.baseIntervalMs ?? 5_000;
   const fallbackMs = Math.round(baseMs * (options?.dataSaver ? 2.2 : 1));
-  const wsSafetyMs = Math.round(6_000 * (options?.dataSaver ? 2 : 1));
+  const wsSafetyMs = Math.round(15_000 * (options?.dataSaver ? 2 : 1));
 
   return useQuery({
     queryKey: mobileQueryKeys.matchesSlim,
@@ -587,7 +587,7 @@ export function useMobileMatchDetailQuery(
     isFinished?: boolean;
   }
 ) {
-  const detailMs = Math.round(3_000 * (options?.dataSaver ? 2.2 : 1));
+  const detailMs = Math.round(5_000 * (options?.dataSaver ? 2.2 : 1));
   const initialIsSlim =
     Boolean(options?.initialMatch) &&
     options?.initialMatch?.status !== "finished" &&
@@ -615,7 +615,7 @@ export function useMobileMatchDetailQuery(
       }
       return failureCount < 2;
     },
-    // Rafraîchit toujours `/api/matches/[id]` toutes les 3.5 s pour maintenir les 19 marchés,
+    // Rafraîchit toujours `/api/matches/[id]` toutes les 5 s pour maintenir les 19 marchés,
     // les stats réelles et la télémétrie 2D en direct.
     refetchInterval: options?.isFinished ? false : detailMs,
     refetchIntervalInBackground: false,
@@ -627,7 +627,7 @@ export function useMobilePredictionsCatalogQuery(options?: {
   dataSaver?: boolean;
   initialQuestions?: ClientPrediction[] | null;
 }) {
-  const intervalMs = Math.round(8_000 * (options?.dataSaver ? 2.2 : 1));
+  const intervalMs = Math.round(15_000 * (options?.dataSaver ? 2.2 : 1));
 
   return useQuery({
     queryKey: mobileQueryKeys.predictionsCatalog,
@@ -651,7 +651,7 @@ export function useMobileMatchHistoryQuery(options?: {
   dataSaver?: boolean;
   initialHistory?: ClientMatchHistoryItem[] | null;
 }) {
-  const intervalMs = Math.round(5_000 * (options?.dataSaver ? 2.2 : 1));
+  const intervalMs = Math.round(10_000 * (options?.dataSaver ? 2.2 : 1));
 
   return useQuery({
     queryKey: mobileQueryKeys.matchHistory,

@@ -10,7 +10,6 @@ import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
 import {
   ensureMatchStoreHydrated,
   getCachedAllMatchesForFeed,
-  hasLiveActiveMatches,
   invalidateAllActiveCaches,
 } from "@/lib/active-state-cache";
 import { serializeSlimPublicMatch } from "@/lib/match-serializer";
@@ -33,8 +32,8 @@ import { recordVisitorActivity } from "@/lib/visitor-activity";
  * - N'exécute le règlement des paris que sur jalon réel ou balayage de sécurité espacé.
  * - Espace les tâches de maintenance de fond (prédictions, dépôts expirés, purge) à 5–10 min.
  */
-const SYNC_THROTTLE_MS = 1_500;
-const SETTLE_SWEEP_THROTTLE_MS = 12_000;
+const SYNC_THROTTLE_MS = 3_000;
+const SETTLE_SWEEP_THROTTLE_MS = 20_000;
 const HOUSEKEEPING_THROTTLE_MS = 5 * 60_000;
 const PRUNE_THROTTLE_MS = 10 * 60_000;
 const USER_READ_FEED_BUDGET_MS = 2_600;
@@ -148,7 +147,10 @@ export async function syncPlatformStateThrottled(
       const realChanged =
         Boolean(realFeedResult) &&
         ((realFeedResult?.settledCount ?? 0) > 0 || (realFeedResult?.syncedCount ?? 0) > 0);
-      if (hasLiveActiveMatches() || manualRefresh || realChanged || hadMilestone) {
+      // Ne purge plus les caches publics à chaque tick : les simples changements de minute
+      // restent bornés par le TTL mémoire/Edge. Les vrais jalons (but, statut, feed réel)
+      // déclenchent toujours une invalidation immédiate.
+      if (manualRefresh || realChanged || hadMilestone) {
         invalidatePublicApiCaches(realChanged || hadMilestone);
       }
       const settleNow = Date.now();

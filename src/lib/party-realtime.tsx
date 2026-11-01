@@ -531,9 +531,9 @@ export function useMatchesFeedQuery(options?: {
 }) {
   const { wsConnected } = useRealtimeStatus();
   const { isConstrained, isOffline } = useNetworkQuality();
-  const baseMs = options?.baseFallbackIntervalMs ?? 3_000;
+  const baseMs = options?.baseFallbackIntervalMs ?? 5_000;
   const fallbackMs = getAdaptiveIntervalMs(baseMs, isConstrained);
-  const wsFullSyncMs = getAdaptiveIntervalMs(5_000, isConstrained);
+  const wsFullSyncMs = getAdaptiveIntervalMs(12_000, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.matches,
@@ -548,7 +548,7 @@ export function useMatchesFeedQuery(options?: {
         ? () => Date.now() - 2_000
         : undefined,
     // Même quand le flux WebSocket slim (1X2/score/minute) est actif, resynchronise
-    // les 18 marchés secondaires toutes les 5 s (et bascule à 3 s hors WS).
+    // les 18 marchés secondaires toutes les 12 s (et bascule à 5 s hors WS).
     refetchInterval: wsConnected ? wsFullSyncMs : fallbackMs,
     refetchIntervalInBackground: false,
   });
@@ -563,7 +563,7 @@ export function useMatchDetailQuery(
   }
 ) {
   const { isConstrained, isOffline } = useNetworkQuality();
-  const detailIntervalMs = getAdaptiveIntervalMs(3_000, isConstrained);
+  const detailIntervalMs = getAdaptiveIntervalMs(5_000, isConstrained);
   const initialIsSlim =
     Boolean(options?.initialMatch) &&
     options?.initialMatch?.status !== "finished" &&
@@ -594,7 +594,7 @@ export function useMatchDetailQuery(
       }
       return failureCount < 2;
     },
-    // Rafraîchit toujours `/api/matches/[id]` (~3 Ko) toutes les 3.5 s pour maintenir
+    // Rafraîchit toujours `/api/matches/[id]` (~3 Ko) toutes les 5 s pour maintenir
     // les 19 marchés complets, les stats réelles et la télémétrie 2D en direct.
     refetchInterval: options?.isFinished ? false : detailIntervalMs,
     refetchIntervalInBackground: false,
@@ -606,7 +606,7 @@ export function usePredictionsCatalogQuery(options?: {
   initialQuestions?: ClientPrediction[];
 }) {
   const { isConstrained, isOffline } = useNetworkQuality();
-  const intervalMs = getAdaptiveIntervalMs(8_000, isConstrained);
+  const intervalMs = getAdaptiveIntervalMs(15_000, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.predictionsCatalog,
@@ -630,7 +630,7 @@ export function useMatchHistoryQuery(options?: {
   initialHistory?: ClientMatchHistoryItem[];
 }) {
   const { isConstrained, isOffline } = useNetworkQuality();
-  const intervalMs = getAdaptiveIntervalMs(5_000, isConstrained);
+  const intervalMs = getAdaptiveIntervalMs(10_000, isConstrained);
 
   return useQuery({
     queryKey: pulseQueryKeys.matchHistory,

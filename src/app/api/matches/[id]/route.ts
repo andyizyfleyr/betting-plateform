@@ -25,9 +25,9 @@ import { syncLiveMatchesThrottled } from "@/lib/sync-throttle";
 export const dynamic = "force-dynamic";
 
 const SINGLE_MATCH_ACTIVE_POLICY = {
-  maxAge: 0,
+  maxAge: 2,
   sMaxAge: 10,
-  staleWhileRevalidate: 1,
+  staleWhileRevalidate: 10,
   tags: [EDGE_CACHE_TAGS.matches],
 } as const;
 
@@ -68,13 +68,13 @@ export async function GET(
         await ensureSeeded();
         await ensureMlLoaded();
         await syncLiveMatchesThrottled(false, { manualRefresh });
-        await ensureMatchStoreHydrated(manualRefresh);
 
         const now = Date.now();
         let row = getCachedMatchById(matchId);
         if (row && !manualRefresh) {
           row = hydrateLiveMatchRow(row, now);
         } else {
+          await ensureMatchStoreHydrated(manualRefresh);
           const [dbRow] = await db
             .select()
             .from(matches)

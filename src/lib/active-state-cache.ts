@@ -72,15 +72,15 @@ interface PlatformMemoryState {
 
 const MAX_FINISHED_VIRTUAL_RAM = 12;
 const MAX_FINISHED_MANUAL_RAM = 20;
-const MULTI_INSTANCE_RECONCILE_MS = 2_500;
+const MULTI_INSTANCE_RECONCILE_MS = 8_000;
 // Les résultats corrigibles sont relus au plus toutes les 10 s ; les actifs
-// restent réconciliés toutes les 2,5 s et les invalidations forcent la lecture.
+// restent réconciliés toutes les 8 s et les invalidations forcent la lecture.
 const FINISHED_RECONCILE_MS = 10_000;
 const PENDING_FLAGS_SAFETY_TTL_MS = 15_000;
 const PENDING_BOOK_TTL_MS = 15_000;
 const QUESTION_SCHEDULE_MAX_TTL_MS = 30_000;
-const USER_PULSE_CACHE_TTL_MS = 1_200;
-const USER_BETS_CACHE_TTL_MS = 1_200;
+const USER_PULSE_CACHE_TTL_MS = 10_000;
+const USER_BETS_CACHE_TTL_MS = 10_000;
 
 const globalStore = globalThis as typeof globalThis & {
   __pulseMemoryStateV1?: PlatformMemoryState;
@@ -162,7 +162,7 @@ function pickMonotonicVirtualOpenRow(
 /**
  * Hydrate et réconcilie en UNE SEULE requête SQL `UNION ALL` l'état actif complet
  * des matchs entre toutes les instances Serverless Vercel :
- * - Réconciliation multi-instance attendue (`await`) toutes les `2,5 s` max (coalescée via
+ * - Réconciliation multi-instance attendue (`await`) toutes les `8 s` max (coalescée via
  *   Singleflight `st.hydratePromise`) et forcée immédiatement sur tout refresh manuel (`force = true`).
  * - Préservation monotone des matchs virtuels déjà avancés en RAM entre deux jalons SQL.
  */

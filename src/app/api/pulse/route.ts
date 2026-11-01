@@ -32,14 +32,16 @@ export async function GET(req: NextRequest) {
     const uid = auth;
 
     const manualRefresh = isManualRefreshRequest(req);
-    await syncLiveMatchesThrottled(false, { manualRefresh });
 
+    // Cache joueur chaud : aucune requête SQL et aucun tick moteur.
     if (!manualRefresh) {
       const cached = getCachedUserPulse(uid);
       if (cached) {
         return jsonWithEtag(req, null, cached);
       }
     }
+
+    await syncLiveMatchesThrottled(false, { manualRefresh });
 
     const res = await db.execute(sql`
       SELECT
