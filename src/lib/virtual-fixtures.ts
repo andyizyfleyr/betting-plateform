@@ -3,7 +3,7 @@ import { virtualTeamIdentity } from "./team-logos";
 /** Une affiche est identique même si domicile et extérieur sont inversés. */
 export const VIRTUAL_MAX_LIVE = 4;
 /** Intervalle entre deux coups d’envoi, indépendamment de la durée du match. */
-export const VIRTUAL_KICKOFF_GAP_MS = 30 * 60_000;
+export const VIRTUAL_KICKOFF_GAP_MS = 3 * 60_000;
 export const VIRTUAL_REMATCH_GAP_MS = 7 * 24 * 60 * 60_000;
 export interface VirtualFixtureWindow { home: string; away: string; start: number; end: number }
 const team = virtualTeamIdentity;

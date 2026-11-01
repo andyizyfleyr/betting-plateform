@@ -43,7 +43,7 @@ const INTER_MATCH_GAP_MS = 3_000;
  * Rythme des matchs :
  * - Matchs virtuels automatiques (`source = "virtual"`) : durée totale de 10 minutes
  *   (95 pas d'horloge × [6 240 ms .. 6 400 ms] ≈ 9m53s .. 10m08s, moyenne exacte 10 min 00 s),
- *   avec au moins 30 minutes entre deux coups d'envoi successifs.
+ *   avec au moins 3 minutes entre deux coups d'envoi successifs.
  * - Matchs manuels créés par l'admin (`source = "manual"`) : rythme réel confortable (40 s / min)
  *   pour laisser le pilotage complet à l'administrateur.
  */
@@ -566,7 +566,7 @@ async function executeTick(now: number): Promise<void> {
     await flushMatchUpdatesBatch([...dbMilestoneRows.values()], finishedRows, now);
   }
 
-  // 5. Regarnit la file et planifie les coups d'envoi à 30 minutes d'intervalle
+  // 5. Regarnit la file et planifie les coups d'envoi à 3 minutes d'intervalle
   const minQueuedNeeded = Math.max(4, MIN_ACTIVE_VIRTUAL - activeLives.length - 2);
   if (upcomingMatches.filter((m) => m.source === "virtual").length < minQueuedNeeded) {
     const refreshedActive = await ensureActiveSchedule(now);
