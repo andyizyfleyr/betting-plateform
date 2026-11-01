@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { Building2, Check, CreditCard, Gift, Loader2, Lock, Smartphone, Wallet, X } from "lucide-react";
 import { ApiRequestError, api, type PaymentProvider } from "@/lib/api";
+import { PaymentMethodMark } from "@/components/payment-method-mark";
+import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
+import { GiftCardMark } from "@/components/gift-card-mark";
 import {
   formatLocalAmount,
   formatPresetChip,
@@ -381,6 +384,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   sub={countryConfig.mobileMoneyHint || "Transfert mobile instantané"}
                   badge="Actif"
                   Icon={Smartphone}
+                  method="mobile_money"
+                  countryCode={countryConfig.code}
                   enabled
                   active={method === "mobile_money"}
                   onClick={() => {
@@ -393,6 +398,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   sub="IBAN / Réf. bancaire"
                   badge="Actif"
                   Icon={Building2}
+                  method="sepa"
+                  countryCode={countryConfig.code}
                   enabled
                   active={method === "sepa"}
                   onClick={() => {
@@ -405,6 +412,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   sub="Transcash, PCS, Paysafe..."
                   badge="Nouveau"
                   Icon={Gift}
+                  method="gift_card"
+                  countryCode={countryConfig.code}
                   enabled
                   active={method === "gift_card"}
                   onClick={() => {
@@ -418,6 +427,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                     sub="Stripe"
                     badge={stripeInfo.live ? "Live" : "Test"}
                     Icon={CreditCard}
+                    method="stripe"
+                    countryCode={countryConfig.code}
                     enabled
                     active={method === "stripe"}
                     onClick={() => {
@@ -432,6 +443,8 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                     sub="Compte PayPal"
                     badge={paypalInfo.live ? "Live" : "Test"}
                     Icon={Wallet}
+                    method="paypal"
+                    countryCode={countryConfig.code}
                     enabled
                     active={method === "paypal"}
                     onClick={() => {
@@ -441,6 +454,9 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                   />
                 )}
               </div>
+              {method === "mobile_money" ? (
+                <MobileMoneyBrandStrip countryCode={countryConfig.code} className="mt-2" />
+              ) : null}
             </div>
 
             {method === "gift_card" ? (
@@ -470,6 +486,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                               : "border-edge bg-elev text-mist hover:text-ink"
                           )}
                         >
+                          <GiftCardMark id={c.id} className="mb-1" />
                           <p className="font-display text-[11px] font-semibold">{c.shortLabel}</p>
                           <p className="text-[9px] text-dim">{c.expectedDigits ? `${c.expectedDigits} ch.` : c.hint}</p>
                         </button>
@@ -599,6 +616,8 @@ function MethodCard({
   sub,
   badge,
   Icon,
+  method,
+  countryCode,
   enabled,
   active,
   onClick,
@@ -607,6 +626,8 @@ function MethodCard({
   sub: string;
   badge?: string;
   Icon: typeof CreditCard;
+  method?: string;
+  countryCode?: string | null;
   enabled: boolean;
   active: boolean;
   onClick: () => void;
@@ -626,11 +647,21 @@ function MethodCard({
       <div className="flex w-full items-center justify-between">
         <span
           className={cn(
-            "grid h-7 w-7 place-items-center rounded-xl",
+            "grid h-7 min-w-7 place-items-center rounded-xl px-0.5",
             active ? "bg-betclic-red text-white" : "bg-elev text-ink"
           )}
         >
-          <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+          {method ? (
+            <PaymentMethodMark
+              method={method}
+              countryCode={countryCode}
+              max={method === "mobile_money" ? 1 : 2}
+              size="xs"
+              fallback={<Icon className="h-3.5 w-3.5" strokeWidth={2.2} />}
+            />
+          ) : (
+            <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+          )}
         </span>
         {badge && (
           <span className="rounded bg-win/12 px-1.5 py-0.5 font-display text-[9px] font-medium uppercase text-win">

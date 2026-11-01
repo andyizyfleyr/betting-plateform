@@ -1,4 +1,5 @@
 import { PaymentMethodMark } from "@/components/payment-method-mark";
+import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -418,13 +419,17 @@ export default function WithdrawScreen() {
                           active && styles.methodCellSelected,
                         ]}
                       >
-                        <PaymentMethodMark method={m.id} fallback={
-                        <m.Icon
-                          size={14}
-                          color={active ? COLORS.betclicRed : COLORS.mist}
-                          strokeWidth={2.2}
+                        <PaymentMethodMark
+                          method={m.id}
+                          countryCode={countryConfig.code}
+                          fallback={
+                            <m.Icon
+                              size={14}
+                              color={active ? COLORS.betclicRed : COLORS.mist}
+                              strokeWidth={2.2}
+                            />
+                          }
                         />
-                        } />
                         <Text numberOfLines={1} style={styles.methodLabel}>
                           {m.label}
                         </Text>
@@ -438,6 +443,12 @@ export default function WithdrawScreen() {
                 <Text style={styles.fieldCaps}>
                   {currentMethod.hint.toUpperCase()}
                 </Text>
+                {method === "mobile_money" ? (
+                  <MobileMoneyBrandStrip
+                    countryCode={countryConfig.code}
+                    style={{ marginTop: 6, marginBottom: 6 }}
+                  />
+                ) : null}
                 <TextInput
                   value={destination}
                   onChangeText={setDestination}

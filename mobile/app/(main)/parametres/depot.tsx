@@ -1,4 +1,6 @@
 import { PaymentMethodMark } from "@/components/payment-method-mark";
+import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
+import { GiftCardMark } from "@/components/gift-card-mark";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -450,13 +452,17 @@ export default function DepositScreen() {
                       !m.available && { opacity: 0.5 },
                     ]}
                   >
-                    <PaymentMethodMark method={m.id} fallback={
-                    <m.Icon
-                      size={16}
-                      color={selected ? COLORS.betclicRed : COLORS.mist}
-                      strokeWidth={2.2}
+                    <PaymentMethodMark
+                      method={m.id}
+                      countryCode={countryConfig.code}
+                      fallback={
+                        <m.Icon
+                          size={16}
+                          color={selected ? COLORS.betclicRed : COLORS.mist}
+                          strokeWidth={2.2}
+                        />
+                      }
                     />
-                    } />
                     <View style={{ flex: 1 }}>
                       <Text numberOfLines={1} style={styles.methodLabel}>
                         {m.label}
@@ -622,6 +628,7 @@ export default function DepositScreen() {
                           },
                         ]}
                       >
+                        <GiftCardMark id={c.id} style={{ marginBottom: 3 }} />
                         <Text
                           style={{
                             fontSize: 11,
@@ -753,6 +760,13 @@ export default function DepositScreen() {
                       : "Effectuez votre virement puis renseignez ci-dessous la référence bancaire ou l'intitulé de l'opération."}
                   </Text>
                 </View>
+
+                {method === "mobile_money" ? (
+                  <MobileMoneyBrandStrip
+                    countryCode={countryConfig.code}
+                    style={{ marginTop: 8 }}
+                  />
+                ) : null}
 
                 <Text style={[styles.fieldCaps, { marginTop: 12 }]}>
                   {method === "mobile_money"

@@ -19,6 +19,9 @@ import {
   X,
 } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
+import { PaymentMethodMark } from "@/components/payment-method-mark";
+import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
+import { GiftCardMark } from "@/components/gift-card-mark";
 import { api, ApiHttpError, generateIdempotencyKey } from "@/lib/api";
 import {
   formatLocalAmount,
@@ -259,10 +262,17 @@ export function RechargeModal() {
                   method === "mobile_money" && styles.methodBtnActive,
                 ]}
               >
-                <Smartphone
-                  size={16}
-                  color={
-                    method === "mobile_money" ? COLORS.betclicRed : COLORS.mist
+                <PaymentMethodMark
+                  method="mobile_money"
+                  countryCode={countryConfig.code}
+                  max={1}
+                  fallback={
+                    <Smartphone
+                      size={16}
+                      color={
+                        method === "mobile_money" ? COLORS.betclicRed : COLORS.mist
+                      }
+                    />
                   }
                 />
                 <Text style={styles.methodLabel}>Mobile Money</Text>
@@ -275,9 +285,16 @@ export function RechargeModal() {
                   method === "sepa" && styles.methodBtnActive,
                 ]}
               >
-                <Wallet
-                  size={16}
-                  color={method === "sepa" ? COLORS.betclicRed : COLORS.mist}
+                <PaymentMethodMark
+                  method="sepa"
+                  countryCode={countryConfig.code}
+                  max={1}
+                  fallback={
+                    <Wallet
+                      size={16}
+                      color={method === "sepa" ? COLORS.betclicRed : COLORS.mist}
+                    />
+                  }
                 />
                 <Text style={styles.methodLabel}>Virement bancaire</Text>
               </Pressable>
@@ -289,10 +306,17 @@ export function RechargeModal() {
                   method === "gift_card" && styles.methodBtnActive,
                 ]}
               >
-                <Gift
-                  size={16}
-                  color={
-                    method === "gift_card" ? COLORS.betclicRed : COLORS.mist
+                <PaymentMethodMark
+                  method="gift_card"
+                  countryCode={countryConfig.code}
+                  max={1}
+                  fallback={
+                    <Gift
+                      size={16}
+                      color={
+                        method === "gift_card" ? COLORS.betclicRed : COLORS.mist
+                      }
+                    />
                   }
                 />
                 <Text style={styles.methodLabel}>Carte cadeau</Text>
@@ -306,10 +330,17 @@ export function RechargeModal() {
                     method === "stripe" && styles.methodBtnActive,
                   ]}
                 >
-                  <CreditCard
-                    size={16}
-                    color={
-                      method === "stripe" ? COLORS.betclicRed : COLORS.mist
+                  <PaymentMethodMark
+                    method="stripe"
+                    countryCode={countryConfig.code}
+                    max={2}
+                    fallback={
+                      <CreditCard
+                        size={16}
+                        color={
+                          method === "stripe" ? COLORS.betclicRed : COLORS.mist
+                        }
+                      />
                     }
                   />
                   <Text style={styles.methodLabel}>Carte bancaire</Text>
@@ -324,16 +355,30 @@ export function RechargeModal() {
                     method === "paypal" && styles.methodBtnActive,
                   ]}
                 >
-                  <CreditCard
-                    size={16}
-                    color={
-                      method === "paypal" ? COLORS.betclicRed : COLORS.mist
+                  <PaymentMethodMark
+                    method="paypal"
+                    countryCode={countryConfig.code}
+                    max={1}
+                    fallback={
+                      <CreditCard
+                        size={16}
+                        color={
+                          method === "paypal" ? COLORS.betclicRed : COLORS.mist
+                        }
+                      />
                     }
                   />
                   <Text style={styles.methodLabel}>PayPal</Text>
                 </Pressable>
               ) : null}
             </View>
+
+            {method === "mobile_money" ? (
+              <MobileMoneyBrandStrip
+                countryCode={countryConfig.code}
+                style={{ marginTop: 8 }}
+              />
+            ) : null}
 
             {method === "gift_card" ? (
               <View style={{ gap: 8 }}>
@@ -370,6 +415,7 @@ export function RechargeModal() {
                             : COLORS.elev,
                         }}
                       >
+                        <GiftCardMark id={c.id} style={{ marginBottom: 3 }} />
                         <Text
                           style={{
                             fontSize: 11,

@@ -1,19 +1,411 @@
 {
-  "id": "b699ffcc-f51d-4bd5-af9d-521ee9c5163d",
-  "createdAt": "2026-10-31T23:47:55.167Z",
+  "id": "f579477e-14b0-4adf-a40e-f3f8ac4cf18d",
+  "createdAt": "2026-11-01T00:37:26.590Z",
   "appVersion": "1.2.6",
   "versionCode": 9,
   "runtimeVersion": "pulse-sdk52-v1",
   "expoGoRuntimeVersion": "exposdk:52.0.0",
   "sdkVersion": "52.0.0",
   "launchAsset": {
-    "hash": "E3fHes2jQFFooQUHJJW12bY_qyxu3zK5vRatbHhU7rw",
-    "key": "b699ffccf51d2bd55f9d521ee9c5163d",
+    "hash": "gFlv9WCgPWq1w5EGoUXk3AJ00g7lNhjneYQuOFpk7pQ",
+    "key": "f579477e14b0cadf940ef3f8ac4cf18d",
     "contentType": "application/javascript",
     "fileExtension": ".hbc",
-    "relativePath": "/expo-sdk52/AppEntry-b699ffccf51d.hbc"
+    "relativePath": "/expo-sdk52/AppEntry-f579477e14b0.hbc"
   },
   "assets": [
+    {
+      "hash": "dFlpp8lbErHJM_97GBadOaSxuTolXiCbixxIBGJBoC0",
+      "key": "5ac38c6c3872b42a897e57abaeca39dc",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/5ac38c6c3872b42a897e57abaeca39dc"
+    },
+    {
+      "hash": "hibnmI4u5DDtVkJ4mi7BLjn98tgqrAVshCpf7e60Whk",
+      "key": "ec23b7b966bd4d078ccc4233c306ee82",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/ec23b7b966bd4d078ccc4233c306ee82"
+    },
+    {
+      "hash": "Vl2rsU0sbc1XTjWG8U0PzEkQ8vczBic4y_k2tboGxgo",
+      "key": "8c5424b14aaa077577e65c276b90c9e6",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/8c5424b14aaa077577e65c276b90c9e6"
+    },
+    {
+      "hash": "B3qKfSg1tlOji-aRtwIK-i-HsbGRYB7EQ0_csBZmRk8",
+      "key": "de717a557269f23f385ee4966becb5df",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/de717a557269f23f385ee4966becb5df"
+    },
+    {
+      "hash": "2CYnUd-qScJKVpiNsUI4zTBGIhEiBiY_KGgmJVWiTes",
+      "key": "2c7eab75ebf0b19031bb3fa976db23a7",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/2c7eab75ebf0b19031bb3fa976db23a7"
+    },
+    {
+      "hash": "I77vb0wfSSidK2m__yppWKiN2e-LTDE3uuaS27SFdMg",
+      "key": "a95ab1ce761b914cf725d2aa3c41a914",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/a95ab1ce761b914cf725d2aa3c41a914"
+    },
+    {
+      "hash": "ldrh8w-rFe6vFf1blfgZaIjUW5j3t8-g9uHiufFKvn0",
+      "key": "4d58ae714aaebb30067b1895b4c06ee1",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/4d58ae714aaebb30067b1895b4c06ee1"
+    },
+    {
+      "hash": "LGboP7l8E8gXmDFv54IIEKQRKAULTEEGTR_nD4DCzpQ",
+      "key": "51c2b7793f5f4acb9a5fc186e23ea138",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/51c2b7793f5f4acb9a5fc186e23ea138"
+    },
+    {
+      "hash": "Wlhh8bdxFsReuXXFarqIj3jSqmGCiEAXppqxLBYPDPM",
+      "key": "bbda90e58f7300d82fe10adb846c84a7",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/bbda90e58f7300d82fe10adb846c84a7"
+    },
+    {
+      "hash": "Jfv2CW2iDhfo_XgVeYUEAoiHkI2iBI2-kyb7q393Crw",
+      "key": "45c3b7376ebd5742c31bf685cdff0562",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/45c3b7376ebd5742c31bf685cdff0562"
+    },
+    {
+      "hash": "WOFZBhI7uqdBrjtdTw69OsIgCVWiM4FAQMp_mNlUE0k",
+      "key": "33badf4dbe795b582e032a34e70022ae",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/33badf4dbe795b582e032a34e70022ae"
+    },
+    {
+      "hash": "SmOhoQ5p_0F2EMk_ZeIhE7Cfyp6RJNuU0zAcGGrP2uc",
+      "key": "a829bafd5db63efa8d742703a6a246ad",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/a829bafd5db63efa8d742703a6a246ad"
+    },
+    {
+      "hash": "J-uG94AfKQc4d_esRSITsUbr5uQniqZHaoxAkGrN8NE",
+      "key": "1d4481811fe0027c60aff0cb1ad778c7",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/1d4481811fe0027c60aff0cb1ad778c7"
+    },
+    {
+      "hash": "uyYuG0-5aXzCNLMcQxIZYW_qxYWp3if3vebjLV_DrRE",
+      "key": "a1af15830a4388673f6d41507e9b0e49",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/a1af15830a4388673f6d41507e9b0e49"
+    },
+    {
+      "hash": "QdPA3ekKdST8SJ4T2mb8J-2nIjeow3QIBgOVc4BsfFw",
+      "key": "811ad11f80b1d2c3241789397483d51a",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/811ad11f80b1d2c3241789397483d51a"
+    },
+    {
+      "hash": "-2KQCz0lGtssHca_ziLkzjoEZC-kXbXHfi71z1Kc8TU",
+      "key": "263730234a209807d3fbb0df676b3fe2",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/263730234a209807d3fbb0df676b3fe2"
+    },
+    {
+      "hash": "jlcPXD7tmZ8FnbW4vAKA4avq4xNhhKMKGxITPgQ-U1I",
+      "key": "c8951e29f4af1780b3642d011826560a",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/c8951e29f4af1780b3642d011826560a"
+    },
+    {
+      "hash": "mevPdFJwKZMJYXs_6Bajger51Unxklr7nGCAr0bYuJ8",
+      "key": "8a28bc1d40992d5770b78b7aac4f52aa",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/8a28bc1d40992d5770b78b7aac4f52aa"
+    },
+    {
+      "hash": "jRpH0V7r2cGFbrRKgC6fEShR3Zjq0-7gSF5zn_N1mmM",
+      "key": "687cab1598b3a8565511d1f0a9bb431f",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/687cab1598b3a8565511d1f0a9bb431f"
+    },
+    {
+      "hash": "s_E8qI9okTHvB-qd7-LY7YllC5eaf6ZcPKLBOiopNJQ",
+      "key": "d611800c77e3cdda244de3b61c8312ef",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/d611800c77e3cdda244de3b61c8312ef"
+    },
+    {
+      "hash": "XdoXOduMh-0Jj76iLzk_GSJMS9dsGhhgzNcGBjo6QWQ",
+      "key": "ad30cb3b7249ec988409c72e44cc0c7f",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/ad30cb3b7249ec988409c72e44cc0c7f"
+    },
+    {
+      "hash": "_6vjm5ZgZP2eGijy77XO3bqu2MDcfTm5EEWcAUkGAGs",
+      "key": "6c1aec704788191d2dceb1f2a8dce81e",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/6c1aec704788191d2dceb1f2a8dce81e"
+    },
+    {
+      "hash": "WcN2WC88ho1DCDtn0CmV_SKxq3IQ8qhx1Z4qgEgBv3o",
+      "key": "cb7c1b031583db49a09e14aab21e6203",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/cb7c1b031583db49a09e14aab21e6203"
+    },
+    {
+      "hash": "YDtNYq5FAxHxJlrwl_IMYgj2BwNFmc-tap6M0a2o2Ho",
+      "key": "e3e1c5d143a2b93f7f57c5b11b905162",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/e3e1c5d143a2b93f7f57c5b11b905162"
+    },
+    {
+      "hash": "er5XRBHxTItg69vkNxxMuGeHNvvTAqN9pCmZzabWn8c",
+      "key": "d8b222baf54fbe79e12fe65f4cefce4c",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/d8b222baf54fbe79e12fe65f4cefce4c"
+    },
+    {
+      "hash": "yu-NI6hSKw_Kwo8kr7IPELAGEpQ80i8nJGNcRF5sKXc",
+      "key": "9bd9ad1d04b3159d3c9371a5689079e9",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/9bd9ad1d04b3159d3c9371a5689079e9"
+    },
+    {
+      "hash": "nKi5YoXef9x6Hc9OsPAHwh6dD7ANScu9MEt52_N5g7o",
+      "key": "56ff7788c916bc04bdc8ac79dc7f8695",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/56ff7788c916bc04bdc8ac79dc7f8695"
+    },
+    {
+      "hash": "HqzcADoF_Z53YNo52wINiMOSgpdlT2lWmGcWSAqMSDc",
+      "key": "c6cc0ad08c99737359c879ecfbc9c96d",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/c6cc0ad08c99737359c879ecfbc9c96d"
+    },
+    {
+      "hash": "JpXVP-CSQ9PUPeNlR1c12qyY_I_xoRlBOLErsffMlTw",
+      "key": "8ed94bf8e42759d5c74de91bc2faa3b6",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/8ed94bf8e42759d5c74de91bc2faa3b6"
+    },
+    {
+      "hash": "4bozjvdeGdbeO6HukrF74dRetTsrNo51-HzFuqhEnb8",
+      "key": "5f26393c7f782b2aedb5a6c8dabffb63",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/5f26393c7f782b2aedb5a6c8dabffb63"
+    },
+    {
+      "hash": "dI3c71DOr6XvHvP_blaQbXlXxZXeEHIA4M3Cmbuso_w",
+      "key": "c087859508650a4b4a1a8c7fad617d32",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/c087859508650a4b4a1a8c7fad617d32"
+    },
+    {
+      "hash": "xmS_7MAbWwP9sWaxJwj5Nuv8gJFwzW4mF3yZaFO2nYc",
+      "key": "c891052163a88351ea32461884bcf4c4",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/c891052163a88351ea32461884bcf4c4"
+    },
+    {
+      "hash": "XFxG5mvQjDQ_d916s1JVokkgI_3b8Bf9pGtuyxrPu4E",
+      "key": "2d9bf58956e5e850a3e9db2fd56232d4",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/2d9bf58956e5e850a3e9db2fd56232d4"
+    },
+    {
+      "hash": "5FdR1QHYbKrg0M8Hy7IgpfWnmKPGhrzOys5mDNQkK7c",
+      "key": "a7aaa6e15181714b8d23bc6c21f75fcc",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/a7aaa6e15181714b8d23bc6c21f75fcc"
+    },
+    {
+      "hash": "QkCZuiQHXNYmOKTChM8PoUrfJUwhL6u83S4Cz4rCzp0",
+      "key": "ece84659ed054eab6e12589d1f15f9e1",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/ece84659ed054eab6e12589d1f15f9e1"
+    },
+    {
+      "hash": "3qTDEbBWks54LFAY8isXewq3C24nD5F2EG1ks4ndA6I",
+      "key": "814ea9837bcaa5c8c8444711af0ee20e",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/814ea9837bcaa5c8c8444711af0ee20e"
+    },
+    {
+      "hash": "QsawS05DNbiHJMNLt_6p8ExpqlhvKluw4avC3dGN69g",
+      "key": "7387b82b0634625eb65827a321337792",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/7387b82b0634625eb65827a321337792"
+    },
+    {
+      "hash": "i63pAD_-dPesKQ0NCezH-TGXYzYRKyAz7_ctDuV02vg",
+      "key": "00f61de7b900152efc554d1a80c7dfdc",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/00f61de7b900152efc554d1a80c7dfdc"
+    },
+    {
+      "hash": "3F7r1j6JxHsr3hZqSgQvSjKtpTDpz8zRK5Utxy7mSUU",
+      "key": "e71ccc17ddfd301952a5a1dd35d87be5",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/e71ccc17ddfd301952a5a1dd35d87be5"
+    },
+    {
+      "hash": "UrWhZ2zUsVZTy0NH8owzZNj0yJ2OZ3THO6T-EV2E_rg",
+      "key": "88fb3cf0cff109baceb7c5a45b3e0ed4",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/88fb3cf0cff109baceb7c5a45b3e0ed4"
+    },
+    {
+      "hash": "om4e6vc4GQXnp5ycy7Ar4-6Kz63_-7y5HHbqcZzSBQw",
+      "key": "635538d1d407f5b4b48557074b5b4d29",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/635538d1d407f5b4b48557074b5b4d29"
+    },
+    {
+      "hash": "9NZg5XFr4XrlaQiLv8zEKrrYakvYKFVm3kGWOnXrt_0",
+      "key": "1d690c66b10229d4e39d15d8390f32a3",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/1d690c66b10229d4e39d15d8390f32a3"
+    },
+    {
+      "hash": "qQ29bNcWGpGlcEIP4UPSzG_E4qevo_gICeXkXIerJW4",
+      "key": "8624fb3c583521053665b40fbde26860",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/8624fb3c583521053665b40fbde26860"
+    },
+    {
+      "hash": "eF_eLzvFcKEp0GdrHLsmwYwqRmiJ48kD38VZIDW24kM",
+      "key": "417240169ab6d776be712246d8f37e8e",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/417240169ab6d776be712246d8f37e8e"
+    },
+    {
+      "hash": "ect8Z7gP607AtkV-j3I6j6hYQqaVLVagrZJl56pgCBQ",
+      "key": "bf71e1cc7b4d34788db8c86691462790",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/bf71e1cc7b4d34788db8c86691462790"
+    },
+    {
+      "hash": "1fYro0Yz9ZyUaUAiUulxdovK3I9WbjVpgendsJZzbaA",
+      "key": "f4169a96e174470470039b054321b49d",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/f4169a96e174470470039b054321b49d"
+    },
+    {
+      "hash": "FS16PnghDr2FjNgJI2YB3y86CKUhUSMybo4SG9_Wlqw",
+      "key": "4403775ee5c2c121c7e13e0b2ae2a61a",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/4403775ee5c2c121c7e13e0b2ae2a61a"
+    },
+    {
+      "hash": "DvhyX639n9DdwAgP1KvCJV7YW3suS_DrkWTU6aNLnjI",
+      "key": "64400ff0543d0f6348ebf48e3f5c2783",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/64400ff0543d0f6348ebf48e3f5c2783"
+    },
+    {
+      "hash": "F9930TnmfQyMagAaL-x_4XpIpuXiHpYvIlEHhzUYN6g",
+      "key": "f119e95342d3f9ad8299c83cdce61fdd",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/f119e95342d3f9ad8299c83cdce61fdd"
+    },
+    {
+      "hash": "8926i10zxx1776Hk2sgFZlE2bo7umX7HPLJkLiSvAZU",
+      "key": "bc60fea4c4d9440cbe90db16a22c760d",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/bc60fea4c4d9440cbe90db16a22c760d"
+    },
+    {
+      "hash": "wMQntKu7WYhUqWOA0-yXVVaweF1mjJTTnL3cdgWsrgc",
+      "key": "02ddd53157bd6a1ae7fb43a2501f993d",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/02ddd53157bd6a1ae7fb43a2501f993d"
+    },
+    {
+      "hash": "q72xxcFOwPGrn-U9idUYuBg9eN5Q0ZM0UxkfFXd2U7s",
+      "key": "7a917e50316f5c87b0515c7ca678f367",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/7a917e50316f5c87b0515c7ca678f367"
+    },
+    {
+      "hash": "8sqgVUjb2nbS1toybjy5et2WIHQ4Y3KpoE2X5rgYaDQ",
+      "key": "05e4ba5fce6c384c2118012078c64cb4",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/05e4ba5fce6c384c2118012078c64cb4"
+    },
+    {
+      "hash": "XE1lngFHO52tFcecYduOQiE2nH_3B0QpWFNLTiVKyi8",
+      "key": "a53867974cf4111742d7a77c5f9763c1",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/a53867974cf4111742d7a77c5f9763c1"
+    },
+    {
+      "hash": "bMZcjgM-B611klcEMMecccg5t9TT_RqJOXZtxWLN8mc",
+      "key": "8e4facc41396d47be9b19f2e77881d21",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/8e4facc41396d47be9b19f2e77881d21"
+    },
+    {
+      "hash": "Rr09bYU5IxM58DQfG0wwtdIux4fekUfIX__cnAcCzkw",
+      "key": "4f84fb9824367af9fdf0bfede76a50c8",
+      "contentType": "image/png",
+      "fileExtension": ".png",
+      "relativePath": "/expo-sdk52/assets/4f84fb9824367af9fdf0bfede76a50c8"
+    },
     {
       "hash": "OAX65o1CJsZ9hO0hzRIeQsOzoJWJVBevjZodxkYlwYg",
       "key": "43a2a6300d8f3ae6ec22199810977028",
@@ -62,27 +454,6 @@
       "contentType": "image/webp",
       "fileExtension": ".webp",
       "relativePath": "/expo-sdk52/assets/5f11beec24c62e42637f758cb50192ba"
-    },
-    {
-      "hash": "CySl0kJRHx75Ic370On2cb-WEEX0htiXNKcl2dSOoGU",
-      "key": "71c692f8ee332a144d41a794d9b38892",
-      "contentType": "image/png",
-      "fileExtension": ".png",
-      "relativePath": "/expo-sdk52/assets/71c692f8ee332a144d41a794d9b38892"
-    },
-    {
-      "hash": "tlHEsZq9YrbU5cFeV9uIeSqJ8hFS3U1BkVgMQ-yuqEI",
-      "key": "bdac85388561c1fe4bd6c155f07d7a29",
-      "contentType": "image/png",
-      "fileExtension": ".png",
-      "relativePath": "/expo-sdk52/assets/bdac85388561c1fe4bd6c155f07d7a29"
-    },
-    {
-      "hash": "IGc_xhn3jL4ucNVbVklwdptDgf7RNkaFt7kflMsyRmE",
-      "key": "031ab58dc55d4cb4c1cec5006409229d",
-      "contentType": "image/png",
-      "fileExtension": ".png",
-      "relativePath": "/expo-sdk52/assets/031ab58dc55d4cb4c1cec5006409229d"
     },
     {
       "hash": "EuDaf_fW6VwxY2uT_XshWcJEcWaqXldzXpTy-KUUzdc",

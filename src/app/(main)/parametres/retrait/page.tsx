@@ -1,6 +1,7 @@
 "use client";
 
 import { PaymentMethodMark } from "@/components/payment-method-mark";
+import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -412,14 +413,18 @@ export default function WithdrawPage() {
                             : "border-edge bg-elev/40"
                         )}
                       >
-                        <PaymentMethodMark method={m.id} fallback={
-                      <m.Icon
-                          className={cn(
-                            "h-3.5 w-3.5 shrink-0 lg:h-4 lg:w-4",
-                            active ? "text-betclic-red" : "text-mist"
-                          )}
+                        <PaymentMethodMark
+                          method={m.id}
+                          countryCode={countryConfig.code}
+                          fallback={
+                            <m.Icon
+                              className={cn(
+                                "h-3.5 w-3.5 shrink-0 lg:h-4 lg:w-4",
+                                active ? "text-betclic-red" : "text-mist"
+                              )}
+                            />
+                          }
                         />
-                      } />
                         <span className="truncate font-display text-[10.5px] font-medium text-ink lg:text-[10.5px]">
                           {m.label}
                         </span>
@@ -427,6 +432,9 @@ export default function WithdrawPage() {
                     );
                   })}
                 </div>
+                {method === "mobile_money" ? (
+                  <MobileMoneyBrandStrip countryCode={countryConfig.code} className="mt-2" />
+                ) : null}
               </div>
 
               <div className="rounded-xl border border-edge bg-white p-3 lg:border-0 lg:p-0">

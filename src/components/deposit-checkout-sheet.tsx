@@ -22,6 +22,8 @@ import {
   validateGiftCard,
 } from "@/lib/gift-cards";
 import { Gift } from "lucide-react";
+import { GiftCardMark } from "@/components/gift-card-mark";
+import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
 
 export type DepositCheckoutSheetSession =
   | {
@@ -663,6 +665,7 @@ function DepositCheckoutSheetBody({
                               : "border-edge bg-elev/50 text-mist hover:border-ink/20 hover:text-ink"
                           )}
                         >
+                          <GiftCardMark id={c.id} className="mb-1" />
                           <span className="truncate font-display text-[10px] font-bold leading-tight">
                             {c.shortLabel}
                           </span>
@@ -770,6 +773,10 @@ function DepositCheckoutSheetBody({
                     }. Indiquez le numéro émetteur ou l'identifiant TXN du transfert.`
                   : "Effectuez votre virement puis renseignez ci-dessous la référence bancaire de l'opération."}
               </div>
+
+              {session.method === "mobile_money" ? (
+                <MobileMoneyBrandStrip countryCode={countryConfig.code} className="mt-2" />
+              ) : null}
 
               <label className="mt-3 block text-[9.5px] font-medium uppercase tracking-wider text-mist">
                 {session.method === "mobile_money"

@@ -13,6 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { ApiRequestError, api } from "@/lib/api";
+import { PaymentMethodMark } from "@/components/payment-method-mark";
+import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
 import {
   formatLocalAmount,
   formatLocalInputString,
@@ -269,7 +271,11 @@ export function WithdrawModal({
                         : "border-edge bg-white text-mist"
                     )}
                   >
-                    <Icon className="h-4 w-4 shrink-0" strokeWidth={2.1} />
+                    <PaymentMethodMark
+                      method={m.id}
+                      countryCode={countryConfig.code}
+                      fallback={<Icon className="h-4 w-4 shrink-0" strokeWidth={2.1} />}
+                    />
                     <span className="truncate font-display text-[10.5px] font-medium leading-tight">
                       {m.label}
                     </span>
@@ -277,6 +283,10 @@ export function WithdrawModal({
                 );
               })}
             </div>
+
+            {method === "mobile_money" ? (
+              <MobileMoneyBrandStrip countryCode={countryConfig.code} className="mt-2" />
+            ) : null}
 
             <div className="mt-3.5">
               <label className="text-[10.5px] font-medium text-mist">{currentMethod.hint}</label>
