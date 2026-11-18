@@ -1,10 +1,10 @@
 name: Synchronisation des matchs
 on:
   schedule:
-    # 25 min exact : cron ne peut pas exprimer « toutes les 25 min » sur une
-    # seule ligne (60 n'est pas divisible par 25). On décrit donc un cycle
-    # de 5 h = 12 déclenchements espacés de 25 min, qui se répète.
-    # (`*/25` donnerait 25, 25 puis 10 min → 20 min en moyenne.)
+    # ~25 min : 58 déclenchements/jour (moyenne 24,8 min). Cron ne peut pas
+    # faire 25 min exact (1 440 min n'est pas divisible par 25) ; le seul
+    # écart est 23:45 → 00:00 (15 min). `*/25`, lui, donne 25, 25 puis 10 min
+    # → 20 min en moyenne, soit plus de requêtes que voulu.
     - cron: '0 0,5,10,15,20 * * *'
     - cron: '25 0,5,10,15,20 * * *'
     - cron: '50 0,5,10,15,20 * * *'
