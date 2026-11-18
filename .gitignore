@@ -66,3 +66,5 @@ next-env.d.ts
 *.live-odds.jsonl
 
 .vercel/
+.vercel
+.env*

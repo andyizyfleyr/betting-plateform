@@ -30,7 +30,7 @@ import { buildServerClockAnchor } from "@/lib/live-clock";
 import { ensureMlLoaded, recordMatchesFinishedBatchMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
 import { teamLogo, virtualClubNames, virtualTeamAliases, virtualTeamIdentity } from "@/lib/team-logos";
-import { planVirtualQueue, sharesVirtualTeam, virtualPairKey, coprimeStride, buildVirtualFixturePool, VIRTUAL_REMATCH_GAP_MS, VIRTUAL_MAX_LIVE, VIRTUAL_KICKOFF_GAP_MS, VIRTUAL_LIVE_PRIME_HORIZON_MS, type VirtualFixtureWindow } from "@/lib/virtual-fixtures";
+import { planVirtualQueue, sharesVirtualTeam, virtualPairKey, coprimeStride, buildVirtualFixturePool, VIRTUAL_REMATCH_GAP_MS, VIRTUAL_MAX_LIVE, VIRTUAL_KICKOFF_GAP_MS, type VirtualFixtureWindow } from "@/lib/virtual-fixtures";
 import { claimVirtualKickoff, VIRTUAL_SCHEDULE_LOCK } from "@/db/virtual-kickoff";
 
 /** Suspension brève du marché après un but (~2,2 s). */
@@ -537,25 +537,23 @@ async function executeTick(now: number): Promise<void> {
     }
   }
 
-  // Remplit immédiatement chaque canal libre avec la prochaine affiche proche.
-  // Le match peut être avancé de quelques minutes pour maintenir les 4 directs,
-  // mais son départ est toujours horodaté à `now` (jamais antidaté).
+  // Démarre uniquement le prochain match dont l'heure de coup d'envoi est atteinte,
+  // et au plus une tentative par tick (une seule transaction SQL).
+  // Aucun démarrage anticipé : l'espacement de VIRTUAL_KICKOFF_GAP_MS (48 min)
+  // plafonne le moteur à 30 matchs virtuels par jour, "ni plus ni moins".
   if (activeLives.length < CONCURRENT_LIVE_VIRTUAL) {
-    const ordered = upcomingMatches.filter(m => m.source === "virtual")
-      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
-    for (const vm of ordered) {
-      if (vm.startsAt.getTime() > now + VIRTUAL_LIVE_PRIME_HORIZON_MS) break;
-      const claimed = await claimVirtualKickoff(vm, now, {
-        allowEarly: true,
-        ignoreRecentGap: true,
-      });
-      if (!claimed) continue;
-      const index = upcomingMatches.findIndex(u => u.id === vm.id);
-      if (index >= 0) upcomingMatches.splice(index, 1);
-      const stepped = kickOffInMemory(claimed, now, now, pressureFor(claimed));
-      recordStepResult(claimed, stepped);
-      if (!stepped.finished) activeLives.push(stepped.row);
-      break;
+    const nextDue = upcomingMatches
+      .filter((m) => m.source === "virtual" && m.startsAt.getTime() <= now)
+      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
+    if (nextDue) {
+      const claimed = await claimVirtualKickoff(nextDue, now);
+      if (claimed) {
+        const index = upcomingMatches.findIndex((u) => u.id === nextDue.id);
+        if (index >= 0) upcomingMatches.splice(index, 1);
+        const stepped = kickOffInMemory(claimed, now, now, pressureFor(claimed));
+        recordStepResult(claimed, stepped);
+        if (!stepped.finished) activeLives.push(stepped.row);
+      }
     }
   }
 

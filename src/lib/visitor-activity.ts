@@ -13,10 +13,12 @@ export const VISITOR_ACTIVE_WINDOW_MS = 3 * 60_000;
 
 /**
  * Fréquence maximale d'écriture du battement de cœur inter-instances dans `admin_settings`
- * pendant que des visiteurs naviguent (1 ligne minuscule toutes les 90 s max, uniquement
+ * pendant que des visiteurs naviguent (1 ligne minuscule toutes les 5 min max, uniquement
  * quand Neon est déjà réveillée par un visiteur).
+ * Réduit drastiquement les opérations d'écriture Neon sur une table qui ne sert qu'à
+ * savoir si le cron doit se lancer ou non.
  */
-const HEARTBEAT_PERSIST_INTERVAL_MS = 90_000;
+const HEARTBEAT_PERSIST_INTERVAL_MS = 300_000; // 5 minutes (était 90 secondes)
 const HEARTBEAT_KEY = "visitor_heartbeat";
 
 interface VisitorActivityMemory {
