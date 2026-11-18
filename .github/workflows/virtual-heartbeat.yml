@@ -1,22 +1,7 @@
-name: Synchronisation des matchs
+name: Synchronisation des matchs (manuel)
+# Déclenchement automatique : cron-job.org, toutes les 25 min.
+# Ce workflow ne sert que de secours manuel (GitHub Actions → Run workflow).
 on:
-  schedule:
-    # ~25 min : 58 déclenchements/jour (moyenne 24,8 min). Cron ne peut pas
-    # faire 25 min exact (1 440 min n'est pas divisible par 25) ; le seul
-    # écart est 23:45 → 00:00 (15 min). `*/25`, lui, donne 25, 25 puis 10 min
-    # → 20 min en moyenne, soit plus de requêtes que voulu.
-    - cron: '0 0,5,10,15,20 * * *'
-    - cron: '25 0,5,10,15,20 * * *'
-    - cron: '50 0,5,10,15,20 * * *'
-    - cron: '15 1,6,11,16,21 * * *'
-    - cron: '40 1,6,11,16,21 * * *'
-    - cron: '5 2,7,12,17,22 * * *'
-    - cron: '30 2,7,12,17,22 * * *'
-    - cron: '55 2,7,12,17,22 * * *'
-    - cron: '20 3,8,13,18,23 * * *'
-    - cron: '45 3,8,13,18,23 * * *'
-    - cron: '10 4,9,14,19 * * *'
-    - cron: '35 4,9,14,19 * * *'
   workflow_dispatch:
 permissions: {}
 concurrency:
