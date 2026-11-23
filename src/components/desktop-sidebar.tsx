@@ -118,7 +118,8 @@ export function DesktopSidebar() {
           </p>
           <nav className="mt-2 flex flex-col gap-1" aria-label="Navigation administration">
             {ADMIN_NAV.map(({ key, label, Icon }) => {
-              const active = pathname.startsWith("/admin") && adminTab === key;
+              const href = key === "dashboard" ? "/admin/dashboard" : `/admin/${key}`;
+              const active = pathname === href;
               const badge = key === "deposits" ? adminPendingFinance : 0;
               return (
                 <button
@@ -126,9 +127,7 @@ export function DesktopSidebar() {
                   type="button"
                   onClick={() => {
                     setAdminTab(key);
-                    if (!pathname.startsWith("/admin")) {
-                      router.push("/admin");
-                    }
+                    router.push(href);
                   }}
                   className={cn(
                     "group flex h-10 w-full items-center justify-between rounded-xl px-3 text-left transition-colors",
