@@ -2984,7 +2984,7 @@ export function BetsTab({
   const searchedRows = q
     ? rows.filter(
         (r) =>
-          r.label.toLowerCase().includes(q) ||
+          (r.label ?? "").toLowerCase().includes(q) ||
           r.detail.toLowerCase().includes(q) ||
           r.kind.toLowerCase().includes(q)
       )
