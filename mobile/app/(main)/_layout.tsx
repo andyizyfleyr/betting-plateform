@@ -15,12 +15,10 @@ import { COLORS } from "@/theme/tokens";
 
 export function MainShellLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isFullscreenGame =
-    pathname.startsWith("/tap") || pathname.startsWith("/accelerator");
 
   return (
     <View style={styles.root}>
-      {!isFullscreenGame ? <AppHeader /> : null}
+      <AppHeader />
       <View style={styles.body}>{children}</View>
       <BottomNav />
 
@@ -31,7 +29,7 @@ export function MainShellLayout({ children }: { children: React.ReactNode }) {
       <RechargeModal />
       <ShareTicketModal />
       <InAppBrowserSheet />
-      {!isFullscreenGame ? <SupportChat /> : null}
+      <SupportChat />
     </View>
   );
 }

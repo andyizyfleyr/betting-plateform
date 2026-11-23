@@ -41,9 +41,6 @@ import ParametresScreen from "./app/(main)/parametres/index";
 import DepotScreen from "./app/(main)/parametres/depot";
 import RetraitScreen from "./app/(main)/parametres/retrait";
 import TransactionsScreen from "./app/(main)/parametres/transactions";
-import JeuxScreen from "./app/(main)/jeux";
-import TapGameScreen from "./app/(main)/tap";
-import AcceleratorGameScreen from "./app/(main)/accelerator";
 import AdminScreen from "./app/(main)/admin";
 
 // Maintient le splash système Android jusqu'au premier rendu du Splash HD React Native
@@ -52,7 +49,6 @@ ensureMobileFocusManagerBound();
 
 function ActiveScreenSwitch() {
   const pathname = usePathname();
-  const isDarkGame = pathname === "/tap" || pathname === "/accelerator";
 
   if (pathname === "/" || pathname === "") {
     return (
@@ -107,12 +103,6 @@ function ActiveScreenSwitch() {
     screen = <RetraitScreen />;
   } else if (pathname === "/parametres/transactions") {
     screen = <TransactionsScreen />;
-  } else if (pathname === "/jeux") {
-    screen = <JeuxScreen />;
-  } else if (pathname === "/tap") {
-    screen = <TapGameScreen />;
-  } else if (pathname === "/accelerator") {
-    screen = <AcceleratorGameScreen />;
   } else if (pathname === "/admin") {
     screen = <AdminScreen />;
   } else {
@@ -121,10 +111,7 @@ function ActiveScreenSwitch() {
 
   return (
     <>
-      <StatusBar
-        style={isDarkGame ? "light" : "dark"}
-        backgroundColor={isDarkGame ? "#020617" : COLORS.white}
-      />
+      <StatusBar style="dark" backgroundColor={COLORS.white} />
       <MainShellLayout>{screen}</MainShellLayout>
     </>
   );

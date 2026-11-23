@@ -12,7 +12,6 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { RefreshCw, X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { usePathname } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
 
 type ExpoUpdatesApi = typeof import("expo-updates");
@@ -169,7 +168,6 @@ const INITIAL_BOOT_CHECK_DELAY_MS = 3_500;
  */
 export function AutoOtaUpdateCoordinator() {
   const insets = useSafeAreaInsets();
-  const pathname = usePathname();
   const [updateReady, setUpdateReady] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [reloading, setReloading] = useState(false);
@@ -177,12 +175,6 @@ export function AutoOtaUpdateCoordinator() {
   const checkingRef = useRef(false);
   const lastCheckAtRef = useRef(0);
   const updateReadyRef = useRef(false);
-  const pathnameRef = useRef(pathname);
-
-  useEffect(() => {
-    pathnameRef.current = pathname;
-  }, [pathname]);
-
   const markUpdateReady = useCallback(() => {
     if (updateReadyRef.current) return;
     updateReadyRef.current = true;
@@ -255,12 +247,7 @@ export function AutoOtaUpdateCoordinator() {
         prevState === "background" || prevState === "inactive";
       if (wasBackground && nextState === "active") {
         void checkAndPrefetchSilently(false);
-      } else if (
-        nextState === "background" &&
-        updateReadyRef.current &&
-        pathnameRef.current !== "/tap" &&
-        pathnameRef.current !== "/accelerator"
-      ) {
+      } else if (nextState === "background" && updateReadyRef.current) {
         const updates = getSafeUpdatesModule();
         if (updates) {
           updates.reloadAsync().catch(() => {});
