@@ -312,10 +312,10 @@ export default function MatchDetailPage() {
         ) : (
           <div className="space-y-2.5 lg:space-y-4">
             {/* Scoreboard compact sur mobile (écussons sm, noms intégraux) */}
-            <section className="glass-card relative overflow-hidden rounded-xl p-3 min-h-[280px] lg:rounded-2xl lg:p-4 lg:min-h-[320px]">
+            <section className="glass-card relative overflow-hidden rounded-xl p-3 min-h-[560px] lg:rounded-2xl lg:p-4 lg:min-h-[640px]">
               <img src="/stadium-bg.jpg" alt="" aria-hidden="true"
                    className="absolute inset-0 h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-black/55" />
+              <div className="absolute inset-0 bg-black/45" />
               <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <div className="flex flex-col items-center gap-1 text-center">
                   <TeamAvatar
@@ -330,7 +330,7 @@ export default function MatchDetailPage() {
                     size="md"
                     className="hidden lg:grid"
                   />
-                  <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
+                  <span className="font-display text-[10.5px] font-medium leading-tight text-white lg:text-[11px]">
                     {match.homeTeam}
                   </span>
                   {(match.redHome ?? 0) > 0 && (
@@ -403,7 +403,7 @@ export default function MatchDetailPage() {
                     size="md"
                     className="hidden lg:grid"
                   />
-                  <span className="font-display text-[10.5px] font-medium leading-tight text-ink lg:text-[11px]">
+                  <span className="font-display text-[10.5px] font-medium leading-tight text-white lg:text-[11px]">
                     {match.awayTeam}
                   </span>
                   {(match.redAway ?? 0) > 0 && (
