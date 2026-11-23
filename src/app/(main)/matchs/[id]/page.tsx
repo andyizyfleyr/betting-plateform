@@ -80,8 +80,20 @@ function ScoreboardTimer({ match }: { match: ClientMatch }) {
   if (!Number.isFinite(startsAtMs)) return null;
 
   const isLive = match.status === "live";
-  const diff = startsAtMs - now;
-  const total = Math.max(0, Math.floor((isLive ? now - startsAtMs : diff) / 1000));
+  const value = isLive ? Math.max(0, now - startsAtMs) : Math.max(0, startsAtMs - now);
+  if (value > 24 * 60 * 60 * 1000) {
+    const dateLabel = new Date(startsAtMs).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    return (
+      <span className="mt-1 inline-flex items-center rounded-md bg-white/10 px-2 py-0.5 font-display text-[10.5px] font-semibold text-white lg:text-[11px]">
+        {dateLabel}
+      </span>
+    );
+  }
+  const total = Math.floor(value / 1000);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const sec = total % 60;
