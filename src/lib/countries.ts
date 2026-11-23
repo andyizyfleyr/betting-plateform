@@ -989,7 +989,6 @@ export function getCurrencyConfig(raw: unknown): CurrencyConfig {
     minWithdrawalLocal: preset.minWithdrawal ?? base.minWithdrawalLocal,
     maxWithdrawalLocal: preset.maxWithdrawal ?? base.maxWithdrawalLocal,
     minStakeLocal: preset.minStake ?? base.minStakeLocal,
-    maxStakeLocal: preset.maxStake ?? base.maxStakeLocal,
   } as CurrencyConfig;
 }
 
