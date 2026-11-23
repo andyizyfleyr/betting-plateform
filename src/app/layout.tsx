@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { BottomNav } from "@/components/bottom-nav";
 import { Providers } from "@/components/providers";
-import { getBrandingSettings } from "@/lib/admin-settings";
+import { getBrandingSettings } from "@/lib/admin-settings-server";
 
 export async function generateMetadata(): Promise<Metadata> {
   // Branding configurable par l'admin (nom, tagline) — sans redéploiement.

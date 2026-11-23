@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { waitUntil } from "@vercel/functions";
 import { db } from "@/db";
-import { getNotificationSettings } from "@/lib/admin-settings";
+import { getNotificationSettings } from "@/lib/admin-settings-server";
 
 /** Les événements sont dédoublonnés par appareil et par événement, jamais par l'état en mémoire. */
 export async function enqueueRecentPushEvents(): Promise<void> {

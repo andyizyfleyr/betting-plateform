@@ -1,9 +1,6 @@
-import { eq } from "drizzle-orm";
-import { adminSettings } from "@/db/schema";
-// `db` (pg) est importé dynamiquement dans les fonctions async afin que cette
-// lib reste bundleable côté client (elle est consommée par markets.ts /
-// payments.ts via getAdminSettingSync). Le schema + drizzle-orm sont safes
-// côté client ; seul l'accès DB doit rester lazy.
+// Module PURE — client-safe. Types, valeurs par défaut, catalogue et cache
+// sync (getAdminSettingSync). Aucun import DB : l'accès DB (pg) est isolé dans
+// @/lib/admin-settings-server (server-only), consommé par les routes API.
 
 /**
  * Système central de réglages d'administration (sans redéploiement).
@@ -427,8 +424,8 @@ export const ADMIN_SETTINGS_CATALOG: Record<
 /* ------------------------------------------------------------------ */
 
 const SETTINGS_CACHE_TTL_MS = 30_000;
-const settingsCache = new Map<AdminSettingKey, { at: number; value: Record<string, unknown> }>();
-let settingsAllCache: { at: number; value: Record<AdminSettingKey, Record<string, unknown>> } | null = null;
+export const settingsCache = new Map<AdminSettingKey, { at: number; value: Record<string, unknown> }>();
+export let settingsAllCache: { at: number; value: Record<AdminSettingKey, Record<string, unknown>> } | null = null;
 
 /** Invalide le cache (appelé après chaque écriture admin). */
 export function invalidateAdminSettingsCache(): void {
@@ -436,28 +433,15 @@ export function invalidateAdminSettingsCache(): void {
   settingsAllCache = null;
 }
 
-/**
- * Réchauffe le cache de toutes les clés (1 requête SQL par clé, ~13 clés).
- * Appelé par le housekeeping du sync-throttle (toutes les 5 min) et au démarrage
- * pour garantir que les lectures sync (cotes, marges…) utilisent les réglages admin
- * sans persistance stale. Le cache persiste sans TTL jusqu'au prochaine écriture.
- */
-export async function warmAdminSettingsCache(): Promise<void> {
-  const keys = Object.keys(ADMIN_SETTINGS_CATALOG) as AdminSettingKey[];
-  await Promise.all(
-    keys.map(async (key) => {
-      if (!settingsCache.has(key)) {
-        await getAdminSetting(key);
-      }
-    })
-  );
-}
 
-function cachedOrDefault<K extends AdminSettingKey>(key: K): Record<string, unknown> {
-  // Lecture sync : retourne la dernière valeur chaudée (même hors TTL) afin que
-  // les fonctions sync en hot path (cotes, marges…) utilisent toujours les réglages
-  // admin. Le cache est réchauffé par les points d'entrée async et invalidé/écrit
-  // par `saveAdminSetting`. En l'absence de réchauffement, on retombe sur le default.
+/**
+ * Lecture tolérante SYNC du cache (0 requête DB). Retourne la valeur chaudée
+ * si disponible, sinon le default. Les fonctions sync en hot path (calcul des
+ * cotes, marges, marchés actifs…) l'utilisent ; le cache est réchauffé côté
+ * serveur par `warmAdminSettingsCache` (admin-settings-server) et invalidé
+ * par `saveAdminSetting`.
+ */
+export function cachedOrDefault<K extends AdminSettingKey>(key: K): Record<string, unknown> {
   const hit = settingsCache.get(key);
   if (hit) return hit.value;
   return ADMIN_SETTINGS_CATALOG[key].default;
@@ -467,133 +451,7 @@ export function defaultForKey<K extends AdminSettingKey>(key: K): Record<string,
   return ADMIN_SETTINGS_CATALOG[key].default;
 }
 
-/**
- * Lecture SYNC du cache (0 requête DB). Retourne la valeur chaudée si disponible,
- * sinon le default. Les fonctions sync en hot path (calcul des cotes, marges…)
- * l'utilisent ; les points d'entrée asynchrones réchauffent le cache via
- * `getAdminSetting` / `getMarketMarginSettings` etc.
- */
+/** Lecture SYNC du cache (0 requête DB). Consommée côté client (markets.ts). */
 export function getAdminSettingSync<K extends AdminSettingKey>(key: K): Record<string, unknown> {
   return cachedOrDefault(key);
-}
-
-/** Lecture tolérante avec cache : retourne la valeur sauvegardée, sinon le default. */
-export async function getAdminSetting<K extends AdminSettingKey>(
-  key: K
-): Promise<Record<string, unknown>> {
-  // Si le cache est déjà chaudée (même avec la valeur default), on sert sans DB.
-  if (settingsCache.has(key)) {
-    return cachedOrDefault(key);
-  }
-  const { db } = await import("@/db");
-  const [row] = await db
-    .select({ value: adminSettings.value })
-    .from(adminSettings)
-    .where(eq(adminSettings.settingKey, key))
-    .limit(1);
-  const value = row?.value && typeof row.value === "object" ? row.value : ADMIN_SETTINGS_CATALOG[key].default;
-  settingsCache.set(key, { at: Date.now(), value });
-  return value;
-}
-
-/** Écriture atomique (upsert) avec validation de structure + raffraîchir le cache. */
-export async function saveAdminSetting<K extends AdminSettingKey>(
-  key: K,
-  value: Record<string, unknown>
-): Promise<void> {
-  if (!ADMIN_SETTINGS_CATALOG[key].validate(value)) {
-    throw new Error(`Paramètre invalide : ${key}`);
-  }
-  const { db } = await import("@/db");
-  await db
-    .insert(adminSettings)
-    .values({ settingKey: key, value, updatedAt: new Date() })
-    .onConflictDoUpdate({
-      target: adminSettings.settingKey,
-      set: { value, updatedAt: new Date() },
-    });
-  settingsCache.set(key, { at: Date.now(), value });
-  settingsAllCache = null;
-}
-
-/** Snapshot complet pour l'admin (cache 30s). */
-export async function getAllAdminSettings(): Promise<
-  Record<AdminSettingKey, Record<string, unknown>>
-> {
-  if (settingsAllCache && Date.now() - settingsAllCache.at < SETTINGS_CACHE_TTL_MS) {
-    return settingsAllCache.value;
-  }
-  const { db } = await import("@/db");
-  const rows = await db.select().from(adminSettings);
-  const map = new Map(rows.map((r) => [r.settingKey, r.value as Record<string, unknown>]));
-  const result = {} as Record<AdminSettingKey, Record<string, unknown>>;
-  (Object.keys(ADMIN_SETTINGS_CATALOG) as AdminSettingKey[]).forEach((key) => {
-    result[key] = map.get(key) ?? ADMIN_SETTINGS_CATALOG[key].default;
-  });
-  settingsAllCache = { at: Date.now(), value: result };
-  return result;
-}
-
-/* ------------------------------------------------------------------ */
-/* Helpers de type pour les libs consommatrices                      */
-/* ------------------------------------------------------------------ */
-
-export async function getComboBoostSettings(): Promise<ComboBoostSettings> {
-  const raw = await getAdminSetting("combo_boost");
-  return { ...DEFAULT_COMBO_BOOST, ...(raw as Partial<ComboBoostSettings>) };
-}
-
-export async function getMarketMarginSettings(): Promise<MarketMarginSettings> {
-  const raw = await getAdminSetting("market_margins");
-  return { ...DEFAULT_MARKET_MARGINS, ...(raw as Partial<MarketMarginSettings>) };
-}
-
-export async function getCashoutSettings(): Promise<CashoutSettings> {
-  const raw = await getAdminSetting("cashout");
-  return { ...DEFAULT_CASHOUT, ...(raw as Partial<CashoutSettings>) };
-}
-
-export async function getWelcomeBonusSettings(): Promise<WelcomeBonusSettings> {
-  const raw = await getAdminSetting("welcome_bonus");
-  return { ...DEFAULT_WELCOME_BONUS, ...(raw as Partial<WelcomeBonusSettings>) };
-}
-
-export async function getPaymentSettings(): Promise<PaymentSettings> {
-  const raw = await getAdminSetting("payments");
-  return { ...DEFAULT_PAYMENTS, ...(raw as Partial<PaymentSettings>) };
-}
-
-export async function getCurrencyRatesSettings(): Promise<CurrencyRatesSettings> {
-  const raw = await getAdminSetting("currency_rates");
-  return { ...DEFAULT_CURRENCY_RATES, ...(raw as Partial<CurrencyRatesSettings>) };
-}
-
-export async function getMarketsCatalogSettings(): Promise<MarketsCatalogSettings> {
-  const raw = await getAdminSetting("markets_catalog");
-  return { ...DEFAULT_MARKETS_CATALOG, ...(raw as Partial<MarketsCatalogSettings>) };
-}
-
-export async function getVirtualSimulatorSettings(): Promise<VirtualSimulatorSettings> {
-  const raw = await getAdminSetting("virtual_simulator");
-  return { ...DEFAULT_VIRTUAL_SIMULATOR, ...(raw as Partial<VirtualSimulatorSettings>) };
-}
-
-export async function getBrandingSettings(): Promise<BrandingSettings> {
-  const raw = await getAdminSetting("branding");
-  return { ...DEFAULT_BRANDING, ...(raw as Partial<BrandingSettings>) };
-}
-
-export async function getNotificationSettings(): Promise<NotificationSettings> {
-  const raw = await getAdminSetting("notifications");
-  return { ...DEFAULT_NOTIFICATIONS, ...(raw as Partial<NotificationSettings>) };
-}
-
-export async function getSecuritySettings(): Promise<SecuritySettings> {
-  const raw = await getAdminSetting("security");
-  return { ...DEFAULT_SECURITY, ...(raw as Partial<SecuritySettings>) };
-}
-
-export async function getPlayerManagementSettings(): Promise<PlayerManagementSettings> {
-  const raw = await getAdminSetting("players");
-  return { ...DEFAULT_PLAYERS, ...(raw as Partial<PlayerManagementSettings>) };
 }

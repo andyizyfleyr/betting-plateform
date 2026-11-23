@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
 import { reconcileRedCardCounts, sanitizeMatchEvents } from "@/lib/match-events";
+import { COUNTRIES } from "@/lib/countries";
 
 let seededOnce = false;
 let seedPromise: Promise<void> | null = null;
@@ -20,6 +21,10 @@ let seedPromise: Promise<void> | null = null;
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
 const SCHEMA_SEED_MARKER_KEY = "schema_seed_v21";
+// Marqueur dédié : réalignement idempotent de la devise des comptes existants.
+// La colonne currency a été ajoutée avec DEFAULT EUR lors des migrations antérieures,
+// ce qui a attribué EUR à tous les comptes, indépendamment de leur pays (ex. BJ -> XOF).
+const CURRENCY_ALIGN_MARKER_KEY = "currency_align_v1";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -81,6 +86,45 @@ async function runSeedInternal(): Promise<void> {
     canMigrateFromV19 = Boolean(chk.has_previous_marker && chk.has_admin);
   } catch {
     // Table `admin_settings` ou colonne absente sur une base neuve : exécute la migration complète.
+  }
+
+  // Réalignement idempotent des devises : la colonne currency a été ajoutée avec
+  // DEFAULT EUR lors des migrations antérieures, ce qui a forcé la devise à EUR pour
+  // tous les comptes existants. La devise officielle est déterminée par le pays de
+  // l'inscription (figée ensuite). Une seule requête UPDATE par passe, marquée
+  // pour ne jamais rejouer (idempotent, sans effet sur les comptes déjà corrects).
+  try {
+    const alignCheck = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM "admin_settings" WHERE "setting_key" = ${CURRENCY_ALIGN_MARKER_KEY}
+      ) AS done
+    `);
+    const aligned = (alignCheck.rows?.[0] as { done?: boolean } | undefined)?.done;
+    if (!aligned) {
+      // CASE généré à partir de la table pure COUNTRIES : seules les devises
+      // non-EUR sont concernées (EUR est la valeur par défaut correcte).
+      const cases = COUNTRIES.filter((c) => c.currency !== "EUR")
+        .map((c) => `WHEN '${c.code}' THEN '${c.currency}'`)
+        .join(" ");
+      const countryList = COUNTRIES.filter((c) => c.currency !== "EUR")
+        .map((c) => `'${c.code}'`)
+        .join(", ");
+      if (cases) {
+        await db.execute(sql.raw(`
+          UPDATE "app_user"
+          SET "currency" = CASE "country_code" ${cases} END
+          WHERE "currency" IS DISTINCT FROM CASE "country_code" ${cases} END
+            AND "country_code" IN (${countryList})
+        `));
+      }
+      await db.execute(sql`
+        INSERT INTO "admin_settings" ("setting_key", "value", "updated_at")
+        VALUES (${CURRENCY_ALIGN_MARKER_KEY}, jsonb_build_object('ready', true), now())
+        ON CONFLICT ("setting_key") DO NOTHING
+      `);
+    }
+  } catch {
+    // Base sans admin_settings encore créée : la migration complète s'occupe de tout.
   }
 
   // Sur une base déjà en v19, éviter de rejouer l'initialisation complète :

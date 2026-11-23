@@ -10,7 +10,7 @@ import {
   invalidateAdminSettingsCache,
   ADMIN_SETTINGS_CATALOG,
   type AdminSettingKey,
-} from "@/lib/admin-settings";
+} from "@/lib/admin-settings-server";
 import {
   applyCurrencyAdminOverrides,
   refreshCurrencyAdminOverrides,

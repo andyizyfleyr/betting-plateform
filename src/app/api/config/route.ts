@@ -5,7 +5,7 @@ import {
   getAdminSetting,
   getBrandingSettings,
   type CurrencyPresetsSettings,
-} from "@/lib/admin-settings";
+} from "@/lib/admin-settings-server";
 import {
   getCurrencyOverrides,
   setCurrencyPresetOverrides,

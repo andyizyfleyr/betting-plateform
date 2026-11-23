@@ -12,7 +12,7 @@ import {
   type PredictionQuestionRow,
 } from "@/db/schema";
 import { computeComboQuote } from "@/lib/combo-math";
-import { getComboBoostSettings } from "@/lib/admin-settings";
+import { getComboBoostSettings } from "@/lib/admin-settings-server";
 import { notifyBetsSettledOrMutated } from "@/lib/active-state-cache";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { normalizeRealLiveMinuteLabel } from "@/lib/live-clock";

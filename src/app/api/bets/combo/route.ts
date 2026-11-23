@@ -37,7 +37,7 @@ import {
 } from "@/lib/markets";
 import { getBettingLimits } from "@/lib/betting-limits";
 import { limitsForCurrency } from "@/lib/betting-limits-shared";
-import { getComboBoostSettings } from "@/lib/admin-settings";
+import { getComboBoostSettings } from "@/lib/admin-settings-server";
 import {
   checkOddsChange,
   extractIdempotencyKey,

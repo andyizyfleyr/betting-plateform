@@ -11,7 +11,7 @@ import {
   getCachedAllMatchesForFeed,
   invalidateAllActiveCaches,
 } from "@/lib/active-state-cache";
-import { warmAdminSettingsCache } from "@/lib/admin-settings";
+import { warmAdminSettingsCache } from "@/lib/admin-settings-server";
 import { applyCurrencyAdminOverrides } from "@/lib/currency-admin";
 import { serializeSlimPublicMatch } from "@/lib/match-serializer";
 import { PARTY_LIVE_MATCHES_ROOM, publishPartyRoomEvent } from "@/lib/partykit";

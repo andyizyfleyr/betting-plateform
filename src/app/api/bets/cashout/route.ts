@@ -24,7 +24,7 @@ import {
   type LiveIncidentSnapshot,
 } from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
-import { getCashoutSettings } from "@/lib/admin-settings";
+import { getCashoutSettings } from "@/lib/admin-settings-server";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import {

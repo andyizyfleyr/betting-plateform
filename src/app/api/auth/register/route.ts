@@ -14,7 +14,7 @@ import {
   isValidCountryCode,
 } from "@/lib/countries";
 import { formatServerErrorResponse } from "@/lib/db-error";
-import { getWelcomeBonusSettings } from "@/lib/admin-settings";
+import { getWelcomeBonusSettings } from "@/lib/admin-settings-server";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   MOBILE_ANDROID_CLIENT,

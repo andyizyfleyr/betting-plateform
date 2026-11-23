@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { sql } from "drizzle-orm";
 import { db, ensureHealthyDbConnection } from "@/db";
-import { getNotificationSettings } from "@/lib/admin-settings";
+import { getNotificationSettings } from "@/lib/admin-settings-server";
 
 export const RESET_CODE_TTL_MINUTES = 15;
 export const RESET_CODE_MAX_ATTEMPTS = 5;
