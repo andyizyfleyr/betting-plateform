@@ -12,8 +12,9 @@ export * from "@/lib/admin-settings";
 import {
   ADMIN_SETTINGS_CATALOG,
   settingsCache,
-  settingsAllCache as settingsAllCacheState,
+  settingsAllCache,
   cachedOrDefault,
+  setSettingsAllCache,
   type AdminSettingKey,
 } from "@/lib/admin-settings";
 
@@ -59,7 +60,7 @@ export async function saveAdminSetting<K extends AdminSettingKey>(
       set: { value, updatedAt: new Date() },
     });
   settingsCache.set(key, { at: Date.now(), value });
-  settingsAllCacheState = null;
+  setSettingsAllCache(null);
 }
 
 /** Snapshot complet pour l'admin (cache 30s). */
@@ -67,10 +68,10 @@ export async function getAllAdminSettings(): Promise<
   Record<AdminSettingKey, Record<string, unknown>>
 > {
   if (
-    settingsAllCacheState &&
-    Date.now() - settingsAllCacheState.at < SETTINGS_CACHE_TTL_MS
+    settingsAllCache &&
+    Date.now() - settingsAllCache.at < SETTINGS_CACHE_TTL_MS
   ) {
-    return settingsAllCacheState.value;
+    return settingsAllCache.value;
   }
   const rows = await db.select().from(adminSettings);
   const map = new Map(rows.map((r) => [r.settingKey, r.value as Record<string, unknown>]));
@@ -78,7 +79,7 @@ export async function getAllAdminSettings(): Promise<
   (Object.keys(ADMIN_SETTINGS_CATALOG) as AdminSettingKey[]).forEach((key) => {
     result[key] = map.get(key) ?? ADMIN_SETTINGS_CATALOG[key].default;
   });
-  settingsAllCacheState = { at: Date.now(), value: result };
+  setSettingsAllCache({ at: Date.now(), value: result });
   return result;
 }
 

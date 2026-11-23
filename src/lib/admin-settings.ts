@@ -433,6 +433,16 @@ export function invalidateAdminSettingsCache(): void {
   settingsAllCache = null;
 }
 
+/**
+ * Setter pour le cache snapshot (la réaffectation directe d'un binding importé
+ * est interdite par Turbopack/ESM ; la mutation passe par cette fonction).
+ */
+export function setSettingsAllCache(
+  value: { at: number; value: Record<AdminSettingKey, Record<string, unknown>> } | null
+): void {
+  settingsAllCache = value;
+}
+
 
 /**
  * Lecture tolérante SYNC du cache (0 requête DB). Retourne la valeur chaudée
