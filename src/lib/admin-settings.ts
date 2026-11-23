@@ -1,6 +1,9 @@
 import { eq } from "drizzle-orm";
-import { db } from "@/db";
 import { adminSettings } from "@/db/schema";
+// `db` (pg) est importé dynamiquement dans les fonctions async afin que cette
+// lib reste bundleable côté client (elle est consommée par markets.ts /
+// payments.ts via getAdminSettingSync). Le schema + drizzle-orm sont safes
+// côté client ; seul l'accès DB doit rester lazy.
 
 /**
  * Système central de réglages d'administration (sans redéploiement).
@@ -482,6 +485,7 @@ export async function getAdminSetting<K extends AdminSettingKey>(
   if (settingsCache.has(key)) {
     return cachedOrDefault(key);
   }
+  const { db } = await import("@/db");
   const [row] = await db
     .select({ value: adminSettings.value })
     .from(adminSettings)
@@ -500,6 +504,7 @@ export async function saveAdminSetting<K extends AdminSettingKey>(
   if (!ADMIN_SETTINGS_CATALOG[key].validate(value)) {
     throw new Error(`Paramètre invalide : ${key}`);
   }
+  const { db } = await import("@/db");
   await db
     .insert(adminSettings)
     .values({ settingKey: key, value, updatedAt: new Date() })
@@ -518,6 +523,7 @@ export async function getAllAdminSettings(): Promise<
   if (settingsAllCache && Date.now() - settingsAllCache.at < SETTINGS_CACHE_TTL_MS) {
     return settingsAllCache.value;
   }
+  const { db } = await import("@/db");
   const rows = await db.select().from(adminSettings);
   const map = new Map(rows.map((r) => [r.settingKey, r.value as Record<string, unknown>]));
   const result = {} as Record<AdminSettingKey, Record<string, unknown>>;
