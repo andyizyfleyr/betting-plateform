@@ -312,7 +312,7 @@ export default function MatchDetailPage() {
         ) : (
           <div className="space-y-2.5 lg:space-y-4">
             {/* Scoreboard compact sur mobile (écussons sm, noms intégraux) */}
-            <section className="glass-card relative overflow-hidden rounded-xl p-3 min-h-[560px] lg:rounded-2xl lg:p-4 lg:min-h-[640px]">
+            <section className="glass-card relative overflow-hidden rounded-xl p-3 min-h-[140px] lg:rounded-2xl lg:p-4 lg:min-h-[160px]">
               <img src="/stadium-bg.jpg" alt="" aria-hidden="true"
                    className="absolute inset-0 h-full w-full object-cover" />
               <div className="absolute inset-0 bg-black/45" />
