@@ -312,8 +312,11 @@ export default function MatchDetailPage() {
         ) : (
           <div className="space-y-2.5 lg:space-y-4">
             {/* Scoreboard compact sur mobile (écussons sm, noms intégraux) */}
-            <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <section className="glass-card relative overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
+              <img src="/pitch-bg.jpg" alt="" aria-hidden="true"
+                   className="absolute inset-0 h-full w-full object-cover" />
+              <div className="absolute inset-0 bg-black/55" />
+              <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
                 <div className="flex flex-col items-center gap-1 text-center">
                   <TeamAvatar
                     name={match.homeTeam}
