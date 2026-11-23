@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-const PITCH_BG = require("../../assets/pitch-bg.jpg");
+const PITCH_BG = require("../../../assets/pitch-bg.jpg");
 import {
   ActivityIndicator,
   Image,
