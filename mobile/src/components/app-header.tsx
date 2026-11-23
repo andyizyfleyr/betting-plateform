@@ -27,11 +27,7 @@ export function AppHeader() {
 
   if (
     pathname === "/auth" ||
-    pathname.startsWith("/auth/") ||
-    pathname === "/tap" ||
-    pathname.startsWith("/tap/") ||
-    pathname === "/accelerator" ||
-    pathname.startsWith("/accelerator/")
+    pathname.startsWith("/auth/")
   ) {
     return null;
   }
