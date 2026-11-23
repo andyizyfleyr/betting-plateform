@@ -196,6 +196,7 @@ export interface AdminWithdrawal {
   userCountryCode?: string;
   userCurrency?: string;
   method: string;
+  destination?: string | null;
   amount: number;
   currency: string;
   status: string;
