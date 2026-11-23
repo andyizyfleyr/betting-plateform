@@ -19,6 +19,7 @@ import {
   type AdminMlOverview, type AdminQuestion, type AdminUser, type AdminWithdrawal,
   type DiscoveredOfficialFixture,
   type PanelData,
+  type QuestionFormState,
 } from "./admin-shared";
 import type { MatchFormState } from "./admin-provider";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
