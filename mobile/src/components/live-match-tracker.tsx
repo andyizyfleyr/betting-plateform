@@ -27,7 +27,7 @@ import {
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { COLORS } from "@/theme/tokens";
 
-const PITCH_BG = require("../assets/pitch-bg.jpg");
+const PITCH_BG = require("../../assets/pitch-bg.jpg");
 import { useLiveMatchClockSnapshot } from "./live-match-clock";
 
 type TrackerTab = "pitch" | "momentum" | "stats";
