@@ -15,6 +15,18 @@ import {
   settingsAllCache,
   cachedOrDefault,
   setSettingsAllCache,
+  DEFAULT_COMBO_BOOST,
+  DEFAULT_MARKET_MARGINS,
+  DEFAULT_CASHOUT,
+  DEFAULT_WELCOME_BONUS,
+  DEFAULT_PAYMENTS,
+  DEFAULT_CURRENCY_RATES,
+  DEFAULT_MARKETS_CATALOG,
+  DEFAULT_VIRTUAL_SIMULATOR,
+  DEFAULT_BRANDING,
+  DEFAULT_NOTIFICATIONS,
+  DEFAULT_SECURITY,
+  DEFAULT_PLAYERS,
   type AdminSettingKey,
 } from "@/lib/admin-settings";
 
@@ -106,60 +118,60 @@ export async function warmAdminSettingsCache(): Promise<void> {
 
 export async function getComboBoostSettings(): Promise<import("@/lib/admin-settings").ComboBoostSettings> {
   const raw = await getAdminSetting("combo_boost");
-  return { ...import("@/lib/admin-settings").DEFAULT_COMBO_BOOST, ...(raw as Partial<import("@/lib/admin-settings").ComboBoostSettings>) };
+  return { ...DEFAULT_COMBO_BOOST, ...(raw as Partial<import("@/lib/admin-settings").ComboBoostSettings>) };
 }
 
 export async function getMarketMarginSettings(): Promise<import("@/lib/admin-settings").MarketMarginSettings> {
   const raw = await getAdminSetting("market_margins");
-  return { ...import("@/lib/admin-settings").DEFAULT_MARKET_MARGINS, ...(raw as Partial<import("@/lib/admin-settings").MarketMarginSettings>) };
+  return { ...DEFAULT_MARKET_MARGINS, ...(raw as Partial<import("@/lib/admin-settings").MarketMarginSettings>) };
 }
 
 export async function getCashoutSettings(): Promise<import("@/lib/admin-settings").CashoutSettings> {
   const raw = await getAdminSetting("cashout");
-  return { ...import("@/lib/admin-settings").DEFAULT_CASHOUT, ...(raw as Partial<import("@/lib/admin-settings").CashoutSettings>) };
+  return { ...DEFAULT_CASHOUT, ...(raw as Partial<import("@/lib/admin-settings").CashoutSettings>) };
 }
 
 export async function getWelcomeBonusSettings(): Promise<import("@/lib/admin-settings").WelcomeBonusSettings> {
   const raw = await getAdminSetting("welcome_bonus");
-  return { ...import("@/lib/admin-settings").DEFAULT_WELCOME_BONUS, ...(raw as Partial<import("@/lib/admin-settings").WelcomeBonusSettings>) };
+  return { ...DEFAULT_WELCOME_BONUS, ...(raw as Partial<import("@/lib/admin-settings").WelcomeBonusSettings>) };
 }
 
 export async function getPaymentSettings(): Promise<import("@/lib/admin-settings").PaymentSettings> {
   const raw = await getAdminSetting("payments");
-  return { ...import("@/lib/admin-settings").DEFAULT_PAYMENTS, ...(raw as Partial<import("@/lib/admin-settings").PaymentSettings>) };
+  return { ...DEFAULT_PAYMENTS, ...(raw as Partial<import("@/lib/admin-settings").PaymentSettings>) };
 }
 
 export async function getCurrencyRatesSettings(): Promise<import("@/lib/admin-settings").CurrencyRatesSettings> {
   const raw = await getAdminSetting("currency_rates");
-  return { ...import("@/lib/admin-settings").DEFAULT_CURRENCY_RATES, ...(raw as Partial<import("@/lib/admin-settings").CurrencyRatesSettings>) };
+  return { ...DEFAULT_CURRENCY_RATES, ...(raw as Partial<import("@/lib/admin-settings").CurrencyRatesSettings>) };
 }
 
 export async function getMarketsCatalogSettings(): Promise<import("@/lib/admin-settings").MarketsCatalogSettings> {
   const raw = await getAdminSetting("markets_catalog");
-  return { ...import("@/lib/admin-settings").DEFAULT_MARKETS_CATALOG, ...(raw as Partial<import("@/lib/admin-settings").MarketsCatalogSettings>) };
+  return { ...DEFAULT_MARKETS_CATALOG, ...(raw as Partial<import("@/lib/admin-settings").MarketsCatalogSettings>) };
 }
 
 export async function getVirtualSimulatorSettings(): Promise<import("@/lib/admin-settings").VirtualSimulatorSettings> {
   const raw = await getAdminSetting("virtual_simulator");
-  return { ...import("@/lib/admin-settings").DEFAULT_VIRTUAL_SIMULATOR, ...(raw as Partial<import("@/lib/admin-settings").VirtualSimulatorSettings>) };
+  return { ...DEFAULT_VIRTUAL_SIMULATOR, ...(raw as Partial<import("@/lib/admin-settings").VirtualSimulatorSettings>) };
 }
 
 export async function getBrandingSettings(): Promise<import("@/lib/admin-settings").BrandingSettings> {
   const raw = await getAdminSetting("branding");
-  return { ...import("@/lib/admin-settings").DEFAULT_BRANDING, ...(raw as Partial<import("@/lib/admin-settings").BrandingSettings>) };
+  return { ...DEFAULT_BRANDING, ...(raw as Partial<import("@/lib/admin-settings").BrandingSettings>) };
 }
 
 export async function getNotificationSettings(): Promise<import("@/lib/admin-settings").NotificationSettings> {
   const raw = await getAdminSetting("notifications");
-  return { ...import("@/lib/admin-settings").DEFAULT_NOTIFICATIONS, ...(raw as Partial<import("@/lib/admin-settings").NotificationSettings>) };
+  return { ...DEFAULT_NOTIFICATIONS, ...(raw as Partial<import("@/lib/admin-settings").NotificationSettings>) };
 }
 
 export async function getSecuritySettings(): Promise<import("@/lib/admin-settings").SecuritySettings> {
   const raw = await getAdminSetting("security");
-  return { ...import("@/lib/admin-settings").DEFAULT_SECURITY, ...(raw as Partial<import("@/lib/admin-settings").SecuritySettings>) };
+  return { ...DEFAULT_SECURITY, ...(raw as Partial<import("@/lib/admin-settings").SecuritySettings>) };
 }
 
 export async function getPlayerManagementSettings(): Promise<import("@/lib/admin-settings").PlayerManagementSettings> {
   const raw = await getAdminSetting("players");
-  return { ...import("@/lib/admin-settings").DEFAULT_PLAYERS, ...(raw as Partial<import("@/lib/admin-settings").PlayerManagementSettings>) };
+  return { ...DEFAULT_PLAYERS, ...(raw as Partial<import("@/lib/admin-settings").PlayerManagementSettings>) };
 }
