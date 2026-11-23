@@ -81,6 +81,8 @@ export interface AdminBet {
   closingOdds?: number | null;
   riskFlag?: string | null;
   placedAt: string;
+  legs?: { selectionLabel: string }[];
+  totalOdds?: number;
 }
 
 export interface AdminDeposit {
