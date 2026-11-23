@@ -138,17 +138,44 @@ const HERO_SLIDES: HeroSlide[] = [
 
 interface MobileHeroCarouselProps {
   onAction: (action: HeroPromoAction) => void;
+  /** Bannières promo admin (précédent les slides par défaut) — configurables sans code. */
+  adminBanners?: Array<{
+    title: string;
+    subtitle: string;
+    image: string;
+    href: string;
+  }>;
 }
 
-export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
+export function MobileHeroCarousel({
+  onAction,
+  adminBanners,
+}: MobileHeroCarouselProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const pauseUntilRef = useRef<number>(0);
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // Bannières admin en tête du carrousel, converties en slides de lien.
+  const adminSlides: HeroSlide[] = (adminBanners ?? []).map((b, i) => ({
+    id: `admin-banner-${i}`,
+    player: "",
+    club: "",
+    title: b.title,
+    description: b.subtitle,
+    ctaLabel: "Découvrir",
+    action: { type: "league", slug: "", defaultLabel: b.title },
+    image: b.image,
+    objectPosition: "50% 30%",
+    solidBg: "#0b1636",
+    fadeMid: "rgba(11, 22, 54, 0.72)",
+    ctaClassName: "bg-[#ff3b30] text-white shadow-[0_4px_12px_rgba(255,59,48,0.35)]",
+  }));
+  const allSlides = [...adminSlides, ...HERO_SLIDES];
+
   const scrollToSlide = useCallback((index: number) => {
     const el = scrollerRef.current;
     if (!el) return;
-    const clamped = ((index % HERO_SLIDES.length) + HERO_SLIDES.length) % HERO_SLIDES.length;
+    const clamped = ((index % allSlides.length) + allSlides.length) % allSlides.length;
     el.scrollTo({
       left: clamped * el.clientWidth,
       behavior: "smooth",
@@ -160,7 +187,7 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
     const el = scrollerRef.current;
     if (!el || el.clientWidth <= 0) return;
     const nextIdx = Math.round(el.scrollLeft / el.clientWidth);
-    if (nextIdx >= 0 && nextIdx < HERO_SLIDES.length) {
+    if (nextIdx >= 0 && nextIdx < allSlides.length) {
       setActiveIndex((prev) => (prev === nextIdx ? prev : nextIdx));
     }
   }, []);
@@ -178,7 +205,7 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
       const el = scrollerRef.current;
       if (!el || el.clientWidth <= 0) return;
       const current = Math.round(el.scrollLeft / el.clientWidth);
-      const next = (current + 1) % HERO_SLIDES.length;
+      const next = (current + 1) % allSlides.length;
       el.scrollTo({
         left: next * el.clientWidth,
         behavior: "smooth",
@@ -201,7 +228,7 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
           onPointerDown={pauseAutoplay}
           className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar scroll-smooth"
         >
-          {HERO_SLIDES.map((slide, idx) => (
+          {allSlides.map((slide, idx) => (
             <article
               key={slide.id}
               style={{ backgroundColor: slide.solidBg }}
@@ -272,7 +299,7 @@ export function MobileHeroCarousel({ onAction }: MobileHeroCarouselProps) {
 
       {/* Pagination externe ultra-compacte sous le slide pour ne rien masquer sur l'image */}
       <div className="mt-1.5 flex items-center justify-center gap-1.5">
-        {HERO_SLIDES.map((slide, idx) => {
+        {allSlides.map((slide, idx) => {
           const isActive = idx === activeIndex;
           return (
             <button

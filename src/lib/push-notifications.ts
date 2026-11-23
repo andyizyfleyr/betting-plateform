@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { waitUntil } from "@vercel/functions";
 import { db } from "@/db";
+import { getNotificationSettings } from "@/lib/admin-settings";
 
 /** Les événements sont dédoublonnés par appareil et par événement, jamais par l'état en mémoire. */
 export async function enqueueRecentPushEvents(): Promise<void> {
@@ -90,7 +91,7 @@ export async function enqueueRecentPushEvents(): Promise<void> {
   `);
 }
 
-type PushRow = { id: number; token: string; title: string; body: string; data: Record<string, unknown> };
+type PushRow = { id: number; token: string; event_key: string; title: string; body: string; data: Record<string, unknown> };
 export async function flushPushNotifications(): Promise<void> {
   await enqueueRecentPushEvents();
   const claim = await db.execute(sql`
@@ -122,14 +123,49 @@ export async function flushPushNotifications(): Promise<void> {
         (CASE split_part(o.event_key, ':', 2) WHEN 'combo' THEN 'Votre combiné' WHEN 'prediction' THEN 'Votre pronostic' ELSE 'Votre pari sportif' END) ||
         (CASE split_part(o.event_key, ':', 4) WHEN 'won' THEN ' est gagné.' WHEN 'lost' THEN ' est perdu.' ELSE ' a été annulé.' END) || ' Consultez votre ticket.'
         ELSE o.body END
-      FROM chosen WHERE o.id=chosen.id RETURNING o.id, o.token, o.title, o.body, o.data
+      FROM chosen WHERE o.id=chosen.id RETURNING o.id, o.token, o.event_key, o.title, o.body, o.data
   `);
   const rows = claim.rows as unknown as PushRow[];
   if (!rows.length) return;
+
+  // Réglages notifications admin : désactivation globale, filtre par catégorie, préfixe.
+  const notif = await getNotificationSettings();
+  if (!notif.enabled) {
+    // Ne pas envoyer : marquer comme envoyé pour éviter les retries.
+    await db.execute(sql`UPDATE push_outbox SET sent_at=now(), claimed_until=NULL WHERE id IN (${sql.join(
+      rows.map((r) => sql`${r.id}`),
+      sql`, `
+    )})`);
+    return;
+  }
+  const enabledCats = new Set(notif.categories);
+  const categoryFor = (key: string): string | null => {
+    if (key.startsWith("bet:")) return "bet_won";
+    if (key.startsWith("match:")) return "match_live";
+    if (key.startsWith("deposit:") || key.startsWith("withdrawal:")) return "payment";
+    if (key.startsWith("dispute:")) return "security";
+    return null;
+  };
+  const prefix = notif.pushSubjectPrefix ? `${notif.pushSubjectPrefix} · ` : "";
+
+  // Filtre les événements dont la catégorie est désactivée (marqués comme envoyés).
+  const toSend = rows.filter((r) => {
+    const cat = categoryFor(r.event_key);
+    return cat === null || enabledCats.has(cat);
+  });
+  const skipped = rows.filter((r) => !toSend.includes(r));
+  if (skipped.length) {
+    await db.execute(sql`UPDATE push_outbox SET sent_at=now(), claimed_until=NULL WHERE id IN (${sql.join(
+      skipped.map((r) => sql`${r.id}`),
+      sql`, `
+    )})`);
+  }
+  if (!toSend.length) return;
+
   try {
     const response = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(rows.map((r) => ({ to: r.token, title: r.title, body: r.body, data: r.data, sound: "default", channelId: "default" }))),
+      body: JSON.stringify(toSend.map((r) => ({ to: r.token, title: prefix + r.title, body: r.body, data: r.data, sound: "default", channelId: "default" }))),
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error(`Expo push HTTP ${response.status}`);

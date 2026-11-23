@@ -1,12 +1,24 @@
 import { virtualTeamIdentity } from "./team-logos";
+import { getAdminSettingSync, type VirtualSimulatorSettings } from "@/lib/admin-settings";
 
-/** Nombre de matchs virtuels en direct simultanés max. Avec 48 min d'écart entre coups d'envoi
- * et ~10 min par match, ce plafond n'est jamais atteint (un seul direct à la fois). */
+/** Nombre de matchs virtuels en direct simultanés max (configurable admin). */
 export const VIRTUAL_MAX_LIVE = 4;
-/** Intervalle entre deux coups d'envoi : 48 minutes = 2 880 000 ms.
+/** Intervalle entre deux coups d'envoi : 48 minutes = 2 880 000 ms (configurable admin).
  * 24h (1 440 min) ÷ 30 matchs par jour = 48 min entre chaque coup d'envoi. */
 export const VIRTUAL_KICKOFF_GAP_MS = 48 * 60_000; // 2 880 000 ms
 export const VIRTUAL_REMATCH_GAP_MS = 7 * 24 * 60 * 60_000;
+
+/** Valeur effective du plafond de matchs live simultanés (admin configurable). */
+export function virtualMaxLive(): number {
+  const s = getAdminSettingSync("virtual_simulator") as unknown as VirtualSimulatorSettings;
+  return s.enabled ? s.maxLive : 0;
+}
+
+/** Valeur effective de l'intervalle entre coups d'envoi (admin configurable). */
+export function virtualKickoffGapMs(): number {
+  const s = getAdminSettingSync("virtual_simulator") as unknown as VirtualSimulatorSettings;
+  return s.enabled ? s.kickoffGapMs : VIRTUAL_KICKOFF_GAP_MS;
+}
 export interface VirtualFixtureWindow { home: string; away: string; start: number; end: number }
 const team = virtualTeamIdentity;
 /** Une affiche est identique même si domicile et extérieur sont inversés. */

@@ -1,5 +1,6 @@
 import { livePricingMinute, type RealMatchLiveStatsInput } from "@/db/fixtures";
 import { normalizeRealLiveMinuteLabel } from "@/lib/live-clock";
+import type { CashoutSettings } from "@/lib/admin-settings";
 import {
   isFirstHalfCompleted,
   isKnownMarket,
@@ -148,6 +149,14 @@ export function checkLiveMatchCashOutGuard(
 }
 
 const CASHOUT_BASE_FACTOR = 0.9;
+/** Marge Cash Out par défaut (configurable admin via `cashout` settings). */
+function cashoutFactor(c?: CashoutSettings): number {
+  return c?.enabled === false ? 0 : c?.baseFactor ?? CASHOUT_BASE_FACTOR;
+}
+/** Plafond Cash Out par défaut (configurable admin). */
+function cashoutCapPct(c?: CashoutSettings): number {
+  return c?.maxCapPct ?? 0.94;
+}
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -213,10 +222,13 @@ export function computeCashOut(params: {
   oddsAway?: number | null;
   realStats?: RealMatchLiveStatsInput | null;
   markets?: CustomMarketGroup[] | null;
+  cashout?: CashoutSettings;
 }): number | null {
-  const { stake, odds, selection } = params;
+  const { stake, odds, selection, cashout } = params;
   const market = params.market ?? "result";
   const potential = Math.min(stake * odds, params.potentialWin ?? Infinity);
+  const capPct = cashoutCapPct(cashout);
+  const factor = cashoutFactor(cashout);
   const isManual = params.source === "manual";
   const effectiveMinute = isManual
     ? normalizeRealLiveMinuteLabel({
@@ -328,7 +340,7 @@ export function computeCashOut(params: {
     const redCardCut = (params.redHome ?? 0) + (params.redAway ?? 0) > 0 ? 0.96 : 1.0;
 
     let effectiveProb = liveProb;
-    let spread = CASHOUT_BASE_FACTOR * lateVolatilityCut * redCardCut;
+    let spread = factor * lateVolatilityCut * redCardCut;
 
     if (liveProb < impliedEntry) {
       // Position perdante : décote convexe empêchant de sortir à bon compte après un but encaissé
@@ -341,7 +353,7 @@ export function computeCashOut(params: {
 
     const rawOffer = potential * effectiveProb * spread;
     if (rawOffer < stake * 0.07) return null;
-    return round2(clamp(rawOffer, 0.05, potential * 0.94));
+    return round2(clamp(rawOffer, 0.05, potential * capPct));
   }
 
   // Repli si marché personnalisé admin
@@ -352,9 +364,9 @@ export function computeCashOut(params: {
   const estProb = aligned
     ? impliedEntry + (0.9 - impliedEntry) * progress
     : Math.pow(impliedEntry * (1 - 0.85 * progress), 1.12);
-  const offer = potential * estProb * CASHOUT_BASE_FACTOR;
+  const offer = potential * estProb * factor;
   if (offer < stake * 0.07) return null;
-  return round2(clamp(offer, 0.05, potential * 0.94));
+  return round2(clamp(offer, 0.05, potential * capPct));
 }
 
 export function predictionProgress(placedAt: Date, resolvesAt: Date, now = Date.now()): number {
@@ -373,6 +385,7 @@ export function computePredictionCashOut(params: {
   currentOddsNo: number;
   options?: Array<{ key: string; label: string; odds: number }> | null;
   selection: string;
+  cashout?: CashoutSettings;
 }): number {
   const {
     stake,
@@ -383,6 +396,7 @@ export function computePredictionCashOut(params: {
     options,
     placedAt,
     resolvesAt,
+    cashout,
   } = params;
   const progress = predictionProgress(placedAt, resolvesAt);
   const entryImplied = clamp(0.94 / Math.max(1.03, params.odds), 0.02, 0.94);
@@ -399,9 +413,9 @@ export function computePredictionCashOut(params: {
   }
 
   const effectiveP = pOwn < entryImplied ? Math.pow(pOwn, 1.12) : pOwn;
-  const spread = 0.87 + 0.05 * progress;
+  const spread = (0.87 + 0.05 * progress) * (cashoutFactor(cashout) / CASHOUT_BASE_FACTOR);
   const value = potentialWin * effectiveP * spread;
 
   const min = Math.min(0.05, stake * 0.12);
-  return round2(clamp(value, min, potentialWin * 0.94));
+  return round2(clamp(value, min, potentialWin * cashoutCapPct(cashout)));
 }

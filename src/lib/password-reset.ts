@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "crypto";
 import { sql } from "drizzle-orm";
 import { db, ensureHealthyDbConnection } from "@/db";
+import { getNotificationSettings } from "@/lib/admin-settings";
 
 export const RESET_CODE_TTL_MINUTES = 15;
 export const RESET_CODE_MAX_ATTEMPTS = 5;
@@ -84,6 +85,11 @@ export async function sendPasswordResetEmail(params: {
     process.env.RESEND_FROM_EMAIL?.trim() ||
     "Pulse Bet Sécurité <security@pulsebets.app>";
 
+  // Footer email configurable par l'admin (sans redéploiement).
+  const notif = await getNotificationSettings();
+  const footer = notif.emailFooter?.trim();
+  const safeFooter = footer?.replace(/[<>&"']/g, "") ?? "";
+
   const safeName = params.userName.replace(/[<>&"']/g, "");
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;color:#111827;">
@@ -103,11 +109,12 @@ export async function sendPasswordResetEmail(params: {
         <p style="font-size:12.5px;line-height:1.5;color:#6b7280;margin:18px 0 0;">
           Ce code expire dans ${RESET_CODE_TTL_MINUTES} minutes. Si vous n'êtes pas à l'origine de cette demande, aucune action n'est requise : votre compte reste protégé.
         </p>
+        ${safeFooter ? `<p style="font-size:11px;line-height:1.5;color:#9ca3af;margin:22px 0 0;border-top:1px solid #e5e7eb;padding-top:14px;">${safeFooter}</p>` : ""}
       </div>
     </div>
   `.trim();
 
-  const text = `Pulse Bet — Votre code de réinitialisation est ${params.code} (valable ${RESET_CODE_TTL_MINUTES} minutes). Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.`;
+  const text = `Pulse Bet — Votre code de réinitialisation est ${params.code} (valable ${RESET_CODE_TTL_MINUTES} minutes). Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.${safeFooter ? `\n\n${safeFooter}` : ""}`;
 
   try {
     const controller = new AbortController();

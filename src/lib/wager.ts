@@ -1,9 +1,17 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { roundEurPivot } from "@/lib/countries";
+import { getAdminSettingSync, type WelcomeBonusSettings } from "@/lib/admin-settings";
 
-export const MIN_WAGER_ODDS_SINGLE = 1.3;
-export const MIN_WAGER_ODDS_COMBO = 1.4;
+/** Cotes mini de mise pour le déblocage du bonus (configurables admin). */
+export function minWagerOddsSingle(): number {
+  const s = getAdminSettingSync("welcome_bonus") as unknown as WelcomeBonusSettings;
+  return s.enabled ? s.minOddsSingle : 1.01;
+}
+export function minWagerOddsCombo(): number {
+  const s = getAdminSettingSync("welcome_bonus") as unknown as WelcomeBonusSettings;
+  return s.enabled ? s.minOddsCombo : 1.01;
+}
 
 export interface WithdrawalEligibility {
   balance: number;
@@ -22,6 +30,9 @@ export interface WithdrawalEligibility {
  *   sans perte sur les 19 devises officielles (XOF, XAF, GNF, CDF, NGN, USD, CAD, EUR…).
  */
 export async function computeWithdrawalEligibility(uid: number): Promise<WithdrawalEligibility> {
+  // Cotes mini de mise (config admin) calculées une fois pour la requête SQL.
+  const minSingle = minWagerOddsSingle();
+  const minCombo = minWagerOddsCombo();
   const res = await db.execute(sql`
     SELECT
       COALESCE(u."balance", 0)::float8 AS balance,
@@ -32,7 +43,7 @@ export async function computeWithdrawalEligibility(uid: number): Promise<Withdra
             SELECT SUM(b."stake")::float8
             FROM "bets" b
             WHERE b."user_id" = ${uid}
-              AND b."odds" >= ${MIN_WAGER_ODDS_SINGLE}
+              AND b."odds" >= ${minSingle}
               AND b."status" NOT IN ('pending', 'cashed', 'void')
           ),
           0
@@ -42,7 +53,7 @@ export async function computeWithdrawalEligibility(uid: number): Promise<Withdra
             SELECT SUM(pb."stake")::float8
             FROM "prediction_bets" pb
             WHERE pb."user_id" = ${uid}
-              AND pb."odds" >= ${MIN_WAGER_ODDS_SINGLE}
+              AND pb."odds" >= ${minSingle}
               AND pb."status" NOT IN ('pending', 'cashed', 'void')
           ),
           0
@@ -52,7 +63,7 @@ export async function computeWithdrawalEligibility(uid: number): Promise<Withdra
             SELECT SUM(cb."stake")::float8
             FROM "combo_bets" cb
             WHERE cb."user_id" = ${uid}
-              AND cb."total_odds" >= ${MIN_WAGER_ODDS_COMBO}
+              AND cb."total_odds" >= ${minCombo}
               AND cb."status" NOT IN ('pending', 'cashed', 'void')
           ),
           0

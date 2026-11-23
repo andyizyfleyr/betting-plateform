@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { virtualTeamAliases } from "@/lib/team-logos";
 import { matches, type MatchRow } from "@/db/schema";
-import { sharesVirtualTeam, virtualPairKey, VIRTUAL_REMATCH_GAP_MS, VIRTUAL_MAX_LIVE, VIRTUAL_KICKOFF_GAP_MS } from "@/lib/virtual-fixtures";
+import { sharesVirtualTeam, virtualPairKey, VIRTUAL_REMATCH_GAP_MS, virtualMaxLive, virtualKickoffGapMs } from "@/lib/virtual-fixtures";
 
 // Le verrou transactionnel est partagé entre instances et utilisé par la création et le lancement.
 export const VIRTUAL_SCHEDULE_LOCK = 781239401;
@@ -26,7 +26,7 @@ export async function claimVirtualKickoff(
     // toutefois être avancé de quelques minutes pour remplir un canal libre.
     if (!options?.allowEarly && current.startsAt.getTime() > now) return null;
     if (!options?.ignoreRecentGap) {
-      const [recentKickoff] = await tx.select({ id: matches.id }).from(matches).where(sql`${matches.source} = 'virtual' AND ${matches.status} IN ('live', 'finished') AND ${matches.startsAt} > ${new Date(now - VIRTUAL_KICKOFF_GAP_MS)}`).limit(1);
+      const [recentKickoff] = await tx.select({ id: matches.id }).from(matches).where(sql`${matches.source} = 'virtual' AND ${matches.status} IN ('live', 'finished') AND ${matches.startsAt} > ${new Date(now - virtualKickoffGapMs())}`).limit(1);
       if (recentKickoff) return null;
     }
     const homeAliases = virtualTeamAliases(current.homeTeam).map(t => t.toLowerCase().trim());
@@ -34,7 +34,7 @@ export async function claimVirtualKickoff(
     const h = sql.join(homeAliases.map(t => sql`${t}`), sql`, `);
     const a = sql.join(awayAliases.map(t => sql`${t}`), sql`, `);
     const conflictRows = await tx.select({ status: matches.status, homeTeam: matches.homeTeam, awayTeam: matches.awayTeam, startsAt: matches.startsAt, finishedAt: matches.finishedAt }).from(matches).where(sql`${matches.source} = 'virtual' AND (${matches.status} = 'live' OR (${matches.status} = 'finished' AND COALESCE(${matches.finishedAt}, ${matches.startsAt} + interval '608 seconds') >= ${new Date(now - VIRTUAL_REMATCH_GAP_MS - 60 * 60_000)} AND ((lower(trim(${matches.homeTeam})) IN (${h}) AND lower(trim(${matches.awayTeam})) IN (${a})) OR (lower(trim(${matches.homeTeam})) IN (${a}) AND lower(trim(${matches.awayTeam})) IN (${h})))))`);
-    if (conflictRows.filter(row => row.status === "live").length >= VIRTUAL_MAX_LIVE) return null;
+    if (conflictRows.filter(row => row.status === "live").length >= virtualMaxLive()) return null;
     const candidate = { home: current.homeTeam, away: current.awayTeam };
     for (const other of conflictRows) {
       if (other.status === "live" && sharesVirtualTeam(candidate, { home: other.homeTeam, away: other.awayTeam })) return null;

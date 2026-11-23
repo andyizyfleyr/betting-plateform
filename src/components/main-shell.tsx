@@ -36,11 +36,6 @@ export function MainShell({ children }: { children: ReactNode }) {
 
   const isBetslipRoute =
     pathname === "/betslip" || pathname.startsWith("/betslip/");
-  const isFullscreenGame =
-    pathname === "/tap" ||
-    pathname.startsWith("/tap/") ||
-    pathname === "/accelerator" ||
-    pathname.startsWith("/accelerator/");
 
   return (
     <div className="flex min-h-dvh w-full flex-col bg-deep">
@@ -60,9 +55,7 @@ export function MainShell({ children }: { children: ReactNode }) {
         <DesktopLeaguesSidebar />
         <main
           className={cn(
-            "min-w-0 flex-1",
-            !isFullscreenGame &&
-              "pb-[calc(68px+env(safe-area-inset-bottom,0px))] lg:pb-0"
+            "min-w-0 flex-1 pb-[calc(68px+env(safe-area-inset-bottom,0px))] lg:pb-0"
           )}
         >
           <NavigationTransitionLayer>{children}</NavigationTransitionLayer>

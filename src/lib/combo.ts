@@ -12,6 +12,7 @@ import {
   type PredictionQuestionRow,
 } from "@/db/schema";
 import { computeComboQuote } from "@/lib/combo-math";
+import { getComboBoostSettings } from "@/lib/admin-settings";
 import { notifyBetsSettledOrMutated } from "@/lib/active-state-cache";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import { normalizeRealLiveMinuteLabel } from "@/lib/live-clock";
@@ -154,6 +155,9 @@ export async function settlePendingCombos(): Promise<void> {
 
   if (openLegRows.length === 0) return;
 
+  // Charge une fois les réglages du Bonus Combiné pour tout le batch (0 requête par pari).
+  const comboBoost = await getComboBoostSettings();
+
   const pending = openLegRows.filter((cb) => cb.status === "pending");
   const settledWithPendingLegs = openLegRows.filter((cb) => cb.status !== "pending");
 
@@ -281,7 +285,7 @@ export async function settlePendingCombos(): Promise<void> {
 
       const wonOdds = nextLegs.filter((l) => l.status === "won").map((l) => l.odds);
       const allVoid = wonOdds.length === 0;
-      const quote = allVoid ? null : computeComboQuote(wonOdds, cb.stake, cb.potentialWin);
+      const quote = allVoid ? null : computeComboQuote(wonOdds, cb.stake, cb.potentialWin, comboBoost);
       const payout =
         quote == null
           ? Math.round(cb.stake * 1_000_000) / 1_000_000

@@ -8,8 +8,6 @@ import {
   Brain,
   CircleDollarSign,
   Eye,
-  Flame,
-  Gauge,
   HelpCircle,
   History,
   Layers,
@@ -42,8 +40,6 @@ const USER_PRIMARY_NAV = [
 ] as const;
 
 const USER_SECONDARY_NAV = [
-  { href: "/jeux", label: "Casino & Mini-jeux", Icon: Flame },
-  { href: "/accelerator", label: "Accelerator Pro", Icon: Gauge },
   { href: "/parametres", label: "Compte & Portefeuille", Icon: SlidersHorizontal },
 ] as const;
 
@@ -56,6 +52,7 @@ const ADMIN_NAV: { key: AdminTabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "deposits", label: "Finance", Icon: CircleDollarSign },
   { key: "users", label: "Joueurs", Icon: Users },
   { key: "ml", label: "IA & ML", Icon: Brain },
+  { key: "settings", label: "Réglages", Icon: SlidersHorizontal },
 ];
 
 export function DesktopSidebar() {

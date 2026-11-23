@@ -26,11 +26,7 @@ export function BottomNav() {
     pathname === "/auth" ||
     pathname.startsWith("/auth/") ||
     pathname === "/admin" ||
-    pathname.startsWith("/admin/") ||
-    pathname === "/tap" ||
-    pathname.startsWith("/tap/") ||
-    pathname === "/accelerator" ||
-    pathname.startsWith("/accelerator/")
+    pathname.startsWith("/admin/")
   ) {
     return null;
   }

@@ -37,6 +37,7 @@ import {
 } from "@/lib/markets";
 import { getBettingLimits } from "@/lib/betting-limits";
 import { limitsForCurrency } from "@/lib/betting-limits-shared";
+import { getComboBoostSettings } from "@/lib/admin-settings";
 import {
   checkOddsChange,
   extractIdempotencyKey,
@@ -123,16 +124,22 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  const bettingLimits = await getBettingLimits();
+  const [bettingLimits, comboBoost] = await Promise.all([
+    getBettingLimits(),
+    getComboBoostSettings(),
+  ]);
   const comboLimit = Math.min(MAX_COMBO_LEGS, bettingLimits.maxComboLegs);
 
   const [currencyUser] = await db
-    .select({ currency: appUser.currency })
+    .select({ currency: appUser.currency, stakeLimit: appUser.stakeLimit })
     .from(appUser)
     .where(eq(appUser.id, uid))
     .limit(1);
   const userCurrency = getCurrencyConfig(currencyUser?.currency);
   const { minEur: minStakeEur, maxEur: maxStakeEur } = limitsForCurrency(bettingLimits, userCurrency.code);
+  // Plafond de mise manuel admin (prioritaire sur le plafond global).
+  const manualStakeLimit = Number(currencyUser?.stakeLimit ?? 0);
+  const effectiveMaxStakeEur = manualStakeLimit > 0 ? Math.min(maxStakeEur, manualStakeLimit) : maxStakeEur;
 
   if (!Number.isFinite(expectedTotalOdds) || expectedTotalOdds <= 1) {
     return NextResponse.json(
@@ -262,10 +269,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Le plafond de gain a changé ou votre application doit être actualisée. Vérifiez le coupon avant de confirmer.", code: "BETTING_LIMITS_CHANGED" }, { status: 409 });
   }
 
-  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-6 || stake > maxStakeEur + 1e-6) {
+  if (!Number.isFinite(stake) || stake < minStakeEur - 1e-6 || stake > effectiveMaxStakeEur + 1e-6) {
     return NextResponse.json(
       {
-        error: `Mise hors limites : ${formatEurAsCurrency(minStakeEur, userCurrency.code)} – ${formatEurAsCurrency(maxStakeEur, userCurrency.code)}`,
+        error: `Mise hors limites : ${formatEurAsCurrency(minStakeEur, userCurrency.code)} – ${formatEurAsCurrency(effectiveMaxStakeEur, userCurrency.code)}`,
       },
       { status: 400 }
     );
@@ -764,7 +771,8 @@ export async function POST(req: NextRequest) {
     const serverQuote = computeComboQuote(
       pricedLegs.map((l) => l.odds),
       roundedStake,
-      localToEur(bettingLimits.maxPayoutXof, "XOF")
+      localToEur(bettingLimits.maxPayoutXof, "XOF"),
+      comboBoost
     );
 
     if (!Number.isFinite(serverQuote.totalOdds) || !Number.isFinite(serverQuote.potentialWin)) {

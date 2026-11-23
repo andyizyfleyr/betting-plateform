@@ -102,6 +102,9 @@ export default function MatchsPage() {
     setSportLeagueFilter: setLeagueFilter,
   } = useApp();
   const [query, setQuery] = useState("");
+  const [adminBanners, setAdminBanners] = useState<
+    Array<{ title: string; subtitle: string; image: string; href: string }>
+  >([]);
   const isClient = useSyncExternalStore(subscribeNoop, getClientTrue, getServerFalse);
   const isMobileViewport = useSyncExternalStore(
     subscribeMobileViewport,
@@ -134,6 +137,21 @@ export default function MatchsPage() {
       setFeedMatches(matchesQuery.data.matches);
     }
   }, [matchesQuery.data, setFeedMatches]);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .config?.currency?.()
+      .then((r) => {
+        if (active && r?.branding?.banners) {
+          setAdminBanners(r.branding.banners);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handlePullRefresh = useCallback(async () => {
     try {
@@ -386,7 +404,7 @@ export default function MatchsPage() {
         </div>
 
         {/* Hero publicitaire mobile */}
-        <MobileHeroCarousel onAction={handleHeroAction} />
+        <MobileHeroCarousel onAction={handleHeroAction} adminBanners={adminBanners} />
 
         {/* Sélecteur d'univers (desktop uniquement) + Barre de recherche */}
         <div className="mb-3.5 lg:mb-4 lg:mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">

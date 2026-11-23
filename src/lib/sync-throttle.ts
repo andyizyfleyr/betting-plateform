@@ -6,12 +6,13 @@ import {
   pruneOldFinishedVirtualMatches,
   runLiveEngine,
 } from "@/db/engine";
-import { expireStaleAcceleratorRounds } from "@/lib/accelerator-engine";
 import {
   ensureMatchStoreHydrated,
   getCachedAllMatchesForFeed,
   invalidateAllActiveCaches,
 } from "@/lib/active-state-cache";
+import { warmAdminSettingsCache } from "@/lib/admin-settings";
+import { applyCurrencyAdminOverrides } from "@/lib/currency-admin";
 import { serializeSlimPublicMatch } from "@/lib/match-serializer";
 import { PARTY_LIVE_MATCHES_ROOM, publishPartyRoomEvent } from "@/lib/partykit";
 import { expireStaleGatewayDeposits } from "@/lib/payments";
@@ -178,8 +179,9 @@ export async function syncPlatformStateThrottled(
         lastHousekeepingAt = hkNow;
         await Promise.all([
           ensureOpenPredictions(hkNow),
-          expireStaleAcceleratorRounds(hkNow),
           expireStaleGatewayDeposits(),
+          warmAdminSettingsCache(),
+          applyCurrencyAdminOverrides(),
         ]);
       }
 

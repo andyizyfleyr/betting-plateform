@@ -274,6 +274,12 @@ export const appUser = pgTable(
     bonusLocked: doublePrecision("bonus_locked").notNull().default(0),
     /** Version du jeton JWT : incrémentée à la déconnexion pour invalider les anciens cookies partout. */
     tokenVersion: integer("token_version").notNull().default(0),
+    /** Suspension/banniment administrateur : le compte ne peut plus se connecter ni parier. */
+    suspended: boolean("suspended").notNull().default(false),
+    /** Date de fin de suspension (null = suspension à vie jusqu'à désactivation). */
+    suspendedUntil: timestamp("suspended_until", { mode: "date" }),
+    /** Plafond de mise manuel par l'admin (0 = aucun plafond, hormis les limites globales). */
+    stakeLimit: doublePrecision("stake_limit").notNull().default(0),
     /** Authentification JWT. `email` est unique ; `passwordHash` = scrypt. */
     email: text("email").unique(),
     passwordHash: text("password_hash"),
@@ -284,44 +290,6 @@ export const appUser = pgTable(
     check("app_user_bonus_nonneg_chk", sql`${table.bonusLocked} >= 0`),
   ]
 );
-
-/**
- * Historique des parties du jeu Tap Win (profil joueur + santé du système).
- */
-export const tapHistory = pgTable("tap_history", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().default(1),
-  betAmount: doublePrecision("bet_amount").notNull(),
-  targetMultiplier: doublePrecision("target_multiplier").notNull(),
-  crashMultiplier: doublePrecision("crash_multiplier").notNull(),
-  win: boolean("win").notNull(),
-  balanceAfter: doublePrecision("balance_after").notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
-
-/**
- * Manches du jeu Accelerator Pro.
- * status: "active" | "autocashed" | "cashed" | "crashed" | "postcrashed"
- */
-export const acceleratorRounds = pgTable("accelerator_rounds", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().default(1),
-  betAmount: doublePrecision("bet_amount").notNull(),
-  gBase: doublePrecision("g_base").notNull(),
-  mMax: doublePrecision("m_max").notNull().default(2.0),
-  autoTarget: doublePrecision("auto_target"),
-  startedAt: timestamp("started_at", { mode: "date" }).notNull(),
-  lastMs: bigint("last_ms", { mode: "number" }).notNull(),
-  currentMultiplier: doublePrecision("current_multiplier").notNull().default(1.01),
-  crashPoint: doublePrecision("crash_point").notNull(),
-  cashoutMultiplier: doublePrecision("cashout_multiplier"),
-  status: text("status").notNull().default("active"),
-  serverSeed: text("server_seed"),
-  seedHash: text("seed_hash"),
-  endedAt: timestamp("ended_at", { mode: "date" }),
-  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
-});
 
 /**
  * Dépôts (rechargements) effectués via un prestataire : Stripe ou PayPal.
@@ -545,8 +513,6 @@ export type WalletAdjustmentRow = typeof walletAdjustments.$inferSelect;
 export type MlModelRow = typeof mlModels.$inferSelect;
 export type AppUserRow = typeof appUser.$inferSelect;
 export type DepositRow = typeof deposits.$inferSelect;
-export type TapHistoryRow = typeof tapHistory.$inferSelect;
-export type AcceleratorRoundRow = typeof acceleratorRounds.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetTokens.$inferSelect;
 
 /** Réclamations liées à un ticket ; elles ne modifient jamais les soldes. */

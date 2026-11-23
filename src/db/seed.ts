@@ -19,7 +19,7 @@ let seedPromise: Promise<void> | null = null;
  * et de verrouiller les tables à chaque démarrage à froid (cold start) sur Vercel Serverless.
  * Incrémenter cette clé dès qu'une nouvelle migration SQL est ajoutée dans `runSeedInternal`.
  */
-const SCHEMA_SEED_MARKER_KEY = "schema_seed_v20";
+const SCHEMA_SEED_MARKER_KEY = "schema_seed_v21";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -100,6 +100,11 @@ async function runSeedInternal(): Promise<void> {
   // Suppression définitive des anciens favoris : la fonctionnalité et son API ont été retirées.
   // Sans CASCADE : une dépendance inattendue arrête la migration au lieu de supprimer d'autres données.
   await db.execute(sql`DROP TABLE IF EXISTS "favorite_teams"`);
+
+  // Suppression définitive des jeux casino (Tap Win + Accelerator Pro) :
+  // fonctionnalité, API, libs moteurs et tables retirées. Sans CASCADE pour isoler les erreurs.
+  await db.execute(sql`DROP TABLE IF EXISTS "accelerator_rounds"`);
+  await db.execute(sql`DROP TABLE IF EXISTS "tap_history"`);
 
   // Création idempotente de toutes les tables de base (permet de brancher une base PostgreSQL
   // 100 % vierge sur Vercel Storage sans avoir besoin de lancer `drizzle-kit push`).
@@ -282,41 +287,6 @@ async function runSeedInternal(): Promise<void> {
   `);
 
   await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS "tap_history" (
-      "id" serial PRIMARY KEY NOT NULL,
-      "user_id" integer DEFAULT 1 NOT NULL,
-      "bet_amount" double precision NOT NULL,
-      "target_multiplier" double precision NOT NULL,
-      "crash_multiplier" double precision NOT NULL,
-      "win" boolean NOT NULL,
-      "balance_after" double precision NOT NULL,
-      "description" text,
-      "created_at" timestamp DEFAULT now() NOT NULL
-    );
-  `);
-
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS "accelerator_rounds" (
-      "id" serial PRIMARY KEY NOT NULL,
-      "user_id" integer DEFAULT 1 NOT NULL,
-      "bet_amount" double precision NOT NULL,
-      "g_base" double precision NOT NULL,
-      "m_max" double precision DEFAULT 2.0 NOT NULL,
-      "auto_target" double precision,
-      "started_at" timestamp NOT NULL,
-      "last_ms" bigint NOT NULL,
-      "current_multiplier" double precision DEFAULT 1.01 NOT NULL,
-      "crash_point" double precision NOT NULL,
-      "cashout_multiplier" double precision,
-      "status" text DEFAULT 'active' NOT NULL,
-      "server_seed" text,
-      "seed_hash" text,
-      "ended_at" timestamp,
-      "created_at" timestamp DEFAULT now() NOT NULL
-    );
-  `);
-
-  await db.execute(sql`
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_matches" boolean NOT NULL DEFAULT true;
@@ -324,6 +294,9 @@ async function runSeedInternal(): Promise<void> {
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_payments" boolean NOT NULL DEFAULT true;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_disputes" boolean NOT NULL DEFAULT true;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "suspended" boolean DEFAULT false NOT NULL;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "suspended_until" timestamp;
+    ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "stake_limit" double precision DEFAULT 0 NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "country_code" text DEFAULT 'FR' NOT NULL;
     ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "currency" text DEFAULT 'EUR' NOT NULL;
     UPDATE "app_user" SET "balance" = 0 WHERE "balance" < 0;
@@ -820,17 +793,6 @@ async function runSeedInternal(): Promise<void> {
       ON "webhook_events" ("processed_at" DESC);
     CREATE INDEX IF NOT EXISTS "wallet_adj_user_created_idx"
       ON "wallet_adjustments" ("user_id", "created_at" DESC);
-    CREATE INDEX IF NOT EXISTS "tap_history_user_created_idx"
-      ON "tap_history" ("user_id", "created_at" DESC);
-    CREATE INDEX IF NOT EXISTS "tap_history_created_idx"
-      ON "tap_history" ("created_at" DESC);
-    CREATE INDEX IF NOT EXISTS "accel_rounds_user_id_idx"
-      ON "accelerator_rounds" ("user_id", "id" DESC);
-    CREATE INDEX IF NOT EXISTS "accel_rounds_active_idx"
-      ON "accelerator_rounds" ("last_ms")
-      WHERE "status" = 'active';
-    CREATE INDEX IF NOT EXISTS "accel_rounds_started_idx"
-      ON "accelerator_rounds" ("started_at" DESC);
   `);
 
   const day = 86_400_000;

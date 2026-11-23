@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { getCurrencyConfig, roundEurPivot } from "@/lib/countries";
 import { DEFAULT_BETTING_LIMITS, limitsForCurrency, validateBettingLimits } from "@/lib/betting-limits-shared";
-import { MIN_WAGER_ODDS_COMBO, MIN_WAGER_ODDS_SINGLE } from "@/lib/wager";
+import { minWagerOddsCombo, minWagerOddsSingle } from "@/lib/wager";
 import { generateTransferCode, hashTransferCode, encryptTransferCode } from "@/lib/transfer-code-crypto";
 import { isValidTransferCode } from "@/lib/transfer-code";
 
@@ -38,10 +38,12 @@ export async function createTransfer(uid: number, amountInput: number, key: stri
     const max = limits.maxEur;
     if (amountInput < min || amountInput > max) throw new Error("Montant hors limites");
     // Le verrou utilisateur sérialise les débits ; le bonus est recalculé dans la même transaction.
+    const mwSingle = minWagerOddsSingle();
+    const mwCombo = minWagerOddsCombo();
     const [wager] = rows<{ total: number }>(await tx.execute(sql`SELECT (
-      COALESCE((SELECT SUM(stake) FROM bets WHERE user_id=${uid} AND odds >= ${MIN_WAGER_ODDS_SINGLE} AND status NOT IN ('pending','cashed','void')),0) +
-      COALESCE((SELECT SUM(stake) FROM prediction_bets WHERE user_id=${uid} AND odds >= ${MIN_WAGER_ODDS_SINGLE} AND status NOT IN ('pending','cashed','void')),0) +
-      COALESCE((SELECT SUM(stake) FROM combo_bets WHERE user_id=${uid} AND total_odds >= ${MIN_WAGER_ODDS_COMBO} AND status NOT IN ('pending','cashed','void')),0)
+      COALESCE((SELECT SUM(stake) FROM bets WHERE user_id=${uid} AND odds >= ${mwSingle} AND status NOT IN ('pending','cashed','void')),0) +
+      COALESCE((SELECT SUM(stake) FROM prediction_bets WHERE user_id=${uid} AND odds >= ${mwSingle} AND status NOT IN ('pending','cashed','void')),0) +
+      COALESCE((SELECT SUM(stake) FROM combo_bets WHERE user_id=${uid} AND total_odds >= ${mwCombo} AND status NOT IN ('pending','cashed','void')),0)
     )::float8 AS total`));
     const lockedBonus = Math.max(0, Number(user.bonus_locked) - Number(wager.total));
     if (amountInput > roundEurPivot(Math.max(0, Number(user.balance) - lockedBonus))) throw new Error("Solde transférable insuffisant");

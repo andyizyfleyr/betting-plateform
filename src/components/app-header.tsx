@@ -139,11 +139,6 @@ export function AppHeader() {
   const isParisActive = pathname === "/paris" || pathname.startsWith("/paris/");
   const isResultatsActive =
     pathname === "/resultats" || pathname.startsWith("/resultats/");
-  const isJeuxActive =
-    pathname === "/jeux" ||
-    pathname.startsWith("/jeux/") ||
-    pathname === "/accelerator" ||
-    pathname.startsWith("/accelerator/");
   const isCompteActive =
     pathname === "/parametres" || pathname.startsWith("/parametres/");
 
@@ -285,18 +280,6 @@ export function AppHeader() {
               )}
             >
               Résultats
-            </Link>
-
-            <Link
-              href="/jeux"
-              className={cn(
-                "relative inline-flex h-8.5 items-center rounded-full px-3 font-display text-[12px] font-medium transition-colors",
-                isJeuxActive
-                  ? "bg-white/18 text-white"
-                  : "text-white/88 hover:bg-white/10 hover:text-white"
-              )}
-            >
-              Mini-jeux
             </Link>
           </nav>
         </div>

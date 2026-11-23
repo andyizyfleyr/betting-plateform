@@ -18,6 +18,11 @@ import {
 import { getCachedMarketCalibratorMultiplier } from "./ml-weights";
 import { normalizeRealLiveMinuteLabel } from "./live-clock";
 import { marginOverround, type BetLike } from "./risk";
+import {
+  getAdminSettingSync,
+  type MarketMarginSettings,
+  type MarketsCatalogSettings,
+} from "@/lib/admin-settings";
 
 export type MarketCategory = "main" | "halftime" | "goals" | "teams" | "scores";
 
@@ -120,8 +125,20 @@ function round2(n: number) {
 }
 
 /** Marge effective d'un marché = marge de base (avant-match ou live) × ratio de liquidité du marché. */
-function effectiveMargin(market: string, baseMargin = marginOverround("result")): number {
-  return Math.round(baseMargin * (marginOverround(market) / marginOverround("result")) * 10000) / 10000;
+function effectiveMargin(
+  market: string,
+  baseMargin = marginOverround("result"),
+  margins?: MarketMarginSettings
+): number {
+  const m = margins ?? (getAdminSettingSync("market_margins") as unknown as MarketMarginSettings);
+  const ref = marginOverround("result", m);
+  return Math.round(baseMargin * (marginOverround(market, m) / ref) * 10000) / 10000;
+}
+
+/** Marché actif selon le catalogue admin (désactivé → exclu des cotes générées). */
+function isMarketActive(key: string): boolean {
+  const catalog = getAdminSettingSync("markets_catalog") as unknown as MarketsCatalogSettings;
+  return catalog.activeMarkets.includes(key);
 }
 
 /**
@@ -1021,6 +1038,7 @@ export function buildMarkets(
   const split = liveHalfSplitModel(home, away, 0, 0, 0, opts, model);
   const out: MarketGroup[] = [];
   for (const m of MARKETS) {
+    if (!isMarketActive(m.key)) continue;
     const grp = buildMarketGroup(m, home, away, model, split, 0, 0, 0, false, opts, bets);
     if (grp) out.push(grp);
   }
@@ -1040,6 +1058,7 @@ export function buildLiveMarkets(
   const split = liveHalfSplitModel(home, away, homeScore, awayScore, minute, opts, model);
   const out: MarketGroup[] = [];
   for (const m of MARKETS) {
+    if (!isMarketActive(m.key)) continue;
     const grp = buildMarketGroup(
       m,
       home,
@@ -1605,6 +1624,7 @@ export function buildRealMatchMarkets(m: RealMatchInput, now = Date.now()): Mark
 
   for (const def of MARKETS) {
     if (def.key === "result") continue;
+    if (!isMarketActive(def.key)) continue;
     if (!hasFeedTimeline && HT_DEPENDENT_MARKETS.has(def.key)) continue;
     if (!hasReliableRealMarketHistory(m, def.key, effMinuteLabel)) continue;
     // Sur un match réel : on conserve la fermeture 1ère MT à 41', mais pas la coupure virtuelle à 75'

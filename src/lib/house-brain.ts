@@ -1,11 +1,9 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  acceleratorRounds,
   bets,
   comboBets,
   predictionBets,
-  tapHistory,
 } from "@/db/schema";
 import { predictBatchUserMlRisk } from "./ml-engine";
 
@@ -100,29 +98,11 @@ export async function getGlobalHouseHealth(): Promise<GlobalHouseHealth> {
             ELSE 0 END), 0)::float8 AS paid
         FROM "combo_bets"
         WHERE "placed_at" > now() - interval '24 hours'
-      ),
-      tap AS (
-        SELECT
-          COALESCE(SUM("bet_amount"), 0)::float8 AS staked,
-          COALESCE(SUM(CASE
-            WHEN "win" = true THEN "bet_amount" * "target_multiplier"
-            ELSE 0 END), 0)::float8 AS paid
-        FROM "tap_history"
-        WHERE "created_at" > now() - interval '24 hours'
-      ),
-      accel AS (
-        SELECT
-          COALESCE(SUM("bet_amount"), 0)::float8 AS staked,
-          COALESCE(SUM(CASE
-            WHEN "status" = 'cashed' THEN "bet_amount" * COALESCE("cashout_multiplier", 1)
-            ELSE 0 END), 0)::float8 AS paid
-        FROM "accelerator_rounds"
-        WHERE "started_at" > now() - interval '24 hours'
       )
       SELECT
-        (sport.staked + pred.staked + combo.staked + tap.staked + accel.staked)::float8 AS total_in,
-        (sport.paid + pred.paid + combo.paid + tap.paid + accel.paid)::float8 AS total_out
-      FROM sport, pred, combo, tap, accel
+        (sport.staked + pred.staked + combo.staked)::float8 AS total_in,
+        (sport.paid + pred.paid + combo.paid)::float8 AS total_out
+      FROM sport, pred, combo
     `);
 
     const row = (res.rows?.[0] ?? {}) as {
@@ -253,33 +233,6 @@ export function buildSmartPlayerSignal(
     lowExitRate,
     cautionFactor: clamp(cautionFactor, 0.52, 1.08),
   };
-}
-
-/** Profil joueur rapide côté Accelerator (25 dernières manches). */
-export async function analyzeAcceleratorProfile(
-  uid: number,
-  currentStake: number
-): Promise<SmartPlayerSignal> {
-  const rows = await db
-    .select({
-      betAmount: acceleratorRounds.betAmount,
-      cashoutMultiplier: acceleratorRounds.cashoutMultiplier,
-      status: acceleratorRounds.status,
-    })
-    .from(acceleratorRounds)
-    .where(eq(acceleratorRounds.userId, uid))
-    .orderBy(desc(acceleratorRounds.id))
-    .limit(25);
-
-  const mapped = rows
-    .filter((r) => r.status !== "active")
-    .map((r) => ({
-      stake: Number(r.betAmount) || 1,
-      multiplier: Number(r.cashoutMultiplier) || 1,
-      won: r.status === "cashed",
-    }));
-
-  return buildSmartPlayerSignal(mapped, currentStake);
 }
 
 /**

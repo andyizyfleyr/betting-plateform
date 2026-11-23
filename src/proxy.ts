@@ -14,9 +14,7 @@ function isPublicVisitorPage(pathname: string): boolean {
     pathname === "/resultats" ||
     pathname.startsWith("/resultats/") ||
     pathname === "/betslip" ||
-    pathname.startsWith("/betslip/") ||
-    pathname === "/jeux" ||
-    pathname.startsWith("/jeux/")
+    pathname.startsWith("/betslip/")
   );
 }
 

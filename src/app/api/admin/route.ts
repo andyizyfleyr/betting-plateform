@@ -27,7 +27,7 @@ import {
   type PredictionOption,
   type RealMatchStats,
 } from "@/db/schema";
-import { publicUser } from "@/lib/auth";
+import { publicUser, hashPassword } from "@/lib/auth";
 import { getBettingLimits, saveBettingLimits, validateBettingLimits } from "@/lib/betting-limits";
 import { invalidateAllActiveCaches } from "@/lib/active-state-cache";
 import { settlePendingCombos } from "@/lib/combo";
@@ -51,7 +51,7 @@ import {
   syncSingleRealMatchNow,
 } from "@/lib/real-sports-feed";
 import { STALE_LATENCY_MS } from "@/lib/risk";
-import { clearAuthCookie, getAuthUserId } from "@/lib/session";
+import { clearAuthCookie, getAuthUserId, invalidateUserSessionCache } from "@/lib/session";
 import { settleFinishedBets, settleMatchBets, voidMatchBets } from "@/lib/settle";
 import { resetSyncThrottle, syncPlatformStateThrottled } from "@/lib/sync-throttle";
 import { teamLogo } from "@/lib/team-logos";
@@ -362,6 +362,65 @@ async function handleAdminPost(
           reason: `Mise à jour manuelle du solde`,
         });
       }
+      return NextResponse.json({ ok: true, user: publicUser(u) });
+    }
+
+    // --- Gestion avancée des joueurs (suspension, plafond, mot de passe) ---
+    if (action === "suspendUser") {
+      const userId = Number(body.userId);
+      if (!userId) return NextResponse.json({ error: "Utilisateur requis" }, { status: 400 });
+      const suspended = Boolean(body.suspended);
+      const untilMs = Number(body.suspendedUntilMs);
+      const until =
+        Number.isFinite(untilMs) && untilMs > 0 ? new Date(untilMs) : null;
+      const [u] = await db
+        .update(appUser)
+        .set({
+          suspended,
+          suspendedUntil: suspended ? until : null,
+          // Toute suspension invalide les sessions existantes.
+          tokenVersion: suspended ? sql`${appUser.tokenVersion} + 1` : appUser.tokenVersion,
+        })
+        .where(eq(appUser.id, userId))
+        .returning();
+      if (!u) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+      // Invalide immédiatement la session en cache (le tokenVersion bump invalide aussi le JWT).
+      invalidateUserSessionCache(userId);
+      invalidateAllActiveCaches(true);
+      return NextResponse.json({ ok: true, user: publicUser(u) });
+    }
+
+    if (action === "setUserStakeLimit") {
+      const userId = Number(body.userId);
+      const rawLimit = Number(body.stakeLimit);
+      if (!userId || !Number.isFinite(rawLimit) || rawLimit < 0) {
+        return NextResponse.json({ error: "Plafond valide requis (≥ 0)" }, { status: 400 });
+      }
+      const [u] = await db
+        .update(appUser)
+        .set({ stakeLimit: Math.round(rawLimit * 1_000_000) / 1_000_000 })
+        .where(eq(appUser.id, userId))
+        .returning();
+      if (!u) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+      return NextResponse.json({ ok: true, user: publicUser(u) });
+    }
+
+    if (action === "resetUserPassword") {
+      const userId = Number(body.userId);
+      const rawPw = String(body.password ?? "");
+      if (!userId || rawPw.length < 8) {
+        return NextResponse.json({ error: "Mot de passe ≥ 8 caractères requis" }, { status: 400 });
+      }
+      const [u] = await db
+        .update(appUser)
+        .set({
+          passwordHash: hashPassword(rawPw),
+          tokenVersion: sql`${appUser.tokenVersion} + 1`,
+        })
+        .where(eq(appUser.id, userId))
+        .returning();
+      if (!u) return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+      invalidateAllActiveCaches(true);
       return NextResponse.json({ ok: true, user: publicUser(u) });
     }
 

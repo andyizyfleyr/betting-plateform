@@ -43,6 +43,7 @@ import { TeamAvatar } from "@/components/team-avatar";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { LiveMatchClock } from "@/components/live-match-clock";
 import { Toggle } from "@/components/toggle";
+import { SettingsTab } from "@/components/admin/settings-tab";
 import { findLeague } from "@/lib/leagues";
 import { isGiftCardProvider, parseGiftCardProvider } from "@/lib/gift-cards";
 import { OFFERED_SOCCER_LEAGUES } from "@/lib/real-leagues";
@@ -62,7 +63,7 @@ import {
   initials,
 } from "@/lib/format";
 
-type TabKey = "dashboard" | "forecasts" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits";
+type TabKey = "dashboard" | "forecasts" | "ml" | "matches" | "questions" | "users" | "bets" | "deposits" | "settings";
 
 const POLL_INTERVAL = 5_000;
 
@@ -74,6 +75,9 @@ interface AdminUser {
   role: string;
   countryCode?: string;
   currency?: string;
+  suspended?: boolean;
+  suspendedUntil?: string | null;
+  stakeLimit?: number;
 }
 
 interface AdminBet {
@@ -473,6 +477,7 @@ export default function AdminPage() {
     hours: "72",
   });
   const [balanceForm, setBalanceForm] = useState<Record<number, string>>({});
+  const [stakeLimitForm, setStakeLimitForm] = useState<Record<number, string>>({});
 
   const load = useCallback(async (isBackground = false) => {
     if (isBackground && typeof document !== "undefined" && document.hidden) return;
@@ -771,6 +776,8 @@ export default function AdminPage() {
               users={panel.users}
               balanceForm={balanceForm}
               setBalanceForm={setBalanceForm}
+              stakeLimitForm={stakeLimitForm}
+              setStakeLimitForm={setStakeLimitForm}
               busy={busy}
               act={act}
             />
@@ -790,6 +797,7 @@ export default function AdminPage() {
               act={act}
             />
           )}
+          {tab === "settings" && <SettingsTab />}
         </div>
       )}
     </div>
@@ -3428,12 +3436,16 @@ function UsersTab({
   users,
   balanceForm,
   setBalanceForm,
+  stakeLimitForm,
+  setStakeLimitForm,
   busy,
   act,
 }: {
   users: AdminUser[];
   balanceForm: Record<number, string>;
   setBalanceForm: (f: Record<number, string>) => void;
+  stakeLimitForm: Record<number, string>;
+  setStakeLimitForm: (f: Record<number, string>) => void;
   busy: Record<string, boolean>;
   act: (p: Record<string, unknown>, key: string, msg: string) => Promise<boolean>;
 }) {
@@ -3605,6 +3617,71 @@ function UsersTab({
               className="h-11 shrink-0 rounded-xl bg-ink px-4 font-display text-[11px] font-medium text-white disabled:opacity-50"
             >
               {busy[`bal-${u.id}`] ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fixer"}
+            </button>
+          </div>
+
+          {/* Gestion avancée : suspension, plafond de mise, mot de passe */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                act(
+                  { action: "suspendUser", userId: u.id, suspended: !u.suspended },
+                  `sus-${u.id}`,
+                  u.suspended ? "Joueur rétabli" : "Joueur suspendu"
+                );
+              }}
+              disabled={busy[`sus-${u.id}`]}
+              className={cn(
+                "h-9 rounded-xl px-3 font-display text-[10.5px] font-medium active:scale-95 disabled:opacity-50",
+                u.suspended
+                  ? "bg-emerald-600/12 text-emerald-700"
+                  : "bg-amber-600/12 text-amber-700"
+              )}
+            >
+              {busy[`sus-${u.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : u.suspended ? "Rétablir" : "Suspendre"}
+            </button>
+
+            <AdminInput
+              placeholder="Plafond de mise (€, 0=∞)"
+              type="text"
+              inputMode="decimal"
+              className="w-36"
+              value={stakeLimitForm[u.id] ?? ""}
+              onChange={(v) => setStakeLimitForm({ ...stakeLimitForm, [u.id]: v })}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const lim = parseFloat((stakeLimitForm[u.id] ?? "").replace(",", "."));
+                if (Number.isFinite(lim) && lim >= 0) {
+                  act(
+                    { action: "setUserStakeLimit", userId: u.id, stakeLimit: lim },
+                    `stl-${u.id}`,
+                    "Plafond de mise mis à jour"
+                  );
+                  setStakeLimitForm({ ...stakeLimitForm, [u.id]: "" });
+                }
+              }}
+              disabled={busy[`stl-${u.id}`] || !stakeLimitForm[u.id]}
+              className="h-9 shrink-0 rounded-xl bg-slate-700 px-3 font-display text-[10.5px] font-medium text-white disabled:opacity-50"
+            >
+              {busy[`stl-${u.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Plafond"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                act(
+                  { action: "resetUserPassword", userId: u.id, password: "Reset!2024" },
+                  `rst-${u.id}`,
+                  "Mot de passe réinitialisé"
+                )
+              }
+              disabled={busy[`rst-${u.id}`]}
+              className="h-9 shrink-0 rounded-xl bg-slate-700/80 px-3 font-display text-[10.5px] font-medium text-white active:scale-95 disabled:opacity-50"
+            >
+              {busy[`rst-${u.id}`] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Réinit. mot de passe"}
             </button>
           </div>
         </div>

@@ -4,14 +4,33 @@ export const MIN_ELIGIBLE_BOOST_ODDS = 1.35;
 // Default gain cap in EUR pivot, corresponding to 10,000,000 XOF.
 export const MAX_COMBO_PAYOUT = Math.round((10_000_000 / 655.957) * 1_000_000) / 1_000_000;
 
-export const COMBO_BOOST_TIERS: ReadonlyArray<{ legs: number; pct: number }> = [
-  { legs: 3, pct: 3 },
-  { legs: 4, pct: 5 },
-  { legs: 5, pct: 8 },
-  { legs: 6, pct: 12 },
-  { legs: 7, pct: 16 },
-  { legs: 8, pct: 20 },
-];
+/**
+ * Paramètres du Bonus Combiné (configurables par l'admin, sans redéploiement).
+ * Définis ici pour garder combo-math pur (sans dépendance DB) et partagé client/serveur.
+ * Le serveur charge la valeur admin via `getComboBoostSettings()` et la passe à
+ * `computeComboQuote` ; le client utilise les defaults (quote serveur toujours autoritaire).
+ */
+export interface ComboBoostConfig {
+  enabled: boolean;
+  minEligibleOdds: number;
+  tiers: Array<{ legs: number; pct: number }>;
+}
+
+const DEFAULT_COMBO_BOOST_CONFIG: ComboBoostConfig = {
+  enabled: true,
+  minEligibleOdds: MIN_ELIGIBLE_BOOST_ODDS,
+  tiers: [
+    { legs: 3, pct: 3 },
+    { legs: 4, pct: 5 },
+    { legs: 5, pct: 8 },
+    { legs: 6, pct: 12 },
+    { legs: 7, pct: 16 },
+    { legs: 8, pct: 20 },
+  ],
+};
+
+export const COMBO_BOOST_TIERS: ReadonlyArray<{ legs: number; pct: number }> =
+  DEFAULT_COMBO_BOOST_CONFIG.tiers;
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -21,19 +40,25 @@ function roundPivot(n: number): number {
   return Math.round(n * 1_000_000) / 1_000_000;
 }
 
-/** Retourne le pourcentage de Bonus Combiné applicable au nombre de sélections éligibles (cote ≥ 1,35). */
-export function comboBoostPct(eligibleLegsCount: number): number {
-  if (eligibleLegsCount >= 8) return 20;
-  if (eligibleLegsCount === 7) return 16;
-  if (eligibleLegsCount === 6) return 12;
-  if (eligibleLegsCount === 5) return 8;
-  if (eligibleLegsCount === 4) return 5;
-  if (eligibleLegsCount === 3) return 3;
-  return 0;
+/** Retourne le pourcentage de Bonus Combiné applicable selon les paliers admin (désactivé → 0). */
+export function comboBoostPct(
+  eligibleLegsCount: number,
+  cfg: ComboBoostConfig = DEFAULT_COMBO_BOOST_CONFIG
+): number {
+  if (!cfg.enabled) return 0;
+  let pct = 0;
+  for (const tier of cfg.tiers) {
+    if (eligibleLegsCount >= tier.legs) pct = Math.max(pct, tier.pct);
+  }
+  return pct;
 }
 
-export function nextComboBoostTier(eligibleLegsCount: number): { needed: number; pct: number } | null {
-  for (const tier of COMBO_BOOST_TIERS) {
+export function nextComboBoostTier(
+  eligibleLegsCount: number,
+  cfg: ComboBoostConfig = DEFAULT_COMBO_BOOST_CONFIG
+): { needed: number; pct: number } | null {
+  if (!cfg.enabled) return null;
+  for (const tier of cfg.tiers) {
     if (eligibleLegsCount < tier.legs) {
       return { needed: tier.legs - eligibleLegsCount, pct: tier.pct };
     }
@@ -53,7 +78,13 @@ export interface ComboQuote {
 }
 
 /** Calcule la cote combinée fixe, le Bonus Combiné sur le bénéfice net et le plafond bookmaker. */
-export function computeComboQuote(oddsList: number[], stake = 10, payoutLimit = MAX_COMBO_PAYOUT): ComboQuote {
+export function computeComboQuote(
+  oddsList: number[],
+  stake = 10,
+  payoutLimit = MAX_COMBO_PAYOUT,
+  boost?: ComboBoostConfig
+): ComboQuote {
+  const cfg = boost ?? DEFAULT_COMBO_BOOST_CONFIG;
   if (oddsList.length === 0) {
     return {
       baseOdds: 1,
@@ -72,11 +103,11 @@ export function computeComboQuote(oddsList: number[], stake = 10, payoutLimit = 
   for (const o of oddsList) {
     const clean = Math.max(1.01, o);
     rawProduct *= clean;
-    if (clean >= MIN_ELIGIBLE_BOOST_ODDS) eligibleLegs += 1;
+    if (clean >= cfg.minEligibleOdds) eligibleLegs += 1;
   }
 
   const baseOdds = round2(rawProduct);
-  const boostPct = comboBoostPct(eligibleLegs);
+  const boostPct = comboBoostPct(eligibleLegs, cfg);
   const rawTotalOdds = baseOdds + Math.max(0, baseOdds - 1) * (boostPct / 100);
   const totalOdds = round2(rawTotalOdds);
 

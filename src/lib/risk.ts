@@ -53,14 +53,25 @@ const DEFAULT_MARGIN = 0.075;
 /**
  * Marge en format multiplicateur d'overround (1/(p·m) convention de markets.ts).
  * m = 1 + marge% → marge 4,5% ⇔ m = 1.045.
+ * `margins` optionnel : marges admin (default = table statique).
  */
-export function marginOverround(market: string): number {
-  return 1 + (MARKET_MARGIN[market] ?? DEFAULT_MARGIN);
+export function marginOverround(
+  market: string,
+  margins?: { markets: Record<string, number>; default: number }
+): number {
+  const table = margins?.markets ?? MARKET_MARGIN;
+  const def = margins?.default ?? DEFAULT_MARGIN;
+  return 1 + (table[market] ?? def);
 }
 
 /** Marge (en %) appliquée à un marché donné, après le calcul des probabilités brutes. */
-export function marketMargin(market: string): number {
-  return MARKET_MARGIN[market] ?? DEFAULT_MARGIN;
+export function marketMargin(
+  market: string,
+  margins?: { markets: Record<string, number>; default: number }
+): number {
+  const table = margins?.markets ?? MARKET_MARGIN;
+  const def = margins?.default ?? DEFAULT_MARGIN;
+  return table[market] ?? def;
 }
 
 /** Limites de mise par profil de joueur. */

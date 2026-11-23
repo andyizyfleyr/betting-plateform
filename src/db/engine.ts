@@ -30,7 +30,7 @@ import { buildServerClockAnchor } from "@/lib/live-clock";
 import { ensureMlLoaded, recordMatchesFinishedBatchMl } from "@/lib/ml-engine";
 import { createServerRng, hmacUint32 } from "@/lib/server-rng";
 import { teamLogo, virtualClubNames, virtualTeamAliases, virtualTeamIdentity } from "@/lib/team-logos";
-import { planVirtualQueue, sharesVirtualTeam, virtualPairKey, coprimeStride, buildVirtualFixturePool, VIRTUAL_REMATCH_GAP_MS, VIRTUAL_MAX_LIVE, VIRTUAL_KICKOFF_GAP_MS, type VirtualFixtureWindow } from "@/lib/virtual-fixtures";
+import { planVirtualQueue, sharesVirtualTeam, virtualPairKey, coprimeStride, buildVirtualFixturePool, VIRTUAL_REMATCH_GAP_MS, virtualMaxLive, virtualKickoffGapMs, type VirtualFixtureWindow } from "@/lib/virtual-fixtures";
 import { claimVirtualKickoff, VIRTUAL_SCHEDULE_LOCK } from "@/db/virtual-kickoff";
 
 /** Suspension brève du marché après un but (~2,2 s). */
@@ -52,8 +52,10 @@ export const VIRTUAL_STEP_MIN_MS = 6_240; // ~9 min 53 s au total
 export const VIRTUAL_STEP_MAX_MS = 6_400; // ~10 min 08 s au total (moyenne 10 min 00 s)
 const TOTAL_CLOCK_STEPS = 95;
 
-/** Plafond conservé pour les directs déjà existants. */
-export const CONCURRENT_LIVE_VIRTUAL = VIRTUAL_MAX_LIVE;
+/** Plafond conservé pour les directs déjà existants (configurable admin). */
+export function concurrentLiveVirtual(): number {
+  return virtualMaxLive();
+}
 const MIN_ACTIVE_VIRTUAL = 11;
 const TARGET_ACTIVE_VIRTUAL = 12;
 
@@ -270,7 +272,7 @@ async function demoteLiveMatchToUpcoming(m: MatchRow, targetStartsAt: Date): Pro
 
 /**
  * Utilisé par l'API Admin lorsqu'un match VIRTUEL est lancé ou rouvert en direct :
- * garantit un plafond propre de `CONCURRENT_LIVE_VIRTUAL` matchs virtuels simultanés.
+ * garantit un plafond propre de `concurrentLiveVirtual()` matchs virtuels simultanés.
  * Les matchs RÉELS (`source = "manual"`) sont 100 % indépendants.
  */
 export async function demoteOtherLiveMatches(keepMatchId: number, now = Date.now()): Promise<void> {
@@ -288,7 +290,7 @@ export async function demoteOtherLiveMatches(keepMatchId: number, now = Date.now
       )
     );
 
-  const maxOthers = Math.max(0, CONCURRENT_LIVE_VIRTUAL - 1);
+  const maxOthers = Math.max(0, concurrentLiveVirtual() - 1);
   if (others.length <= maxOthers) return;
 
   others.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id);
@@ -508,18 +510,18 @@ async function executeTick(now: number): Promise<void> {
     }
   }
 
-  // 2. Plafonne proprement à `CONCURRENT_LIVE_VIRTUAL` matchs virtuels en direct simultanément
+  // 2. Plafonne proprement à `concurrentLiveVirtual()` matchs virtuels en direct simultanément
   stillLive.sort((a, b) => {
     const betsDiff = (betsByMatch.get(b.id)?.length ?? 0) - (betsByMatch.get(a.id)?.length ?? 0);
     if (betsDiff !== 0) return betsDiff;
     return a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id;
   });
 
-  const keptLive = stillLive.slice(0, CONCURRENT_LIVE_VIRTUAL);
-  if (stillLive.length > CONCURRENT_LIVE_VIRTUAL) {
+  const keptLive = stillLive.slice(0, concurrentLiveVirtual());
+  if (stillLive.length > concurrentLiveVirtual()) {
     let deferCursor =
       Math.max(...keptLive.map((lm) => expectedMatchEndMs(lm, now))) + INTER_MATCH_GAP_MS;
-    for (const extra of stillLive.slice(CONCURRENT_LIVE_VIRTUAL)) {
+    for (const extra of stillLive.slice(concurrentLiveVirtual())) {
       const demoted = await demoteLiveMatchToUpcoming(extra, new Date(deferCursor));
       ramDirtyRows.set(demoted.id, demoted);
       upcomingMatches.push(demoted);
@@ -539,9 +541,9 @@ async function executeTick(now: number): Promise<void> {
 
   // Démarre uniquement le prochain match dont l'heure de coup d'envoi est atteinte,
   // et au plus une tentative par tick (une seule transaction SQL).
-  // Aucun démarrage anticipé : l'espacement de VIRTUAL_KICKOFF_GAP_MS (48 min)
+  // Aucun démarrage anticipé : l'espacement de virtualKickoffGapMs() (48 min)
   // plafonne le moteur à 30 matchs virtuels par jour, "ni plus ni moins".
-  if (activeLives.length < CONCURRENT_LIVE_VIRTUAL) {
+  if (activeLives.length < concurrentLiveVirtual()) {
     const nextDue = upcomingMatches
       .filter((m) => m.source === "virtual" && m.startsAt.getTime() <= now)
       .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id - b.id)[0];
@@ -605,7 +607,7 @@ async function syncUpcomingQueue(
   const [latestKickoff] = await db.select({ startsAt: matches.startsAt }).from(matches)
     .where(sql`${matches.source} = 'virtual' AND ${matches.status} IN ('live', 'finished')`)
     .orderBy(sql`${matches.startsAt} DESC`).limit(1);
-  const cursor = Math.max(now, latestKickoff ? latestKickoff.startsAt.getTime() + VIRTUAL_KICKOFF_GAP_MS : now);
+  const cursor = Math.max(now, latestKickoff ? latestKickoff.startsAt.getTime() + virtualKickoffGapMs() : now);
 
   interface QueuedMatchPatch {
     id: number;
@@ -764,7 +766,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
 
   // Les affiches lointaines (par exemple des doublons déjà réservés) ne doivent pas
   // empêcher la création d'une file utilisable à court terme.
-  const nearHorizon = now + TARGET_ACTIVE_VIRTUAL * VIRTUAL_KICKOFF_GAP_MS;
+  const nearHorizon = now + TARGET_ACTIVE_VIRTUAL * virtualKickoffGapMs();
   const nearCount = activeVirtual.filter(m => m.status === "live" || m.startsAt.getTime() <= nearHorizon).length;
   if (nearCount >= MIN_ACTIVE_VIRTUAL - 2) return activeVirtual;
 
@@ -803,7 +805,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
     chosen.push(oriented);
   }
 
-  let nextStart = Math.max(now, tailStartMs === null ? now : tailStartMs + VIRTUAL_KICKOFF_GAP_MS);
+  let nextStart = Math.max(now, tailStartMs === null ? now : tailStartMs + virtualKickoffGapMs());
   const rows: Array<typeof matches.$inferInsert> = [];
 
   chosen.forEach((fx, idx) => {
@@ -814,7 +816,7 @@ async function ensureActiveSchedule(now: number): Promise<MatchRow[]> {
     const awayForm = Math.round((0.91 + rng() * 0.18) * 100) / 100;
 
     const startsAt = new Date(nextStart);
-    nextStart += VIRTUAL_KICKOFF_GAP_MS;
+    nextStart += virtualKickoffGapMs();
 
     const preOdds = oddsFor(fx.home, fx.away, { homeForm, awayForm, league: fx.league });
     rows.push({

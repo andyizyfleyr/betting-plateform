@@ -45,6 +45,14 @@ export default function DepositPage() {
   const [stripePublishableKey, setStripePublishableKey] = useState<
     string | null
   >(null);
+  const [manualMethods, setManualMethods] = useState<{
+    mobile_money: boolean;
+    sepa: boolean;
+    gift_card: boolean;
+  }>({ mobile_money: true, sepa: true, gift_card: true });
+  const [mobileMoneyAccounts, setMobileMoneyAccounts] = useState<
+    Array<{ country: string; label: string; number: string }>
+  >([]);
   const [prevCur, setPrevCur] = useState(currency);
   const [amountText, setAmountText] = useState(() =>
     String(currencyConfig.defaultDepositLocal)
@@ -73,8 +81,22 @@ export default function DepositPage() {
         setProviders(r.providers);
         setPaypalClientId(r.paypalClientId ?? null);
         setStripePublishableKey(r.stripePublishableKey ?? null);
+        setManualMethods(r.manualMethods ?? manualMethods);
+        setMobileMoneyAccounts(r.mobileMoneyAccounts ?? []);
         const autoOnline = r.providers.find((p) => p.enabled);
-        if (autoOnline) setMethod(autoOnline.id);
+        // Si la méthode courante est désactivée par l'admin, bascule sur la première disponible.
+        const allAvailable = [
+          ...r.providers.filter((p) => p.enabled),
+          ...(r.manualMethods?.mobile_money ? [{ id: "mobile_money" as const }] : []),
+          ...(r.manualMethods?.sepa ? [{ id: "sepa" as const }] : []),
+          ...(r.manualMethods?.gift_card ? [{ id: "gift_card" as const }] : []),
+        ];
+        const currentAvailable = allAvailable.some((m) => m.id === method);
+        if (!currentAvailable && allAvailable.length > 0) {
+          setMethod(allAvailable[0].id);
+        } else if (autoOnline) {
+          setMethod(autoOnline.id);
+        }
       })
       .catch(() => {
         if (active) setProviders([]);
@@ -383,17 +405,17 @@ export default function DepositPage() {
                     label: "Mobile Money",
                     sub: countryConfig.mobileMoneyHint || "Transfert mobile",
                     Icon: Smartphone,
-                    available: true,
+                    available: manualMethods.mobile_money,
                   },
                   {
                     id: "sepa" as const,
                     label: "Virement bancaire",
                     sub: "IBAN / Réf. bancaire",
                     Icon: Building2,
-                    available: true,
+                    available: manualMethods.sepa,
                   },
                   {
-                    id: "gift_card" as const, label: "Carte cadeau", sub: "Transcash, PCS, Paysafe...", Icon: Gift, available: true,
+                    id: "gift_card" as const, label: "Carte cadeau", sub: "Transcash, PCS, Paysafe...", Icon: Gift, available: manualMethods.gift_card,
                   },
                   {
                     id: "stripe" as const,

@@ -213,13 +213,16 @@ export async function POST(req: NextRequest) {
     );
   }
   const [currencyUser] = await db
-    .select({ currency: appUser.currency })
+    .select({ currency: appUser.currency, stakeLimit: appUser.stakeLimit })
     .from(appUser)
     .where(eq(appUser.id, uid))
     .limit(1);
   const userCurrency = getCurrencyConfig(currencyUser?.currency);
   const bettingLimits = await getBettingLimits();
   const { minEur: minPredEur, maxEur: maxPredEur, maxPayoutEur } = limitsForCurrency(bettingLimits, userCurrency.code);
+  // Plafond de mise manuel admin (prioritaire sur le plafond global).
+  const manualStakeLimit = Number(currencyUser?.stakeLimit ?? 0);
+  const effectiveMaxPredEur = manualStakeLimit > 0 ? Math.min(maxPredEur, manualStakeLimit) : maxPredEur;
 
   const roundedInputStake = roundEurPivot(stake);
   const requestHash = computeIdempotencyHash({
@@ -297,8 +300,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Le plafond de gain a changé ou votre application doit être actualisée. Vérifiez le coupon avant de confirmer.", code: "BETTING_LIMITS_CHANGED" }, { status: 409 });
   }
 
-  if (!Number.isFinite(stake) || stake < minPredEur - 1e-6 || stake > maxPredEur + 1e-6) {
-    return NextResponse.json({ error: `Mise hors limites (${formatEurAsCurrency(minPredEur, userCurrency.code)} – ${formatEurAsCurrency(maxPredEur, userCurrency.code)})` }, { status: 400 });
+  if (!Number.isFinite(stake) || stake < minPredEur - 1e-6 || stake > effectiveMaxPredEur + 1e-6) {
+    return NextResponse.json({ error: `Mise hors limites (${formatEurAsCurrency(minPredEur, userCurrency.code)} – ${formatEurAsCurrency(effectiveMaxPredEur, userCurrency.code)})` }, { status: 400 });
   }
 
 

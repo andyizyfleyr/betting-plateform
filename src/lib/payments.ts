@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appUser, deposits, webhookEvents } from "@/db/schema";
 import { invalidateUserCaches } from "@/lib/active-state-cache";
+import { getAdminSettingSync, type PaymentSettings } from "@/lib/admin-settings";
 import {
   eurToLocal,
   getCurrencyConfig,
@@ -34,25 +35,51 @@ export interface PublicPaymentClientConfig {
   paypalClientId: string | null;
   paypalMode: "live" | "sandbox";
   stripePublishableKey: string | null;
+  /** Méthodes manuelles admin-activées (Mobile Money, SEPA, Cartes cadeaux). */
+  manualMethods: {
+    mobile_money: boolean;
+    sepa: boolean;
+    gift_card: boolean;
+  };
+  /** Numéros Mobile Money affichés (pays → compte). */
+  mobileMoneyAccounts: Array<{ country: string; label: string; number: string }>;
 }
 
-/** Prestataires configurés via les variables d'environnement (live/sandbox). */
+/** Moyens de paiement admin-activés (configurables sans redéploiement). */
+function adminEnabledMethods(): Set<string> {
+  const s = getAdminSettingSync("payments") as unknown as PaymentSettings;
+  return new Set(s.enabledMethods);
+}
+
+/**
+ * Prestataires configurés : env (clés Stripe/PayPal live/sandbox) ET activation admin.
+ * Un prestataire n'apparaît que si les clés sont présentes ET l'admin l'a activé.
+ */
 export function paymentProviders(): ProviderInfo[] {
+  const enabled = adminEnabledMethods();
   const stripeKey = process.env.STRIPE_SECRET_KEY ?? "";
-  return [
-    {
+  const providers: ProviderInfo[] = [];
+  if (enabled.has("stripe") && stripeKey.startsWith("sk_")) {
+    providers.push({
       id: "stripe",
       name: "Carte bancaire",
-      enabled: stripeKey.startsWith("sk_"),
+      enabled: true,
       live: stripeKey.startsWith("sk_live_"),
-    },
-    {
+    });
+  }
+  if (
+    enabled.has("paypal") &&
+    !!process.env.PAYPAL_CLIENT_ID &&
+    !!process.env.PAYPAL_SECRET
+  ) {
+    providers.push({
       id: "paypal",
       name: "PayPal",
-      enabled: !!process.env.PAYPAL_CLIENT_ID && !!process.env.PAYPAL_SECRET,
+      enabled: true,
       live: PAYPAL_MODE === "live",
-    },
-  ];
+    });
+  }
+  return providers;
 }
 
 export function publicPaymentClientConfig(): PublicPaymentClientConfig {
@@ -62,11 +89,19 @@ export function publicPaymentClientConfig(): PublicPaymentClientConfig {
     ""
   ).trim();
   const ppClientId = (process.env.PAYPAL_CLIENT_ID ?? "").trim();
+  const pay = getAdminSettingSync("payments") as unknown as PaymentSettings;
+  const enabled = new Set(pay.enabledMethods);
   return {
     providers: paymentProviders(),
     paypalClientId: ppClientId || null,
     paypalMode: PAYPAL_MODE,
     stripePublishableKey: pk.startsWith("pk_") ? pk : null,
+    manualMethods: {
+      mobile_money: enabled.has("mobile_money"),
+      sepa: enabled.has("sepa"),
+      gift_card: enabled.has("gift_card"),
+    },
+    mobileMoneyAccounts: pay.mobileMoneyAccounts ?? [],
   };
 }
 

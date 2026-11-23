@@ -35,6 +35,8 @@ import {
   normalizeCountryCode,
   normalizeCurrencyCode,
   roundEurPivot,
+  setCurrencyPresetOverrides,
+  setCurrencyRateOverrides,
   type CountryConfig,
   type CurrencyCode,
   type CurrencyConfig,
@@ -85,7 +87,8 @@ export type AdminTabKey =
   | "questions"
   | "users"
   | "bets"
-  | "deposits";
+  | "deposits"
+  | "settings";
 
 export type SportUniverse = "real" | "virtual";
 export type SportStatusFilter = "all" | "live" | "upcoming" | "finished";
@@ -286,6 +289,21 @@ export function Providers({ children }: { children: ReactNode }) {
     if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw-static.js").catch(() => {});
     }
+    // Applique les overrides devises admin (taux + paliers) côté client, une fois.
+    let active = true;
+    void api
+      .config?.currency?.()
+      .then((r) => {
+        if (!active || !r) return;
+        setCurrencyRateOverrides(r.currencyRates ?? {});
+        setCurrencyPresetOverrides(
+          (r.currencyPresets ?? {}) as Record<string, never>
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
   return (
     <QueryClientProvider client={queryClient}>

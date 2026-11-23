@@ -24,6 +24,7 @@ import {
   type LiveIncidentSnapshot,
 } from "@/lib/cashout";
 import { computeComboCashOut } from "@/lib/combo";
+import { getCashoutSettings } from "@/lib/admin-settings";
 import { formatServerErrorResponse } from "@/lib/db-error";
 import { invalidateHouseHealthCache } from "@/lib/house-brain";
 import {
@@ -183,6 +184,9 @@ export async function POST(req: NextRequest) {
     if (typeof auth !== "number") return auth;
     const uid = auth;
     await syncLiveMatchesThrottled();
+
+    // Réglages Cash Out chargés une fois pour le handler (marge, plafond, exclusions).
+    const cashoutSettings = await getCashoutSettings();
 
     let body: {
       betId?: number;
@@ -633,6 +637,7 @@ export async function POST(req: NextRequest) {
               oddsAway: effectiveMatch.oddsAway,
               realStats: effectiveMatch.realStats ?? null,
               markets: effectiveMatch.markets ?? null,
+              cashout: cashoutSettings,
             });
             if (value == null) {
               return {
@@ -802,6 +807,7 @@ export async function POST(req: NextRequest) {
           currentOddsNo: lockedQuestion.oddsNo,
           options: lockedQuestion.options ?? null,
           selection: lockedBet.selection,
+          cashout: cashoutSettings,
         });
 
         const cashoutCheck = checkCashoutChange({

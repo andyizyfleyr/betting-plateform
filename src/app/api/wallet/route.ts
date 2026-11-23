@@ -2,12 +2,10 @@ import { desc, eq, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import {
-  acceleratorRounds,
   bets,
   comboBets,
   deposits,
   predictionBets,
-  tapHistory,
   walletAdjustments,
   withdrawals,
 } from "@/db/schema";
@@ -60,8 +58,6 @@ export async function GET(req: NextRequest) {
     sportRows,
     predRows,
     comboRows,
-    tapRows,
-    accelRows,
     adjRows,
     depositTotals,
     withdrawalTotals,
@@ -146,33 +142,6 @@ export async function GET(req: NextRequest) {
       .where(eq(comboBets.userId, uid))
       .orderBy(desc(comboBets.placedAt))
       .limit(30),
-    db
-      .select({
-        id: tapHistory.id,
-        win: tapHistory.win,
-        betAmount: tapHistory.betAmount,
-        targetMultiplier: tapHistory.targetMultiplier,
-        crashMultiplier: tapHistory.crashMultiplier,
-        createdAt: tapHistory.createdAt,
-      })
-      .from(tapHistory)
-      .where(eq(tapHistory.userId, uid))
-      .orderBy(desc(tapHistory.createdAt))
-      .limit(25),
-    db
-      .select({
-        id: acceleratorRounds.id,
-        status: acceleratorRounds.status,
-        cashoutMultiplier: acceleratorRounds.cashoutMultiplier,
-        betAmount: acceleratorRounds.betAmount,
-        crashPoint: acceleratorRounds.crashPoint,
-        endedAt: acceleratorRounds.endedAt,
-        createdAt: acceleratorRounds.createdAt,
-      })
-      .from(acceleratorRounds)
-      .where(eq(acceleratorRounds.userId, uid))
-      .orderBy(desc(acceleratorRounds.createdAt))
-      .limit(25),
     db
       .select({
         id: walletAdjustments.id,
@@ -377,42 +346,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 6. Mini-jeu Tap Win (lecture seule depuis tap_history sans toucher à /tap)
-  for (const t of tapRows) {
-    const netWin = t.win ? round2(t.betAmount * t.targetMultiplier - t.betAmount) : -round2(t.betAmount);
-    entries.push({
-      id: `tap-${t.id}`,
-      type: t.win ? "win" : "stake",
-      title: t.win ? "Gain Tap Win" : "Mise Tap Win",
-      subtitle: `Cible ×${t.targetMultiplier.toFixed(2)} (crash ×${t.crashMultiplier.toFixed(2)})`,
-      amount: netWin,
-      status: t.win ? "won" : "lost",
-      createdAt: t.createdAt.toISOString(),
-    });
-  }
-
-  // 7. Mini-jeu Accelerator Pro (manches terminées)
-  for (const a of accelRows) {
-    if (a.status === "active") continue;
-    const won =
-      (a.status === "cashed" || a.status === "autocashed") &&
-      a.cashoutMultiplier != null &&
-      a.cashoutMultiplier > 1;
-    const payout = won ? round2(a.betAmount * (a.cashoutMultiplier ?? 1) - a.betAmount) : -round2(a.betAmount);
-    entries.push({
-      id: `acc-${a.id}`,
-      type: won ? "win" : "stake",
-      title: won ? "Gain Accelerator" : "Mise Accelerator",
-      subtitle: won
-        ? `Encaissé à ×${(a.cashoutMultiplier ?? 1).toFixed(2)}`
-        : `Crash à ×${a.crashPoint.toFixed(2)}`,
-      amount: payout,
-      status: won ? "won" : "lost",
-      createdAt: (a.endedAt ?? a.createdAt).toISOString(),
-    });
-  }
-
-  // 8. Ajustements administrateur
+  // 6. Ajustements administrateur
   for (const adj of adjRows) {
     entries.push({
       id: `adj-${adj.id}`,

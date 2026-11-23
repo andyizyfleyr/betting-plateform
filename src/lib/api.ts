@@ -258,6 +258,11 @@ export interface ClientUser {
   bonusLocked?: number;
   email?: string | null;
   createdAt?: string | null;
+  /** Suspension/banniment admin. */
+  suspended?: boolean;
+  suspendedUntil?: string | null;
+  /** Plafond de mise manuel admin (EUR, 0 = aucun plafond). */
+  stakeLimit?: number;
 }
 
 export interface PaymentProvider {
@@ -508,11 +513,7 @@ async function executeRequest<T>(
         p === "/parametres" ||
         p.startsWith("/parametres/") ||
         p === "/admin" ||
-        p.startsWith("/admin/") ||
-        p === "/tap" ||
-        p.startsWith("/tap/") ||
-        p === "/accelerator" ||
-        p.startsWith("/accelerator/");
+        p.startsWith("/admin/");
       const hadSessionHint =
         Boolean(window.localStorage.getItem("pulsebet_cached_user_v1")) ||
         document.cookie.includes("__pulse_uid=");
@@ -903,6 +904,27 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     }),
+  config: {
+    currency: () =>
+      request<{
+        currencyRates: Record<string, number>;
+        currencyPresets: Record<string, unknown>;
+        branding?: {
+          siteName: string;
+          shortName: string;
+          tagline: string;
+          heroTitle: string;
+          heroSubtitle: string;
+          primaryColor: string;
+          banners: Array<{
+            title: string;
+            subtitle: string;
+            image: string;
+            href: string;
+          }>;
+        };
+      }>("/api/config"),
+  },
   payments: {
     providers: () =>
       request<{
@@ -910,6 +932,16 @@ export const api = {
         paypalClientId?: string | null;
         paypalMode?: "live" | "sandbox";
         stripePublishableKey?: string | null;
+        manualMethods?: {
+          mobile_money: boolean;
+          sepa: boolean;
+          gift_card: boolean;
+        };
+        mobileMoneyAccounts?: Array<{
+          country: string;
+          label: string;
+          number: string;
+        }>;
       }>("/api/payments"),
     create: (
       provider: "stripe" | "paypal",
@@ -1005,5 +1037,27 @@ export const api = {
       }),
     logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
     me: () => request<{ user: ClientUser }>("/api/auth/me"),
+  },
+  admin: {
+    getSettings: () =>
+      request<{
+        settings: Record<string, Record<string, unknown>>;
+        catalog?: Record<
+          string,
+          { label: string; description: string }
+        >;
+      }>("/api/admin/settings"),
+    saveSetting: (
+      key: string,
+      value: Record<string, unknown>
+    ) =>
+      request<{ ok: boolean; key: string; value: Record<string, unknown> }>(
+        "/api/admin/settings",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, value }),
+        }
+      ),
   },
 };

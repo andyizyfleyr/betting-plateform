@@ -30,7 +30,7 @@ const SESSION_TV_CACHE_MAX = 2_000;
 
 const tokenVersionCache = new Map<
   number,
-  { tokenVersion: number; expiresAt: number }
+  { tokenVersion: number; suspended: boolean; suspendedUntil: number | null; expiresAt: number }
 >();
 
 export function invalidateUserSessionCache(userId?: number) {
@@ -41,15 +41,29 @@ export function invalidateUserSessionCache(userId?: number) {
   }
 }
 
-export function primeUserSessionCache(userId: number, tokenVersion: number) {
+export function primeUserSessionCache(
+  userId: number,
+  tokenVersion: number,
+  suspended = false,
+  suspendedUntil: number | null = null
+) {
   if (tokenVersionCache.size >= SESSION_TV_CACHE_MAX) {
     const firstKey = tokenVersionCache.keys().next().value;
     if (firstKey !== undefined) tokenVersionCache.delete(firstKey);
   }
   tokenVersionCache.set(userId, {
     tokenVersion,
+    suspended,
+    suspendedUntil,
     expiresAt: Date.now() + SESSION_TV_CACHE_TTL_MS,
   });
+}
+
+/** Vérifie si un compte est suspendu au moment t (suivi du cache ou DB). */
+function isSuspended(suspended: boolean, suspendedUntil: number | null, now: number): boolean {
+  if (!suspended) return false;
+  if (suspendedUntil == null) return true;
+  return suspendedUntil > now;
 }
 
 const cookieOpts = {
@@ -128,12 +142,20 @@ export async function getAuthUserId(req: NextRequest): Promise<number | null> {
     if (typeof payload.tv === "number" && payload.tv !== cached.tokenVersion) {
       return null;
     }
+    if (isSuspended(cached.suspended, cached.suspendedUntil, now)) {
+      return null;
+    }
     return uid;
   }
 
-  // Vérifie l'existence du compte et la version du jeton si présente dans le JWT
+  // Vérifie l'existence du compte, la suspension et la version du jeton si présente dans le JWT
   const [row] = await db
-    .select({ id: appUser.id, tokenVersion: appUser.tokenVersion })
+    .select({
+      id: appUser.id,
+      tokenVersion: appUser.tokenVersion,
+      suspended: appUser.suspended,
+      suspendedUntil: appUser.suspendedUntil,
+    })
     .from(appUser)
     .where(eq(appUser.id, uid))
     .limit(1);
@@ -144,9 +166,15 @@ export async function getAuthUserId(req: NextRequest): Promise<number | null> {
   }
 
   const tv = row.tokenVersion ?? 0;
-  primeUserSessionCache(uid, tv);
+  const suspendedUntilMs = row.suspendedUntil
+    ? new Date(row.suspendedUntil).getTime()
+    : null;
+  primeUserSessionCache(uid, tv, Boolean(row.suspended), suspendedUntilMs);
 
   if (typeof payload.tv === "number" && payload.tv !== tv) {
+    return null;
+  }
+  if (isSuspended(Boolean(row.suspended), suspendedUntilMs, now)) {
     return null;
   }
 
