@@ -197,6 +197,8 @@ export interface AdminWithdrawal {
   userCurrency?: string;
   method: string;
   destination?: string | null;
+  adminNote?: string | null;
+  note?: string | null;
   amount: number;
   currency: string;
   status: string;
@@ -231,10 +233,35 @@ export interface AdminMlModel {
 
 export interface AdminMlOverview {
   models: AdminMlModel[];
+  sharpBias: number;
   sharpWeights: Array<{
     key: string;
     label: string;
     weight: number;
+    prior: number;
+  }>;
+  playerProfiles: Array<{
+    userId: number;
+    name: string;
+    betsCount: number;
+    pSharpPct: number;
+  }>;
+  calibratedSegments: Array<{
+    segment: string;
+    market: string;
+    bucket: string;
+    samples: number;
+    predWinPct: number;
+    obsWinPct: number;
+  }>;
+  clubRatings: Array<{
+    clubKey: string;
+    matches: number;
+    attack: number;
+    defense: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    netPower: number;
   }>;
 }
 
