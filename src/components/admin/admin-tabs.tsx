@@ -6,7 +6,7 @@
  * des pages Next.js distinctes avec URLs propres.
  */
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   Brain, CalendarPlus, CheckCircle2, ChevronDown, CircleDollarSign, Dices, Eye,
   Flag, Goal, HelpCircle, Lock, Loader2, Plus, Play, RefreshCw, RotateCcw,
@@ -29,7 +29,9 @@ import { Toggle } from "@/components/toggle";
 import { findLeague } from "@/lib/leagues";
 import { OFFERED_SOCCER_LEAGUES } from "@/lib/real-leagues";
 import { teamLogo } from "@/lib/team-logos";
-import { cn, eur, eurPivot, formatKickoff, formatOdds, formatPlacedAt, initials } from "@/lib/format";
+import { cn, eur, eurPivot, formatEurAsCurrency, formatKickoff, formatOdds, formatPlacedAt, initials } from "@/lib/format";
+import { getCountryConfig, getCurrencyConfig } from "@/lib/countries";
+import { isGiftCardProvider, parseGiftCardProvider } from "@/lib/gift-cards";
 
 export function BettingLimitsForm({ limits, busy, act }: {
   limits: NonNullable<PanelData["bettingLimits"]>;
