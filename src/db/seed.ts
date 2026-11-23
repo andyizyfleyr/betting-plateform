@@ -25,6 +25,12 @@ const SCHEMA_SEED_MARKER_KEY = "schema_seed_v21";
 // La colonne currency a été ajoutée avec DEFAULT EUR lors des migrations antérieures,
 // ce qui a attribué EUR à tous les comptes, indépendamment de leur pays (ex. BJ -> XOF).
 const CURRENCY_ALIGN_MARKER_KEY = "currency_align_v1";
+// Marqueur dédié : réalignement idempotent des colonnes ajoutées depuis v19.
+// Sur une base déjà marquée v21 (posée par le chemin v19 sans ALTER), le fast-path
+// renvoyait avant d'ajouter les colonnes (suspended, suspended_until, stake_limit,
+// currency...) -> erreur 42703 « column does not exist ». Ce bloc s'exécute donc
+// indépendamment du marqueur v21, une fois pour toutes.
+const COLUMNS_ALIGN_MARKER_KEY = "columns_align_v1";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -49,6 +55,84 @@ export async function ensureSeeded(): Promise<void> {
       });
   }
   return seedPromise;
+}
+
+/**
+ * Réalignement idempotent des colonnes : garantit la presence de toutes les
+ * colonnes ajoutées depuis v19, même sur une base déjà marquée v21. Les ALTER
+ * sont idempotents (IF NOT EXISTS) ; une seule passe, marquée pour ne rejouer
+ * jamais. Sans cela, une base v21 posée sans ALTER plantrait 42703 « column
+ * suspended does not exist » sur la page admin / connexion.
+ */
+async function ensureSchemaColumns(): Promise<void> {
+  try {
+    const colsCheck = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM "admin_settings" WHERE "setting_key" = ${COLUMNS_ALIGN_MARKER_KEY}
+      ) AS done
+    `);
+    const colsAligned = (colsCheck.rows?.[0] as { done?: boolean } | undefined)?.done;
+    if (colsAligned) return;
+    await db.execute(sql`
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_matches" boolean NOT NULL DEFAULT true;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_bets" boolean NOT NULL DEFAULT true;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_payments" boolean NOT NULL DEFAULT true;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_disputes" boolean NOT NULL DEFAULT true;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "suspended" boolean DEFAULT false NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "suspended_until" timestamp;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "stake_limit" double precision DEFAULT 0 NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "country_code" text DEFAULT 'FR' NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "currency" text DEFAULT 'EUR' NOT NULL;
+      UPDATE "app_user" SET "balance" = 0 WHERE "balance" < 0;
+      UPDATE "app_user" SET "bonus_locked" = 0 WHERE "bonus_locked" < 0;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "home_logo" text;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "away_logo" text;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "markets" jsonb;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_locked" boolean DEFAULT false NOT NULL;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_nonce" integer DEFAULT 0 NOT NULL;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scripted_events" jsonb;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "external_id" text;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "external_league" text;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "auto_sync" boolean DEFAULT true NOT NULL;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "ht_home_score" integer;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "ht_away_score" integer;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "real_stats" jsonb;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_synced_at" timestamp;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_finished_at" timestamp;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_status_note" text;
+      CREATE TABLE IF NOT EXISTS "admin_settings" (
+        "setting_key" text PRIMARY KEY NOT NULL,
+        "value" jsonb NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );
+      ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "closing_odds" double precision;
+      ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "risk_flag" text;
+      ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+      ALTER TABLE "prediction_questions" ADD COLUMN IF NOT EXISTS "options" jsonb;
+      ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+      ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
+      ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
+      ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+      ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+      ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
+      ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+      ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+      ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
+      CREATE INDEX IF NOT EXISTS "matches_external_id_idx" ON "matches" ("external_id");
+      CREATE INDEX IF NOT EXISTS "matches_status_source_idx" ON "matches" ("status", "source", "finished_at" DESC);
+      CREATE INDEX IF NOT EXISTS "bets_user_status_idx" ON "bets" ("user_id", "status", "placed_at" DESC);
+    `);
+    await db.execute(sql`
+      INSERT INTO "admin_settings" ("setting_key", "value", "updated_at")
+      VALUES (${COLUMNS_ALIGN_MARKER_KEY}, jsonb_build_object('ready', true), now())
+      ON CONFLICT ("setting_key") DO NOTHING
+    `);
+  } catch {
+    // Base sans admin_settings encore créée : la migration complète s'occupe de tout.
+  }
 }
 
 async function runSeedInternal(): Promise<void> {
@@ -80,6 +164,11 @@ async function runSeedInternal(): Promise<void> {
       has_previous_marker?: boolean;
       has_admin?: boolean;
     };
+    // Réalignement idempotent des colonnes avant tout return : garantit la presence
+    // de toutes les colonnes ajoutées depuis v19, même sur une base déjà marquée
+    // v21 sans ALTER. Les ALTER sont idempotents (IF NOT EXISTS) ; une seule passe.
+    await ensureSchemaColumns();
+
     if (chk.has_marker && chk.has_admin) {
       return;
     }
@@ -129,9 +218,64 @@ async function runSeedInternal(): Promise<void> {
 
   // Sur une base déjà en v19, éviter de rejouer l'initialisation complète :
   // la suppression et son marqueur sont atomiques, même en cas de déploiements concurrents.
+  // Les ALTER TABLE idempotents (IF NOT EXISTS) sont rejoues pour garantir la presence
+  // de toutes les colonnes ajoutées depuis v19 (suspended, suspended_until, stake_limit,
+  // currency, notify_*...) : le marqueur v21 seul ne suffisait pas sur une base v19.
   if (canMigrateFromV19) {
     await db.transaction(async (tx) => {
       await tx.execute(sql`DROP TABLE IF EXISTS "favorite_teams"`);
+      await tx.execute(sql`
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "role" text DEFAULT 'user' NOT NULL;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_locked" double precision DEFAULT 0 NOT NULL;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_matches" boolean NOT NULL DEFAULT true;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_bets" boolean NOT NULL DEFAULT true;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_payments" boolean NOT NULL DEFAULT true;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "notify_disputes" boolean NOT NULL DEFAULT true;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "token_version" integer DEFAULT 0 NOT NULL;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "suspended" boolean DEFAULT false NOT NULL;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "suspended_until" timestamp;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "stake_limit" double precision DEFAULT 0 NOT NULL;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "country_code" text DEFAULT 'FR' NOT NULL;
+        ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "currency" text DEFAULT 'EUR' NOT NULL;
+        UPDATE "app_user" SET "balance" = 0 WHERE "balance" < 0;
+        UPDATE "app_user" SET "bonus_locked" = 0 WHERE "bonus_locked" < 0;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "home_logo" text;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "away_logo" text;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "markets" jsonb;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_locked" boolean DEFAULT false NOT NULL;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scenario_nonce" integer DEFAULT 0 NOT NULL;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "scripted_events" jsonb;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "external_id" text;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "external_league" text;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "auto_sync" boolean DEFAULT true NOT NULL;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "ht_home_score" integer;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "ht_away_score" integer;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "real_stats" jsonb;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_synced_at" timestamp;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_finished_at" timestamp;
+        ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "feed_status_note" text;
+        CREATE TABLE IF NOT EXISTS "admin_settings" (
+          "setting_key" text PRIMARY KEY NOT NULL,
+          "value" jsonb NOT NULL,
+          "updated_at" timestamp DEFAULT now() NOT NULL
+        );
+        ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "closing_odds" double precision;
+        ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "risk_flag" text;
+        ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+        ALTER TABLE "prediction_questions" ADD COLUMN IF NOT EXISTS "options" jsonb;
+        ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+        ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
+        ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cash_out_amount" double precision;
+        ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+        ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+        ALTER TABLE "prediction_bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
+        ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "settled_at" timestamp;
+        ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "idempotency_key" text;
+        ALTER TABLE "combo_bets" ADD COLUMN IF NOT EXISTS "cashout_idempotency_key" text;
+        CREATE INDEX IF NOT EXISTS "matches_external_id_idx" ON "matches" ("external_id");
+        CREATE INDEX IF NOT EXISTS "matches_status_source_idx" ON "matches" ("status", "source", "finished_at" DESC);
+        CREATE INDEX IF NOT EXISTS "bets_user_status_idx" ON "bets" ("user_id", "status", "placed_at" DESC);
+      `);
       await tx.execute(sql`
         INSERT INTO "admin_settings" ("setting_key", "value", "updated_at")
         VALUES (${SCHEMA_SEED_MARKER_KEY}, jsonb_build_object('ready', true, 'version', ${SCHEMA_SEED_MARKER_KEY}::text), now())
