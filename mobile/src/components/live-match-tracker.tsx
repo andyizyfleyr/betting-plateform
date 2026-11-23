@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -26,6 +26,8 @@ import {
 } from "@/lib/live-telemetry";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { COLORS } from "@/theme/tokens";
+
+const PITCH_BG = require("../assets/pitch-bg.jpg");
 import { useLiveMatchClockSnapshot } from "./live-match-clock";
 
 type TrackerTab = "pitch" | "momentum" | "stats";
@@ -354,6 +356,7 @@ function PitchRadarView({
   return (
     <View style={styles.pitchOuter}>
       <View style={styles.pitchFrame}>
+        <Image source={PITCH_BG} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
         <Svg
           viewBox="0 0 340 112"
           preserveAspectRatio="xMidYMid meet"
@@ -362,8 +365,8 @@ function PitchRadarView({
         >
           <Defs>
             <RadialGradient id={`lights-${match.id}`} cx="50%" cy="50%" r="62%">
-              <Stop offset="0%" stopColor="#1c7c4d" stopOpacity="0.25" />
-              <Stop offset="100%" stopColor="#04190f" stopOpacity="0.42" />
+              <Stop offset="0%" stopColor="#1c7c4d" stopOpacity="0.16" />
+              <Stop offset="100%" stopColor="#04190f" stopOpacity="0.3" />
             </RadialGradient>
 
             <SvgLinearGradient
@@ -386,18 +389,6 @@ function PitchRadarView({
             </SvgLinearGradient>
           </Defs>
 
-          <Rect x="0" y="0" width="340" height="112" fill="#0d4228" />
-          {Array.from({ length: 10 }).map((_, i) => (
-            <Rect
-              key={i}
-              x={12 + i * 31.6}
-              y="6"
-              width="15.8"
-              height="100"
-              fill="#125334"
-              opacity={0.56}
-            />
-          ))}
           <Rect
             x="0"
             y="0"
