@@ -833,7 +833,11 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
     backgroundColor: "rgba(8,10,14,0.45)",
     padding: 12,
+<<<<<<< HEAD
     minHeight: 560,
+=======
+    minHeight: 280,
+>>>>>>> origin/main
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
