@@ -19,6 +19,7 @@ const ADMIN_TAB_TITLES: Record<AdminTabKey, string> = {
   deposits: "Trésorerie · Dépôts & Retraits",
   users: "Comptes joueurs",
   ml: "Intelligence artificielle & Modèles",
+  settings: "Réglages",
 };
 
 export function AppHeader() {
