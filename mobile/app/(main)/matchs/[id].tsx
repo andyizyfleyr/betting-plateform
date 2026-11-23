@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+
+const PITCH_BG = require("../../assets/pitch-bg.jpg");
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -305,7 +308,9 @@ export default function MatchDetailScreen() {
         ) : (
           <View style={styles.stack}>
             {/* Scoreboard compact */}
-            <View style={styles.scoreCard}>
+            <View style={styles.scoreCardWrap}>
+              <Image source={PITCH_BG} style={styles.scoreBg} resizeMode="cover" />
+              <View style={[styles.scoreCard, { backgroundColor: "rgba(8,10,14,0.62)" }]}>
               <View style={styles.scoreGrid}>
                 <View style={styles.teamCol}>
                   <TeamAvatar
@@ -447,6 +452,7 @@ export default function MatchDetailScreen() {
                 </View>
               ) : null}
             </View>
+          </View>
 
             {/* Terrain 2D ou Stats officielles à la demande */}
             {showTracker && !isReal && isLive ? (
@@ -808,11 +814,24 @@ const styles = StyleSheet.create({
   stack: {
     gap: 10,
   },
+  scoreCardWrap: {
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+  },
+  scoreBg: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   scoreCard: {
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.edge,
-    backgroundColor: "#ffffff",
+    backgroundColor: "rgba(8,10,14,0.62)",
     padding: 12,
   },
   scoreGrid: {
