@@ -46,7 +46,7 @@ export function BettingLimitsForm({ limits, busy, act }: {
     <p className="mt-1 text-[11px] text-mist">Montants en ₣, convertis pour les autres devises. Le gain maximum doit être au moins égal à la mise maximale.</p>
     <div className="mt-3 grid grid-cols-2 gap-3">
       {fields.map(([key, label]) => <label key={key} className="text-[11px] text-mist">{label}
-        <input type="number" min="1" value={values[key]} onChange={(e) => {
+        <input type="number" min="1" value={String(values[key] ?? "")} onChange={(e) => {
           setValues((v) => ({ ...v, [key]: Number(e.target.value) }));
         }} className="mt-1 block h-10 w-full rounded-lg border border-edge bg-white px-3 text-ink" />
       </label>)}
