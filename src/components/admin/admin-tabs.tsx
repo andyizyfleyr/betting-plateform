@@ -8,14 +8,16 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  CalendarPlus, CheckCircle2, ChevronDown, Dices, Eye, Flag, Goal, Loader2,
-  Plus, Play, RefreshCw, RotateCcw, Search, ShieldCheck, Target, Trash2,
-  TrendingUp, Trophy, Unlock, X,
+  Brain, CalendarPlus, CheckCircle2, ChevronDown, CircleDollarSign, Dices, Eye,
+  Flag, Goal, HelpCircle, Lock, Loader2, Plus, Play, RefreshCw, RotateCcw,
+  Search, ShieldCheck, Target, Ticket, Trash2, TrendingUp, Trophy, Unlock,
+  Users, X,
 } from "lucide-react";
 import {
   AdminInput, AdminSectionTitle, ComboBox, LogoOrAvatar, StatPill, StatusBadge,
   type AdminBet, type AdminDeposit, type AdminMatch, type AdminMatchForecast,
   type AdminMlOverview, type AdminQuestion, type AdminUser, type AdminWithdrawal,
+  type DiscoveredOfficialFixture,
   type PanelData,
 } from "./admin-shared";
 import type { MatchFormState } from "./admin-provider";
