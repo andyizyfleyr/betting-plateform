@@ -356,6 +356,12 @@ function PitchRadarView({
   return (
     <div className="relative h-[104px] w-full select-none px-2 py-1.5">
       <div className="relative h-full w-full overflow-hidden rounded-lg bg-[#0d4228] ring-1 ring-white/12">
+        <img
+          src="/pitch-bg.jpg"
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover"
+        />
         <svg
           viewBox="0 0 340 112"
           preserveAspectRatio="xMidYMid meet"
@@ -364,8 +370,8 @@ function PitchRadarView({
         >
           <defs>
             <radialGradient id={`lights-${match.id}`} cx="50%" cy="50%" r="62%">
-              <stop offset="0%" stopColor="#1c7c4d" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#04190f" stopOpacity="0.42" />
+              <stop offset="0%" stopColor="#1c7c4d" stopOpacity="0.16" />
+              <stop offset="100%" stopColor="#04190f" stopOpacity="0.3" />
             </radialGradient>
 
             <linearGradient
@@ -639,18 +645,6 @@ function FootballSurface({
 }) {
   return (
     <g>
-      <rect x="0" y="0" width="340" height="112" fill="#0d4228" />
-      {Array.from({ length: 10 }).map((_, i) => (
-        <rect
-          key={i}
-          x={12 + i * 31.6}
-          y="6"
-          width="15.8"
-          height="100"
-          fill="#125334"
-          opacity="0.56"
-        />
-      ))}
       <rect x="0" y="0" width="340" height="112" fill={`url(#lights-${matchId})`} />
 
       <rect x="10.2" y="6" width="1.8" height="100" fill={colors.homePrimary} opacity="0.85" />
