@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 
-const PITCH_BG = require("../../../assets/pitch-bg.jpg");
+const STADIUM_BG = require("../../../assets/stadium-bg.jpg");
 import {
   ActivityIndicator,
   Image,
@@ -309,7 +309,7 @@ export default function MatchDetailScreen() {
           <View style={styles.stack}>
             {/* Scoreboard compact */}
             <View style={styles.scoreCardWrap}>
-              <Image source={PITCH_BG} style={styles.scoreBg} resizeMode="cover" />
+              <Image source={STADIUM_BG} style={styles.scoreBg} resizeMode="cover" />
               <View style={[styles.scoreCard, { backgroundColor: "rgba(8,10,14,0.62)" }]}>
               <View style={styles.scoreGrid}>
                 <View style={styles.teamCol}>
@@ -833,6 +833,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
     backgroundColor: "rgba(8,10,14,0.62)",
     padding: 12,
+    minHeight: 280,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
   },
   scoreGrid: {
     flexDirection: "row",
