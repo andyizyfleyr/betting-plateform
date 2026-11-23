@@ -245,6 +245,11 @@ export interface AdminMlOverview {
     name: string;
     betsCount: number;
     pSharpPct: number;
+    zScore: number;
+    roiPct: number;
+    riskWeight: number;
+    maxStake: number;
+    topReason: string;
   }>;
   calibratedSegments: Array<{
     segment: string;
@@ -253,6 +258,7 @@ export interface AdminMlOverview {
     samples: number;
     predWinPct: number;
     obsWinPct: number;
+    marginMult: number;
   }>;
   clubRatings: Array<{
     clubKey: string;
