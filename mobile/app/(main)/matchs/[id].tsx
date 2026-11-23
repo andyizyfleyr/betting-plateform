@@ -310,7 +310,7 @@ export default function MatchDetailScreen() {
             {/* Scoreboard compact */}
             <View style={styles.scoreCardWrap}>
               <Image source={STADIUM_BG} style={styles.scoreBg} resizeMode="cover" />
-              <View style={[styles.scoreCard, { backgroundColor: "rgba(8,10,14,0.62)" }]}>
+              <View style={[styles.scoreCard, { backgroundColor: "rgba(8,10,14,0.45)" }]}>
               <View style={styles.scoreGrid}>
                 <View style={styles.teamCol}>
                   <TeamAvatar
@@ -831,9 +831,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.edge,
-    backgroundColor: "rgba(8,10,14,0.62)",
+    backgroundColor: "rgba(8,10,14,0.45)",
     padding: 12,
-    minHeight: 280,
+    minHeight: 560,
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
@@ -851,7 +851,7 @@ const styles = StyleSheet.create({
   teamName: {
     fontSize: 10.5,
     fontWeight: "500",
-    color: COLORS.ink,
+    color: COLORS.white,
     textAlign: "center",
     lineHeight: 15,
   },
