@@ -43,6 +43,7 @@ import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
 import { ApiHttpError, api, type ClientMatch } from "@/lib/api";
+import { getAlignedServerNow } from "@/lib/live-clock";
 import { getCachedClientMatch } from "@/lib/entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { useParams, useRouter } from "@/lib/router";
@@ -377,6 +378,7 @@ export default function MatchDetailScreen() {
                       <Text style={styles.vsText}>VS</Text>
                     </View>
                   )}
+                  <ScoreboardTimer match={match} />
                 </View>
 
                 <View style={styles.teamCol}>
@@ -896,6 +898,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
+  timerLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: COLORS.white,
+    fontVariant: ["tabular-nums"],
+    textAlign: "center",
+  },
   vsText: {
     fontSize: 10,
     fontWeight: "500",
@@ -1064,3 +1074,26 @@ const styles = StyleSheet.create({
     color: COLORS.dim,
   },
 });
+
+function ScoreboardTimer({ match }: { match: ClientMatch }) {
+  const [now, setNow] = useState<number>(() => getAlignedServerNow());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(getAlignedServerNow()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (match.status === "finished") return null;
+  const startsAtMs = Date.parse(match.startsAt);
+  if (!Number.isFinite(startsAtMs)) return null;
+
+  const isLive = match.status === "live";
+  const diff = startsAtMs - now;
+  const total = Math.max(0, Math.floor((isLive ? now - startsAtMs : diff) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+
+  return <Text style={styles.timerLabel}>{label}</Text>;
+}

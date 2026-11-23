@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiRequestError, type ClientMatch } from "@/lib/api";
+import { getAlignedServerNow } from "@/lib/live-clock";
 import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import {
@@ -64,6 +65,33 @@ function defaultOpenMarkets(match: ClientMatch | null | undefined): Record<strin
     for (const g of groups.slice(0, 2)) initial[g.key] = true;
   }
   return initial;
+}
+
+function ScoreboardTimer({ match }: { match: ClientMatch }) {
+  const [now, setNow] = useState<number>(() => getAlignedServerNow());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(getAlignedServerNow()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  if (match.status === "finished") return null;
+  const startsAtMs = Date.parse(match.startsAt);
+  if (!Number.isFinite(startsAtMs)) return null;
+
+  const isLive = match.status === "live";
+  const diff = startsAtMs - now;
+  const total = Math.max(0, Math.floor((isLive ? now - startsAtMs : diff) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+
+  return (
+    <span className="mt-1 inline-flex items-center rounded-md bg-white/10 px-2 py-0.5 font-display text-[10.5px] font-semibold tabular-nums text-white lg:text-[11px]">
+      {label}
+    </span>
+  );
 }
 
 export default function MatchDetailPage() {
@@ -382,6 +410,7 @@ export default function MatchDetailPage() {
                       VS
                     </div>
                   )}
+                  <ScoreboardTimer match={match} />
 
                   {match.htHomeScore != null && match.htAwayScore != null && (
                     <span className="mt-0.5 text-[9.5px] font-medium tabular-nums text-dim lg:mt-1 lg:text-[10px]">
