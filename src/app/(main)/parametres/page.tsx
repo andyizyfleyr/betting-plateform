@@ -295,8 +295,7 @@ export default function ParametresPage() {
           <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowLeftRight size={17} />Transférer</button>
         </div>
       </section>
-        {user?.role === "admin" && <span className="rounded-full bg-betclic-red/10 px-2 py-1 text-[10px] text-betclic-red">Admin</span>}
-      </div>
+
       {/* Découpage mobile en 2 onglets nets : Portefeuille | Réglages */}
       <div className="mt-2 grid grid-cols-2 gap-1 rounded-2xl bg-elev p-1 lg:hidden">
         <button
