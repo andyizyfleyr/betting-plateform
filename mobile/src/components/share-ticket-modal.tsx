@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Clipboard, Modal, Pressable, Share, StyleSheet, Text, View } from "react-native";
+import { Clipboard, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { Check, Copy, Share2, X } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api, type ClientBet, type ClientSavedCouponLeg } from "@/lib/api";
@@ -80,10 +80,6 @@ export function ShareTicketModal({
     ];
   };
 
-  const couponMessage = couponCode
-    ? `\nCode coupon : ${couponCode} (chargez-le dans l'app pour jouer les mêmes matchs)`
-    : "";
-
   const generateCouponCode = async () => {
     if (couponSaving) return;
     const legs = buildCouponLegs(bet);
@@ -107,16 +103,6 @@ export function ShareTicketModal({
     await Clipboard.setString(couponCode);
     setCouponCopied(true);
     setTimeout(() => setCouponCopied(false), 2000);
-  };
-
-  const handleNativeShare = async () => {
-    try {
-      await Share.share({
-        message: `Ticket PULSE #${bet.id}\n${title}\n${bet.selectionLabel} @ ${formatOdds(bet.odds, oddsFormat)}\nMise : ${eur(bet.stake)} · Gain potentiel : ${eur(bet.potentialWin)}${couponMessage}\nhttps://be-plateform.vercel.app`,
-      });
-    } catch {
-      /* annulé */
-    }
   };
 
   return (
@@ -205,10 +191,7 @@ export function ShareTicketModal({
             </Pressable>
           )}
 
-          <Pressable onPress={handleNativeShare} style={styles.shareBtn}>
-            <Share2 size={16} color="#ffffff" strokeWidth={2.4} />
-            <Text style={styles.shareBtnText}>Partager le ticket</Text>
-          </Pressable>
+          </View>
         </View>
       </View>
     </Modal>
