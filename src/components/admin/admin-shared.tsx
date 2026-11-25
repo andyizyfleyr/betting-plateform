@@ -13,6 +13,7 @@ import {
   CircleDollarSign,
   Eye,
   HelpCircle,
+  SlidersHorizontal,
   Trophy,
   Ticket,
   Users,
@@ -47,6 +48,7 @@ export const TABS: {
   { key: "users", label: "Joueurs", href: "/admin/users", Icon: Users },
   { key: "bets", label: "Paris", href: "/admin/bets", Icon: Ticket },
   { key: "deposits", label: "Finance", href: "/admin/deposits", Icon: CircleDollarSign },
+  { key: "settings", label: "Réglages", href: "/admin/settings", Icon: SlidersHorizontal },
 ];
 
 export interface AdminUser {

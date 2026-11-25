@@ -16,6 +16,7 @@ import {
   CircleDollarSign,
   Eye,
   HelpCircle,
+  SlidersHorizontal,
   Trophy,
   Ticket,
   Users,
@@ -56,6 +57,7 @@ const NAV: { key: TabKey; label: string; href: string; Icon: typeof Trophy }[] =
   { key: "users", label: "Joueurs", href: "/admin/users", Icon: Users },
   { key: "bets", label: "Paris", href: "/admin/bets", Icon: Ticket },
   { key: "deposits", label: "Finance", href: "/admin/deposits", Icon: CircleDollarSign },
+  { key: "settings", label: "Réglages", href: "/admin/settings", Icon: SlidersHorizontal },
 ];
 
 function tabFromPathname(pathname: string): TabKey {
