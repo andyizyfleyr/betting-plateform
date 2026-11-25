@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react-native";
 import { BetTicket } from "@/components/bet-ticket";
+import { SwipeToDelete } from "@/components/swipe-to-delete";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import {
@@ -190,6 +191,21 @@ export default function ParisScreen() {
       setRefreshing(false);
     }
   }, [betsVersion, queryClient, setBalance, user?.id]);
+
+  const handleDeleteBet = useCallback(
+    async (id: number) => {
+      await api.deleteBet(id);
+      if (user?.id != null) {
+        for (const filter of ["ongoing", "finished", "all"] as const) {
+          queryClient.invalidateQueries({
+            queryKey: mobileQueryKeys.userBets(user.id, filter),
+          });
+        }
+      }
+    },
+    [queryClient, user?.id]
+  );
+
 
   const qNorm = query.trim().toLowerCase();
 
@@ -626,11 +642,12 @@ export default function ParisScreen() {
                     </Text>
                     <View style={styles.ticketStack}>
                       {group.map((b) => (
-                        <BetTicket
+                        <SwipeToDelete
                           key={`${b.kind}-${b.id}`}
-                          bet={b}
-                          onShare={setSharingBet}
-                        />
+                          onDelete={() => void handleDeleteBet(b.id)}
+                        >
+                          <BetTicket bet={b} onShare={setSharingBet} />
+                        </SwipeToDelete>
                       ))}
                     </View>
                   </View>

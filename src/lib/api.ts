@@ -749,6 +749,10 @@ export const api = {
         balance: res.balance,
       };
     }),
+  deleteBet: (id: number, opts?: RequestExtraOptions) =>
+    request<{ ok: boolean; id: number }>(`/api/bets/${id}`, {
+      method: "DELETE",
+    }, opts),
   pulse: (opts?: RequestExtraOptions) =>
     request<{
       balance: number;
@@ -1037,6 +1041,12 @@ export const api = {
       }),
     logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
     me: () => request<{ user: ClientUser }>("/api/auth/me"),
+    updateProfile: (payload: { name?: string; email?: string }) =>
+      request<{ user: ClientUser }>("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
   },
   admin: {
     getSettings: () =>

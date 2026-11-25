@@ -543,7 +543,7 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
           {q.resolvedAt ? `Résolu · ${formatPlacedAt(q.resolvedAt)}` : "Résolu"}
         </span>
       </div>
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[12px] font-medium leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[11.5px] font-medium leading-snug text-ink">
         {q.question}
       </p>
       <div className="pointer-events-none relative z-[1] mt-2.5 flex items-center justify-between rounded-xl border border-win/25 bg-win/10 px-3 py-2">
@@ -624,7 +624,7 @@ function MultiChoiceQuestionCard({
         </span>
       </div>
 
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[12.5px] font-medium leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[11.5px] font-medium leading-snug text-ink">
         {q.question}
       </p>
 
@@ -671,7 +671,7 @@ function MultiChoiceQuestionCard({
         <button
           type="button"
           onClick={() => setExpanded((s) => !s)}
-          className="pointer-events-auto relative z-10 mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[11px] font-medium text-ink transition-colors hover:bg-elev active:scale-[0.99]"
+          className="pointer-events-auto relative z-10 mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[11px] font-medium text-ink transition-colors hover:bg-elev active:scale-[0.99]"
         >
           <span>
             {expanded
@@ -724,7 +724,7 @@ function BinaryQuestionCard({
         </span>
       </div>
 
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[12px] font-medium leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[11.5px] font-medium leading-snug text-ink">
         {q.question}
       </p>
 
@@ -815,7 +815,7 @@ function MultiOptionButton({
       {...handlers}
       style={style}
       className={cn(
-        "relative flex min-h-[44px] w-full items-center justify-between gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition-colors",
+        "relative flex min-h-[40px] w-full items-center justify-between gap-2 overflow-hidden rounded-xl border px-3 py-1.5 text-left transition-colors",
         inCombo
           ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
           : selected

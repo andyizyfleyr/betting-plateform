@@ -60,7 +60,7 @@ export function AppHeader() {
             onPress={() => router.push("/admin")}
             style={({ pressed }) => [styles.brand, pressed && { opacity: 0.8 }]}
           >
-            <PulseLogo size="sm" variant="light" />
+            <PulseLogo size="sm" variant="light" showMark={false} />
             <View style={styles.adminPill}>
               <ShieldCheck size={12} color={COLORS.betclicRed} strokeWidth={2.4} />
               <Text style={styles.adminPillText}>ADMIN</Text>
@@ -102,7 +102,7 @@ export function AppHeader() {
           onPress={() => router.push("/matchs")}
           style={({ pressed }) => [styles.brand, pressed && { opacity: 0.8 }]}
         >
-          <PulseLogo size="sm" variant="light" />
+          <PulseLogo size="sm" variant="light" showMark={false} />
         </Pressable>
 
         <View style={styles.rightRow}>

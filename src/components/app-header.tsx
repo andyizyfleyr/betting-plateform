@@ -65,7 +65,7 @@ export function AppHeader() {
         {/* Barre mobile (< lg) */}
         <div className="flex h-[48px] items-center justify-between px-2 lg:hidden">
           <Link href="/admin" className="flex items-center gap-1.5 active:opacity-80">
-            <PulseLogo size="sm" variant="light" />
+            <PulseLogo size="sm" variant="light" showMark={false} />
             <span className="inline-flex items-center gap-1 rounded-full bg-betclic-red/10 px-2 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wide text-betclic-red">
               <ShieldCheck className="h-3 w-3" strokeWidth={2.2} />
               Admin
@@ -155,7 +155,7 @@ export function AppHeader() {
           }}
           className="flex items-center gap-1.5 active:opacity-80"
         >
-          <PulseLogo size="sm" variant="light" />
+          <PulseLogo size="sm" variant="light" showMark={false} />
         </Link>
 
         <div className="flex items-center gap-1.5">
@@ -208,7 +208,7 @@ export function AppHeader() {
             }}
             className="flex shrink-0 items-center gap-2 text-white transition-opacity hover:opacity-90"
           >
-            <PulseLogo size="lg" variant="onRed" />
+            <PulseLogo size="lg" variant="onRed" showMark={false} />
           </Link>
 
           <nav aria-label="Navigation principale" className="flex items-center gap-1">

@@ -134,11 +134,13 @@ export function PulseLogo({
   variant = "light",
   subtitle,
   className,
+  showMark = true,
 }: {
   size?: "sm" | "md" | "lg";
   variant?: "light" | "dark" | "onRed";
   subtitle?: string;
   className?: string;
+  showMark?: boolean;
 }) {
   const markPx = size === "lg" ? 38 : size === "md" ? 32 : 28;
   const isOnRed = variant === "onRed";
@@ -146,7 +148,7 @@ export function PulseLogo({
 
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
-      <PulseMark size={markPx} inverted={isOnRed} />
+      {showMark ? <PulseMark size={markPx} inverted={isOnRed} /> : null}
       <span className="flex flex-col leading-none">
         <span className="inline-flex items-center gap-1">
           <span

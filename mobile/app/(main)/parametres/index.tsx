@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -109,6 +110,14 @@ export default function ParametresScreen() {
   };
   const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
   const [refreshing, setRefreshing] = useState(false);
+  const [profilName, setProfilName] = useState("");
+  const [profilEmail, setProfilEmail] = useState("");
+  const [profilSaving, setProfilSaving] = useState(false);
+
+  useEffect(() => {
+    setProfilName(user?.name ?? "");
+    setProfilEmail(user?.email ?? "");
+  }, [user]);
   const otaDiag = useMemo(() => getOtaRuntimeDiagnostics(), []);
 
   const cancelSlotRef = useRef<Map<number, string>>(new Map());
@@ -201,6 +210,29 @@ export default function ParametresScreen() {
       toast({ kind: "success", title: label });
     } catch {
       toast({ kind: "error", title: "Impossible d'enregistrer" });
+    }
+  };
+
+  const saveProfile = async () => {
+    const name = profilName.trim();
+    const email = profilEmail.trim();
+    if (name.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({ kind: "error", title: "Nom ou email invalide" });
+      return;
+    }
+    if (name === user?.name && email === user?.email) {
+      toast({ kind: "info", title: "Aucune modification" });
+      return;
+    }
+    setProfilSaving(true);
+    try {
+      const r = await api.auth.updateProfile({ name, email });
+      applyUser(r.user);
+      toast({ kind: "success", title: "Profil mis à jour" });
+    } catch {
+      toast({ kind: "error", title: "Impossible d'enregistrer le profil" });
+    } finally {
+      setProfilSaving(false);
     }
   };
 
@@ -362,27 +394,25 @@ export default function ParametresScreen() {
 
       {mobileTab === "wallet" ? (
         <View style={styles.sectionStack}>
-          <LinearGradient colors={[COLORS.betclicRed, "#a90018"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.balanceCard}>
-            <View>
-              <View style={styles.walletTopRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.walletLabel}>Solde disponible</Text>
-                  <Text style={styles.walletAmount}>{balanceVisible ? eur(user.balance) : "••••••"}</Text>
-                </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} onPress={() => setBalanceVisible(v => !v)} style={styles.eyeButton}>
-                  {balanceVisible ? <Eye size={18} color="#ffffff" /> : <EyeOff size={18} color="#ffffff" />}
-                </Pressable>
+          <View style={styles.balanceCardWhite}>
+            <View style={styles.walletTopRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.walletLabelWhite}>Solde disponible</Text>
+                <Text style={styles.walletAmountWhite}>{balanceVisible ? eur(user.balance) : "••••••"}</Text>
               </View>
-              {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
-              {wallet && wallet.summary.pendingWithdrawals > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</Text> : null}
-              {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</Text> : null}
+              <Pressable accessibilityRole="button" accessibilityLabel={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} onPress={() => setBalanceVisible(v => !v)} style={styles.eyeButtonWhite}>
+                {balanceVisible ? <Eye size={18} color={COLORS.ink} /> : <EyeOff size={18} color={COLORS.ink} />}
+              </Pressable>
             </View>
+            {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
+            {wallet && wallet.summary.pendingWithdrawals > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</Text> : null}
+            {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</Text> : null}
             <View style={styles.walletBtnsGrid}>
               <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/depot")} style={styles.depositBtn}><Plus size={16} color={COLORS.betclicRed} /><Text style={styles.depositBtnText}>Déposer</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/retrait")} style={styles.withdrawBtn}><ArrowUpRight size={16} color="#ffffff" /><Text style={styles.withdrawBtnText}>Retirer</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtn}><ArrowLeftRight size={16} color="#ffffff" /><Text style={styles.withdrawBtnText}>Transférer</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/retrait")} style={styles.withdrawBtnWhite}><ArrowUpRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Retirer</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtnWhite}><ArrowLeftRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Transférer</Text></Pressable>
             </View>
-          </LinearGradient>
+          </View>
           {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
 
           {/* Retraits en attente avec annulation immédiate */}
@@ -468,6 +498,58 @@ export default function ParametresScreen() {
         </View>
       ) : (
         <View style={styles.sectionStack}>
+          {/* Carte profil : nom + email éditables */}
+          <View style={styles.profileCard}>
+            <LinearGradient colors={[`hsl(${hue}, 60%, 44%)`, `hsl(${(hue + 36) % 360}, 68%, 30%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarBox}>
+              <Text style={styles.avatarInitials}>{initials(user?.name ?? "PU")}</Text>
+            </LinearGradient>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={styles.profileName}>{user?.name ?? "—"}</Text>
+              <Text numberOfLines={1} style={styles.profileEmail}>{user?.email ?? "Session active"}</Text>
+            </View>
+            {user?.role === "admin" ? <Text style={styles.adminBadge}>Admin</Text> : null}
+          </View>
+          <View style={{ gap: 6 }}>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Profil</Text><Text style={styles.settingsSubtitle}>Nom et email de votre compte</Text></View>
+            <View style={styles.listCard}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Nom</Text>
+                <TextInput
+                  value={profilName}
+                  onChangeText={setProfilName}
+                  placeholder="Votre nom"
+                  placeholderTextColor={COLORS.mist}
+                  maxLength={80}
+                  style={styles.fieldInput}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </View>
+              <View style={[styles.fieldGroup, { marginTop: 10 }]}>
+                <Text style={styles.fieldLabel}>Email</Text>
+                <TextInput
+                  value={profilEmail}
+                  onChangeText={setProfilEmail}
+                  placeholder="votre.email@exemple.com"
+                  placeholderTextColor={COLORS.mist}
+                  maxLength={160}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.fieldInput}
+                />
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={saveProfile}
+                disabled={profilSaving}
+                style={[styles.profileSaveBtn, profilSaving && { opacity: 0.6 }]}
+              >
+                {profilSaving ? <ActivityIndicator size="small" color="#ffffff" /> : <SlidersHorizontal size={15} color="#ffffff" strokeWidth={2.4} />}
+                <Text style={styles.profileSaveBtnText}>Enregistrer le profil</Text>
+              </Pressable>
+            </View>
+          </View>
           <View style={{ gap: 6 }}>
             <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Compte</Text><Text style={styles.settingsSubtitle}>Pays et devise</Text></View>
             <View style={styles.listCard}>
@@ -820,8 +902,54 @@ const styles = StyleSheet.create({
   settingsTitle: { color: COLORS.ink, fontSize: 12, fontWeight: "700" },
   settingsSubtitle: { color: COLORS.dim, fontSize: 10 },
   balanceCard: { minHeight: 132, borderRadius: 16, padding: 14, justifyContent: "space-between" },
-  eyeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  balanceNote: { marginTop: 3, fontSize: 10, color: "rgba(255,255,255,0.85)" },
+  balanceCardWhite: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    padding: 14,
+  },
+  eyeButtonWhite: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.elev,
+  },
+  walletLabelWhite: { fontSize: 10, fontWeight: "500", color: COLORS.dim },
+  walletAmountWhite: {
+    marginTop: 2,
+    fontSize: 23,
+    fontWeight: "700",
+    color: COLORS.ink,
+    fontVariant: ["tabular-nums"],
+  },
+  balanceNote: { marginTop: 3, fontSize: 10, color: COLORS.mist },
+  fieldGroup: { gap: 4 },
+  fieldLabel: { fontSize: 10, fontWeight: "600", color: COLORS.dim },
+  fieldInput: {
+    marginTop: 2,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    fontSize: 12.5,
+    color: COLORS.ink,
+  },
+  profileSaveBtn: {
+    marginTop: 14,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: COLORS.betclicRed,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  profileSaveBtnText: { fontSize: 12, fontWeight: "600", color: "#ffffff" },
   recentHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   recentTitle: { fontSize: 12, fontWeight: "700", color: COLORS.ink },
   seeAll: { fontSize: 10.5, color: COLORS.betclicRed },
@@ -927,6 +1055,23 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     fontWeight: "500",
     color: "#ffffff",
+  },
+  withdrawBtnWhite: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  withdrawBtnTextWhite: {
+    fontSize: 10.5,
+    fontWeight: "500",
+    color: COLORS.ink,
   },
   listCard: {
     borderRadius: 16,

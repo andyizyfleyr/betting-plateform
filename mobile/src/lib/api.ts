@@ -504,6 +504,12 @@ export const api = {
         ignoreUnauthorizedRedirect: true,
         bypassEtag: true,
       }),
+    updateProfile: (payload: { name?: string; email?: string }) =>
+      requestJson<{ user: ClientUser }>("/api/auth/me", {
+        method: "PATCH",
+        body: payload,
+        ignoreUnauthorizedRedirect: true,
+      }),
     login: async (
       emailOrPayload:
         | { email: string; password: string; rememberMe?: boolean }
@@ -834,6 +840,11 @@ export const api = {
     return { bets: normalized, balance: data.balance };
   },
 
+  deleteBet: (id: number) =>
+    requestJson<{ ok: boolean; id: number }>(`/api/bets/${id}`, {
+      method: "DELETE",
+    }),
+
   placeBet: (payload: {
     expectedMaxPayoutXof?: number;
     matchId: number;
@@ -1094,5 +1105,24 @@ export const api = {
         method: "POST",
         body,
       }),
+    getSettings: () =>
+      requestJson<{
+        settings: Record<string, Record<string, unknown>>;
+        catalog?: Record<
+          string,
+          { label: string; description: string }
+        >;
+      }>("/api/admin/settings", { bypassEtag: true }),
+    saveSetting: (
+      key: string,
+      value: Record<string, unknown>
+    ) =>
+      requestJson<{ ok: boolean; key: string; value: Record<string, unknown> }>(
+        "/api/admin/settings",
+        {
+          method: "PUT",
+          body: { key, value },
+        }
+      ),
   },
 };

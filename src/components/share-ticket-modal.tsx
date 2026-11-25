@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Copy, Download, Eye, EyeOff, Share2, X } from "lucide-react";
-import type { ClientBet } from "@/lib/api";
+import { api, type ClientBet } from "@/lib/api";
+import { triggerHaptic } from "@/lib/feedback";
 import { sortComboBetLegsChronologically } from "@/lib/combo-math";
 import { cn, eur, formatOdds, formatPlacedAt } from "@/lib/format";
+import type { ClientSavedCouponLeg } from "@/lib/api";
 
 interface Props {
   bet: ClientBet | null;
@@ -333,6 +335,14 @@ export function ShareTicketModal({ bet, onClose }: Props) {
   const [hideAmounts, setHideAmounts] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [couponCode, setCouponCode] = useState<string | null>(null);
+  const [couponSaving, setCouponSaving] = useState(false);
+  const [couponCopied, setCouponCopied] = useState(false);
+
+  useEffect(() => {
+    setCouponCode(null);
+    setCouponCopied(false);
+  }, [bet]);
 
   useEffect(() => {
     if (!bet) return;
@@ -343,6 +353,78 @@ export function ShareTicketModal({ bet, onClose }: Props) {
   }, [bet, hideAmounts]);
 
   if (!bet) return null;
+
+  const buildCouponLegs = (b: ClientBet): ClientSavedCouponLeg[] => {
+    if (b.kind === "combo" && b.legs && b.legs.length > 0) {
+      return b.legs
+        .filter((l) => (l.kind === "sport" ? l.matchId : l.questionId))
+        .map((l, i) => ({
+          uid: `share-${b.id}-${i}`,
+          kind: l.kind,
+          matchId: l.matchId ?? undefined,
+          questionId: l.questionId ?? undefined,
+          title: l.title,
+          homeTeam: l.homeTeam,
+          awayTeam: l.awayTeam,
+          league: l.league,
+          market: l.market,
+          selection: l.selection,
+          selectionLabel: l.selectionLabel,
+          odds: l.odds,
+        }));
+    }
+    const kind = b.kind === "prediction" ? "prediction" : "sport";
+    const id = kind === "sport" ? b.matchId : b.questionId;
+    if (!id) return [];
+    return [
+      {
+        uid: `share-${b.id}`,
+        kind,
+        matchId: kind === "sport" ? id : undefined,
+        questionId: kind === "prediction" ? id : undefined,
+        title: b.kind === "prediction" ? (b.question ?? "Prédiction") : `${b.homeTeam} – ${b.awayTeam}`,
+        homeTeam: b.homeTeam,
+        awayTeam: b.awayTeam,
+        league: b.league,
+        market: b.market,
+        selection: b.selection,
+        selectionLabel: b.selectionLabel,
+        odds: b.odds,
+      },
+    ];
+  };
+
+  const generateCouponCode = async () => {
+    if (couponSaving) return;
+    const legs = buildCouponLegs(bet);
+    if (legs.length === 0) {
+      setCouponCode(null);
+      return;
+    }
+    setCouponSaving(true);
+    try {
+      const { code } = await api.saveCoupon(legs);
+      setCouponCode(code);
+      triggerHaptic(false, [12, 22]);
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code).catch(() => undefined);
+      }
+    } catch {
+      /* génération échouée : on ne bloque pas le partage d'image */
+    } finally {
+      setCouponSaving(false);
+    }
+  };
+
+  const copyCouponCode = async () => {
+    if (!couponCode) return;
+    triggerHaptic(false, 8);
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(couponCode).catch(() => undefined);
+    }
+    setCouponCopied(true);
+    setTimeout(() => setCouponCopied(false), 2000);
+  };
 
   const shareText = (() => {
     const title =
@@ -362,7 +444,8 @@ export function ShareTicketModal({ bet, onClose }: Props) {
     const gainPart = hideAmounts
       ? `Cote ×${formatOdds(bet.odds)}`
       : `Cote ×${formatOdds(bet.odds)} → ${eur(bet.status === "cashed" ? (bet.cashOutAmount ?? 0) : bet.status === "void" ? bet.stake : bet.potentialWin)}`;
-    return `${statusLabel} sur Pulse Bet !\n${title}\n${gainPart}`;
+    const couponPart = couponCode ? `\n\nCode coupon : ${couponCode} (chargez-le dans l'app pour jouer les mêmes matchs)` : "";
+    return `${statusLabel} sur Pulse Bet !\n${title}\n${gainPart}${couponPart}`;
   })();
 
   const shareNative = async () => {
@@ -515,6 +598,51 @@ export function ShareTicketModal({ bet, onClose }: Props) {
                 Télécharger PNG
               </button>
             </div>
+
+            {/* Code de partage du coupon */}
+            {couponCode ? (
+              <div className="mt-3 rounded-2xl border border-win/30 bg-win/5 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[9.5px] font-medium uppercase tracking-wider text-win">
+                      Code coupon partagé
+                    </p>
+                    <p className="truncate font-display text-[13px] font-bold tracking-wider text-ink">
+                      {couponCode}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void copyCouponCode()}
+                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-win px-2.5 font-display text-[10.5px] font-medium text-white active:scale-95"
+                  >
+                    {couponCopied ? (
+                      <Check className="h-3.5 w-3.5" strokeWidth={2.6} />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    )}
+                    {couponCopied ? "Copié" : "Copier"}
+                  </button>
+                </div>
+                <p className="mt-1 text-[9.5px] text-mist">
+                  Vos amis chargent ce code dans l&apos;app pour jouer les mêmes matchs.
+                </p>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void generateCouponCode()}
+                disabled={couponSaving}
+                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev disabled:opacity-45"
+              >
+                {couponSaving ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-betclic-red/40 border-t-betclic-red" />
+                ) : (
+                  <Share2 className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.3} />
+                )}
+                Générer le code coupon
+              </button>
+            )}
 
             <button
               type="button"
