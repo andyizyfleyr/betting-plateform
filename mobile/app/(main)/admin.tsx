@@ -23,6 +23,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  SlidersHorizontal,
   Ticket,
   Trash2,
   Trophy,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react-native";
 import { OFFERED_SOCCER_LEAGUES } from "@/lib/real-leagues";
 import { LiveMatchClock } from "@/components/live-match-clock";
+import { AdminSettingsTab } from "@/components/admin-settings-tab";
 import { AdminDisputes } from "@/components/admin-disputes";
 import { AdminMonitoring } from "@/components/admin-monitoring";
 import { PaymentIncidents } from "@/components/payment-incidents";
@@ -64,7 +66,8 @@ type TabKey =
   | "questions"
   | "users"
   | "bets"
-  | "deposits";
+  | "deposits"
+  | "settings";
 
 const TABS: { key: TabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "dashboard", label: "Synthèse", Icon: BarChart3 },
@@ -75,6 +78,7 @@ const TABS: { key: TabKey; label: string; Icon: typeof Trophy }[] = [
   { key: "users", label: "Joueurs", Icon: Users },
   { key: "bets", label: "Paris", Icon: Ticket },
   { key: "deposits", label: "Finance", Icon: CircleDollarSign },
+  { key: "settings", label: "Réglages", Icon: SlidersHorizontal },
 ];
 
 interface AdminMatchForecast {
@@ -1260,6 +1264,8 @@ export default function AdminScreen() {
             );
           })}
         </View>
+      ) : tab === "settings" ? (
+        <AdminSettingsTab />
       ) : tab === "bets" ? (
         <View style={styles.stack}>
           {(panel.comboBets ?? []).slice(0, 15).map((cb) => (

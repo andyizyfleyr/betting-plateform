@@ -1105,5 +1105,24 @@ export const api = {
         method: "POST",
         body,
       }),
+    getSettings: () =>
+      requestJson<{
+        settings: Record<string, Record<string, unknown>>;
+        catalog?: Record<
+          string,
+          { label: string; description: string }
+        >;
+      }>("/api/admin/settings", { bypassEtag: true }),
+    saveSetting: (
+      key: string,
+      value: Record<string, unknown>
+    ) =>
+      requestJson<{ ok: boolean; key: string; value: Record<string, unknown> }>(
+        "/api/admin/settings",
+        {
+          method: "PUT",
+          body: { key, value },
+        }
+      ),
   },
 };
