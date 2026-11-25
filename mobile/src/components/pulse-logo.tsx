@@ -126,10 +126,12 @@ export function PulseLogo({
   size = "sm",
   variant = "light",
   subtitle,
+  showMark = true,
 }: {
   size?: "sm" | "md" | "lg";
   variant?: "light" | "dark" | "onRed";
   subtitle?: string;
+  showMark?: boolean;
 }) {
   const markPx = size === "lg" ? 38 : size === "md" ? 32 : 28;
   const isOnRed = variant === "onRed";
@@ -137,7 +139,7 @@ export function PulseLogo({
 
   return (
     <View style={styles.root}>
-      <PulseMark size={markPx} inverted={isOnRed} />
+      {showMark ? <PulseMark size={markPx} inverted={isOnRed} /> : null}
       <View style={styles.textCol}>
         <View style={styles.wordRow}>
           <Text

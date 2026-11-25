@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   summaryWin: {
     fontSize: 12.5,
     fontWeight: "500",
-    color: COLORS.win,
+    color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   actionsRow: {

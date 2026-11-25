@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowRight, RefreshCw, Search, TicketX, X } from "lucide
 import { api, type ClientBet } from "@/lib/api";
 import { BetTicket } from "@/components/bet-ticket";
 import { ShareTicketModal } from "@/components/share-ticket-modal";
+import { SwipeToDelete } from "@/components/swipe-to-delete";
 import { FilterDropdownRow } from "@/components/filter-dropdown-row";
 import {
   InfiniteScrollSentinel,
@@ -260,6 +261,21 @@ export default function ParisPage() {
   // seulement sur les 20 dernières lignes. Charger les pages restantes si
   // nécessaire ; pendant ce temps aucun compteur partiel n'est présenté comme global.
   const filteredHistory = tab === "finished" && (Boolean(query.trim()) || kindFilter !== "all" || outcomeFilter !== "all");
+  const handleDeleteBet = useCallback(
+    async (id: number) => {
+      await api.deleteBet(id);
+      // rafraîchir toutes les listes de paris de l'utilisateur
+      if (user?.id != null) {
+        for (const filter of ["ongoing", "finished", "all"] as const) {
+          void queryClient.invalidateQueries({
+            queryKey: pulseQueryKeys.userBets(user.id, filter),
+          });
+        }
+      }
+    },
+    [queryClient, user?.id]
+  );
+
   const { hasNextPage, isFetching, isFetchNextPageError, fetchNextPage } = finishedQuery;
   useEffect(() => {
     if (filteredHistory && hasNextPage && !isFetching && !isFetchNextPageError) {
@@ -357,35 +373,6 @@ export default function ParisPage() {
         </div>
       </div>
 
-      {/* Synthèse contextuelle uniquement s'il y a des paris */}
-      {bets !== null && (staked > 0 || (settled > 0 && !finishedQuery.hasNextPage)) && (
-        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-xl border border-edge bg-white px-3 py-2 text-[10.5px] shadow-2xs">
-          {staked > 0 && (
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              <span className="text-mist">
-                En jeu :{" "}
-                <strong className="font-display font-medium tabular-nums text-ink">
-                  {eur(staked)}
-                </strong>
-              </span>
-              <span className="text-mist">
-                Gain max :{" "}
-                <strong className="font-display font-medium tabular-nums text-win">
-                  {eur(potential)}
-                </strong>
-              </span>
-            </div>
-          )}
-          {settled > 0 && !finishedQuery.hasNextPage && (
-            <span className="text-mist">
-              Réussite :{" "}
-              <strong className="font-display font-medium tabular-nums text-ink">
-                {winRate}%
-              </strong>
-            </span>
-          )}
-        </div>
-      )}
 
       {/* Barre de recherche mobile dépliable au clic sur la loupe */}
       {(mobileSearchOpen || query) && (
@@ -420,7 +407,7 @@ export default function ParisPage() {
             <button key={value} type="button" role="tab" aria-selected={tab === value}
               onClick={() => { setTabChoice(value); if (value === "ongoing") setOutcomeFilter("all"); }}
               className={cn("h-8 shrink-0 rounded-full px-3 text-[11.5px] font-medium whitespace-nowrap", tab === value ? "bg-betclic-red text-white" : "bg-[#e7e9ed] text-[#374151]")}>
-              {label} {bets !== null && (value === "ongoing" || !finishedQuery.hasNextPage) && `(${value === "ongoing" ? ongoingAll.length : finishedAll.length})`}
+              {label}
             </button>
           ))}
         </div>}
@@ -479,13 +466,7 @@ export default function ParisPage() {
             ],
           }] : []),
         ]}
-        resultCountText={
-          bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage)
-            ? tab === "ongoing"
-              ? `${visibleBets.length} pari${visibleBets.length > 1 ? "s" : ""} en cours`
-              : `${visibleBets.length} pari${visibleBets.length > 1 ? "s" : ""} terminé${visibleBets.length > 1 ? "s" : ""}`
-            : null
-        }
+        resultCountText={null}
       />
       </div>
 
@@ -531,23 +512,6 @@ export default function ParisPage() {
               ? "Choisissez une prédiction ou un match pour placer une mise."
               : "Modifiez vos filtres ou consultez vos coupons en cours."}
           </p>
-          {tab === "ongoing" && (
-            <div className="mt-4 flex gap-2">
-              <Link
-                href="/matchs"
-                className="flex h-10 items-center gap-1.5 rounded-full bg-betclic-red px-4 font-display text-[11px] font-medium text-white active:opacity-90"
-              >
-                Matchs
-                <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.4} />
-              </Link>
-              <Link
-                href="/predictions"
-                className="flex h-10 items-center rounded-full border border-edge bg-white px-4 font-display text-[11px] font-medium text-ink active:bg-elev"
-              >
-                Prédictions
-              </Link>
-            </div>
-          )}
         </div>
       ) : (
         <div>
@@ -568,7 +532,9 @@ export default function ParisPage() {
                 </p>
                 <div className="grid grid-cols-1 items-start gap-3">
                   {group.map((b) => (
-                    <BetTicket key={`${b.kind}-${b.id}`} bet={b} onShare={setSharingBet} />
+                    <SwipeToDelete key={`${b.kind}-${b.id}`} onDelete={() => void handleDeleteBet(b.id)}>
+                      <BetTicket bet={b} onShare={setSharingBet} />
+                    </SwipeToDelete>
                   ))}
                 </div>
               </div>

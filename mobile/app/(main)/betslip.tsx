@@ -583,10 +583,7 @@ export default function BetslipScreen() {
 
   if (receipt && comboLegs.length === 0) {
     return (
-      <ScrollView
-        style={styles.page}
-        contentContainerStyle={styles.receiptScroll}
-      >
+      <View style={[styles.page, styles.receiptCenter]}>
         <View style={styles.receiptCard}>
           <View style={styles.receiptIconCircle}>
             <Check size={28} color={COLORS.win} strokeWidth={2.6} />
@@ -618,30 +615,8 @@ export default function BetslipScreen() {
               </Text>
             </View>
           </View>
-
-          <View style={styles.receiptActions}>
-            <Pressable
-              onPress={() => {
-                setReceipt(null);
-                router.push("/matchs");
-              }}
-              style={styles.receiptSecondaryBtn}
-            >
-              <Text style={styles.receiptSecondaryText}>Continuer</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setReceipt(null);
-                router.push("/paris");
-              }}
-              style={styles.receiptPrimaryBtn}
-            >
-              <Text style={styles.receiptPrimaryText}>Mes paris</Text>
-              <ArrowRight size={16} color="#ffffff" strokeWidth={2.3} />
-            </Pressable>
-          </View>
         </View>
-      </ScrollView>
+      </View>
     );
   }
 
@@ -1208,7 +1183,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 12,
+    padding: 10,
   },
   legCardClosed: {
     borderColor: "rgba(225,0,20,0.40)",
@@ -1477,10 +1452,13 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#ffffff",
   },
-  receiptScroll: {
-    paddingHorizontal: 8,
-    paddingTop: 24,
-    paddingBottom: 32,
+  receiptCenter: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 24,
   },
   receiptCard: {
     borderRadius: 24,

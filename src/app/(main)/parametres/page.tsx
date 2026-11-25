@@ -59,6 +59,39 @@ export default function ParametresPage() {
   const [transferOpen, setTransferOpen] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
+  const [profilName, setProfilName] = useState("");
+  const [profilEmail, setProfilEmail] = useState("");
+  const [profilSaving, setProfilSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setProfilName(user.name ?? "");
+      setProfilEmail(user.email ?? "");
+    }
+  }, [user]);
+
+  const saveProfile = async () => {
+    const name = profilName.trim();
+    const email = profilEmail.trim();
+    if (name.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({ kind: "error", title: "Nom ou email invalide" });
+      return;
+    }
+    if (name === user?.name && email === user?.email) {
+      toast({ kind: "info", title: "Aucune modification" });
+      return;
+    }
+    setProfilSaving(true);
+    try {
+      const r = await api.auth.updateProfile({ name, email });
+      applyUser(r.user);
+      toast({ kind: "success", title: "Profil mis à jour" });
+    } catch {
+      toast({ kind: "error", title: "Impossible d'enregistrer le profil" });
+    } finally {
+      setProfilSaving(false);
+    }
+  };
 
   const reloadWallet = useCallback(() => {
     api
@@ -230,13 +263,38 @@ export default function ParametresPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
-      <h1 className="hidden font-display text-[16px] font-bold leading-tight tracking-tight text-ink lg:block">Compte</h1>
-      <div className="flex items-center gap-3 rounded-2xl border border-edge bg-white p-3 lg:hidden">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full font-display text-[12px] font-bold text-white" style={{ background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))` }}>{initials(user?.name ?? "PU")}</span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-[12.5px] font-bold text-ink">{user?.name ?? "—"}</p>
-          <p className="truncate text-[10.5px] text-mist">{user?.email ?? "Session active"}</p>
+      <h1 className="font-display text-[16px] font-bold leading-tight tracking-tight text-ink">Compte</h1>
+      {/* Carte Solde disponible — fond blanc, tout en haut */}
+      <section className="rounded-2xl border border-edge bg-white p-3.5 shadow-sm">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-dim">Solde disponible</p>
+            {balanceVisible ? (
+              <AnimatedNumber value={user?.balance ?? 0} format={eur} className="mt-1 block font-display text-[23px] font-bold leading-tight tabular-nums text-ink" />
+            ) : (
+              <span className="mt-1 block text-[23px] font-bold leading-tight tabular-nums" aria-label="Solde masqué">••••••</span>
+            )}
+          </div>
+          <button type="button" onClick={() => setBalanceVisible(v => !v)} aria-label={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} aria-pressed={!balanceVisible} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge">{balanceVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button>
         </div>
+        {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && (
+          <p className="mt-1 text-[10px] font-medium text-mist">
+            Retirable : <strong className="font-medium text-win">{eur(wallet.summary.withdrawable)}</strong>
+            {wallet.summary.bonusRemaining != null && wallet.summary.bonusRemaining > 0 && <span className="text-dim"> · Bonus {eur(wallet.summary.bonusRemaining)}</span>}
+          </p>
+        )}
+        {wallet && (wallet.summary.pendingWithdrawals > 0 || (wallet.summary.pendingDeposits ?? 0) > 0) && (
+          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-mist">
+            {wallet.summary.pendingWithdrawals > 0 && <span className="rounded-full bg-amber-500/12 px-2 py-0.5 text-amber-800">{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</span>}
+            {(wallet.summary.pendingDeposits ?? 0) > 0 && <span className="rounded-full bg-sky-500/12 px-2 py-0.5 text-sky-800">+{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</span>}
+          </div>
+        )}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Link href="/parametres/depot" className="flex min-h-10 items-center justify-center gap-1 rounded-xl bg-betclic-red font-display text-[10.5px] font-medium text-white active:opacity-90"><Plus size={17} />Déposer</Link>
+          <Link href="/parametres/retrait" className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowUpRight size={17} />Retirer</Link>
+          <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowLeftRight size={17} />Transférer</button>
+        </div>
+      </section>
         {user?.role === "admin" && <span className="rounded-full bg-betclic-red/10 px-2 py-1 text-[10px] text-betclic-red">Admin</span>}
       </div>
       {/* Découpage mobile en 2 onglets nets : Portefeuille | Réglages */}
@@ -272,110 +330,6 @@ export default function ParametresPage() {
       <div className="mt-3 space-y-4 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:space-y-0">
         {/* Colonne gauche : Portefeuille, Solde et accès direct aux mouvements */}
         <div className={cn("space-y-3", mobileTab !== "wallet" && "hidden lg:block")}>
-          <section className="flex min-h-[132px] flex-col justify-between rounded-2xl bg-gradient-to-br from-betclic-red to-[#a90018] p-3.5 text-white shadow-sm lg:hidden">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] text-white/85">Solde disponible</p>
-                {balanceVisible ? <AnimatedNumber value={user?.balance ?? 0} format={eur} className="mt-1 block font-display text-[23px] font-bold leading-tight tabular-nums" /> : <span className="mt-1 block text-[23px] font-bold leading-tight" aria-label="Solde masqué">••••••</span>}
-              </div>
-              <button type="button" onClick={() => setBalanceVisible(v => !v)} aria-label={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} aria-pressed={!balanceVisible} className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-white active:bg-white/15">{balanceVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button>
-            </div>
-            {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && <p className="mt-1 text-[10px] text-white/85">Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</p>}
-            {wallet && (wallet.summary.pendingWithdrawals > 0 || (wallet.summary.pendingDeposits ?? 0) > 0) && <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-white/85">{wallet.summary.pendingWithdrawals > 0 && <span>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</span>}{(wallet.summary.pendingDeposits ?? 0) > 0 && <span>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</span>}</div>}
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              <Link href="/parametres/depot" className="flex min-h-10 items-center justify-center gap-1 rounded-xl bg-white text-[10.5px] text-betclic-red active:opacity-90"><Plus size={17} />Déposer</Link>
-              <Link href="/parametres/retrait" className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowUpRight size={17} />Retirer</Link>
-              <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-white/80 text-[10.5px] text-white active:bg-white/10"><ArrowLeftRight size={17} />Transférer</button>
-            </div>
-          </section>
-          <section className="hidden glass-card rounded-2xl p-4 lg:block lg:p-5">
-            <div className="hidden items-center gap-3 pb-4 lg:flex">
-              <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl font-display text-[12px] font-medium text-white"
-                style={{
-                  background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))`,
-                }}
-              >
-                {initials(user?.name ?? "PU")}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate font-display text-[12.5px] font-medium text-ink">
-                    {user?.name ?? "—"}
-                  </p>
-                  {user?.role === "admin" && (
-                    <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase text-betclic-red">
-                      Admin
-                    </span>
-                  )}
-                </div>
-                <p className="truncate text-[10.5px] text-dim">{user?.email ?? "Session active"}</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-elev p-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-medium text-dim">Solde disponible</p>
-                  <AnimatedNumber
-                    value={user?.balance ?? 0}
-                    format={eur}
-                    className="mt-0.5 block font-display text-[16px] font-medium leading-none tabular-nums text-ink"
-                  />
-                  {wallet &&
-                    wallet.summary.withdrawable != null &&
-                    (wallet.summary.bonusRemaining ?? 0) > 1e-4 &&
-                    wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && (
-                      <p className="mt-1 text-[10px] font-medium text-mist">
-                        Retirable :{" "}
-                        <strong className="font-medium text-win">
-                          {eur(wallet.summary.withdrawable)}
-                        </strong>
-                        {wallet.summary.bonusRemaining != null &&
-                          wallet.summary.bonusRemaining > 0 && (
-                            <span className="text-dim">
-                              {" "}
-                              · Bonus {eur(wallet.summary.bonusRemaining)}
-                            </span>
-                          )}
-                      </p>
-                    )}
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  {wallet && wallet.summary.pendingWithdrawals > 0 && (
-                    <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 font-display text-[9.5px] font-medium text-amber-800">
-                      {eur(wallet.summary.pendingWithdrawals)} en retrait
-                    </span>
-                  )}
-                  {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 && (
-                    <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 font-display text-[9.5px] font-medium text-sky-800">
-                      +{eur(wallet.summary.pendingDeposits ?? 0)} en dépôt
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Link
-                  href="/parametres/depot"
-                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[11px] font-medium text-white active:opacity-90"
-                >
-                  <Plus className="h-4 w-4" strokeWidth={2.6} />
-                  Déposer
-                </Link>
-                <Link
-                  href="/parametres/retrait"
-                  className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-edge bg-white font-display text-[11px] font-medium text-ink active:bg-surface"
-                >
-                  <ArrowUpRight className="h-4 w-4 text-betclic-red" strokeWidth={2.4} />
-                  Retirer
-                </Link>
-              </div>
-              <button type="button" onClick={() => setTransferOpen(true)} className="mt-2 w-full rounded-xl border border-edge bg-white py-2.5 text-xs text-ink">Transférer avec un code</button>
-
-            </div>
-          </section>
-
           {/* Retraits en attente avec annulation immédiate */}
           {pendingWithdrawalEntries.length > 0 && (
             <section className="glass-card divide-y divide-edge overflow-hidden rounded-2xl">
@@ -466,8 +420,69 @@ export default function ParametresPage() {
           )}
         </div>
 
-        {/* Colonne droite : Préférences & Déconnexion */}
+        {/* Colonne droite : Profil éditable + Préférences & Déconnexion */}
         <div className={cn("space-y-3", mobileTab !== "settings" && "hidden lg:block")}>
+          {/* Carte profil : nom + email éditables */}
+          <section className="rounded-2xl border border-edge bg-white p-3.5">
+            <div className="mb-3 flex items-center gap-3">
+              <span
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl font-display text-[12px] font-medium text-white"
+                style={{
+                  background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))`,
+                }}
+              >
+                {initials(user?.name ?? "PU")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-display text-[12.5px] font-medium text-ink">
+                  {user?.name ?? "—"}
+                </p>
+                <p className="truncate text-[10.5px] text-dim">
+                  {user?.role === "admin" ? "Espace administrateur" : "Compte joueur"}
+                </p>
+              </div>
+              {user?.role === "admin" && (
+                <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase text-betclic-red">
+                  Admin
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Nom</span>
+                <input
+                  type="text"
+                  value={profilName}
+                  onChange={(e) => setProfilName(e.target.value)}
+                  placeholder="Votre nom"
+                  maxLength={80}
+                  className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Email</span>
+                <input
+                  type="email"
+                  value={profilEmail}
+                  onChange={(e) => setProfilEmail(e.target.value)}
+                  placeholder="votre.email@exemple.com"
+                  maxLength={160}
+                  className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={saveProfile}
+                disabled={profilSaving}
+                className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-medium text-white transition-opacity active:opacity-90 disabled:opacity-60"
+              >
+                {profilSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" strokeWidth={2.4} />}
+                Enregistrer le profil
+              </button>
+            </div>
+          </section>
+
           {/* Sur mobile, les mêmes réglages sont regroupés comme dans l'application. */}
           <div className="space-y-3 lg:hidden">
             <SettingsGroup title="Compte" subtitle="Pays et devise">

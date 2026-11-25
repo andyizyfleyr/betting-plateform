@@ -569,8 +569,8 @@ export default function BetslipPage() {
   // État après validation réussie
   if (receipt && comboLegs.length === 0) {
     return (
-      <div className="mx-auto w-full max-w-[1600px] px-2 pt-4 pb-6 lg:px-0 lg:py-3">
-        <div className="glass-card mx-auto max-w-[540px] rounded-3xl p-5 text-center lg:p-7">
+      <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center bg-white px-4 py-6">
+        <div className="mx-auto w-full max-w-[540px] text-center">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
             <Check className="h-7 w-7" strokeWidth={2.6} />
           </div>
@@ -602,32 +602,6 @@ export default function BetslipPage() {
                 {eur(receipt.potentialWin)}
               </p>
             </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                setReceipt(null);
-                triggerRouteLoader("/matchs");
-                router.push("/matchs");
-              }}
-              className="h-11 rounded-xl bg-elev font-display text-[11px] font-medium text-ink active:scale-[0.98]"
-            >
-              Continuer
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setReceipt(null);
-                triggerRouteLoader("/paris");
-                router.push("/paris");
-              }}
-              className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[11px] font-medium text-white active:scale-[0.98]"
-            >
-              Mes paris
-              <ArrowRight className="h-4 w-4" strokeWidth={2.3} />
-            </button>
           </div>
         </div>
       </div>
@@ -760,7 +734,7 @@ export default function BetslipPage() {
                 <div
                   key={leg.uid}
                   className={cn(
-                    "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3 transition-colors hover:bg-elev/20 active:bg-elev/40 lg:p-3.5",
+                    "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-2.5 transition-colors hover:bg-elev/20 active:bg-elev/40 lg:p-3",
                     leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
                   )}
                 >
@@ -817,7 +791,7 @@ export default function BetslipPage() {
                   </div>
 
                   {/* Corps de la sélection */}
-                  <div className="pointer-events-none relative z-[1] mt-2.5 block w-full text-left">
+                  <div className="pointer-events-none relative z-[1] mt-2 block w-full text-left">
                     {hasSportTeams ? (
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center gap-2.5">

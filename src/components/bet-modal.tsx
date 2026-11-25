@@ -717,7 +717,7 @@ function SuccessView({
           </div>
           <div className="text-right">
             <p className="text-[9.5px] font-medium uppercase text-dim">Gain max</p>
-            <p className="mt-0.5 font-display text-[11.5px] font-medium tabular-nums text-win">
+            <p className="mt-0.5 font-display text-[11.5px] font-medium tabular-nums text-ink">
               {eur(payout)}
             </p>
           </div>
