@@ -32,7 +32,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { ShareTicketModal } from "@/components/share-ticket-modal";
 import { useApp } from "@/context/app-context";
 import { api, type UnifiedBet } from "@/lib/api";
-import { eur, formatDayHeading } from "@/lib/format";
+import { formatDayHeading } from "@/lib/format";
 import { mobileQueryKeys } from "@/lib/query-client";
 import { useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
@@ -323,24 +323,6 @@ export default function ParisScreen() {
     return Array.from(groups.entries());
   }, [tab, pagedBets]);
 
-  // Synthèse globale
-  const { staked, potential, settled, winRate } = useMemo(() => {
-    const list = bets ?? [];
-    const pend = list.filter((b) => b.status === "pending");
-    const st = pend.reduce((s, b) => s + b.stake, 0);
-    const pot = pend.reduce((s, b) => s + b.potentialWin, 0);
-    const decided = list.filter(
-      (b) => b.status === "won" || b.status === "lost"
-    );
-    const won = decided.filter((b) => b.status === "won").length;
-    return {
-      staked: st,
-      potential: pot,
-      settled: decided.length,
-      winRate: decided.length > 0 ? Math.round((won / decided.length) * 100) : 0,
-    };
-  }, [bets]);
-
   const toggleMobileSearch = () => {
     if (mobileSearchOpen) {
       setQuery("");
@@ -388,7 +370,7 @@ export default function ParisScreen() {
       <ScrollView
         style={styles.page}
         contentContainerStyle={styles.content}
-        stickyHeaderIndices={[3]}
+        stickyHeaderIndices={[2]}
         showsVerticalScrollIndicator={false}
         onScroll={onPageScroll}
         scrollEventThrottle={16}
@@ -424,35 +406,7 @@ export default function ParisScreen() {
           </Pressable>
         </View>
 
-        {/* 1 : Synthèse contextuelle */}
-        <View>
-          {bets !== null && (staked > 0 || (settled > 0 && !finishedQuery.hasNextPage)) ? (
-            <View style={styles.summaryStrip}>
-              {staked > 0 ? (
-                <View style={styles.summaryLeft}>
-                  <Text style={styles.summaryMuted}>
-                    En jeu :{" "}
-                    <Text style={styles.summaryStrong}>{eur(staked)}</Text>
-                  </Text>
-                  <Text style={styles.summaryMuted}>
-                    Gain max :{" "}
-                    <Text style={[styles.summaryStrong, { color: COLORS.win }]}>
-                      {eur(potential)}
-                    </Text>
-                  </Text>
-                </View>
-              ) : null}
-              {settled > 0 && !finishedQuery.hasNextPage ? (
-                <Text style={styles.summaryMuted}>
-                  Réussite :{" "}
-                  <Text style={styles.summaryStrong}>{winRate}%</Text>
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-
-        {/* 2 : Barre de recherche mobile dépliable */}
+        {/* 1 : Barre de recherche mobile dépliable */}
         <View>
           {mobileSearchOpen || query ? (
             <View style={styles.searchBar}>
@@ -478,7 +432,7 @@ export default function ParisScreen() {
           ) : null}
         </View>
 
-        {/* 3 : Onglets et filtres */}
+        {/* 2 : Onglets et filtres */}
         <View style={styles.stickyFilterWrap}>
           <FilterDropdownRow compact
             leading={<View style={styles.tabRow} accessibilityRole="tablist">
@@ -561,7 +515,7 @@ export default function ParisScreen() {
           />
         </View>
 
-        {/* 4 : Liste des tickets */}
+        {/* 3 : Liste des tickets */}
         {bets === null ? (
           <PulseFlashLoader compact />
         ) : loadError ? (
@@ -699,35 +653,6 @@ const styles = StyleSheet.create({
   },
   roundSearchBtnActive: {
     backgroundColor: COLORS.betclicRed,
-  },
-  summaryStrip: {
-    marginTop: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  summaryLeft: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "baseline",
-    gap: 12,
-  },
-  summaryMuted: {
-    fontSize: 10.5,
-    color: COLORS.mist,
-  },
-  summaryStrong: {
-    fontWeight: "500",
-    color: COLORS.ink,
-    fontVariant: ["tabular-nums"],
   },
   searchBar: {
     marginTop: 10,
