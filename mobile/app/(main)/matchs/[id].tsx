@@ -43,7 +43,6 @@ import { SportIcon } from "@/components/sport-icon";
 import { TeamAvatar } from "@/components/team-avatar";
 import { useApp } from "@/context/app-context";
 import { ApiHttpError, api, type ClientMatch } from "@/lib/api";
-import { getAlignedServerNow } from "@/lib/live-clock";
 import { getCachedClientMatch } from "@/lib/entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import { useParams, useRouter } from "@/lib/router";
@@ -321,24 +320,16 @@ export default function MatchDetailScreen() {
                   />
                   <Text style={styles.teamName}>{match.homeTeam}</Text>
                   {(match.redHome ?? 0) > 0 ? (
-                    <Text style={styles.redCardLabel}>
-                      🟥 ×{match.redHome}
-                    </Text>
+                    <View style={styles.redCardPill}>
+                      <Text style={styles.redCardText}>🟥 ×{match.redHome}</Text>
+                    </View>
                   ) : null}
                 </View>
 
                 <View style={styles.scoreCenter}>
                   {isLive ? (
                     <View style={{ marginBottom: 6 }}>
-                      <LiveStatusBadge
-                        match={match}
-                        minute={match.minute}
-                        suspended={suspended}
-                      />
-                    </View>
-                  ) : isFinished ? (
-                    <View style={[styles.finBadge, { marginBottom: 6 }]}>
-                      <Text style={styles.finBadgeText}>TERMINÉ</Text>
+                      <LiveStatusBadge match={match} minute={match.minute} />
                     </View>
                   ) : null}
 
@@ -367,18 +358,12 @@ export default function MatchDetailScreen() {
                           {match.awayScore ?? 0}
                         </Text>
                       </View>
-                      {match.htHomeScore != null && match.htAwayScore != null ? (
-                        <Text style={styles.htScore}>
-                          MT {match.htHomeScore}-{match.htAwayScore}
-                        </Text>
-                      ) : null}
                     </>
                   ) : (
                     <View style={styles.vsPill}>
                       <Text style={styles.vsText}>VS</Text>
                     </View>
                   )}
-                  <ScoreboardTimer match={match} />
                 </View>
 
                 <View style={styles.teamCol}>
@@ -389,9 +374,9 @@ export default function MatchDetailScreen() {
                   />
                   <Text style={styles.teamName}>{match.awayTeam}</Text>
                   {(match.redAway ?? 0) > 0 ? (
-                    <Text style={styles.redCardLabel}>
-                      🟥 ×{match.redAway}
-                    </Text>
+                    <View style={styles.redCardPill}>
+                      <Text style={styles.redCardText}>🟥 ×{match.redAway}</Text>
+                    </View>
                   ) : null}
                 </View>
               </View>
@@ -482,15 +467,6 @@ export default function MatchDetailScreen() {
                     ? "Rencontre terminée — marchés clôturés."
                     : "Aucun marché ouvert pour le moment."}
                 </Text>
-                {isFinished ? (
-                  <Pressable
-                    onPress={() => router.push(`/resultats/${match.id}`)}
-                    style={[styles.redBtn, { marginTop: 10 }]}
-                  >
-                    <Text style={styles.redBtnText}>Bilan détaillé</Text>
-                    <ChevronRight size={14} color="#ffffff" strokeWidth={2.4} />
-                  </Pressable>
-                ) : null}
               </View>
             ) : (
               <View style={{ gap: 8 }}>
@@ -732,18 +708,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  finBadge: {
-    borderRadius: 999,
-    backgroundColor: COLORS.elev,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  finBadgeText: {
-    fontSize: 9.5,
-    fontWeight: "500",
-    color: COLORS.mist,
-    letterSpacing: 0.4,
-  },
   datePill: {
     borderRadius: 999,
     backgroundColor: COLORS.elev,
@@ -821,6 +785,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: COLORS.edge,
+    backgroundColor: "#0b0e14",
   },
   scoreBg: {
     position: "absolute",
@@ -831,8 +796,6 @@ const styles = StyleSheet.create({
   },
   scoreCard: {
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
     backgroundColor: "rgba(8,10,14,0.45)",
     padding: 12,
     minHeight: 140,
@@ -857,10 +820,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 15,
   },
-  redCardLabel: {
-    fontSize: 9.5,
+  redCardPill: {
+    borderRadius: 4,
+    backgroundColor: COLORS.betclicRed,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  redCardText: {
+    fontSize: 8.5,
     fontWeight: "500",
-    color: COLORS.betclicRed,
+    color: "#ffffff",
   },
   scoreCenter: {
     alignItems: "center",
@@ -885,26 +854,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: COLORS.dim,
   },
-  htScore: {
-    marginTop: 2,
-    fontSize: 9.5,
-    fontWeight: "500",
-    color: COLORS.dim,
-    fontVariant: ["tabular-nums"],
-  },
   vsPill: {
     borderRadius: 8,
     backgroundColor: COLORS.elev,
     paddingHorizontal: 10,
     paddingVertical: 4,
-  },
-  timerLabel: {
-    marginTop: 6,
-    fontSize: 11,
-    fontWeight: "600",
-    color: COLORS.white,
-    fontVariant: ["tabular-nums"],
-    textAlign: "center",
   },
   vsText: {
     fontSize: 10,
@@ -1074,34 +1028,3 @@ const styles = StyleSheet.create({
     color: COLORS.dim,
   },
 });
-
-function ScoreboardTimer({ match }: { match: ClientMatch }) {
-  const [now, setNow] = useState<number>(() => getAlignedServerNow());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(getAlignedServerNow()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  if (match.status === "finished") return null;
-  const startsAtMs = Date.parse(match.startsAt);
-  if (!Number.isFinite(startsAtMs)) return null;
-
-  const isLive = match.status === "live";
-  const value = isLive ? Math.max(0, now - startsAtMs) : Math.max(0, startsAtMs - now);
-  if (value > 24 * 60 * 60 * 1000) {
-    const dateLabel = new Date(startsAtMs).toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-    return <Text style={styles.timerLabel}>{dateLabel}</Text>;
-  }
-  const total = Math.floor(value / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
-  const label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-
-  return <Text style={styles.timerLabel}>{label}</Text>;
-}
