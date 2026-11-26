@@ -27,6 +27,7 @@ import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "./providers";
 import { cn, eur } from "@/lib/format";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 const METHODS = [
   {
@@ -85,11 +86,14 @@ export function WithdrawModal({
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
+  const [confirmForfeit, setConfirmForfeit] = useState(false);
   const [eligibility, setEligibility] = useState<{
     withdrawable: number;
     bonusLocked: number;
     qualifiedWagered: number;
     bonusRemaining: number;
+    wagerRequired: number;
+    wagerRemaining: number;
   } | null>(null);
 
   useEffect(() => {
@@ -104,6 +108,8 @@ export function WithdrawModal({
           bonusLocked: w.summary.bonusLocked ?? 0,
           qualifiedWagered: w.summary.qualifiedWagered ?? 0,
           bonusRemaining: w.summary.bonusRemaining ?? 0,
+          wagerRequired: w.summary.wagerRequired ?? 0,
+          wagerRemaining: w.summary.wagerRemaining ?? 0,
         });
       })
       .catch(() => undefined);
@@ -116,10 +122,11 @@ export function WithdrawModal({
 
   const withdrawable = eligibility ? eligibility.withdrawable : balance;
   const bonusRemaining = eligibility?.bonusRemaining ?? 0;
-  const bonusLocked = eligibility?.bonusLocked ?? 0;
   const qualifiedWagered = eligibility?.qualifiedWagered ?? 0;
+  const wagerRequired = eligibility?.wagerRequired ?? 0;
+  const wagerRemaining = eligibility?.wagerRemaining ?? 0;
   const progressPct =
-    bonusLocked > 0 ? Math.min(100, Math.round((qualifiedWagered / bonusLocked) * 100)) : 100;
+    wagerRequired > 0 ? Math.min(100, Math.round((qualifiedWagered / wagerRequired) * 100)) : 100;
 
   const currentMethod = METHODS.find((m) => m.id === method) ?? METHODS[0];
   const methodPlaceholder =
@@ -135,21 +142,35 @@ export function WithdrawModal({
       : 0;
   const amount = localToEur(localAmount, currency, withdrawable);
   const overWithdrawable = amount > withdrawable + 1e-5;
+  const overBalance = amount > balance + 1e-5;
+  /** Le montant dépasse le retirable uniquement à cause du bonus : on propose de l'annuler. */
+  const forfeitNeeded = overWithdrawable && !overBalance && bonusRemaining > 0;
   const belowMin = localAmount > 0 && localAmount < currencyConfig.minWithdrawalLocal;
   const quickWithdrawPresets = currencyConfig.withdrawalPresetsLocal;
 
   const canSubmit =
     !loading &&
     localAmount >= currencyConfig.minWithdrawalLocal &&
-    !overWithdrawable &&
+    !overBalance &&
+    (!overWithdrawable || forfeitNeeded) &&
     destination.trim().length >= 4;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || inFlightRef.current) return;
+    if (forfeitNeeded) {
+      setConfirmForfeit(true);
+      return;
+    }
+    await send(false);
+  };
+
+  const send = async (forfeit: boolean) => {
+    if (inFlightRef.current) return;
+    setConfirmForfeit(false);
     inFlightRef.current = true;
     const cleanDest = destination.trim();
-    const sig = `${method}:${cleanDest}:${amount}`;
+    const sig = `${method}:${cleanDest}:${amount}:${forfeit ? "forfeit" : "keep"}`;
     if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
       idempotencySlotRef.current = {
         key: generateIdempotencyKey("wd"),
@@ -166,6 +187,7 @@ export function WithdrawModal({
         destination: cleanDest,
         amount,
         idempotencyKey,
+        forfeitBonus: forfeit,
       });
       idempotencySlotRef.current = null;
       setBalance(res.balance);
@@ -182,6 +204,12 @@ export function WithdrawModal({
     } catch (err) {
       if (err instanceof ApiRequestError && err.status >= 400 && err.status < 500) {
         idempotencySlotRef.current = null;
+      }
+      if (err instanceof ApiRequestError && err.code === "bonus_locked" && bonusRemaining > 0) {
+        // Le solde retirable n'était plus à jour : on propose directement l'annulation.
+        setConfirmForfeit(true);
+        setError(null);
+        return;
       }
       const msg = err instanceof Error ? err.message : "Retrait impossible";
       setError(msg);
@@ -231,7 +259,7 @@ export function WithdrawModal({
                 <div className="flex items-center justify-between gap-2 text-[10.5px]">
                   <span className="inline-flex items-center gap-1 font-display font-medium text-amber-900">
                     <Lock className="h-3.5 w-3.5 text-amber-700" strokeWidth={2.3} />
-                    Déblocage du bonus de bienvenue
+                    Bonus de dépôt
                   </span>
                   <span className="font-display font-medium tabular-nums text-amber-900">
                     {progressPct}%
@@ -244,8 +272,12 @@ export function WithdrawModal({
                   />
                 </div>
                 <p className="mt-1.5 text-[10px] leading-relaxed text-amber-900/85">
-                  Misez encore <strong>{balanceHidden ? BALANCE_MASK : eur(bonusRemaining)}</strong> sur des paris réglés à cote{" "}
-                  <strong>≥ 1,30</strong> pour rendre l&apos;intégralité du bonus retirable.
+                  Misez encore <strong>{balanceHidden ? BALANCE_MASK : eur(wagerRemaining)}</strong> sur des paris réglés à cote{" "}
+                  <strong>≥ 1,30</strong> pour débloquer{" "}
+                  <strong>{balanceHidden ? BALANCE_MASK : eur(bonusRemaining)}</strong> de bonus.
+                </p>
+                <p className="mt-1 text-[9.5px] leading-relaxed text-amber-900/70">
+                  Ton propre argent reste retirable à tout moment.
                 </p>
               </div>
             )}
@@ -372,11 +404,24 @@ export function WithdrawModal({
                 {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}
               </p>
             )}
-            {overWithdrawable && (
+            {overWithdrawable && !overBalance && !forfeitNeeded && (
               <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                {amount <= balance
-                  ? balanceHidden ? "Montant supérieur à votre solde retirable." : `Montant supérieur à votre solde retirable (${eur(withdrawable)}).`
-                  : "Ce montant dépasse votre solde disponible."}
+                {balanceHidden
+                  ? "Montant supérieur à votre solde retirable."
+                  : `Montant supérieur à votre solde retirable (${eur(withdrawable)}).`}
+              </p>
+            )}
+            {forfeitNeeded && (
+              <p className="mt-2 rounded-xl bg-amber-500/8 px-3 py-2 text-[10.5px] leading-relaxed text-amber-900">
+                {balanceHidden
+                  ? "Ce montant inclut ton bonus restant."
+                  : `Ce montant inclut ton bonus restant (${eur(bonusRemaining)}).`}{" "}
+                Tu peux retirer ton propre argent maintenant, ou annuler le bonus pour tout retirer.
+              </p>
+            )}
+            {overBalance && (
+              <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
+                Ce montant dépasse votre solde disponible.
               </p>
             )}
             {error && (
@@ -408,6 +453,20 @@ export function WithdrawModal({
           </form>
         </motion.div>
       </div>
+      <ConfirmDialog
+        open={confirmForfeit}
+        title="Annuler ton bonus ?"
+        description={
+          balanceHidden
+            ? "Tu vas retirer tout ton solde : le bonus restant sera définitivement annulé."
+            : `Tu vas retirer ${eur(amount)} : le bonus restant de ${eur(bonusRemaining)} sera définitivement annulé.`
+        }
+        note="Ton propre argent, lui, reste intact et sera versé. Ce bonus ne reviendra pas."
+        confirmLabel="Annuler le bonus et retirer"
+        cancelLabel="Garder le bonus"
+        onCancel={() => setConfirmForfeit(false)}
+        onConfirm={() => void send(true)}
+      />
     </AnimatePresence>
   );
 }

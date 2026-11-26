@@ -284,8 +284,17 @@ export const appUser = pgTable(
     liveSim: boolean("live_sim").notNull().default(true), // moteur de matchs en direct
     /** Rôle du compte : "user" (joueur) ou "admin" (espace d'administration). */
     role: text("role").notNull().default("user"),
-    /** Montant de bonus initial soumis à exigence de mise (wager 1× à cote ≥ 1,30) avant retrait. */
+    /**
+     * Bonus de dépôt encore verrouillé (non retirable) tant que l'exigence de mise
+     * (multiplicateur × bonus, cote ≥ 1,30 / 1,40) n'est pas remplie.
+     */
     bonusLocked: doublePrecision("bonus_locked").notNull().default(0),
+    /** Nombre de bonus de dépôt déjà accordés (0 à 3 : 50 %, 75 %, puis 100 % du dépôt). */
+    bonusStage: integer("bonus_stage").notNull().default(0),
+    /** Total des bonus de dépôt crédités, base de calcul de l'exigence de mise. */
+    bonusGranted: doublePrecision("bonus_granted").notNull().default(0),
+    /** Début du comptage des mises éligibles au déblocage (premier bonus accordé). */
+    bonusWagerStart: timestamp("bonus_wager_start", { mode: "date" }),
     /** Version du jeton JWT : incrémentée à la déconnexion pour invalider les anciens cookies partout. */
     tokenVersion: integer("token_version").notNull().default(0),
     /** Suspension/banniment administrateur : le compte ne peut plus se connecter ni parier. */

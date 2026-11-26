@@ -8,7 +8,7 @@ import { normalizeCouponCode } from "@/lib/coupon-code";
 import { validateLoadedCoupon } from "@/lib/coupon-load-validation";
 import { useApp } from "@/components/providers";
 import type { ComboSelection } from "@/components/combo-slip";
-import { CouponConfirmDialog } from "@/components/coupon-confirm-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type Mode = "menu" | "load" | "saving" | "saved" | null;
 
@@ -130,7 +130,7 @@ export function BetslipMobileActions({ onClear }: { onClear: () => void }) {
         </section>
       </div>, document.body)}
 
-    <CouponConfirmDialog
+    <ConfirmDialog
       open={pendingDialog !== null}
       title={pendingDialog?.kind === "unavailable" ? "Sélections indisponibles" : "Remplacer le coupon ?"}
       description={

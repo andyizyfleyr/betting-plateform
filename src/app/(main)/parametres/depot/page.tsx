@@ -346,6 +346,12 @@ export default function DepositPage() {
 
         <div className="mt-2.5 lg:mt-4">
           <div className="space-y-2.5 lg:space-y-4">
+            {/* Bonus de dépôt : 50 % / 75 % / 100 % sur les trois premiers dépôts */}
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-[10px] leading-relaxed text-amber-900">
+              Bonus de dépôt : <strong>+50 %</strong> sur le 1<sup>er</sup> dépôt,{" "}
+              <strong>+75 %</strong> sur le 2<sup>e</sup>, <strong>+100 %</strong> sur le 3<sup>e</sup>{" "}
+              · mises 4× à cote ≥ 1,30 avant retrait du bonus.
+            </div>
             {/* Montant compact */}
             <section className="glass-card rounded-xl p-3 lg:rounded-2xl lg:p-4">
               <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist lg:text-[10px]">

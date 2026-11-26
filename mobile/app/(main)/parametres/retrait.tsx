@@ -33,6 +33,7 @@ import {
 import { getCachedWallet } from "@/lib/entity-cache";
 import { eur } from "@/lib/format";
 import { BALANCE_MASK, useBalanceHidden } from "@/lib/balance-visibility";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
@@ -103,6 +104,7 @@ export default function WithdrawScreen() {
   const inFlightRef = useRef(false);
   const idempotencySlotRef = useRef<{ key: string; sig: string } | null>(null);
 
+  const [confirmForfeit, setConfirmForfeit] = useState(false);
   const [eligibility, setEligibility] = useState(() => {
     const cached = getCachedWallet();
     if (!cached) return null;
@@ -111,6 +113,8 @@ export default function WithdrawScreen() {
       bonusLocked: cached.summary.bonusLocked ?? 0,
       qualifiedWagered: cached.summary.qualifiedWagered ?? 0,
       bonusRemaining: cached.summary.bonusRemaining ?? 0,
+      wagerRequired: cached.summary.wagerRequired ?? 0,
+      wagerRemaining: cached.summary.wagerRemaining ?? 0,
     };
   });
 
@@ -127,6 +131,8 @@ export default function WithdrawScreen() {
           bonusLocked: w.summary.bonusLocked ?? 0,
           qualifiedWagered: w.summary.qualifiedWagered ?? 0,
           bonusRemaining: w.summary.bonusRemaining ?? 0,
+          wagerRequired: w.summary.wagerRequired ?? 0,
+          wagerRemaining: w.summary.wagerRemaining ?? 0,
         });
       })
       .catch(() => {});
@@ -163,11 +169,12 @@ export default function WithdrawScreen() {
 
   const withdrawable = eligibility ? eligibility.withdrawable : balance;
   const bonusRemaining = eligibility?.bonusRemaining ?? 0;
-  const bonusLocked = eligibility?.bonusLocked ?? 0;
   const qualifiedWagered = eligibility?.qualifiedWagered ?? 0;
+  const wagerRequired = eligibility?.wagerRequired ?? 0;
+  const wagerRemaining = eligibility?.wagerRemaining ?? 0;
   const progressPct =
-    bonusLocked > 0
-      ? Math.min(100, Math.round((qualifiedWagered / bonusLocked) * 100))
+    wagerRequired > 0
+      ? Math.min(100, Math.round((qualifiedWagered / wagerRequired) * 100))
       : 100;
 
   const currentMethod = METHODS.find((m) => m.id === method) ?? METHODS[0];
@@ -184,20 +191,34 @@ export default function WithdrawScreen() {
       : 0;
   const amount = localToEur(localAmount, currency, withdrawable);
   const overWithdrawable = amount > withdrawable + 1e-5;
+  const overBalance = amount > balance + 1e-5;
+  /** Le montant dépasse le retirable uniquement à cause du bonus : on propose de l'annuler. */
+  const forfeitNeeded = overWithdrawable && !overBalance && bonusRemaining > 0;
   const belowMin =
     localAmount > 0 && localAmount < currencyConfig.minWithdrawalLocal;
 
   const canSubmit =
     !loading &&
     localAmount >= currencyConfig.minWithdrawalLocal &&
-    !overWithdrawable &&
+    !overBalance &&
+    (!overWithdrawable || forfeitNeeded) &&
     destination.trim().length >= 4;
 
   const submit = async () => {
     if (!canSubmit || inFlightRef.current) return;
+    if (forfeitNeeded) {
+      setConfirmForfeit(true);
+      return;
+    }
+    await send(false);
+  };
+
+  const send = async (forfeit: boolean) => {
+    if (inFlightRef.current) return;
+    setConfirmForfeit(false);
     inFlightRef.current = true;
     const cleanDest = destination.trim();
-    const sig = `${method}:${cleanDest}:${amount}`;
+    const sig = `${method}:${cleanDest}:${amount}:${forfeit ? "forfeit" : "keep"}`;
     if (!idempotencySlotRef.current || idempotencySlotRef.current.sig !== sig) {
       idempotencySlotRef.current = {
         key: createIdempotencyKey("wd"),
@@ -214,6 +235,7 @@ export default function WithdrawScreen() {
         destination: cleanDest,
         amount,
         idempotencyKey,
+        forfeitBonus: forfeit,
       });
       idempotencySlotRef.current = null;
       setBalance(res.balance);
@@ -229,6 +251,11 @@ export default function WithdrawScreen() {
       if (err instanceof ApiHttpError && err.status >= 400 && err.status < 500) {
         idempotencySlotRef.current = null;
       }
+      if (err instanceof ApiHttpError && err.code === "bonus_locked" && bonusRemaining > 0) {
+        setConfirmForfeit(true);
+        setError(null);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Retrait impossible");
     } finally {
       inFlightRef.current = false;
@@ -237,6 +264,7 @@ export default function WithdrawScreen() {
   };
 
   return (
+    <>
     <ScrollView
       style={styles.page}
       contentContainerStyle={styles.content}
@@ -316,7 +344,7 @@ export default function WithdrawScreen() {
                     Déblocage bonus 
                   </Text>
                   <Text style={styles.bonusRight}>
-                    Reste {balanceHidden ? BALANCE_MASK : eur(bonusRemaining)}
+                    Misez encore {balanceHidden ? BALANCE_MASK : eur(wagerRemaining)}
                   </Text>
                 </View>
                 <View style={styles.bonusTrack}>
@@ -398,9 +426,20 @@ export default function WithdrawScreen() {
                     {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}.
                   </Text>
                 ) : null}
-                {overWithdrawable ? (
+                {overWithdrawable && !overBalance && !forfeitNeeded ? (
                   <Text style={styles.inlineWarn}>
                     Dépasse le solde retirable.
+                  </Text>
+                ) : null}
+                {forfeitNeeded ? (
+                  <Text style={styles.inlineHint}>
+                    Inclut ton bonus restant{balanceHidden ? "" : ` (${eur(bonusRemaining)})`} · tu
+                    pourras l&apos;annuler pour tout retirer.
+                  </Text>
+                ) : null}
+                {overBalance ? (
+                  <Text style={styles.inlineWarn}>
+                    Dépasse ton solde disponible.
                   </Text>
                 ) : null}
               </View>
@@ -503,6 +542,21 @@ export default function WithdrawScreen() {
         )}
       </View>
     </ScrollView>
+      <ConfirmDialog
+        visible={confirmForfeit}
+        title="Annuler ton bonus ?"
+        description={
+          balanceHidden
+            ? "Tu vas retirer tout ton solde : le bonus restant sera définitivement annulé."
+            : `Tu vas retirer ${eur(amount)} : le bonus restant de ${eur(bonusRemaining)} sera définitivement annulé.`
+        }
+        note="Ton propre argent, lui, reste intact et sera versé. Ce bonus ne reviendra pas."
+        confirmLabel="Annuler le bonus et retirer"
+        cancelLabel="Garder le bonus"
+        onCancel={() => setConfirmForfeit(false)}
+        onConfirm={() => void send(true)}
+      />
+    </>
   );
 }
 
@@ -658,6 +712,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
+  },
+  inlineHint: {
+    marginTop: 4,
+    fontSize: 10,
+    lineHeight: 15,
+    color: "#92400e",
   },
   inlineWarn: {
     marginTop: 4,

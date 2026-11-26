@@ -115,22 +115,32 @@ export const DEFAULT_CASHOUT: CashoutSettings = {
   disabledMatchIds: [],
 };
 
+/**
+ * Bonus de dépôt : trois paliers seulement (1er dépôt 50 %, 2e 75 %, 3e 100 %),
+ * puis plus aucun bonus. Le montant est crédité sur le solde et reste verrouillé
+ * jusqu'à ce que le joueur ait misé `wagerMultiplier × bonus` à cote suffisante.
+ */
 export interface WelcomeBonusSettings {
   enabled: boolean;
-  amount: number;
+  /** Plafond du bonus par dépôt en euros (0 = aucun plafond). */
+  maxBonus: number;
   wagerMultiplier: number;
   minOddsSingle: number;
   minOddsCombo: number;
-  validityDays: number;
+  /** Anciens champs conservés pour relire les réglages déjà enregistrés. */
+  amount?: number;
+  validityDays?: number;
 }
+
+/** Paliers de bonus par dépôt, dans l'ordre : 1er, 2e, 3e dépôt. */
+export const DEPOSIT_BONUS_PERCENTS = [50, 75, 100] as const;
 
 export const DEFAULT_WELCOME_BONUS: WelcomeBonusSettings = {
   enabled: true,
-  amount: 250,
-  wagerMultiplier: 1,
+  maxBonus: 0,
+  wagerMultiplier: 4,
   minOddsSingle: 1.3,
   minOddsCombo: 1.4,
-  validityDays: 30,
 };
 
 export type PaymentMethodId =

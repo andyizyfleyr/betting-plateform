@@ -2,6 +2,7 @@ import { schedulePushNotifications } from "@/lib/push-notifications";
 import { timingSafeEqual } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { grantDepositBonusInTx } from "@/lib/deposit-bonus";
 import { appUser, deposits, webhookEvents } from "@/db/schema";
 import { invalidateUserCaches } from "@/lib/active-state-cache";
 import { getAdminSettingSync, type PaymentSettings } from "@/lib/admin-settings";
@@ -536,6 +537,9 @@ export async function creditDepositInTx(
         balance: sql`ROUND((${appUser.balance} + ${amount})::numeric, 6)::float8`,
       })
       .where(eq(appUser.id, uid));
+    // Bonus de dépôt (50 % / 75 % / 100 % sur les 3 premiers dépôts), crédité
+    // dans la même transaction que le dépôt : jamais de bonus sans crédit.
+    await grantDepositBonusInTx(tx, uid, amount);
     return { creditedNow: true, userId: uid };
   }
 

@@ -14,7 +14,6 @@ import {
   isValidCountryCode,
 } from "@/lib/countries";
 import { formatServerErrorResponse } from "@/lib/db-error";
-import { getWelcomeBonusSettings } from "@/lib/admin-settings-server";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   MOBILE_ANDROID_CLIENT,
@@ -110,8 +109,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Bonus de bienvenue configurable par l'admin (montant verrouillé, misable 1×).
-    const welcome = await getWelcomeBonusSettings();
+    // Le bonus n'est plus offert à l'inscription : il est accordé à chaque dépôt
+    // (50 % au 1er, 75 % au 2e, 100 % au 3e), avec un dépôt réel comme contrepartie.
     const [user] = await db
       .insert(appUser)
       .values({
@@ -121,7 +120,7 @@ export async function POST(req: NextRequest) {
         countryCode,
         currency,
         balance: 0,
-        bonusLocked: welcome.enabled ? welcome.amount : 0,
+        bonusLocked: 0,
         tokenVersion: 0,
       })
       .returning();

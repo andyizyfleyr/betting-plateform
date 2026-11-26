@@ -2,6 +2,7 @@ import { schedulePushNotifications } from "@/lib/push-notifications";
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { grantDepositBonusInTx } from "@/lib/deposit-bonus";
 import { ensureSeeded } from "@/db/seed";
 import {
   backdateStartsAtForMinute,
@@ -1494,6 +1495,9 @@ async function handleAdminPost(
             balance: sql`ROUND((${appUser.balance} + ${ Math.round(credited.amount * 1_000_000) / 1_000_000 })::numeric, 6)::float8`,
           })
           .where(eq(appUser.id, credited.userId));
+
+        // Bonus de dépôt accordé à la validation manuelle du dépôt.
+        await grantDepositBonusInTx(tx, credited.userId, credited.amount);
 
         return credited;
       });
