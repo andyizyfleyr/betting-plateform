@@ -501,17 +501,7 @@ export default function ParisScreen() {
                 ],
               }] : []),
             ]}
-            resultCountText={
-              bets !== null && (tab === "ongoing" || !finishedQuery.hasNextPage)
-                ? tab === "ongoing"
-                  ? `${visibleBets.length} pari${
-                      visibleBets.length > 1 ? "s" : ""
-                    } en cours`
-                  : `${visibleBets.length} pari${
-                      visibleBets.length > 1 ? "s" : ""
-                    } terminé${visibleBets.length > 1 ? "s" : ""}`
-                : null
-            }
+            resultCountText={null}
           />
         </View>
 
@@ -553,23 +543,6 @@ export default function ParisScreen() {
                 ? "Choisissez une prédiction ou un match pour placer une mise."
                 : "Modifiez vos filtres ou consultez vos coupons en cours."}
             </Text>
-            {tab === "ongoing" ? (
-              <View style={styles.emptyBtnsRow}>
-                <Pressable
-                  onPress={() => router.push("/matchs")}
-                  style={styles.emptyRedBtn}
-                >
-                  <Text style={styles.emptyRedBtnText}>Matchs</Text>
-                  <ArrowRight size={14} color="#ffffff" strokeWidth={2.4} />
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push("/predictions")}
-                  style={styles.emptyWhiteBtn}
-                >
-                  <Text style={styles.emptyWhiteBtnText}>Prédictions</Text>
-                </Pressable>
-              </View>
-            ) : null}
           </View>
         ) : (
           <View>
@@ -756,40 +729,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.dim,
     lineHeight: 18,
-  },
-  emptyBtnsRow: {
-    marginTop: 16,
-    flexDirection: "row",
-    gap: 8,
-  },
-  emptyRedBtn: {
-    height: 40,
-    borderRadius: 999,
-    backgroundColor: COLORS.betclicRed,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  emptyRedBtnText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#ffffff",
-  },
-  emptyWhiteBtn: {
-    height: 40,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyWhiteBtnText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: COLORS.ink,
   },
   ticketStack: {
     gap: 12,
