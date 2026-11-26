@@ -10,6 +10,7 @@ import {
 } from "@/lib/countries";
 import { triggerHaptic } from "@/lib/feedback";
 import { cn, eur } from "@/lib/format";
+import { BALANCE_MASK, useBalanceHidden } from "@/lib/balance-visibility";
 import { useApp } from "./providers";
 
 const MOBILE_MEDIA_QUERY = "(max-width: 1023px)";
@@ -78,6 +79,7 @@ export function TouchStakePad({
   defaultExpandedOnMobile = true,
 }: TouchStakePadProps) {
   const { currency, currencyConfig } = useApp();
+  const balanceHidden = useBalanceHidden();
   const resolvedMaxCap = maxCap ?? currencyConfig.maxInputLocal;
   const isMobile = useSyncExternalStore(
     subscribeMobile,
@@ -190,7 +192,7 @@ export function TouchStakePad({
           {label}
         </label>
         <span className="text-dim">
-          Solde: <strong className="font-medium text-ink">{eur(balance)}</strong>
+          Solde: <strong className="font-medium text-ink">{balanceHidden ? BALANCE_MASK : eur(balance)}</strong>
         </span>
       </div>
 

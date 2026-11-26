@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { ApiRequestError, api } from "@/lib/api";
+import { BALANCE_MASK, useBalanceHidden } from "@/lib/balance-visibility";
 import { PaymentMethodMark } from "@/components/payment-method-mark";
 import { MobileMoneyBrandStrip } from "@/components/mobile-money-brand-strip";
 import {
@@ -69,6 +70,7 @@ export function WithdrawModal({
 }) {
   const { balance, setBalance, toast, user, countryConfig, currency, currencyConfig } =
     useApp();
+  const balanceHidden = useBalanceHidden();
   const [method, setMethod] = useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
   const [prevCur, setPrevCur] = useState(currency);
@@ -210,7 +212,7 @@ export function WithdrawModal({
             <div>
               <h2 className="font-display text-[13.5px] font-bold text-ink">Retirer mes gains</h2>
               <p className="text-[10.5px] text-dim">
-                Solde retirable: <strong className="text-win">{eur(withdrawable)}</strong>
+                Solde retirable: <strong className="text-win">{balanceHidden ? BALANCE_MASK : eur(withdrawable)}</strong>
               </p>
             </div>
             <button
@@ -242,7 +244,7 @@ export function WithdrawModal({
                   />
                 </div>
                 <p className="mt-1.5 text-[10px] leading-relaxed text-amber-900/85">
-                  Misez encore <strong>{eur(bonusRemaining)}</strong> sur des paris réglés à cote{" "}
+                  Misez encore <strong>{balanceHidden ? BALANCE_MASK : eur(bonusRemaining)}</strong> sur des paris réglés à cote{" "}
                   <strong>≥ 1,30</strong> pour rendre l&apos;intégralité du bonus retirable.
                 </p>
               </div>
@@ -373,7 +375,7 @@ export function WithdrawModal({
             {overWithdrawable && (
               <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
                 {amount <= balance
-                  ? `Montant supérieur à votre solde retirable (${eur(withdrawable)}).`
+                  ? balanceHidden ? "Montant supérieur à votre solde retirable." : `Montant supérieur à votre solde retirable (${eur(withdrawable)}).`
                   : "Ce montant dépasse votre solde disponible."}
               </p>
             )}

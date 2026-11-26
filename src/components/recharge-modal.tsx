@@ -20,6 +20,7 @@ import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { useApp } from "@/components/providers";
 import { cn, eur } from "@/lib/format";
+import { BALANCE_MASK, useBalanceHidden } from "@/lib/balance-visibility";
 import {
   GIFT_CARDS,
   GiftCardId,
@@ -41,6 +42,7 @@ export function RechargeModal({ open, onClose }: Props) {
 function RechargeSheet({ onClose }: { onClose: () => void }) {
   const { toast, balance, user, bumpBets, countryConfig, currency, currencyConfig } =
     useApp();
+  const balanceHidden = useBalanceHidden();
   const dragControls = useDragControls();
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
   const [paypalClientId, setPaypalClientId] = useState<string | null>(null);
@@ -319,7 +321,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                 <h2 className="font-display text-[13.5px] font-bold tracking-tight text-ink">
                   Recharger mon solde
                 </h2>
-                <p className="text-[10.5px] text-dim">Actuel: {eur(balance)}</p>
+                <p className="text-[10.5px] text-dim">Actuel: {balanceHidden ? BALANCE_MASK : eur(balance)}</p>
               </div>
               <button
                 type="button"

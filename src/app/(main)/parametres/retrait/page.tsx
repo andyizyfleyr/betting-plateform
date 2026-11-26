@@ -33,6 +33,7 @@ import {
   maxSpendableLocalFromEur,
 } from "@/lib/countries";
 import { cn, eur } from "@/lib/format";
+import { BALANCE_MASK, useBalanceHidden } from "@/lib/balance-visibility";
 
 const METHODS = [
   {
@@ -79,6 +80,7 @@ export default function WithdrawPage() {
     currency,
     currencyConfig,
   } = useApp();
+  const balanceHidden = useBalanceHidden();
   const [method, setMethod] =
     useState<(typeof METHODS)[number]["id"]>("mobile_money");
   const [destination, setDestination] = useState("");
@@ -264,7 +266,7 @@ export default function WithdrawPage() {
               Retirer mes gains
             </h1>
             <p className="truncate text-[10px] leading-tight text-dim lg:text-[10.5px]">
-              Retirable: {eur(withdrawable)}
+              Retirable: {balanceHidden ? BALANCE_MASK : eur(withdrawable)}
             </p>
           </div>
         </div>
@@ -315,7 +317,7 @@ export default function WithdrawPage() {
                 <div className="flex justify-between">
                   <span>Déblocage bonus </span>
                   <span className="font-medium tabular-nums text-ink">
-                    Reste {eur(bonusRemaining)}
+                    Reste {balanceHidden ? BALANCE_MASK : eur(bonusRemaining)}
                   </span>
                 </div>
                 <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-elev">
