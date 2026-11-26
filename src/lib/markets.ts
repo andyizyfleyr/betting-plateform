@@ -20,6 +20,7 @@ import { normalizeRealLiveMinuteLabel } from "./live-clock";
 import { marginOverround, type BetLike } from "./risk";
 import {
   getAdminSettingSync,
+  RETIRED_MARKETS,
   type MarketMarginSettings,
   type MarketsCatalogSettings,
 } from "@/lib/admin-settings";
@@ -137,8 +138,9 @@ function effectiveMargin(
 
 /** Marché actif selon le catalogue admin (désactivé → exclu des cotes générées). */
 function isMarketActive(key: string): boolean {
+  if (RETIRED_MARKETS.includes(key)) return false;
   const catalog = getAdminSettingSync("markets_catalog") as unknown as MarketsCatalogSettings;
-  return catalog.activeMarkets.includes(key);
+  return catalog.activeMarkets.includes(key) && !RETIRED_MARKETS.includes(key);
 }
 
 /**
@@ -1279,7 +1281,7 @@ export function customMarketLabel(
 }
 
 export function marketCatalog(): Array<{ key: string; label: string; short: string; outcomes: MarketOutcome[] }> {
-  return MARKETS.map((m) => {
+  return MARKETS.filter((m) => !RETIRED_MARKETS.includes(m.key)).map((m) => {
     const spec = m.outcomes("Domicile", "Extérieur");
     return {
       key: m.key,

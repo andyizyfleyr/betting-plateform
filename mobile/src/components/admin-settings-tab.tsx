@@ -135,6 +135,10 @@ const MARKET_LABELS: Record<string, string> = {
   score_exact: "Score exact",
 };
 
+/** Marchés retirés de l'offre : non proposés à l'activation. */
+const RETIRED_MARKETS: readonly string[] = ["dnb", "handicap_euro", "winning_margin"];
+
+
 const PAYMENT_LABELS: Record<string, string> = {
   stripe: "Carte bancaire (Stripe)",
   paypal: "PayPal",
@@ -1045,7 +1049,7 @@ function MarketsCatalogEditor({
   expanded: boolean;
 }) {
   const active = (draft.activeMarkets as string[]) ?? [];
-  const allMarkets = Object.keys(MARKET_LABELS);
+  const allMarkets = Object.keys(MARKET_LABELS).filter((m) => !RETIRED_MARKETS.includes(m));
   return (
     <View style={styles.bodyCol}>
       <View style={styles.bodyCol}>

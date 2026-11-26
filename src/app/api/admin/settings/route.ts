@@ -9,6 +9,7 @@ import {
   saveAdminSetting,
   invalidateAdminSettingsCache,
   ADMIN_SETTINGS_CATALOG,
+  RETIRED_MARKETS,
   type AdminSettingKey,
 } from "@/lib/admin-settings-server";
 import {
@@ -83,6 +84,12 @@ export async function PUT(req: NextRequest) {
     const value = body.value;
     if (!value || typeof value !== "object") {
       return NextResponse.json({ error: "Valeur invalide" }, { status: 400 });
+    }
+    // Marchés retirés : jamais réactivables, même via une requête forgée.
+    if (key === "markets_catalog" && Array.isArray((value as { activeMarkets?: unknown }).activeMarkets)) {
+      (value as { activeMarkets: string[] }).activeMarkets = (
+        (value as { activeMarkets: string[] }).activeMarkets
+      ).filter((m) => !RETIRED_MARKETS.includes(m));
     }
     await saveAdminSetting(key as AdminSettingKey, value);
     invalidateAdminSettingsCache();

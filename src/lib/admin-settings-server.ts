@@ -22,6 +22,7 @@ import {
   DEFAULT_PAYMENTS,
   DEFAULT_CURRENCY_RATES,
   DEFAULT_MARKETS_CATALOG,
+  RETIRED_MARKETS,
   DEFAULT_VIRTUAL_SIMULATOR,
   DEFAULT_BRANDING,
   DEFAULT_NOTIFICATIONS,
@@ -155,7 +156,15 @@ export async function getCurrencyRatesSettings(): Promise<import("@/lib/admin-se
 
 export async function getMarketsCatalogSettings(): Promise<import("@/lib/admin-settings").MarketsCatalogSettings> {
   const raw = await getAdminSetting("markets_catalog");
-  return { ...DEFAULT_MARKETS_CATALOG, ...(raw as Partial<import("@/lib/admin-settings").MarketsCatalogSettings>) };
+  const merged = { ...DEFAULT_MARKETS_CATALOG, ...(raw as Partial<import("@/lib/admin-settings").MarketsCatalogSettings>) };
+  // Les marchés retirés ne doivent jamais revenir, même si la valeur a été
+  // enregistrée en base avant leur retrait.
+  return {
+    ...merged,
+    activeMarkets: (merged.activeMarkets ?? []).filter(
+      (key) => !RETIRED_MARKETS.includes(key)
+    ),
+  };
 }
 
 export async function getVirtualSimulatorSettings(): Promise<import("@/lib/admin-settings").VirtualSimulatorSettings> {

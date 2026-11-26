@@ -230,7 +230,7 @@ function MatchCardInner({
           {marketCount > 1 && (
             <div className="mt-2 hidden items-center justify-between gap-2 border-t border-edge/60 pt-1.5 text-[10px] lg:flex">
               <span className="truncate text-dim">
-                Total, Double chance, Handicap, Score exact…
+                Total, Double chance, Score exact, MT-Fin…
               </span>
               <span className="inline-flex shrink-0 items-center gap-0.5 font-display font-medium text-ink">
                 <ChevronRight className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
