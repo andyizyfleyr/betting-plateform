@@ -581,41 +581,29 @@ export default function BetslipScreen() {
     }
   };
 
+  // Page de confirmation : fond blanc plein écran, contenu centré, sans boutons.
   if (receipt && comboLegs.length === 0) {
     return (
-      <View style={[styles.page, styles.receiptCenter]}>
-        <View style={styles.receiptCard}>
-          <View style={styles.receiptIconCircle}>
-            <Check size={28} color={COLORS.win} strokeWidth={2.6} />
-          </View>
-          <Text style={styles.receiptTitle}>Coupon validé !</Text>
-          <Text style={styles.receiptSub}>
-            {receipt.kind === "combo"
-              ? `Pari combiné (${receipt.count} sélections)`
-              : "Pari simple enregistré"}
-          </Text>
-
-          <View style={styles.receiptSummaryGrid}>
-            <View style={styles.receiptStatCol}>
-              <Text style={styles.receiptStatLabel}>Mise</Text>
-              <Text style={styles.receiptStatValue}>{eur(receipt.stake)}</Text>
-            </View>
-            <View style={styles.receiptStatCol}>
-              <Text style={styles.receiptStatLabel}>Cote totale</Text>
-              <Text
-                style={[styles.receiptStatValue, { color: COLORS.betclicRed }]}
-              >
-                {formatOdds(receipt.totalOdds, oddsFormat)}
-              </Text>
-            </View>
-            <View style={styles.receiptStatCol}>
-              <Text style={styles.receiptStatLabel}>Gain max</Text>
-              <Text style={[styles.receiptStatValue, { color: COLORS.win }]}>
-                {eur(receipt.potentialWin)}
-              </Text>
-            </View>
-          </View>
+      <View style={[styles.page, styles.receiptScreen]}>
+        <View style={styles.receiptIconCircle}>
+          <Check size={28} color={COLORS.win} strokeWidth={2.6} />
         </View>
+        <Text style={styles.receiptTitle}>Coupon validé !</Text>
+        <Text style={styles.receiptSub}>
+          {receipt.kind === "combo"
+            ? `Pari combiné (${receipt.count} sélections)`
+            : "Pari simple enregistré"}
+        </Text>
+        <Text style={styles.receiptStatsLine}>
+          Mise {eur(receipt.stake)} · Cote{" "}
+          <Text style={{ color: COLORS.ink }}>
+            {formatOdds(receipt.totalOdds, oddsFormat)}
+          </Text>{" "}
+          · Gain max{" "}
+          <Text style={{ color: COLORS.win }}>
+            {eur(receipt.potentialWin)}
+          </Text>
+        </Text>
       </View>
     );
   }
@@ -1452,21 +1440,14 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#ffffff",
   },
-  receiptCenter: {
-    flex: 1,
+  receiptScreen: {
+    flexGrow: 1,
+    minHeight: "100%",
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-  },
-  receiptCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    backgroundColor: "#ffffff",
-    padding: 20,
-    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 32,
   },
   receiptIconCircle: {
     width: 56,
@@ -1487,28 +1468,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.mist,
   },
-  receiptSummaryGrid: {
-    marginTop: 16,
-    width: "100%",
-    borderRadius: 16,
-    backgroundColor: COLORS.elev,
-    padding: 12,
-    flexDirection: "row",
-    gap: 8,
-  },
-  receiptStatCol: {
-    flex: 1,
-    alignItems: "center",
-  },
-  receiptStatLabel: {
-    fontSize: 10,
-    color: COLORS.dim,
-  },
-  receiptStatValue: {
-    marginTop: 2,
-    fontSize: 11.5,
+  receiptStatsLine: {
+    marginTop: 8,
+    fontSize: 10.5,
     fontWeight: "500",
-    color: COLORS.ink,
+    color: COLORS.mist,
+    textAlign: "center",
     fontVariant: ["tabular-nums"],
   },
   receiptActions: {

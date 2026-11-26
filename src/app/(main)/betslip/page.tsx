@@ -566,12 +566,12 @@ export default function BetslipPage() {
     }
   };
 
-  // État après validation réussie
+  // État après validation réussie : page entièrement blanche, contenu centré.
   if (receipt && comboLegs.length === 0) {
     return (
-      <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center bg-white px-4 py-6">
-        <div className="mx-auto w-full max-w-[540px] text-center">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
+      <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center bg-white px-6 py-10">
+        <div className="mx-auto flex w-full max-w-[420px] flex-col items-center text-center">
+          <div className="grid h-14 w-14 place-items-center rounded-full bg-win/15 text-win">
             <Check className="h-7 w-7" strokeWidth={2.6} />
           </div>
           <h1 className="mt-3 font-display text-[14.5px] font-bold text-ink">
@@ -582,27 +582,14 @@ export default function BetslipPage() {
               ? `Pari combiné (${receipt.count} sélections)`
               : "Pari simple enregistré"}
           </p>
-
-          <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-elev p-3">
-            <div>
-              <p className="text-[10px] text-dim">Mise</p>
-              <p className="font-display text-[11.5px] font-medium tabular-nums text-ink">
-                {eur(receipt.stake)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-dim">Cote totale</p>
-              <p className="font-display text-[11.5px] font-medium tabular-nums text-betclic-red">
-                {formatOdds(receipt.totalOdds, oddsFormat)}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] text-dim">Gain max</p>
-              <p className="font-display text-[11.5px] font-medium tabular-nums text-win">
-                {eur(receipt.potentialWin)}
-              </p>
-            </div>
-          </div>
+          <p className="mt-2 text-[10.5px] font-medium tabular-nums text-mist">
+            Mise {eur(receipt.stake)} · Cote{" "}
+            <span className="text-ink">
+              {formatOdds(receipt.totalOdds, oddsFormat)}
+            </span>{" "}
+            · Gain max{" "}
+            <span className="text-win">{eur(receipt.potentialWin)}</span>
+          </p>
         </div>
       </div>
     );

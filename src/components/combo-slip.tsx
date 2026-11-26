@@ -318,6 +318,19 @@ export function ComboSheet() {
     };
   }, [applyComboOddsUpdates, comboLegs.length, comboOpen]);
 
+  // Confirmation sans boutons : la feuille se referme d'elle-même.
+  useEffect(() => {
+    if (!comboOpen || phase !== "success") return;
+    const t = window.setTimeout(() => {
+      setPhase("input");
+      setPlacedInfo(null);
+      setError(null);
+      setOddsChanged(null);
+      closeCombo();
+    }, 2400);
+    return () => window.clearTimeout(t);
+  }, [comboOpen, phase, closeCombo]);
+
   if (!comboOpen) return null;
 
   const parsed = Number(stakeText.replace(",", "."));
@@ -483,22 +496,6 @@ export function ComboSheet() {
                 </span>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => finishAndClose(true)}
-                  className="h-11 rounded-2xl bg-betclic-red font-display text-[11px] font-medium text-white"
-                >
-                  Voir mes paris
-                </button>
-                <button
-                  type="button"
-                  onClick={() => finishAndClose(false)}
-                  className="h-11 rounded-2xl bg-elev font-display text-[11px] font-medium text-ink"
-                >
-                  Continuer
-                </button>
-              </div>
             </div>
           ) : (
             <>
