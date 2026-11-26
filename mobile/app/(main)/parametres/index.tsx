@@ -437,9 +437,9 @@ export default function ParametresScreen() {
                 style={styles.profileEditPill}
               >
                 {profilEditing ? (
-                  <X size={14} color={COLORS.ink} strokeWidth={2.4} />
+                  <X size={16} color={COLORS.dim} strokeWidth={2.2} />
                 ) : (
-                  <Pencil size={14} color={COLORS.ink} strokeWidth={2.2} />
+                  <Pencil size={16} color={COLORS.dim} strokeWidth={2.2} />
                 )}
               </Pressable>
             </View>
@@ -682,12 +682,10 @@ const styles = StyleSheet.create({
   },
   profileForm: { padding: 14, gap: 10 },
   profileEditPill: {
-    width: 32,
-    height: 32,
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 16,
-    backgroundColor: COLORS.elev,
   },
   profileEditBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.elev },
   topBlock: {
