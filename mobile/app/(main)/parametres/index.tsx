@@ -354,7 +354,7 @@ export default function ParametresScreen() {
               {balanceVisible ? <Eye size={18} color={COLORS.ink} /> : <EyeOff size={18} color={COLORS.ink} />}
             </Pressable>
           </View>
-          {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
+          {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable: {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
           {wallet && wallet.summary.pendingWithdrawals > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</Text> : null}
           {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</Text> : null}
           <View style={styles.walletBtnsGrid}>
@@ -549,7 +549,7 @@ export default function ParametresScreen() {
               <View style={styles.lockedCurrencyPill}>
                 <Lock size={11} color={COLORS.dim} strokeWidth={2.2} />
                 <Text style={styles.lockedCurrencyPillText}>
-                  {currencyConfig.code} ({currencyConfig.symbol})
+                  {currencyConfig.code} 
                 </Text>
               </View>
             </View>
@@ -760,7 +760,7 @@ export default function ParametresScreen() {
       </View>
 
       <Text style={styles.footerDisclaimer}>
-        18+ · Jouer comporte des risques : endettement, isolement, dépendance.
+        18+ · Jouer comporte des risques: endettement, isolement, dépendance.
       </Text>
     </ScrollView>
   );

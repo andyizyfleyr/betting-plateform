@@ -479,7 +479,7 @@ function DepositCheckoutSheetBody({
 
     const cleanRef = reference.trim();
     if (cleanRef.length < 4) {
-      setError("Saisissez la référence ou le numéro (4 caractères min.).");
+      setError("Saisissez la référence ou le numéro.");
       return;
     }
     inFlightRef.current = true;
@@ -645,7 +645,7 @@ function DepositCheckoutSheetBody({
 
                 <div>
                   <label className="text-[9.5px] font-medium uppercase tracking-wider text-mist">
-                    Carte cadeau ({GIFT_CARDS.length})
+                    Carte cadeau 
                   </label>
                   <div className="mt-1.5 grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-0.5">
                     {GIFT_CARDS.map((c) => {
@@ -733,7 +733,7 @@ function DepositCheckoutSheetBody({
                     </p>
                   ) : giftCardCode.length > 0 && giftValidation.valid ? (
                     <p className="mt-1 text-[9.5px] font-medium text-win">
-                      ✓ Format valide pour {giftCardDef.shortLabel} ({giftValidation.formatted})
+                      ✓ Format valide pour {giftCardDef.shortLabel} 
                     </p>
                   ) : null}
                 </div>

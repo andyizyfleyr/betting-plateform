@@ -322,7 +322,7 @@ const TeamRow = memo(function TeamRow({
       </span>
 
       {redCards > 0 && (
-        <span className="inline-flex shrink-0 items-center gap-0.5" title={`${redCards} carton(s) rouge(s)`}>
+        <span className="inline-flex shrink-0 items-center gap-0.5" title={`${redCards} carton${redCards > 1 ? "s" : ""} rouge${redCards > 1 ? "s" : ""}`}>
           {Array.from({ length: redCards }).map((_, i) => (
             <span
               key={i}
@@ -437,7 +437,7 @@ export function ResultOdds({ match }: { match: ClientMatch }) {
               if (comboQuickMode) {
                 const res = toggleComboLeg(comboSel);
                 if (res === "full") {
-                  toast({ kind: "error", title: "Betslip complet (limite atteinte)" });
+                  toast({ kind: "error", title: "Betslip complet" });
                 } else if (res === "source_conflict") {
                   toast({
                     kind: "error",

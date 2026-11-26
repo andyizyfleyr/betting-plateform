@@ -260,7 +260,7 @@ export default function DepositScreen() {
 
     const cleanRef = reference.trim();
     if (cleanRef.length < 4) {
-      setSheetError("Saisissez la référence ou le numéro (4 caractères min.).");
+      setSheetError("Saisissez la référence ou le numéro .");
       return;
     }
 
@@ -547,7 +547,7 @@ export default function DepositScreen() {
                     : "Dépôt par virement bancaire"}
                 </Text>
                 <Text numberOfLines={1} style={styles.sheetSub}>
-                  Montant à créditer : {localFormatted}
+                  Montant à créditer: {localFormatted}
                 </Text>
               </View>
               <Pressable onPress={closeManualSheet} style={styles.sheetCloseBtn}>
@@ -566,13 +566,7 @@ export default function DepositScreen() {
                   <Text style={{ fontWeight: "500", color: COLORS.ink }}>
                     {localFormatted}
                   </Text>{" "}
-                  (
-                  {method === "mobile_money"
-                    ? "Mobile Money"
-                    : method === "gift_card"
-                    ? `Carte ${giftCardDef.label}`
-                    : "Virement bancaire"}
-                  ) sera crédité sur votre solde dès validation par l'administrateur.
+                   sera crédité sur votre solde dès validation par l'administrateur.
                 </Text>
                 <View style={styles.doneBtns}>
                   <Pressable
@@ -601,7 +595,7 @@ export default function DepositScreen() {
                 </View>
 
                 <Text style={[styles.fieldCaps, { marginTop: 12, marginBottom: 6 }]}>
-                  TYPE DE CARTE ({GIFT_CARDS.length})
+                  TYPE DE CARTE 
                 </Text>
                 <ScrollView
                   horizontal

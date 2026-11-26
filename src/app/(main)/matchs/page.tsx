@@ -613,7 +613,7 @@ export default function MatchsPage() {
                             onClick={() => setFilter("finished")}
                             className="h-9 rounded-full bg-elev px-3.5 font-display text-[10.5px] font-medium text-ink active:scale-95"
                           >
-                            Voir les résultats réels ({realMatchesAll.length})
+                            Voir les résultats réels 
                           </button>
                         )}
                         <button
@@ -621,7 +621,7 @@ export default function MatchsPage() {
                           onClick={() => switchUniverse("virtual")}
                           className="inline-flex h-9 items-center rounded-full bg-betclic-red px-3.5 font-display text-[10.5px] font-medium text-white active:scale-95"
                         >
-                          Ouvrir les matchs virtuels ({virtualActiveTotal})
+                          Ouvrir les matchs virtuels 
                         </button>
                       </div>
                     )}

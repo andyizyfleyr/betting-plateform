@@ -344,7 +344,7 @@ function AuthShellInner({
     const cleanEmail = email.trim().toLowerCase();
 
     if (cleanName.length < 2) {
-      setError("Veuillez indiquer un nom ou pseudonyme (2 caractères minimum).");
+      setError("Veuillez indiquer un nom ou pseudonyme.");
       return;
     }
     if (!isValidAuthEmail(cleanEmail)) {
@@ -403,8 +403,8 @@ function AuthShellInner({
       setResendCooldown(60);
       setInfoMessage(
         isResend
-          ? `Un nouveau code de sécurité (valable ${r.expiresInMinutes} min) a été généré.`
-          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres (valable ${r.expiresInMinutes} min) a été envoyé.`
+          ? `Un nouveau code de sécurité a été généré.`
+          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres a été envoyé.`
       );
       setTimeout(() => otpInputRef.current?.focus(), 60);
     } catch (err) {
@@ -552,10 +552,10 @@ function AuthShellInner({
             18+
           </span>
           <p className="text-[10.5px] leading-relaxed text-slate-400">
-            Jouer comporte des risques : endettement, isolement, dépendance. Pour
+            Jouer comporte des risques: endettement, isolement, dépendance. Pour
             être aidé, appelez le{" "}
             <span className="font-medium text-white">09 74 75 13 13</span>{" "}
-            (appel non surtaxé).
+            .
           </p>
         </div>
       </aside>
@@ -766,7 +766,7 @@ function AuthShellInner({
                     <Check className="h-3.5 w-3.5" strokeWidth={3} />
                   </span>
                   <span className="text-[11px] font-medium text-mist">
-                    Rester connecté sur cet appareil (30 jours)
+                    Rester connecté sur cet appareil 
                   </span>
                 </button>
 
@@ -799,7 +799,7 @@ function AuthShellInner({
                 </button>
 
                 <div className="hidden pt-1 text-center text-[11px] text-mist lg:block">
-                  <p className="hidden lg:block">Nouveau sur Pulse Bet ?</p>
+                  <p className="hidden lg:block">Nouveau sur Pulse Bet?</p>
                   <Link href={registerHref} replace className="mt-2 flex h-11 items-center justify-center rounded-xl border border-betclic-red font-display text-[11px] font-medium text-betclic-red lg:mt-0 lg:inline lg:h-auto lg:border-0 lg:text-ink lg:underline lg:decoration-edge lg:underline-offset-4">Ouvrir un compte</Link>
                 </div>
               </form>
@@ -894,7 +894,7 @@ function AuthShellInner({
                         <input
                           value={countrySearch}
                           onChange={(e) => setCountrySearch(e.target.value)}
-                          placeholder="Rechercher un pays ou une devise (ex. Bénin, XOF, Canada…)"
+                          placeholder="Rechercher un pays ou une devise"
                           className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
                         />
                       </div>
@@ -944,7 +944,7 @@ function AuthShellInner({
                                         : "bg-elev text-mist"
                                     )}
                                   >
-                                    {cur.code} ({cur.symbol})
+                                    {cur.code} 
                                   </span>
                                   {active && (
                                     <Check
@@ -966,7 +966,7 @@ function AuthShellInner({
                     <span>
                       Votre solde, vos mises et vos retraits seront affichés en{" "}
                       <span className="text-ink">
-                        {selectedCurrencyCfg.name} ({selectedCurrencyCfg.symbol})
+                        {selectedCurrencyCfg.name} 
                       </span>
                       .
                     </span>
@@ -1176,7 +1176,7 @@ function AuthShellInner({
                 </button>
 
                 <p className="hidden pt-1 text-center text-[11px] text-mist lg:block">
-                  Vous avez déjà un compte ?{" "}
+                  Vous avez déjà un compte?{" "}
                   <Link
                     href={loginHref}
                     replace
@@ -1315,7 +1315,7 @@ function AuthShellInner({
                     >
                       <RefreshCw className="h-3 w-3" strokeWidth={2.4} />
                       {resendCooldown > 0
-                        ? `Renvoyer (${resendCooldown}s)`
+                        ? `Renvoyer`
                         : translate(DEFAULT_LANGUAGE, "resendCode")}
                     </button>
                   </div>
@@ -1509,7 +1509,7 @@ function AuthShellInner({
           </div>
           <p className="text-[10px] leading-relaxed text-dim lg:hidden">
             <strong className="font-display font-medium text-mist">18+</strong> ·
-            Jouer comporte des risques : endettement, isolement, dépendance. Aide
+            Jouer comporte des risques: endettement, isolement, dépendance. Aide
             : 09 74 75 13 13.
           </p>
         </footer>

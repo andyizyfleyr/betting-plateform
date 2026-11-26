@@ -114,7 +114,7 @@ export async function sendPasswordResetEmail(params: {
     </div>
   `.trim();
 
-  const text = `Pulse Bet — Votre code de réinitialisation est ${params.code} (valable ${RESET_CODE_TTL_MINUTES} minutes). Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.${safeFooter ? `\n\n${safeFooter}` : ""}`;
+  const text = `Pulse Bet — Votre code de réinitialisation est ${params.code} . Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.${safeFooter ? `\n\n${safeFooter}` : ""}`;
 
   try {
     const controller = new AbortController();

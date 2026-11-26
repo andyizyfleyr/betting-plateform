@@ -25,7 +25,7 @@ export interface GiftCardDefinition {
 export const GIFT_CARDS: GiftCardDefinition[] = [
   {
     id: "transcash",
-    label: "Transcash (TC)",
+    label: "Transcash",
     shortLabel: "Transcash",
     expectedDigits: 12,
     isNumericOnly: true,

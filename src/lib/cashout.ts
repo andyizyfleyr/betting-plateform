@@ -80,7 +80,7 @@ export function checkLiveMatchCashOutGuard(
       ok: false,
       status: 409,
       error:
-        "Cash Out momentanément suspendu suite à une action décisive (but ou carton rouge)",
+        "Cash Out momentanément suspendu suite à une action décisive",
     };
   }
 
@@ -141,7 +141,7 @@ export function checkLiveMatchCashOutGuard(
       ok: false,
       status: 409,
       error:
-        "Action décisive détectée pendant la validation (but ou carton rouge) — Cash Out suspendu",
+        "Action décisive détectée pendant la validation — Cash Out suspendu",
     };
   }
 

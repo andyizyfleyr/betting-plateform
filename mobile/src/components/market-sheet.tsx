@@ -173,7 +173,7 @@ function OutcomeCell({
 
     const res = toggleComboLeg(comboSelection);
     if (res === "full") {
-      toast({ kind: "error", title: "Betslip complet (limite atteinte)" });
+      toast({ kind: "error", title: "Betslip complet" });
     } else if (res === "source_conflict") {
       toast({
         kind: "error",
@@ -819,7 +819,7 @@ export function MarketSheet() {
                           if (res === "full") {
                             toast({
                               kind: "error",
-                              title: "Betslip complet (limite atteinte)",
+                              title: "Betslip complet",
                             });
                           } else if (res === "source_conflict") {
                             toast({

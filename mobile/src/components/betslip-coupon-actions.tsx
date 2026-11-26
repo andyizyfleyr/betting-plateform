@@ -60,12 +60,12 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
         if (problem) { setError(problem); return; }
         loadComboLegs(result.legs as ComboSelection[]);
         setCode(""); setMode(null);
-        toast({ kind: "success", title: "Coupon chargé", description: `${result.legs.length} sélection(s) chargée(s) dans le Betslip.` });
+        toast({ kind: "success", title: "Coupon chargé", description: `${result.legs.length} sélections chargées dans le Betslip.` });
       };
       if (result.skippedClosedCount) {
-        const names = (result.unavailable ?? []).map(x => `• ${x.title} (${x.reason})`).join("\n");
+        const names = (result.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
         const replace = comboLegs.length && result.legs.length ? "\nLe coupon chargé remplacera aussi vos sélections actuelles." : "";
-        Alert.alert("Sélections indisponibles", `${result.skippedClosedCount} sélection(s) commencée(s) ou indisponible(s).\n${names}\n\nLes retirer du coupon chargé ?${replace}`, [
+        Alert.alert("Sélections indisponibles", `${result.skippedClosedCount} sélections commencées ou indisponibles.\n${names}\n\nLes retirer du coupon chargé ?${replace}`, [
           { text: "Annuler", style: "cancel" },
           { text: "Retirer", onPress: apply },
         ]);

@@ -434,11 +434,11 @@ export default function ComboDetailScreen() {
 
                 <View style={styles.amountsRow}>
                   <Text style={styles.amountItem}>
-                    <Text style={styles.amountMuted}>Mise : </Text>
+                    <Text style={styles.amountMuted}>Mise: </Text>
                     <Text style={styles.amountStrong}>{eur(bet.stake)}</Text>
                   </Text>
                   <Text style={styles.amountItem}>
-                    <Text style={styles.amountMuted}>Cote : </Text>
+                    <Text style={styles.amountMuted}>Cote: </Text>
                     <Text style={styles.amountStrong}>
                       {formatOdds(bet.odds, oddsFormat)}
                     </Text>
@@ -497,7 +497,7 @@ export default function ComboDetailScreen() {
                   <View style={styles.cashedBanner}>
                     <Sparkles size={14} color={COLORS.win} strokeWidth={2.3} />
                     <Text style={styles.cashedBannerText}>
-                      Cash Out encaissé :{" "}
+                      Cash Out encaissé:{" "}
                       {eur((bet.cashOutAmount ?? bet.cashOut)!)}
                     </Text>
                   </View>
@@ -507,7 +507,7 @@ export default function ComboDetailScreen() {
               {/* Sélections du combiné (date/heure à côté du statut, jamais dans le corps) */}
               <View style={{ gap: 10 }}>
                 <Text style={styles.sectionCaps}>
-                  SÉLECTIONS DU COMBINÉ ({orderedLegs.length})
+                  SÉLECTIONS DU COMBINÉ 
                 </Text>
 
                 <View style={{ gap: 10 }}>
@@ -686,7 +686,7 @@ function ComboLegCard({
       <View style={styles.pickRow}>
         <View style={styles.pickLeft}>
           <Text numberOfLines={1} style={styles.pickLabel}>
-            Choix : {leg.selectionLabel}
+            Choix: {leg.selectionLabel}
           </Text>
         </View>
         <View style={styles.pickOddsBadge}>

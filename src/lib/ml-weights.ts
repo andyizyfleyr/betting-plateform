@@ -22,10 +22,10 @@ export const SHARP_FEATURE_KEYS = [
 ] as const;
 
 export const SHARP_FEATURE_LABELS: Record<(typeof SHARP_FEATURE_KEYS)[number], string> = {
-  clv_ema: "CLV moyen (valeur vs clôture)",
-  skill_zscore: "Z-Score de compétence (hors chance)",
-  stake_escalation: "Escalade de mise (Martingale / Kelly)",
-  directional_bias: "Biais répétitif (faible entropie)",
+  clv_ema: "CLV moyen",
+  skill_zscore: "Z-Score de compétence",
+  stake_escalation: "Escalade de mise",
+  directional_bias: "Biais répétitif",
   late_live_share: "Concentration fin de match",
   roi_excess: "Sur-performance ROI net",
   cadence_burst: "Rafales d'exécution rapide",

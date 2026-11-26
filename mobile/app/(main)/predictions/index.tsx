@@ -265,7 +265,7 @@ export default function PredictionsScreen() {
         if (res === "full") {
           toast({
             kind: "error",
-            title: "Betslip complet (limite atteinte)",
+            title: "Betslip complet",
           });
         }
         return;
@@ -542,7 +542,7 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
       <View style={styles.winnerBox}>
         <View style={styles.winnerLeft}>
           <CheckCircle2 size={15} color={COLORS.win} strokeWidth={2.4} />
-          <Text style={styles.winnerText}>Issue gagnante : {winner.label}</Text>
+          <Text style={styles.winnerText}>Issue gagnante: {winner.label}</Text>
         </View>
         {winner.odds != null ? (
           <Text style={styles.winnerOddsText}>
@@ -623,7 +623,7 @@ function MultiChoiceQuestionCard({
         {q.myBet && myBetLabel ? (
           <View style={styles.myBetBanner}>
             <Text style={styles.myBetBannerText}>
-              Votre mise : {myBetLabel} · {eur(q.myBet.stake)}
+              Votre mise: {myBetLabel} · {eur(q.myBet.stake)}
             </Text>
           </View>
         ) : null}
@@ -672,7 +672,7 @@ function MultiChoiceQuestionCard({
                 } else if (res === "full") {
                   toast({
                     kind: "error",
-                    title: "Betslip complet (limite atteinte)",
+                    title: "Betslip complet",
                   });
                 }
               }}
@@ -692,7 +692,7 @@ function MultiChoiceQuestionCard({
           <Text style={styles.expandBtnText}>
             {expanded
               ? "Voir moins"
-              : `Voir tout (${sortedOptions.length} choix)`}
+              : `Voir tout`}
           </Text>
           <View
             style={expanded ? { transform: [{ rotate: "180deg" }] } : undefined}
@@ -849,7 +849,7 @@ function BinaryQuestionCard({
         {q.myBet ? (
           <View style={styles.myBetBanner}>
             <Text style={styles.myBetBannerText}>
-              Votre mise : {q.myBet.selection === "yes" ? "Oui" : "Non"} ·{" "}
+              Votre mise: {q.myBet.selection === "yes" ? "Oui" : "Non"} ·{" "}
               {eur(q.myBet.stake)}
             </Text>
           </View>
@@ -901,7 +901,7 @@ function BinaryQuestionCard({
                 } else if (res === "full") {
                   toast({
                     kind: "error",
-                    title: "Betslip complet (limite atteinte)",
+                    title: "Betslip complet",
                   });
                 }
               }}

@@ -352,21 +352,21 @@ export function ComboSheet() {
               <View style={styles.successIcon}>
                 <Check size={28} color={COLORS.win} strokeWidth={2.6} />
               </View>
-              <Text style={styles.successTitle}>Pari combiné accepté !</Text>
+              <Text style={styles.successTitle}>Pari combiné accepté!</Text>
               <Text style={styles.successSub}>
                 Cote totale{" "}
                 <Text style={{ fontWeight: "500", color: COLORS.ink }}>
                   {formatOdds(placedInfo.totalOdds, oddsFormat)}
                 </Text>
                 {placedInfo.boostPct > 0
-                  ? ` (+${placedInfo.boostPct}% Bonus inclus)`
+                  ? ` · Bonus ${placedInfo.boostPct}%`
                   : ""}
               </Text>
 
               <View style={styles.successPayoutRow}>
                 <View>
                   <Text style={styles.successStake}>
-                    Mise : {eur(placedInfo.stake)}
+                    Mise: {eur(placedInfo.stake)}
                   </Text>
                   <Text style={styles.successGainLabel}>Gain potentiel</Text>
                 </View>
@@ -449,8 +449,7 @@ export function ComboSheet() {
                 ) : (
                   <View style={styles.needTwoBox}>
                     <Text style={styles.needTwoText}>
-                      Ajoutez au moins 2 sélections pour valider un combiné (ou
-                      ouvrez l&apos;onglet Betslip pour un pari simple).
+                      Ajoutez au moins 2 sélections pour valider un combiné.
                     </Text>
                   </View>
                 )}
@@ -502,7 +501,7 @@ export function ComboSheet() {
 
                 {belowMin && !overBalance ? (
                   <Text style={styles.errText}>
-                    Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}.
+                    Mise minimale: {formatLocalAmount(currencyConfig.minStakeLocal, currency)}.
                   </Text>
                 ) : null}
 
@@ -522,7 +521,7 @@ export function ComboSheet() {
                 {overBalance && user ? (
                   <Pressable onPress={openRecharge} style={styles.rechargeHint}>
                     <Text style={styles.rechargeHintText}>
-                      Solde insuffisant ({eur(balance)}) · Recharger
+                      Solde insuffisant · Recharger
                     </Text>
                   </Pressable>
                 ) : null}
@@ -539,11 +538,11 @@ export function ComboSheet() {
                     </Text>
                   </Text>
                   <Text style={styles.quoteWin}>
-                    Gain : {eur(quote.potentialWin)}
+                    Gain: {eur(quote.potentialWin)}
                   </Text>
                 </View>
 
-                <Text style={styles.quoteLabel}>Plafond de gain : {eur(maxPayoutEur)}</Text>
+                <Text style={styles.quoteLabel}>Plafond de gain: {eur(maxPayoutEur)}</Text>
                 <Pressable
                   disabled={!canSubmit}
                   onPress={() => void submitCombo()}

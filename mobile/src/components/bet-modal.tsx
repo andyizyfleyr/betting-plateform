@@ -384,7 +384,7 @@ export function BetModal() {
               <View style={[styles.summaryCol, { alignItems: "flex-end" }]}>
                 <Text style={styles.summaryLabel}>Gain potentiel</Text>
                 <Text style={styles.summaryWin}>{eur(potentialWin)}</Text>
-                <Text style={styles.summaryLabel}>Plafond : {eur(maxPayoutEur)}</Text>
+                <Text style={styles.summaryLabel}>Plafond: {eur(maxPayoutEur)}</Text>
               </View>
             </View>
 

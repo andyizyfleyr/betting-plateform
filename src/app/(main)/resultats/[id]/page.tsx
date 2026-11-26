@@ -117,7 +117,7 @@ export default function ResultDetailPage() {
       { label: "Double chance", value: doubleChance },
       {
         label: "Total 2.5",
-        value: total >= 3 ? `TP 2.5 (${total} b.)` : `TM 2.5 (${total} b.)`,
+        value: total >= 3 ? `TP 2.5` : `TM 2.5`,
       },
       {
         label: "Les 2 marquent",
@@ -402,7 +402,7 @@ export default function ResultDetailPage() {
             {cleanEvents.length > 0 && (
               <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
                 <h2 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
-                  Faits de match ({cleanEvents.length})
+                  Faits de match 
                 </h2>
                 <div className="mt-1.5 divide-y divide-edge/60">
                   {cleanEvents.map((ev, idx) => (

@@ -858,7 +858,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
         };
         const res = toggleComboLeg(comboSel);
         if (res === "full") {
-          toast({ kind: "error", title: "Coupon complet (limite atteinte)" });
+          toast({ kind: "error", title: "Coupon complet" });
         } else if (res === "source_conflict") {
           toast({
             kind: "error",

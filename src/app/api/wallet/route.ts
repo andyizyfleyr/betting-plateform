@@ -202,8 +202,8 @@ export async function GET(req: NextRequest) {
         : w.status === "approved"
           ? `Envoyé · ${w.destination}`
           : w.status === "rejected"
-            ? `Refusé (remboursé)${w.adminNote ? ` · ${w.adminNote}` : ""}`
-            : "Annulé (remboursé)";
+            ? `Refusé${w.adminNote ? ` · ${w.adminNote}` : ""}`
+            : "Annulé";
     entries.push({
       id: `wd-${w.id}`,
       type: "withdrawal",

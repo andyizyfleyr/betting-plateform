@@ -112,7 +112,7 @@ export default function ResultDetailScreen() {
       { label: "Double chance", value: doubleChance },
       {
         label: "Total 2.5",
-        value: total >= 3 ? `TP 2.5 (${total} b.)` : `TM 2.5 (${total} b.)`,
+        value: total >= 3 ? `TP 2.5` : `TM 2.5`,
       },
       {
         label: "Les 2 marquent",
@@ -387,7 +387,7 @@ export default function ResultDetailScreen() {
             {cleanEvents.length > 0 ? (
               <View style={styles.card}>
                 <Text style={styles.sectionCaps}>
-                  FAITS DE MATCH ({cleanEvents.length})
+                  FAITS DE MATCH 
                 </Text>
                 <View style={{ marginTop: 6 }}>
                   {cleanEvents.map((ev, idx) => (

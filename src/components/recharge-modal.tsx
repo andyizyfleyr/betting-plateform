@@ -296,8 +296,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
               Demande de dépôt transmise
             </h3>
             <p className="mt-1 text-[11px] leading-relaxed text-mist">
-              Votre dépôt de <strong className="text-ink">{eur(amount)}</strong> (
-              {method === "mobile_money" ? "Mobile Money" : "Virement SEPA"}) sera crédité sur votre
+              Votre dépôt de <strong className="text-ink">{eur(amount)}</strong>  sera crédité sur votre
               solde dès validation par l&apos;équipe.
             </p>
             <button
@@ -320,7 +319,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                 <h2 className="font-display text-[13.5px] font-bold tracking-tight text-ink">
                   Recharger mon solde
                 </h2>
-                <p className="text-[10.5px] text-dim">Actuel : {eur(balance)}</p>
+                <p className="text-[10.5px] text-dim">Actuel: {eur(balance)}</p>
               </div>
               <button
                 type="button"
@@ -334,8 +333,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
 
             <div className="mt-3.5">
               <label htmlFor="recharge-amount" className="text-[10.5px] font-medium text-mist">
-                Montant du dépôt ({formatLocalAmount(effectiveMinLocal, currency)} à{" "}
-                {formatLocalAmount(currencyConfig.maxDepositLocal, currency)})
+                Montant du dépôt 
               </label>
               <div
                 className={cn(
@@ -464,7 +462,7 @@ function RechargeSheet({ onClose }: { onClose: () => void }) {
                 <div>
                   <div className="flex items-center justify-between">
                     <label className="text-[10.5px] font-medium text-mist">
-                      Type de carte ({GIFT_CARDS.length})
+                      Type de carte 
                     </label>
                     <span className="text-[9.5px] text-dim">{giftCardDef.hint}</span>
                   </div>

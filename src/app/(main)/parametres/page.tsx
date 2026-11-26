@@ -284,7 +284,7 @@ export default function ParametresPage() {
         </div>
         {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && (
           <p className="mt-1 text-[10px] font-medium text-mist">
-            Retirable : <strong className="font-medium text-win">{eur(wallet.summary.withdrawable)}</strong>
+            Retirable: <strong className="font-medium text-win">{eur(wallet.summary.withdrawable)}</strong>
             {wallet.summary.bonusRemaining != null && wallet.summary.bonusRemaining > 0 && <span className="text-dim"> · Bonus {eur(wallet.summary.bonusRemaining)}</span>}
           </p>
         )}
@@ -491,7 +491,7 @@ export default function ParametresPage() {
                   </div>
                 </div>
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-elev px-2.5 py-1 text-[10px] font-medium text-ink">
-                  <Lock className="h-3 w-3 text-dim" strokeWidth={2.2} />{currencyConfig.code} ({currencyConfig.symbol})
+                  <Lock className="h-3 w-3 text-dim" strokeWidth={2.2} />{currencyConfig.code} 
                 </span>
               </div>
             </SettingsGroup>
@@ -548,7 +548,7 @@ export default function ParametresPage() {
               </div>
               <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[10px] font-medium text-ink">
                 <Lock className="h-3 w-3 text-dim" strokeWidth={2.2} />
-                {currencyConfig.code} ({currencyConfig.symbol})
+                {currencyConfig.code} 
               </span>
             </div>
 
@@ -665,7 +665,7 @@ export default function ParametresPage() {
 
       {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
       <p className="mt-3 flex items-start gap-2 rounded-xl bg-white p-3 text-[10px] leading-relaxed text-mist lg:mt-6 lg:block lg:bg-transparent lg:p-0 lg:text-center lg:text-dim">
-        <Info className="h-4 w-4 shrink-0 lg:hidden" /> <span>18+ · Jouer comporte des risques : endettement, isolement, dépendance.</span>
+        <Info className="h-4 w-4 shrink-0 lg:hidden" /> <span>18+ · Jouer comporte des risques: endettement, isolement, dépendance.</span>
       </p>
     </div>
   );

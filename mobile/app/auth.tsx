@@ -322,7 +322,7 @@ export default function AuthScreen() {
 
     if (cleanName.length < 2) {
       triggerHaptic("warning", hapticsEnabled);
-      setError("Veuillez indiquer un nom ou pseudonyme (2 caractères minimum).");
+      setError("Veuillez indiquer un nom ou pseudonyme.");
       return;
     }
     if (!isValidEmail(cleanEmail)) {
@@ -390,8 +390,8 @@ export default function AuthScreen() {
       setResendCooldown(60);
       setInfoMessage(
         isResend
-          ? `Un nouveau code de sécurité (valable ${r.expiresInMinutes} min) a été généré.`
-          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres (valable ${r.expiresInMinutes} min) a été envoyé.`
+          ? `Un nouveau code de sécurité a été généré.`
+          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres a été envoyé.`
       );
       setTimeout(() => otpInputRef.current?.focus(), 80);
     } catch (err) {
@@ -646,7 +646,7 @@ export default function AuthScreen() {
                       ) : null}
                     </View>
                     <Text style={styles.rememberText}>
-                      Rester connecté sur cet appareil (30 jours)
+                      Rester connecté sur cet appareil 
                     </Text>
                   </Pressable>
 
@@ -786,7 +786,7 @@ export default function AuthScreen() {
                           <TextInput
                             value={countrySearch}
                             onChangeText={setCountrySearch}
-                            placeholder="Pays ou devise (ex. Bénin, XOF, Canada…)"
+                            placeholder="Pays ou devise"
                             placeholderTextColor={COLORS.dim}
                             autoCorrect={false}
                             style={styles.countrySearchInput}
@@ -852,7 +852,7 @@ export default function AuthScreen() {
                                           active && { color: "#ffffff" },
                                         ]}
                                       >
-                                        {cur.code} ({cur.symbol})
+                                        {cur.code} 
                                       </Text>
                                     </View>
                                     {active ? (
@@ -880,7 +880,7 @@ export default function AuthScreen() {
                       <Text style={styles.countryHintText}>
                         Solde, mises et retraits affichés en{" "}
                         <Text style={{ color: COLORS.ink }}>
-                          {selectedCurrencyCfg.name} ({selectedCurrencyCfg.symbol})
+                          {selectedCurrencyCfg.name} 
                         </Text>
                         .
                       </Text>
@@ -1281,7 +1281,7 @@ export default function AuthScreen() {
                           ]}
                         >
                           {resendCooldown > 0
-                            ? `Renvoyer (${resendCooldown}s)`
+                            ? `Renvoyer`
                             : translate(DEFAULT_LANGUAGE, "resendCode")}
                         </Text>
                       </Pressable>
@@ -1512,7 +1512,7 @@ export default function AuthScreen() {
             </View>
             <Text style={styles.footerDisclaimer}>
               <Text style={styles.footerBold}>18+</Text> · Jouer comporte des
-              risques : endettement, isolement, dépendance. Aide : 09 74 75 13 13.
+              risques: endettement, isolement, dépendance. Aide: 09 74 75 13 13.
             </Text>
           </View>
         </ScrollView>

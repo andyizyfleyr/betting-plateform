@@ -627,14 +627,8 @@ function PitchRadarView({
             ]}
           />
           <Text style={styles.cornerText}>{initials(match.homeTeam)} →</Text>
-          {redHome > 0 ? (
-            <Text style={styles.redPlayerCount}>({11 - redHome}j)</Text>
-          ) : null}
         </View>
         <View pointerEvents="none" style={styles.cornerRight}>
-          {redAway > 0 ? (
-            <Text style={styles.redPlayerCount}>({11 - redAway}j)</Text>
-          ) : null}
           <Text style={styles.cornerText}>← {initials(match.awayTeam)}</Text>
           <View
             style={[
@@ -693,7 +687,7 @@ function MomentumHistogramView({
         </View>
         <View style={styles.momentumCenterBadge}>
           <Text style={styles.momentumCenterText}>
-            10 dern. min :{" "}
+            10 dern. min:{" "}
             <Text style={{ fontWeight: "500", color: "#ffffff" }}>
               {telemetry.recentHomePressure}%
             </Text>{" "}
@@ -924,11 +918,7 @@ function MatchTimelineStrip({
           <Text numberOfLines={1} style={styles.pinnedPillText}>
             {activePinnedEvent.minute}’ ·{" "}
             {activePinnedEvent.type === "red_card" ? "🟥 Rouge" : "⚽ But"}{" "}
-            {activePinnedEvent.player ? `${activePinnedEvent.player} ` : ""}(
-            {activePinnedEvent.team === "home"
-              ? match.homeTeam
-              : match.awayTeam}
-            )
+            {activePinnedEvent.player ? `${activePinnedEvent.player} ` : ""}
           </Text>
         </View>
       ) : null}

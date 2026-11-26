@@ -351,7 +351,7 @@ export default function ParisScreen() {
           <Text style={styles.guestTitle}>Connectez-vous pour suivre vos paris</Text>
           <Text style={styles.guestSub}>
             Retrouvez vos coupons simples et combinés, vendez vos paris en
-            direct (Cash Out) et partagez vos codes coupons.
+            direct et partagez vos codes coupons.
           </Text>
           <Pressable
             onPress={() => router.push("/auth")}
@@ -560,7 +560,7 @@ export default function ParisScreen() {
                       {dayLabel(group[0].settledAt ?? group[0].placedAt)}
                       {!finishedQuery.hasNextPage && <Text style={styles.dayCount}>
                         {" "}
-                        ({dayTotalCounts.get(key) ?? group.length})
+                        
                       </Text>}
                     </Text>
                     <View style={styles.ticketStack}>

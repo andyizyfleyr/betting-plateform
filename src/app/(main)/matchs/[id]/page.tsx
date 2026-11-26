@@ -569,7 +569,7 @@ export default function MatchDetailPage() {
                             if (res === "full") {
                               toast({
                                 kind: "error",
-                                title: "Betslip complet (limite atteinte)",
+                                title: "Betslip complet",
                               });
                             } else if (res === "source_conflict") {
                               toast({
@@ -601,7 +601,7 @@ export default function MatchDetailPage() {
             {cleanEvents.length > 0 && (
               <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
                 <h2 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
-                  Chronologie ({cleanEvents.length})
+                  Chronologie 
                 </h2>
                 <div className="mt-1.5 divide-y divide-edge/60">
                   {cleanEvents.map((ev, idx) => (

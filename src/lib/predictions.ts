@@ -344,7 +344,7 @@ const ROLLING_PREDICTION_TEMPLATES: Array<{
   },
   {
     category: "Sport",
-    buildTitle: (lbl) => `Un club outsider (cote > 3,20) s'imposera-t-il sur la série ${lbl} ?`,
+    buildTitle: (lbl) => `Un club outsider s'imposera-t-il sur la série ${lbl} ?`,
     oddsYes: 1.78,
     oddsNo: 2.05,
     hoursAhead: 18,

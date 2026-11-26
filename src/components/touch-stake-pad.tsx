@@ -190,7 +190,7 @@ export function TouchStakePad({
           {label}
         </label>
         <span className="text-dim">
-          Solde : <strong className="font-medium text-ink">{eur(balance)}</strong>
+          Solde: <strong className="font-medium text-ink">{eur(balance)}</strong>
         </span>
       </div>
 

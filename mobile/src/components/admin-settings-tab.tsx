@@ -233,8 +233,7 @@ export function AdminSettingsTab() {
           <View style={styles.hero}>
             <Text style={styles.heroTitle}>Réglages de la plateforme</Text>
             <Text style={styles.heroSub}>
-              Configurez tous les paramètres fonctionnels (bonus, marges, paiements, devises,
-              branding…) sans redéploiement. Les modifications s'appliquent instantanément côté
+              Configurez tous les paramètres fonctionnels sans redéploiement. Les modifications s'appliquent instantanément côté
               serveur. Chaque réglage s'enregistre indépendamment.
             </Text>
             <Pressable
@@ -475,8 +474,7 @@ function NumberRow({
     <View style={styles.bodyCol}>
       <FieldLabel>
         {label}
-        {unit ? <Text style={styles.unitInline}> ({unit})</Text> : null}
-      </FieldLabel>
+              </FieldLabel>
       <TextInput
         value={String(value ?? "")}
         onChangeText={(s) => onChange(keyName, s === "" ? "" : Number(s))}
@@ -519,7 +517,7 @@ function GenericField({
       <View style={styles.bodyCol}>
         <FieldLabel>
           {meta.label}
-          {meta.unit ? <Text style={styles.unitInline}> ({meta.unit})</Text> : null}
+          
         </FieldLabel>
         <TextInput
           value={String(value)}
@@ -714,8 +712,8 @@ function WelcomeBonusEditor({
       <NumberRow label="Montant du bonus" unit="€" keyName="amount" value={draft.amount} onChange={set} />
       <NumberRow label="Wager" keyName="wagerMultiplier" value={draft.wagerMultiplier} onChange={set} />
       <View style={styles.twoCol}>
-        <NumberRow label="Cote minimale (simple)" keyName="minOddsSingle" value={draft.minOddsSingle} onChange={set} />
-        <NumberRow label="Cote minimale (combiné)" keyName="minOddsCombo" value={draft.minOddsCombo} onChange={set} />
+        <NumberRow label="Cote minimale" keyName="minOddsSingle" value={draft.minOddsSingle} onChange={set} />
+        <NumberRow label="Cote minimale" keyName="minOddsCombo" value={draft.minOddsCombo} onChange={set} />
       </View>
       <NumberRow label="Validité" unit="jours" keyName="validityDays" value={draft.validityDays} onChange={set} />
     </View>
@@ -883,7 +881,7 @@ function CurrencyRatesEditor({
   const entries = Object.entries(rates);
   return (
     <View style={styles.bodyCol}>
-      <Text style={styles.hint}>1 EUR = … pour chaque devise. Mise à jour manuelle.</Text>
+      <Text style={styles.hint}>1 EUR =… pour chaque devise. Mise à jour manuelle.</Text>
       <View style={styles.marketGrid}>
         {entries.map(([code, rate]) => (
           <View key={code} style={styles.rateCell}>
@@ -994,7 +992,7 @@ function CurrencyPresetsEditor({
       {expanded ? (
         <Pressable
           onPress={() => {
-            Alert.prompt("Ajouter une devise", "Code devise à ajouter (ex. XOF) :", [
+            Alert.prompt("Ajouter une devise", "Code devise à ajouter :", [
               { text: "Annuler" },
               {
                 text: "Ajouter",
@@ -1068,7 +1066,7 @@ function MarketsCatalogEditor({
         </View>
       </View>
       {expanded ? (
-        <ArrayFieldEditor label="Ligues actives (codes)" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
+        <ArrayFieldEditor label="Ligues actives" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
       ) : null}
     </View>
   );
@@ -1110,7 +1108,7 @@ function BrandingEditor({
       <View style={styles.inputWrap}>
         <FieldLabel>
           Couleur principale
-          <Text style={styles.unitInline}> (code hexadécimal)</Text>
+          
         </FieldLabel>
         <View style={styles.colorRow}>
           {COLOR_PRESETS.map((c) => (
@@ -1130,7 +1128,7 @@ function BrandingEditor({
           style={styles.input}
         />
       </View>
-      <ArrayFieldEditor label="Bannières promotionnelles (URLs)" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
+      <ArrayFieldEditor label="Bannières promotionnelles" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
     </View>
   );
 }

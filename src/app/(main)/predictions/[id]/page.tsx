@@ -166,7 +166,7 @@ export default function PredictionDetailPage() {
       if (res === "full") {
         toast({
           kind: "error",
-          title: "Betslip complet (limite atteinte)",
+          title: "Betslip complet",
         });
       }
       return;
@@ -282,7 +282,7 @@ export default function PredictionDetailPage() {
             <section className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
-                  Issues ({sortedOptions.length})
+                  Issues 
                 </h3>
                 {comboPick && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-display text-[9.5px] font-medium text-white">

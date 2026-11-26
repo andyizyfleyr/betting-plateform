@@ -195,7 +195,7 @@ function PredictionBetSheet({
       startsAt: question.resolvesAt,
     });
     if (res === "full") {
-      toast({ kind: "error", title: "Coupon complet (limite atteinte)" });
+      toast({ kind: "error", title: "Coupon complet" });
       return;
     }
     if (res === "removed") {
@@ -363,7 +363,7 @@ function PredictionBetSheet({
                 </p>
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-edge bg-white px-3 py-1.5">
                   <span className="min-w-0 truncate text-[10.5px] font-medium text-ink">
-                    Choix : <span className="text-betclic-red">{initialMeta.label}</span>
+                    Choix: <span className="text-betclic-red">{initialMeta.label}</span>
                   </span>
                   <span className="shrink-0 rounded-lg bg-betclic-red px-2.5 py-1 font-display text-[11.5px] font-medium tabular-nums text-white">
                     {formatOdds(odds, oddsFormat)}
@@ -406,7 +406,7 @@ function PredictionBetSheet({
 
               {belowMin && !overBalance && (
                 <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                  Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
+                  Mise minimale: {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
                 </p>
               )}
 
@@ -443,7 +443,7 @@ function PredictionBetSheet({
                 />
               </div>
 
-              <p className="mb-1 text-[10px] text-mist">Plafond de gain : {eur(maxPayoutEur)}</p>
+              <p className="mb-1 text-[10px] text-mist">Plafond de gain: {eur(maxPayoutEur)}</p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -495,7 +495,7 @@ function PredictionBetSheet({
                   ) : oddsChanged ? (
                     <>
                       <span className="truncate">
-                        Accepter ({formatOdds(odds, oddsFormat)})
+                        Accepter 
                       </span>
                       <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                     </>
@@ -561,7 +561,7 @@ function SuccessView({
       <div className="mt-4 rounded-2xl border border-edge bg-elev/50 p-3.5">
         <p className="font-display text-[11.5px] font-medium leading-snug text-ink">{question}</p>
         <p className="mt-1 text-[10.5px] font-medium text-mist">
-          Réponse choisie : <strong className="text-ink">{selectionLabel}</strong>
+          Réponse choisie: <strong className="text-ink">{selectionLabel}</strong>
         </p>
 
         <div className="mt-3 grid grid-cols-3 gap-2 border-t border-edge pt-3">
