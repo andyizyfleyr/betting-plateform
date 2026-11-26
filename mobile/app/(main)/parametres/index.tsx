@@ -27,8 +27,6 @@ import {
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
-  Vibrate,
-  Volume2,
   X,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
@@ -102,6 +100,22 @@ export default function ParametresScreen() {
       .catch(() => {});
     return () => { alive = false; };
   }, []);
+  // Sons et vibrations restent actifs par défaut : le réglage n'est plus affiché,
+  // on réaligne donc une ancienne préférence désactivée sur la valeur par défaut.
+  const feedbackAlignedRef = useRef<string | number | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    if (feedbackAlignedRef.current === user.id) return;
+    if (user.sound !== false && user.haptics !== false) return;
+    feedbackAlignedRef.current = user.id;
+    void api
+      .patchSettings({ sound: true, haptics: true })
+      .then((r) => {
+        void writeUserPreferences(r.user.id, { sound: true, haptics: true });
+        applyUser(r.user);
+      })
+      .catch(() => {});
+  }, [user, applyUser]);
   const changeBiometrics = async (enabled: boolean) => {
     if (biometricBusy) return;
     setBiometricBusy(true);
@@ -481,10 +495,10 @@ export default function ParametresScreen() {
             </View>
           ) : null}
           <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Préférences de jeu</Text></View>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Préférences</Text></View>
             <View style={styles.listCard}>
             {/* Format des cotes */}
-            <View style={styles.prefRow}>
+            <View style={[styles.prefRow, styles.rowBottomDivider]}>
               <View style={styles.prefLeft}>
                 <View style={styles.grayIconBox}>
                   <SlidersHorizontal
@@ -526,24 +540,6 @@ export default function ParametresScreen() {
               </View>
             </View>
 
-            <SwitchRow
-              icon={<Volume2 size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Effets sonores"
-              checked={user.sound ?? true}
-              onChange={(v) => patch({ sound: v }, "Sons mis à jour")}
-            />
-            <SwitchRow
-              icon={<Vibrate size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Retour haptique"
-              checked={user.haptics ?? true}
-              onChange={(v) => patch({ haptics: v }, "Vibrations mises à jour")}
-              last
-            />
-            </View>
-          </View>
-          <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Notifications</Text></View>
-            <View style={styles.listCard}>
             <SwitchRow
               icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
               label="Toutes les notifications"
