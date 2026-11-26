@@ -1121,16 +1121,17 @@ function stepLiveMatchInMemory(
   const naturalEndMs = effectiveStartsAt.getTime() + matchDurationMs(m.id, m.source);
 
   // Archive « bookmaker » des cotes joueur :
-  // - ouverture = prix au coup d'envoi (première projection live), figée ensuite ;
-  // - clôture  = dernier prix tant que les marchés sont ouverts (< 85'), jamais mise à jour
-  //   après le verrou de fin de match (sinon on tombait sur les bornes 1,01 / 100,00).
-  const marketOpen = !isOver && targetSimMin < 85;
+  // - ouverture = prix au coup d'envoi ;
+  // - clôture  = dernier prix PRÉ-MATCH (le seul que publient Bet365 / OddsPortal pour un
+  //   match réglé), figé au coup d'envoi et jamais réécrit.
+  // Les cotes in-play (jusqu'à 1,01 / 100,00) restent réservées aux écrans live : elles ne
+  // doivent jamais devenir la « cote de clôture » d'un match terminé.
   const openOddsHome = m.openOddsHome ?? m.oddsHome;
   const openOddsDraw = m.openOddsDraw ?? m.oddsDraw;
   const openOddsAway = m.openOddsAway ?? m.oddsAway;
-  const closeOddsHome = marketOpen ? dynamicOdds.oddsHome : (m.closeOddsHome ?? openOddsHome);
-  const closeOddsDraw = marketOpen ? dynamicOdds.oddsDraw : (m.closeOddsDraw ?? openOddsDraw);
-  const closeOddsAway = marketOpen ? dynamicOdds.oddsAway : (m.closeOddsAway ?? openOddsAway);
+  const closeOddsHome = m.closeOddsHome ?? openOddsHome;
+  const closeOddsDraw = m.closeOddsDraw ?? openOddsDraw;
+  const closeOddsAway = m.closeOddsAway ?? openOddsAway;
 
   const nextRow: MatchRow = {
     ...m,

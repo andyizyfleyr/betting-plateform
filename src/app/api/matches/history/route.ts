@@ -133,7 +133,7 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
   // Cotes « joueur » de l'historique : ouverture figée au coup d'envoi et clôture
   // au dernier prix marché ouvert. Jamais les cotes live finales (bornes 1,01 / 100).
   const plausibleOdds = (v: number | null | undefined): number | null =>
-    typeof v === "number" && Number.isFinite(v) && v >= 1.05 && v <= 60
+    typeof v === "number" && Number.isFinite(v) && v >= 1.05 && v <= 50
       ? Math.round(v * 100) / 100
       : null;
   // Repli pour les lignes terminées avant l'archivage : cote pré-match du modèle
