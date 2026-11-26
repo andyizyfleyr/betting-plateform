@@ -32,6 +32,7 @@ import {
 } from "@/lib/countries";
 import { getCachedWallet } from "@/lib/entity-cache";
 import { eur } from "@/lib/format";
+import { BALANCE_MASK, useBalanceHidden } from "@/lib/balance-visibility";
 import { createIdempotencyKey } from "@/lib/http";
 import { useRouter } from "@/lib/router";
 import { COLORS, triggerHaptic } from "@/theme/tokens";
@@ -82,6 +83,7 @@ export default function WithdrawScreen() {
     currency,
     currencyConfig,
   } = useApp();
+  const balanceHidden = useBalanceHidden();
 
   const [method, setMethod] =
     useState<(typeof METHODS)[number]["id"]>("mobile_money");
@@ -258,7 +260,7 @@ export default function WithdrawScreen() {
               Retirer mes gains
             </Text>
             <Text numberOfLines={1} style={styles.headerSub}>
-              Retirable: {eur(withdrawable)}
+              Retirable: {balanceHidden ? BALANCE_MASK : eur(withdrawable)}
             </Text>
           </View>
         </View>
@@ -314,7 +316,7 @@ export default function WithdrawScreen() {
                     Déblocage bonus 
                   </Text>
                   <Text style={styles.bonusRight}>
-                    Reste {eur(bonusRemaining)}
+                    Reste {balanceHidden ? BALANCE_MASK : eur(bonusRemaining)}
                   </Text>
                 </View>
                 <View style={styles.bonusTrack}>

@@ -29,6 +29,7 @@ import {
   localToEur,
 } from "@/lib/countries";
 import { eur } from "@/lib/format";
+import { BALANCE_MASK, useBalanceHidden } from "@/lib/balance-visibility";
 import { openInAppUrl } from "@/lib/external-url";
 import { useRouter } from "@/lib/router";
 import {
@@ -51,6 +52,7 @@ export function RechargeModal() {
     currency,
     currencyConfig,
   } = useApp();
+  const balanceHidden = useBalanceHidden();
 
   const [prevCur, setPrevCur] = useState(currency);
   const [amount, setAmount] = useState(() =>
@@ -209,7 +211,7 @@ export function RechargeModal() {
           <View style={styles.topRow}>
             <View>
               <Text style={styles.title}>Recharger mon compte</Text>
-              <Text style={styles.sub}>Solde actuel: {eur(balance)}</Text>
+              <Text style={styles.sub}>Solde actuel: {balanceHidden ? BALANCE_MASK : eur(balance)}</Text>
             </View>
             <Pressable onPress={closeRecharge} style={styles.closeBtn}>
               <X size={17} color={COLORS.mist} strokeWidth={2.2} />

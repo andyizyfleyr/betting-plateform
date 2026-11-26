@@ -4,6 +4,9 @@ import { useSyncExternalStore } from "react";
 
 const BALANCE_HIDDEN_STORAGE_KEY = "pulsebet_balance_hidden_v1";
 
+/** Texte affiché à la place de tout montant quand le solde est masqué. */
+export const BALANCE_MASK = "••••••";
+
 let hidden = false;
 let loaded = false;
 const listeners = new Set<() => void>();
