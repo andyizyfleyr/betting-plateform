@@ -1,9 +1,10 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LogOut, Plus, ShieldCheck } from "lucide-react-native";
 import { useApp } from "@/context/app-context";
 import { api } from "@/lib/api";
+import { toggleBalanceHidden, useBalanceHidden } from "@/lib/balance-visibility";
 import { eur } from "@/lib/format";
 import { usePathname, useRouter } from "@/lib/router";
 import { COLORS } from "@/theme/tokens";
@@ -24,8 +25,7 @@ export function AppHeader() {
   } = useApp();
   const authPending = !authReady || sessionRestoring;
   const [loggingOut, setLoggingOut] = useState(false);
-  const [balanceHidden, setBalanceHidden] = useState(false);
-  const longPressUntilRef = useRef(0);
+  const balanceHidden = useBalanceHidden();
 
   if (
     pathname === "/auth" ||
@@ -110,21 +110,15 @@ export function AppHeader() {
         <View style={styles.rightRow}>
           {user ? (
             <Pressable
+              onPress={openRecharge}
+              onLongPress={toggleBalanceHidden}
+              delayLongPress={450}
               accessibilityRole="button"
               accessibilityLabel={
                 balanceHidden
-                  ? "Solde masqué, appui long pour afficher"
-                  : "Solde, appui long pour masquer"
+                  ? "Solde masqué · appui long pour afficher le solde"
+                  : "Solde et rechargement · appui long pour masquer le solde"
               }
-              delayLongPress={400}
-              onLongPress={() => {
-                longPressUntilRef.current = Date.now() + 800;
-                setBalanceHidden((v) => !v);
-              }}
-              onPress={() => {
-                if (Date.now() < longPressUntilRef.current) return;
-                openRecharge();
-              }}
               style={({ pressed }) => [
                 styles.balancePill,
                 pressed && { transform: [{ scale: 0.98 }] },
