@@ -43,15 +43,22 @@ export async function getAdminSetting<K extends AdminSettingKey>(
   if (settingsCache.has(key)) {
     return cachedOrDefault(key);
   }
-  const [row] = await db
-    .select({ value: adminSettings.value })
-    .from(adminSettings)
-    .where(eq(adminSettings.settingKey, key))
-    .limit(1);
-  const value =
+  let row: { value: unknown } | undefined;
+  try {
+    [row] = await db
+      .select({ value: adminSettings.value })
+      .from(adminSettings)
+      .where(eq(adminSettings.settingKey, key))
+      .limit(1);
+  } catch {
+    // Base momentanément injoignable (build, réveil de l'instance, coupure) :
+    // on sert la valeur par défaut sans casser le rendu ni le prerender.
+    return ADMIN_SETTINGS_CATALOG[key].default as Record<string, unknown>;
+  }
+  const value: Record<string, unknown> =
     row?.value && typeof row.value === "object"
-      ? row.value
-      : ADMIN_SETTINGS_CATALOG[key].default;
+      ? (row.value as Record<string, unknown>)
+      : (ADMIN_SETTINGS_CATALOG[key].default as Record<string, unknown>);
   settingsCache.set(key, { at: Date.now(), value });
   return value;
 }
