@@ -34,6 +34,7 @@ export function FilterDropdownRow({
   hasActiveFilters,
   compact = false,
   leading,
+  trailing,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   filters: FilterDropdownDef<any>[];
@@ -42,6 +43,8 @@ export function FilterDropdownRow({
   hasActiveFilters?: boolean;
   compact?: boolean;
   leading?: React.ReactNode;
+  /** Élément fixe à droite de la rangée (ex. loupe de recherche). */
+  trailing?: React.ReactNode;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const activeDef = filters.find((f) => f.id === openId) ?? null;
@@ -55,10 +58,11 @@ export function FilterDropdownRow({
 
   return (
     <>
-      <View style={[styles.barWrap, compact && styles.barWrapCompact]}>
+      <View style={[styles.barWrap, compact && styles.barWrapCompact, styles.barRow]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.scroll}
           contentContainerStyle={[styles.rowContent, compact && styles.rowContentCompact]}
         >
           {leading}
@@ -127,6 +131,7 @@ export function FilterDropdownRow({
             </Pressable>
           ) : null}
         </ScrollView>
+        {trailing ? <View style={styles.trailingSlot}>{trailing}</View> : null}
       </View>
 
       {resultCountText != null ? (
@@ -207,6 +212,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   barWrapCompact: { paddingVertical: 6 },
+  barRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  scroll: { flex: 1 },
+  trailingSlot: { flexShrink: 0, justifyContent: "center" },
   rowContentCompact: { gap: 6 },
   pillCompact: { height: 32, flexGrow: 0, paddingHorizontal: 12, gap: 4 },
   resetBtnCompact: { height: 32 },

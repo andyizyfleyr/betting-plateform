@@ -29,7 +29,11 @@ interface FilterDropdownRowProps {
   bleedHorizontal?: boolean;
   className?: string;
   compactMobile?: boolean;
+  /** Boutons plus petits (hauteur 32/36 px, texte 11 px). */
+  dense?: boolean;
   leading?: React.ReactNode;
+  /** Élément fixe à droite de la rangée (ex. loupe de recherche). */
+  trailing?: React.ReactNode;
 }
 
 interface MenuPosition {
@@ -47,7 +51,9 @@ export function FilterDropdownRow({
   bleedHorizontal = true,
   className,
   compactMobile = false,
+  dense = false,
   leading,
+  trailing,
 }: FilterDropdownRowProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<MenuPosition | null>(null);
@@ -143,60 +149,70 @@ export function FilterDropdownRow({
           className
         )}
       >
-        <div className={cn("no-scrollbar flex w-full items-center overflow-x-auto", compactMobile ? "gap-1.5" : "gap-2")}>
-          {leading}
-          {filters.map((filter) => {
-            const isActive = filter.value !== filter.defaultValue;
-            const isOpen = openId === filter.id;
-            const selectedOption = filter.options.find((o) => o.value === filter.value);
-            const displayLabel = isActive
-              ? (selectedOption?.pillLabel ?? selectedOption?.label ?? filter.placeholder)
-              : filter.placeholder;
+        <div className="flex w-full items-center gap-2">
+          <div className={cn("no-scrollbar flex min-w-0 flex-1 items-center overflow-x-auto", compactMobile ? "gap-1.5" : "gap-2")}>
+            {leading}
+            {filters.map((filter) => {
+              const isActive = filter.value !== filter.defaultValue;
+              const isOpen = openId === filter.id;
+              const selectedOption = filter.options.find((o) => o.value === filter.value);
+              const displayLabel = isActive
+                ? (selectedOption?.pillLabel ?? selectedOption?.label ?? filter.placeholder)
+                : filter.placeholder;
 
-            return (
-              <button
-                key={filter.id}
-                ref={(el) => {
-                  buttonRefs.current[filter.id] = el;
-                }}
-                type="button"
-                aria-haspopup="listbox"
-                aria-expanded={isOpen}
-                onClick={() => toggleMenu(filter.id)}
-                className={cn(
-                  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border-0 text-[11.5px] font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
-                  compactMobile ? "h-8 grow-0 px-3" : "h-10 grow px-3.5",
-                  isActive
-                    ? "bg-betclic-red text-white shadow-[0_2px_8px_rgba(225,0,20,0.22)]"
-                    : "bg-[#e7e9ed] text-[#374151] hover:bg-[#dde0e6]"
-                )}
-              >
-                <span>{displayLabel}</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  strokeWidth={2.25}
+              return (
+                <button
+                  key={filter.id}
+                  ref={(el) => {
+                    buttonRefs.current[filter.id] = el;
+                  }}
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={isOpen}
+                  onClick={() => toggleMenu(filter.id)}
                   className={cn(
-                    "h-4 w-4 shrink-0 transition-transform duration-150",
-                    isOpen && "rotate-180",
-                    isActive ? "text-white/95" : "text-[#374151]/80"
+                    "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border-0 font-medium leading-none whitespace-nowrap transition-all active:scale-[0.98]",
+                    dense
+                      ? "h-8 grow-0 px-3 text-[11px] lg:h-9"
+                      : compactMobile
+                        ? "h-8 grow-0 px-3 text-[11.5px]"
+                        : "h-10 grow px-3.5 text-[11.5px]",
+                    isActive
+                      ? "bg-betclic-red text-white shadow-[0_2px_8px_rgba(225,0,20,0.22)]"
+                      : "bg-[#e7e9ed] text-[#374151] hover:bg-[#dde0e6]"
                   )}
-                />
-              </button>
-            );
-          })}
+                >
+                  <span>{displayLabel}</span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    strokeWidth={2.25}
+                    className={cn(
+                      dense ? "h-3.5 w-3.5" : "h-4 w-4",
+                      "shrink-0 transition-transform duration-150",
+                      isOpen && "rotate-180",
+                      isActive ? "text-white/95" : "text-[#374151]/80"
+                    )}
+                  />
+                </button>
+              );
+            })}
 
-          {hasActiveFilter && onReset && (
-            <button
-              type="button"
-              onClick={() => {
-                setOpenId(null);
-                onReset();
-              }}
-              className={cn("shrink-0 rounded-full border-0 px-3 text-[11px] font-medium whitespace-nowrap text-betclic-red transition-colors hover:bg-betclic-red/8 active:scale-[0.98]", compactMobile ? "h-8 lg:h-10" : "h-10")}
-            >
-              Réinitialiser
-            </button>
-          )}
+            {hasActiveFilter && onReset && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenId(null);
+                  onReset();
+                }}
+                className={cn("shrink-0 rounded-full border-0 px-3 text-[11px] font-medium whitespace-nowrap text-betclic-red transition-colors hover:bg-betclic-red/8 active:scale-[0.98]", dense ? "h-8 lg:h-9" : compactMobile ? "h-8 lg:h-10" : "h-10")}
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
+          {trailing ? (
+            <div className="flex shrink-0 items-center gap-1.5">{trailing}</div>
+          ) : null}
         </div>
       </div>
 
