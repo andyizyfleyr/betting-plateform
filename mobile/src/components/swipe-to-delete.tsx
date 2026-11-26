@@ -1,12 +1,20 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { Animated, PanResponder, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { triggerHaptic } from "@/theme/tokens";
 
 /**
- * Cartes « swipe to delete » façon grandes apps (React Native).
- * Un glissement horizontal vers la gauche (résistance douce) dévoile un fond
- * « Supprimer » ; au-delà d'un seuil le relâchement déclenche la suppression.
+ * Carte « swipe to delete » façon grandes apps (React Native).
+ * Glissement horizontal vers la gauche : suivi direct puis frein progressif
+ * (résistance type rubber-band) au-delà du seuil. Le relâchement au-delà du
+ * seuil (ou un geste vif) supprime la carte ; sinon retour élastique.
  */
+const THRESHOLD = 104;
+const MAX_DRAG = 168;
+const FLICK_DISTANCE = 56;
+const FLICK_VELOCITY = 0.5; // px / ms
+const EXIT_X = -460;
+
 export function SwipeToDelete({
   children,
   onDelete,
@@ -17,48 +25,96 @@ export function SwipeToDelete({
   disabled?: boolean;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
+  const [armed, setArmed] = useState(false);
+  const armedRef = useRef(false);
   const baseX = useRef(0);
   const startX = useRef(0);
+  const onDeleteRef = useRef(onDelete);
+  const disabledRef = useRef(Boolean(disabled));
+  onDeleteRef.current = onDelete;
+  disabledRef.current = Boolean(disabled);
 
-  const SWIPE_THRESHOLD = 110;
-  const MAX_DRAG = 260;
+  const snapBack = () => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      speed: 16,
+      bounciness: 3,
+    }).start();
+  };
 
   const pan = useRef(
     PanResponder.create({
-      onPanResponderGrant: (_e, g) => {
-        startX.current = g.x;
-        baseX.current = translateX.__getValue() as number;
+      onMoveShouldSetPanResponder: (_e, g) =>
+        !disabledRef.current &&
+        g.dx < -8 &&
+        Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
+      onPanResponderGrant: () => {
+        startX.current = 0;
+        // @ts-expect-error — valeur interne d'Animated.Value
+        baseX.current = (translateX.__getValue() as number) ?? 0;
         translateX.setValue(baseX.current);
       },
       onPanResponderMove: (_e, g) => {
-        let next = baseX.current + (g.x - startX.current);
-        // résistance douce au-delà du seuil
-        const over = -next - SWIPE_THRESHOLD;
-        if (over > 0) next = -SWIPE_THRESHOLD - Math.min(over, 120) * 0.35;
+        const raw = baseX.current + g.dx;
+        let next: number;
+        if (raw >= -THRESHOLD) {
+          next = raw;
+        } else {
+          const over = -raw - THRESHOLD;
+          next = Math.max(EXIT_X + 120, -THRESHOLD - over * 0.4);
+        }
         next = Math.max(-MAX_DRAG, Math.min(0, next));
         translateX.setValue(next);
-      },
-      onPanResponderRelease: (_e, g) => {
-        const v = baseX.current + (g.x - startX.current);
-        if (v <= -SWIPE_THRESHOLD) {
-          onDelete();
-        } else {
-          translateX.setValue(0);
+
+        const nowArmed = next <= -THRESHOLD;
+        if (nowArmed !== armedRef.current) {
+          armedRef.current = nowArmed;
+          setArmed(nowArmed);
+          if (nowArmed) triggerHaptic("light");
         }
       },
+      onPanResponderRelease: (_e, g) => {
+        const raw = baseX.current + g.dx;
+        const fastFlick = g.vx <= -FLICK_VELOCITY && raw <= -FLICK_DISTANCE;
+        if (raw <= -THRESHOLD || fastFlick) {
+          triggerHaptic("warning");
+          Animated.timing(translateX, {
+            toValue: EXIT_X,
+            duration: 190,
+            useNativeDriver: true,
+          }).start(() => onDeleteRef.current());
+          return;
+        }
+        armedRef.current = false;
+        setArmed(false);
+        snapBack();
+      },
       onPanResponderTerminate: () => {
-        translateX.setValue(0);
+        armedRef.current = false;
+        setArmed(false);
+        snapBack();
       },
     })
   ).current;
 
   return (
     <View style={styles.container}>
-      <View style={[styles.deleteBg, { opacity: disabled ? 0.4 : 1 }]}>
-        <Ionicons name="trash-outline" size={18} color="#ffffff" />
-        <Text style={styles.deleteLabel}>Supprimer</Text>
+      <View style={styles.deleteBg}>
+        <View
+          style={[
+            styles.deleteInner,
+            { transform: [{ scale: armed ? 1.08 : 0.96 }] },
+          ]}
+        >
+          <Ionicons name="trash-outline" size={18} color="#ffffff" />
+          <Text style={styles.deleteLabel}>Supprimer</Text>
+        </View>
       </View>
-      <Animated.View {...pan.panHandlers} style={[styles.front, { transform: [{ translateX }] }]}>
+      <Animated.View
+        {...pan.panHandlers}
+        style={[styles.front, { transform: [{ translateX }] }]}
+      >
         {children}
       </Animated.View>
     </View>
@@ -69,17 +125,18 @@ const styles = StyleSheet.create({
   container: {
     position: "relative",
     overflow: "hidden",
+    borderRadius: 16,
   },
   deleteBg: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: 132,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "#d1384a",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    paddingRight: 18,
+  },
+  deleteInner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 6,
   },
   deleteLabel: {

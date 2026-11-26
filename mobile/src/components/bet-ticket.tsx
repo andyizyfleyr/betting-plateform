@@ -371,8 +371,6 @@ function ComboBetTicket({
     <View
       style={[
         styles.card,
-        won && styles.cardWon,
-        lost && styles.cardLost,
       ]}
     >
       <Pressable
@@ -590,8 +588,6 @@ function SingleBetTicket({
     <View
       style={[
         styles.card,
-        won && styles.cardWon,
-        lost && styles.cardLost,
       ]}
     >
       <Pressable
@@ -764,12 +760,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
-  },
-  cardWon: {
-    borderColor: "rgba(21, 128, 61, 0.38)",
-  },
-  cardLost: {
-    borderColor: "rgba(225, 0, 20, 0.25)",
   },
   headRow: {
     flexDirection: "row",
