@@ -70,8 +70,8 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   disabledMatchIds: { label: "Matchs exclus du cash out" },
   amount: { label: "Montant du bonus", unit: "€" },
   wagerMultiplier: { label: "Wager", hint: "Nombre de mises à effectuer avant retrait" },
-  minOddsSingle: { label: "Cote minimale (simple)" },
-  minOddsCombo: { label: "Cote minimale (combiné)" },
+  minOddsSingle: { label: "Cote minimale · simple" },
+  minOddsCombo: { label: "Cote minimale · combiné" },
   validityDays: { label: "Validité", unit: "jours" },
   enabledMethods: { label: "Méthodes de paiement actives" },
   mobileMoneyAccounts: { label: "Comptes Mobile Money" },
@@ -80,7 +80,7 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   rates: { label: "Taux de change", hint: "1 EUR = … (mis à jour manuellement)" },
   presets: { label: "Paliers par devise", hint: "Paliers rapides et bornes dépôt/retrait" },
   activeMarkets: { label: "Marchés actifs" },
-  activeLeagues: { label: "Ligues actives" },
+  activeLeagues: { label: "Ligues actives · codes" },
   maxLive: { label: "Matchs live simultanés", unit: "matchs" },
   kickoffGapMs: { label: "Écart entre coups d'envoi", unit: "ms" },
   siteName: { label: "Nom du site" },
@@ -89,7 +89,7 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   heroTitle: { label: "Titre de la bannière d'accueil" },
   heroSubtitle: { label: "Sous-titre de la bannière d'accueil" },
   primaryColor: { label: "Couleur principale", hint: "Code hexadécimal" },
-  banners: { label: "Bannières promotionnelles" },
+  banners: { label: "Bannières promotionnelles · URLs" },
   categories: { label: "Catégories de notifications actives" },
   pushSubjectPrefix: { label: "Préfixe des notifications push" },
   emailFooter: { label: "Pied de page des e-mails" },
@@ -712,8 +712,8 @@ function WelcomeBonusEditor({
       <NumberRow label="Montant du bonus" unit="€" keyName="amount" value={draft.amount} onChange={set} />
       <NumberRow label="Wager" keyName="wagerMultiplier" value={draft.wagerMultiplier} onChange={set} />
       <View style={styles.twoCol}>
-        <NumberRow label="Cote minimale" keyName="minOddsSingle" value={draft.minOddsSingle} onChange={set} />
-        <NumberRow label="Cote minimale" keyName="minOddsCombo" value={draft.minOddsCombo} onChange={set} />
+        <NumberRow label="Cote minimale · simple" keyName="minOddsSingle" value={draft.minOddsSingle} onChange={set} />
+        <NumberRow label="Cote minimale · combiné" keyName="minOddsCombo" value={draft.minOddsCombo} onChange={set} />
       </View>
       <NumberRow label="Validité" unit="jours" keyName="validityDays" value={draft.validityDays} onChange={set} />
     </View>
@@ -1066,7 +1066,7 @@ function MarketsCatalogEditor({
         </View>
       </View>
       {expanded ? (
-        <ArrayFieldEditor label="Ligues actives" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
+        <ArrayFieldEditor label="Ligues actives · codes" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
       ) : null}
     </View>
   );
@@ -1128,7 +1128,7 @@ function BrandingEditor({
           style={styles.input}
         />
       </View>
-      <ArrayFieldEditor label="Bannières promotionnelles" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
+      <ArrayFieldEditor label="Bannières promotionnelles · URLs" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
     </View>
   );
 }

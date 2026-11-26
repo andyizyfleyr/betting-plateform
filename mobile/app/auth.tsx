@@ -390,8 +390,8 @@ export default function AuthScreen() {
       setResendCooldown(60);
       setInfoMessage(
         isResend
-          ? `Un nouveau code de sécurité a été généré.`
-          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres a été envoyé.`
+          ? `Un nouveau code de sécurité a été généré. Valable ${r.expiresInMinutes} min.`
+          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres a été envoyé. Valable ${r.expiresInMinutes} min.`
       );
       setTimeout(() => otpInputRef.current?.focus(), 80);
     } catch (err) {
@@ -1512,7 +1512,7 @@ export default function AuthScreen() {
             </View>
             <Text style={styles.footerDisclaimer}>
               <Text style={styles.footerBold}>18+</Text> · Jouer comporte des
-              risques: endettement, isolement, dépendance. Aide: 09 74 75 13 13.
+              risques: endettement, isolement, dépendance. Aide: 09 74 75 13 13. Appel non surtaxé.
             </Text>
           </View>
         </ScrollView>

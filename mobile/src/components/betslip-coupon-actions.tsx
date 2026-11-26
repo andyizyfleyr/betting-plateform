@@ -65,7 +65,7 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
       if (result.skippedClosedCount) {
         const names = (result.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
         const replace = comboLegs.length && result.legs.length ? "\nLe coupon chargé remplacera aussi vos sélections actuelles." : "";
-        Alert.alert("Sélections indisponibles", `${result.skippedClosedCount} sélections commencées ou indisponibles.\n${names}\n\nLes retirer du coupon chargé ?${replace}`, [
+        Alert.alert("Sélections indisponibles", `${result.skippedClosedCount} sélection${result.skippedClosedCount > 1 ? "s" : ""} commencée${result.skippedClosedCount > 1 ? "s" : ""} ou indisponible${result.skippedClosedCount > 1 ? "s" : ""}.\n${names}\n\nLes retirer du coupon chargé ?${replace}`, [
           { text: "Annuler", style: "cancel" },
           { text: "Retirer", onPress: apply },
         ]);

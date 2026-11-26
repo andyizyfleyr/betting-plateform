@@ -936,7 +936,7 @@ export default function BetslipScreen() {
             {quote.boostAmount > 0 ? (
               <View style={styles.summaryLine}>
                 <Text style={{ fontSize: 11, color: COLORS.win }}>
-                  Bonus Combiné 
+                  Bonus Combiné +{quote.boostPct}%
                 </Text>
                 <Text
                   style={{

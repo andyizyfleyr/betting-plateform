@@ -66,9 +66,9 @@ function formatPlayerWithFlags(
   isPenalty: boolean
 ): string | undefined {
   const clean = base.replace(/\s+/g, " ").trim();
-  // Les balises `(CSC)` / `(P)` ne sont plus affichées : aucun texte entre parenthèses dans l'UI.
-  void isOwnGoal;
-  void isPenalty;
+  // Repères « contre son camp » / penalty rendus en suffixe, sans parenthèses.
+  if (isOwnGoal) return `${clean} · csc`;
+  if (isPenalty) return `${clean} · pen`;
   return clean || undefined;
 }
 
@@ -562,7 +562,7 @@ export function formatGoalSummaryStrings(
       }
 
       const minutesStr = grp.entries
-        .map((e) => `${e.minute}’`)
+        .map((e) => (e.isPenalty ? `${e.minute}’ · pen` : `${e.minute}’`))
         .join(", ");
       return `${minutesStr} ${grp.displayBase}`;
     });

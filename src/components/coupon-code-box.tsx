@@ -60,7 +60,7 @@ export function CouponCodeBox({
         const finalCode = res.code;
         if (skipped > 0) {
           const names = (res.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
-          if (!window.confirm(`${skipped} sélections commencées ou indisponibles :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
+          if (!window.confirm(`${skipped} sélection${skipped > 1 ? "s" : ""} commencée${skipped > 1 ? "s" : ""} ou indisponible${skipped > 1 ? "s" : ""} :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
         }
         if (!loadedLegs.length) throw new Error("Aucune sélection disponible dans ce coupon.");
         const problem = validateLoadedCoupon(loadedLegs, bettingLimits.maxComboLegs);

@@ -2193,7 +2193,7 @@ export function QuestionsTab({
                     </select>
                   </label>
                   <AdminInput
-                    label="Échéance"
+                    label="Échéance en heures"
                     value={form.hours}
                     onChange={(v) => setForm({ ...form, hours: v })}
                   />
@@ -2805,7 +2805,7 @@ export function UsersTab({
           </div>
           <div className="mt-2.5 flex gap-2">
             <AdminInput
-              placeholder="Nouveau solde pivot"
+              placeholder="Nouveau solde pivot en €"
               type="text"
               inputMode="decimal"
               className="flex-1"
@@ -2855,7 +2855,7 @@ export function UsersTab({
             </button>
 
             <AdminInput
-              placeholder="Plafond de mise"
+              placeholder="Plafond de mise en € · 0 = illimité"
               type="text"
               inputMode="decimal"
               className="w-36"
@@ -3320,7 +3320,7 @@ export function DepositsTab({
                   type="text"
                   value={noteVal}
                   onChange={(e) => setWdNotes({ ...wdNotes, [w.id]: e.target.value })}
-                  placeholder="Motif ou réf. transfert"
+                  placeholder="Motif ou réf. transfert · visible par le joueur"
                   className="mt-2.5 h-9 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[10.5px] text-ink outline-none placeholder:text-dim focus:border-ink focus:bg-white"
                 />
 

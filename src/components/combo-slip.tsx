@@ -723,7 +723,7 @@ export function ComboSheet() {
                   </div>
                   {quote.boostAmount > 0 && (
                     <div className="mt-1 flex items-center justify-between text-[10.5px] text-win">
-                      <span>Bonus Combiné </span>
+                      <span>Bonus Combiné +{quote.boostPct}%</span>
                       <span className="font-display font-medium tabular-nums">
                         +{eur(quote.boostAmount)}
                       </span>
