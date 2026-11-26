@@ -12,15 +12,13 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
-  ArrowDownLeft,
   ArrowLeftRight,
   ArrowRight,
-  Eye,
-  EyeOff,
   ArrowUpRight,
   Bell,
   ChevronRight,
-  Globe,
+  Eye,
+  EyeOff,
   History,
   Lock,
   LogOut,
@@ -94,11 +92,19 @@ export default function ParametresScreen() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [transferCodesEnabled, setTransferCodesEnabled] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [checkingOta, setCheckingOta] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
   useEffect(() => { void isBiometricLoginEnabled().then(setBiometricEnabled); }, []);
+  useEffect(() => {
+    let alive = true;
+    void api.config()
+      .then((cfg) => { if (alive) setTransferCodesEnabled(Boolean(cfg.transferCodesEnabled)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const changeBiometrics = async (enabled: boolean) => {
     if (biometricBusy) return;
     setBiometricBusy(true);
@@ -112,14 +118,12 @@ export default function ParametresScreen() {
   };
   const [refreshing, setRefreshing] = useState(false);
   const [profilName, setProfilName] = useState("");
-  const [profilEmail, setProfilEmail] = useState("");
   const [profilSaving, setProfilSaving] = useState(false);
   const [profilEditing, setProfilEditing] = useState(false);
 
   const toggleProfilEditing = () => {
     if (!profilEditing) {
       setProfilName(user?.name ?? "");
-      setProfilEmail(user?.email ?? "");
     }
     setProfilEditing(v => !v);
   };
@@ -222,12 +226,12 @@ export default function ParametresScreen() {
 
   const saveProfile = async () => {
     const name = profilName.trim();
-    const email = profilEmail.trim();
-    if (name.length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast({ kind: "error", title: "Nom ou email invalide" });
+    const email = user?.email ?? "";
+    if (name.length === 0) {
+      toast({ kind: "error", title: "Nom invalide" });
       return;
     }
-    if (name === user?.name && email === user?.email) {
+    if (name === user?.name) {
       toast({ kind: "info", title: "Aucune modification" });
       return;
     }
@@ -355,15 +359,15 @@ export default function ParametresScreen() {
             </Pressable>
           </View>
           {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable: {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
-          {wallet && wallet.summary.pendingWithdrawals > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</Text> : null}
-          {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</Text> : null}
           <View style={styles.walletBtnsGrid}>
             <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/depot")} style={styles.depositBtn}><Plus size={16} color={COLORS.betclicRed} /><Text style={styles.depositBtnText}>Déposer</Text></Pressable>
             <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/retrait")} style={styles.withdrawBtnWhite}><ArrowUpRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Retirer</Text></Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtnWhite}><ArrowLeftRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Transférer</Text></Pressable>
+            {transferCodesEnabled ? (
+              <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtnWhite}><ArrowLeftRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Transférer</Text></Pressable>
+            ) : null}
           </View>
         </View>
-        {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
+        {transferCodesEnabled && transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
       </View>
 
       <View style={styles.sectionStack}>
@@ -410,22 +414,6 @@ export default function ParametresScreen() {
             </View>
           ) : null}
 
-          <View>
-            <View style={styles.recentHeader}>
-              <Text style={styles.recentTitle}>Dernières opérations</Text>
-              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/transactions")}><Text style={styles.seeAll}>Voir tout</Text></Pressable>
-            </View>
-            <View style={styles.listCard}>
-              {!wallet ? <Text style={styles.emptyOperations}>Chargement des opérations…</Text> : wallet.entries.length === 0 ? <Text style={styles.emptyOperations}>Aucune opération pour le moment.</Text> : wallet.entries.slice(0, 3).map((entry, index) => (
-                <View key={entry.id} style={[styles.operationRow, index > 0 && styles.rowDivider]}>
-                  <View style={[styles.operationIcon, { backgroundColor: entry.amount >= 0 ? "rgba(0,150,78,0.1)" : "rgba(225,0,20,0.1)" }]}>{entry.amount >= 0 ? <ArrowDownLeft size={15} color={COLORS.win} /> : <ArrowUpRight size={15} color={COLORS.betclicRed} />}</View>
-                  <View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={styles.navRowTitle}>{entry.title}</Text><Text numberOfLines={1} style={styles.navRowSub}>{formatPlacedAt(entry.createdAt)}</Text></View>
-                  <Text style={[styles.operationAmount, { color: entry.amount >= 0 ? COLORS.win : COLORS.betclicRed }]}>{balanceVisible ? `${entry.amount >= 0 ? "+" : "−"} ${eur(Math.abs(entry.amount))}` : "••••"}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
           {/* Accès Admin (si administrateur) */}
           {user.role === "admin" ? (
             <Pressable
@@ -456,11 +444,11 @@ export default function ParametresScreen() {
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={styles.profileName}>{user?.name ?? "—"}</Text>
               <Text numberOfLines={1} style={styles.profileEmail}>{user?.email ?? "Session active"}</Text>
+              <Text numberOfLines={1} style={styles.profileMeta}>{countryConfig.flag} {countryConfig.name} · {currencyConfig.code} {currencyConfig.symbol}</Text>
             </View>
-            {user?.role === "admin" ? <Text style={styles.adminBadge}>Admin</Text> : null}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={profilEditing ? "Fermer la modification" : "Modifier le nom et l'email"}
+              accessibilityLabel={profilEditing ? "Fermer la modification" : "Modifier le nom"}
               onPress={toggleProfilEditing}
               style={styles.profileEditBtn}
             >
@@ -469,7 +457,7 @@ export default function ParametresScreen() {
           </View>
           {profilEditing ? (
             <View style={{ gap: 6 }}>
-              <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Profil</Text><Text style={styles.settingsSubtitle}>Nom et email de votre compte</Text></View>
+              <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Profil</Text></View>
               <View style={styles.listCard}>
                 <View style={styles.fieldGroup}>
                   <Text style={styles.fieldLabel}>Nom</Text>
@@ -482,20 +470,6 @@ export default function ParametresScreen() {
                     style={styles.fieldInput}
                     autoCapitalize="words"
                     autoCorrect={false}
-                  />
-                </View>
-                <View style={[styles.fieldGroup, { marginTop: 10 }]}>
-                  <Text style={styles.fieldLabel}>Email</Text>
-                  <TextInput
-                    value={profilEmail}
-                    onChangeText={setProfilEmail}
-                    placeholder="votre.email@exemple.com"
-                    placeholderTextColor={COLORS.mist}
-                    maxLength={160}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.fieldInput}
                   />
                 </View>
                 <Pressable
@@ -511,7 +485,7 @@ export default function ParametresScreen() {
             </View>
           ) : null}
           <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Portefeuille</Text><Text style={styles.settingsSubtitle}>Dépôts, retraits, mises et gains</Text></View>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Portefeuille</Text></View>
             <View style={styles.listCard}>
               <Pressable
                 accessibilityRole="button"
@@ -531,33 +505,7 @@ export default function ParametresScreen() {
             </View>
           </View>
           <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Compte</Text><Text style={styles.settingsSubtitle}>Pays et devise</Text></View>
-            <View style={styles.listCard}>
-            {/* Pays & devise officielle verrouillés à l'inscription */}
-            <View style={styles.prefRow}>
-              <View style={[styles.prefLeft, { flex: 1 }]}>
-                <View style={styles.grayIconBox}>
-                  <Globe size={16} color={COLORS.ink} strokeWidth={2.1} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.prefLabel}>Pays & devise du compte</Text>
-                  <Text numberOfLines={1} style={styles.navRowSub}>
-                    {countryConfig.flag} {countryConfig.name} · {currencyConfig.name}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.lockedCurrencyPill}>
-                <Lock size={11} color={COLORS.dim} strokeWidth={2.2} />
-                <Text style={styles.lockedCurrencyPillText}>
-                  {currencyConfig.code} 
-                </Text>
-              </View>
-            </View>
-
-            </View>
-          </View>
-          <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Préférences de jeu</Text><Text style={styles.settingsSubtitle}>Cotes, sons et connexion</Text></View>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Préférences de jeu</Text></View>
             <View style={styles.listCard}>
             {/* Format des cotes */}
             <View style={styles.prefRow}>
@@ -632,7 +580,7 @@ export default function ParametresScreen() {
             </View>
           </View>
           <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Notifications</Text><Text style={styles.settingsSubtitle}>Choisissez les alertes à recevoir</Text></View>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Notifications</Text></View>
             <View style={styles.listCard}>
             <SwitchRow
               icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
@@ -668,22 +616,10 @@ export default function ParametresScreen() {
               checked={user.notifyBets ?? true}
               onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")}
             />
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Dépôts et retraits"
-              checked={user.notifyPayments ?? true}
-              onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Réclamations"
-              checked={user.notifyDisputes ?? true}
-              onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")}
-            />
             </View>
           </View>
           <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Sécurité</Text><Text style={styles.settingsSubtitle}>Accès à votre compte</Text></View>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Sécurité</Text></View>
             <View style={styles.listCard}>
             <SwitchRow
               icon={<ShieldCheck size={16} color={COLORS.ink} strokeWidth={2.1} />}
@@ -693,7 +629,9 @@ export default function ParametresScreen() {
             />
             </View>
           </View>
-          <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Application</Text><Text style={styles.settingsSubtitle}>Version et session</Text></View>
+          {user.role === "admin" ? (
+          <View style={{ gap: 6 }}>
+          <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Application</Text></View>
           <Pressable
             disabled={checkingOta}
             onPress={() => void handleManualOtaCheck()}
@@ -734,6 +672,8 @@ export default function ParametresScreen() {
               {checkingOta ? "Analyse…" : "Vérifier"}
             </Text>
           </Pressable>
+          </View>
+          ) : null}
 
           <Pressable
             disabled={loggingOut}
@@ -807,28 +747,7 @@ const styles = StyleSheet.create({
   },
   profileCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: COLORS.edge, backgroundColor: "#ffffff" },
   profileEditBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.elev },
-  adminBadge: { color: COLORS.betclicRed, fontSize: 10 },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  pageTitle: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    color: COLORS.ink,
-  },
-  profileMini: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  profileTextCol: {
-    maxWidth: 145,
-    alignItems: "flex-end",
-  },
+  profileMeta: { marginTop: 1, fontSize: 9.5, color: COLORS.mist },
   profileName: {
     fontSize: 12.5,
     fontWeight: "700",
@@ -859,7 +778,6 @@ const styles = StyleSheet.create({
   },
   settingsHeading: { paddingHorizontal: 4, gap: 2 },
   settingsTitle: { color: COLORS.ink, fontSize: 12, fontWeight: "700" },
-  settingsSubtitle: { color: COLORS.dim, fontSize: 10 },
   balanceCard: { minHeight: 132, borderRadius: 16, padding: 14, justifyContent: "space-between" },
   balanceCardWhite: {
     borderRadius: 16,
@@ -909,25 +827,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   profileSaveBtnText: { fontSize: 12, fontWeight: "600", color: "#ffffff" },
-  recentHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  recentTitle: { fontSize: 12, fontWeight: "700", color: COLORS.ink },
-  seeAll: { fontSize: 10.5, color: COLORS.betclicRed },
-  emptyOperations: { padding: 12, fontSize: 10.5, color: COLORS.dim },
-  operationRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 10 },
-  operationIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  operationAmount: { fontSize: 11, fontWeight: "500", fontVariant: ["tabular-nums"] },
-  cardPad: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.edge,
-    backgroundColor: "#ffffff",
-    padding: 16,
-  },
-  walletInnerBox: {
-    borderRadius: 12,
-    backgroundColor: COLORS.elev,
-    padding: 12,
-  },
   walletTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -945,38 +844,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#ffffff",
     fontVariant: ["tabular-nums"],
-  },
-  withdrawableNote: {
-    marginTop: 4,
-    fontSize: 10,
-    fontWeight: "500",
-    color: COLORS.mist,
-  },
-  pendingPillsCol: {
-    alignItems: "flex-end",
-    gap: 4,
-  },
-  pendingWdPill: {
-    borderRadius: 999,
-    backgroundColor: "rgba(245,158,11,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-  },
-  pendingWdText: {
-    fontSize: 9.5,
-    fontWeight: "500",
-    color: "#92400e",
-  },
-  pendingDepPill: {
-    borderRadius: 999,
-    backgroundColor: "rgba(14,165,233,0.15)",
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-  },
-  pendingDepText: {
-    fontSize: 9.5,
-    fontWeight: "500",
-    color: "#075985",
   },
   walletBtnsGrid: {
     marginTop: 12,
@@ -1222,19 +1089,5 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: "500",
     color: "#ffffff",
-  },
-  lockedCurrencyPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 8,
-    backgroundColor: COLORS.elev,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  lockedCurrencyPillText: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: COLORS.ink,
   },
 });

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowDownLeft,
   ArrowLeftRight,
   ArrowUpRight,
   Eye,
@@ -12,19 +11,13 @@ import {
   Info,
   Bell,
   ChevronRight,
-  Globe,
   History,
   Loader2,
-  Lock,
-  LogOut,
   Pencil,
   Plus,
   ShieldCheck,
   SlidersHorizontal,
-  Vibrate,
-  Volume2,
   X,
-  Zap,
 } from "lucide-react";
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/client-entity-cache";
@@ -38,7 +31,6 @@ import { Toggle } from "@/components/toggle";
 import { TransferCodeSheet } from "@/components/transfer-code-sheet";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { writeUserPreferences } from "@/lib/user-preferences";
-import { useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
 export default function ParametresPage() {
@@ -51,12 +43,11 @@ export default function ParametresPage() {
     betsVersion,
     countryConfig,
     currencyConfig,
+    transferCodesEnabled,
   } = useApp();
-  const { manualDataSaver, autoConstrained, setManualDataSaver } = useNetworkQuality();
   const router = useRouter();
   const [wallet, setWallet] = useState<ClientWalletData | null>(() => getCachedWallet());
   const [cancellingId, setCancellingId] = useState<number | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [profilName, setProfilName] = useState("");
@@ -246,20 +237,6 @@ export default function ParametresPage() {
     }
   };
 
-  const logout = async () => {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    try {
-      await api.auth.logout();
-    } catch {
-      /* déconnexion locale même en cas d'erreur réseau */
-    }
-    applyUser(null);
-    router.push("/auth");
-    router.refresh();
-    setLoggingOut(false);
-  };
-
   const hue = teamHue(user?.name ?? "Pulse");
 
   if (!authReady && !user) {
@@ -268,7 +245,6 @@ export default function ParametresPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
-      <h1 className="font-display text-[16px] font-bold leading-tight tracking-tight text-ink">Compte</h1>
       {/* Carte Solde disponible — fond blanc, tout en haut */}
       <section className="rounded-2xl border border-edge bg-white p-3.5 shadow-sm">
         <div className="flex items-start justify-between gap-2">
@@ -288,16 +264,12 @@ export default function ParametresPage() {
             {wallet.summary.bonusRemaining != null && wallet.summary.bonusRemaining > 0 && <span className="text-dim"> · Bonus {eur(wallet.summary.bonusRemaining)}</span>}
           </p>
         )}
-        {wallet && (wallet.summary.pendingWithdrawals > 0 || (wallet.summary.pendingDeposits ?? 0) > 0) && (
-          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-mist">
-            {wallet.summary.pendingWithdrawals > 0 && <span className="rounded-full bg-amber-500/12 px-2 py-0.5 text-amber-800">{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</span>}
-            {(wallet.summary.pendingDeposits ?? 0) > 0 && <span className="rounded-full bg-sky-500/12 px-2 py-0.5 text-sky-800">+{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</span>}
-          </div>
-        )}
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className={cn("mt-3 grid gap-2", transferCodesEnabled ? "grid-cols-3" : "grid-cols-2")}>
           <Link href="/parametres/depot" className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-betclic-red active:bg-elev"><Plus size={17} />Déposer</Link>
           <Link href="/parametres/retrait" className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowUpRight size={17} />Retirer</Link>
-          <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowLeftRight size={17} />Transférer</button>
+          {transferCodesEnabled && (
+            <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowLeftRight size={17} />Transférer</button>
+          )}
         </div>
       </section>
 
@@ -339,37 +311,6 @@ export default function ParametresPage() {
               ))}
             </section>
           )}
-
-          <section className="lg:hidden">
-            <div className="mb-2 flex items-center justify-between gap-2"><h2 className="text-[12px] font-bold text-ink">Dernières opérations</h2><Link href="/parametres/transactions" className="text-[10.5px] font-medium text-betclic-red">Voir tout</Link></div>
-            <div className="overflow-hidden rounded-2xl border border-edge bg-white">
-              {!wallet ? <p className="p-3 text-[10.5px] text-dim">Chargement des opérations…</p> : wallet.entries.length === 0 ? <p className="p-3 text-[10.5px] text-dim">Aucune opération pour le moment.</p> : wallet.entries.slice(0, 3).map(entry => <div key={entry.id} className="flex items-center gap-2.5 border-b border-edge p-2.5 last:border-b-0">
-                <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full", entry.amount >= 0 ? "bg-win/10 text-win" : "bg-betclic-red/10 text-betclic-red")}>{entry.amount >= 0 ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span>
-                <div className="min-w-0 flex-1"><p className="truncate text-[11px] font-medium text-ink">{entry.title}</p><p className="truncate text-[10px] text-mist">{formatPlacedAt(entry.createdAt)}</p></div>
-                <span className={cn("shrink-0 text-[11px] font-medium tabular-nums", entry.amount >= 0 ? "text-win" : "text-betclic-red")}>{balanceVisible ? `${entry.amount >= 0 ? "+" : "−"} ${eur(Math.abs(entry.amount))}` : "••••"}</span>
-              </div>)}
-            </div>
-          </section>
-          {/* Lien direct vers la page dédiée des mouvements */}
-          <Link
-            href="/parametres/transactions"
-            className="glass-card hidden items-center gap-3 rounded-2xl p-3.5 transition-colors hover:bg-elev/40 active:bg-elev lg:flex"
-          >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
-              <History className="h-4 w-4" strokeWidth={2.2} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-[11.5px] font-medium text-ink">
-                Historique des mouvements
-              </p>
-              <p className="truncate text-[10.5px] text-dim">
-                {wallet
-                  ? `${wallet.entries.length} opération${wallet.entries.length > 1 ? "s" : ""}`
-                  : "Dépôts, retraits, mises et gains"}
-              </p>
-            </div>
-            <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
-          </Link>
 
           {/* Accès Admin (si administrateur) */}
           {user?.role === "admin" && (
@@ -414,12 +355,10 @@ export default function ParametresPage() {
                 <p className="truncate text-[10.5px] text-dim">
                   {user?.email ?? "Session active"}
                 </p>
+                <p className="truncate text-[10px] text-mist">
+                  {countryConfig.flag} {countryConfig.name} · {currencyConfig.code} {currencyConfig.symbol}
+                </p>
               </div>
-              {user?.role === "admin" && (
-                <span className="rounded-md bg-betclic-red/10 px-1.5 py-0.5 font-display text-[9.5px] font-medium uppercase text-betclic-red">
-                  Admin
-                </span>
-              )}
               <button
                 type="button"
                 onClick={toggleProfilEditing}
@@ -445,17 +384,6 @@ export default function ParametresPage() {
                     className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
                   />
                 </label>
-                <label className="block">
-                  <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Email</span>
-                  <input
-                    type="email"
-                    value={profilEmail}
-                    onChange={(e) => setProfilEmail(e.target.value)}
-                    placeholder="votre.email@exemple.com"
-                    maxLength={160}
-                    className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
-                  />
-                </label>
                 <button
                   type="button"
                   onClick={saveProfile}
@@ -469,197 +397,34 @@ export default function ParametresPage() {
             )}
           </section>
 
-          {/* Sur mobile, les mêmes réglages sont regroupés comme dans l'application. */}
-          <div className="space-y-3 lg:hidden">
-            <SettingsGroup title="Portefeuille" subtitle="Dépôts, retraits, mises et gains">
-              <Link href="/parametres/transactions" className="flex items-center gap-3 p-3.5 active:bg-elev">
-                <IconBox><History className="h-4 w-4" strokeWidth={2.1} /></IconBox>
-                <div className="min-w-0 flex-1">
-                  <p className="font-display text-[11.5px] font-medium text-ink">Dernières opérations</p>
-                  <p className="truncate text-[10px] text-dim">Voir tous les mouvements du compte</p>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
-              </Link>
-            </SettingsGroup>
-            <SettingsGroup title="Compte" subtitle="Pays et devise">
-              <div className="flex items-center justify-between gap-3 p-3.5">
-                <div className="flex min-w-0 items-center gap-3">
-                  <IconBox><Globe className="h-4 w-4" strokeWidth={2.1} /></IconBox>
-                  <div className="min-w-0">
-                    <p className="font-display text-[11.5px] font-medium text-ink">Pays &amp; devise du compte</p>
-                    <p className="truncate text-[10px] text-dim">{countryConfig.flag} {countryConfig.name} · {currencyConfig.name}</p>
-                  </div>
-                </div>
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-elev px-2.5 py-1 text-[10px] font-medium text-ink">
-                  <Lock className="h-3 w-3 text-dim" strokeWidth={2.2} />{currencyConfig.code} 
-                </span>
-              </div>
-            </SettingsGroup>
-            <SettingsGroup title="Préférences de jeu" subtitle="Cotes, sons et connexion">
-              <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
-                <div className="flex min-w-0 items-center gap-3">
-                  <IconBox><SlidersHorizontal className="h-4 w-4" strokeWidth={2.1} /></IconBox>
-                  <p className="font-display text-[11.5px] font-medium text-ink">Format des cotes</p>
-                </div>
-                <div className="flex shrink-0 rounded-xl bg-elev p-0.5">
-                  {(["decimal", "fractional"] as const).map((fmt) => (
-                    <button key={fmt} type="button" onClick={() => patch({ oddsFormat: fmt }, "Format des cotes mis à jour")}
-                      aria-pressed={(user?.oddsFormat ?? "decimal") === fmt}
-                      className={cn("rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors", (user?.oddsFormat ?? "decimal") === fmt ? "bg-white text-ink shadow-2xs" : "text-mist")}>
-                      {fmt === "decimal" ? "1.85" : "17/20"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <SwitchRow Icon={<Volume2 className="h-4 w-4" />} label="Effets sonores" checked={user?.sound ?? true} onChange={(v) => patch({ sound: v }, "Sons mis à jour")} />
-              <SwitchRow Icon={<Vibrate className="h-4 w-4" />} label="Retour haptique" checked={user?.haptics ?? true} onChange={(v) => patch({ haptics: v }, "Vibrations mises à jour")} />
-              <SwitchRow Icon={<Zap className="h-4 w-4" />} label="Mode économie 3G" checked={manualDataSaver || autoConstrained} onChange={(v) => {
-                setManualDataSaver(v);
-                toast({ kind: "success", title: v ? "Mode économie 3G activé" : "Rafraîchissement rapide restauré" });
-              }} last />
-            </SettingsGroup>
-            <SettingsGroup title="Notifications" subtitle="Choisissez les alertes à recevoir">
-              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")} />
-              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Début des matchs" checked={user?.notifyMatches ?? true} onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")} />
-              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Résultats des paris" checked={user?.notifyBets ?? true} onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")} />
-              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Dépôts et retraits" checked={user?.notifyPayments ?? true} onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")} />
-              <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Réclamations" checked={user?.notifyDisputes ?? true} onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")} last />
-            </SettingsGroup>
-            <div className="px-1">
-              <h2 className="text-[12px] font-bold text-ink">Application</h2>
-              <p className="mt-0.5 text-[10px] text-dim">Gérer votre session</p>
-            </div>
-          </div>
-          <div className="glass-card hidden overflow-hidden rounded-2xl lg:block">
-            {/* Pays & devise officielle verrouillés à l'inscription */}
-            <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
-              <div className="flex min-w-0 items-center gap-3">
-                <IconBox>
-                  <Globe className="h-4 w-4" strokeWidth={2.1} />
-                </IconBox>
-                <div className="min-w-0">
-                  <p className="font-display text-[11.5px] font-medium text-ink">
-                    Pays & devise du compte
-                  </p>
-                  <p className="truncate text-[10px] text-dim">
-                    {countryConfig.flag} {countryConfig.name} · {currencyConfig.name}
-                  </p>
-                </div>
-              </div>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-elev px-2.5 py-1 font-display text-[10px] font-medium text-ink">
-                <Lock className="h-3 w-3 text-dim" strokeWidth={2.2} />
-                {currencyConfig.code} 
-              </span>
-            </div>
+          <SettingsGroup title="Portefeuille">
+            <Link href="/parametres/transactions" className="flex items-center gap-3 p-3.5 active:bg-elev">
+              <IconBox><History className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+              <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">Dernières opérations</p>
+              <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
+            </Link>
+          </SettingsGroup>
 
-            {/* Format des cotes */}
+          <SettingsGroup title="Préférences">
             <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
               <div className="flex min-w-0 items-center gap-3">
-                <IconBox>
-                  <SlidersHorizontal className="h-4 w-4" strokeWidth={2.1} />
-                </IconBox>
-                <p className="font-display text-[11.5px] font-medium text-ink">
-                  Format des cotes
-                </p>
+                <IconBox><SlidersHorizontal className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+                <p className="font-display text-[11.5px] font-medium text-ink">Format des cotes</p>
               </div>
               <div className="flex shrink-0 rounded-xl bg-elev p-0.5">
-                {(["decimal", "fractional"] as const).map((fmt) => {
-                  const active = (user?.oddsFormat ?? "decimal") === fmt;
-                  return (
-                    <button
-                      key={fmt}
-                      type="button"
-                      onClick={() =>
-                        patch({ oddsFormat: fmt }, "Format des cotes mis à jour")
-                      }
-                      className={cn(
-                        "rounded-lg px-2.5 py-1 font-display text-[10px] font-medium transition-colors",
-                        active ? "bg-white text-ink shadow-2xs" : "text-mist"
-                      )}
-                    >
-                      {fmt === "decimal" ? "1.85" : "17/20"}
-                    </button>
-                  );
-                })}
+                {(["decimal", "fractional"] as const).map((fmt) => (
+                  <button key={fmt} type="button" onClick={() => patch({ oddsFormat: fmt }, "Format des cotes mis à jour")}
+                    aria-pressed={(user?.oddsFormat ?? "decimal") === fmt}
+                    className={cn("rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors", (user?.oddsFormat ?? "decimal") === fmt ? "bg-white text-ink shadow-2xs" : "text-mist")}>
+                    {fmt === "decimal" ? "1.85" : "17/20"}
+                  </button>
+                ))}
               </div>
             </div>
-
-            <SwitchRow
-              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-              label="Toutes les notifications"
-              checked={user?.notifications ?? true}
-              onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")}
-            />
-            <SwitchRow
-              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-              label="Début des matchs"
-              checked={user?.notifyMatches ?? true}
-              onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-              label="Résultats des paris"
-              checked={user?.notifyBets ?? true}
-              onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-              label="Dépôts et retraits"
-              checked={user?.notifyPayments ?? true}
-              onChange={(v) => patch({ notifyPayments: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              Icon={<Bell className="h-4 w-4" strokeWidth={2.1} />}
-              label="Réclamations"
-              checked={user?.notifyDisputes ?? true}
-              onChange={(v) => patch({ notifyDisputes: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              Icon={<Volume2 className="h-4 w-4" strokeWidth={2.1} />}
-              label="Effets sonores"
-              checked={user?.sound ?? true}
-              onChange={(v) => patch({ sound: v }, "Sons mis à jour")}
-            />
-            <SwitchRow
-              Icon={<Vibrate className="h-4 w-4" strokeWidth={2.1} />}
-              label="Retour haptique"
-              checked={user?.haptics ?? true}
-              onChange={(v) => patch({ haptics: v }, "Vibrations mises à jour")}
-            />
-            <SwitchRow
-              Icon={<Zap className="h-4 w-4" strokeWidth={2.1} />}
-              label="Mode économie 3G"
-              checked={manualDataSaver || autoConstrained}
-              onChange={(v) => {
-                setManualDataSaver(v);
-                toast({
-                  kind: "success",
-                  title: v
-                    ? "Mode économie 3G activé"
-                    : "Rafraîchissement rapide restauré",
-                });
-              }}
-              last
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={logout}
-            disabled={loggingOut}
-            className="glass-card flex w-full items-center gap-3 rounded-2xl p-3.5 text-left transition-colors active:bg-betclic-red/5 disabled:opacity-60"
-          >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
-              {loggingOut ? (
-                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.2} />
-              ) : (
-                <LogOut className="h-4 w-4" strokeWidth={2.1} />
-              )}
-            </span>
-            <p className="font-display text-[11.5px] font-medium text-betclic-red">
-              Se déconnecter
-            </p>
-          </button>
+            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")} />
+            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Début des matchs" checked={user?.notifyMatches ?? true} onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")} />
+            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Résultats des paris" checked={user?.notifyBets ?? true} onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")} last />
+          </SettingsGroup>
         </div>
       </div>
 
@@ -671,12 +436,11 @@ export default function ParametresPage() {
   );
 }
 
-function SettingsGroup({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-1.5">
       <div className="px-1">
         <h2 className="text-[12px] font-bold text-ink">{title}</h2>
-        <p className="mt-0.5 text-[10px] text-dim">{subtitle}</p>
       </div>
       <div className="glass-card overflow-hidden rounded-2xl">{children}</div>
     </section>

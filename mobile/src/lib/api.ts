@@ -506,6 +506,11 @@ export const api = {
       forceRefresh: opts?.forceRefresh,
     }),
 
+  config: () =>
+    requestJson<{ transferCodesEnabled?: boolean }>("/api/config", {
+      ignoreUnauthorizedRedirect: true,
+    }),
+
   auth: {
     me: () =>
       requestJson<{ user: ClientUser | null }>("/api/auth/me", {

@@ -921,6 +921,7 @@ export const api = {
       request<{
         currencyRates: Record<string, number>;
         currencyPresets: Record<string, unknown>;
+        transferCodesEnabled?: boolean;
         branding?: {
           siteName: string;
           shortName: string;
