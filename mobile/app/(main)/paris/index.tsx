@@ -569,7 +569,7 @@ export default function ParisScreen() {
                           key={`${b.kind}-${b.id}`}
                           onDelete={() => void handleDeleteBet(b.id)}
                         >
-                          <BetTicket bet={b} onShare={setSharingBet} />
+                          <BetTicket bet={b} />
                         </SwipeToDelete>
                       ))}
                     </View>
