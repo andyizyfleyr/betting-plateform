@@ -40,6 +40,7 @@ import { useApp } from "@/context/app-context";
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
 import { eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
+import { writeUserPreferences } from "@/lib/user-preferences";
 import { createIdempotencyKey, isBiometricLoginEnabled, setBiometricLoginEnabled } from "@/lib/http";
 import { registerPushDevice, unregisterPushDevice } from "@/lib/push-notifications";
 import {
@@ -211,6 +212,8 @@ export default function ParametresScreen() {
   const patch = async (p: Partial<ClientUser>, label: string) => {
     try {
       const r = await api.patchSettings(p);
+      // Miroir local : le choix survit à la fermeture de l'application.
+      void writeUserPreferences(r.user.id, p);
       applyUser(r.user);
       toast({ kind: "success", title: label });
     } catch {
@@ -675,6 +678,7 @@ export default function ParametresScreen() {
               try {
                 await registerPushDevice(true);
                 const result = await api.patchSettings({ notifications: true });
+                void writeUserPreferences(result.user.id, { notifications: true });
                 applyUser(result.user);
                 toast({ kind: "success", title: "Notifications système activées" });
               } catch (e) {

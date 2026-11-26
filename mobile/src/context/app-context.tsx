@@ -38,6 +38,7 @@ import {
   type CurrencyConfig,
 } from "@/lib/countries";
 import { setActiveDisplayCurrency } from "@/lib/format";
+import { mergeUserPreferences } from "@/lib/user-preferences";
 import { usePathname } from "@/lib/router";
 import {
   clearPrivateEntityCaches,
@@ -547,8 +548,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const runNetworkBootstrap = async () => {
           try {
             const boot = await api.mobileBootstrap();
+            const merged = boot.user
+              ? await mergeUserPreferences(boot.user)
+              : { user: null, drift: null };
             if (mounted) {
-              applyUser(boot.user);
+              applyUser(merged.user);
+              if (merged.drift) void api.patchSettings(merged.drift).catch(() => undefined);
               setPendingCount(boot.pendingCount ?? 0);
               if (Array.isArray(boot.providers)) {
                 setPaymentProviders(boot.providers);
