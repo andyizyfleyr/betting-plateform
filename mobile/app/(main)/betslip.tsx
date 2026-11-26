@@ -815,9 +815,9 @@ export default function BetslipScreen() {
                       </Pressable>
                     </View>
 
-                    <View style={{ marginTop: 10 }}>
+                    <View style={{ marginTop: 8 }}>
                       {hasSportTeams ? (
-                        <View style={{ gap: 6 }}>
+                        <View style={{ gap: 4 }}>
                           <View style={styles.teamRow}>
                             <TeamAvatar
                               name={hName}
@@ -1179,11 +1179,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   legCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
-    padding: 10,
+    padding: 8,
   },
   legCardClosed: {
     borderColor: "rgba(225,0,20,0.40)",
@@ -1211,8 +1211,8 @@ const styles = StyleSheet.create({
   livePill: {
     borderRadius: 999,
     backgroundColor: "rgba(225,0,20,0.12)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -1232,8 +1232,8 @@ const styles = StyleSheet.create({
   kickoffPill: {
     borderRadius: 999,
     backgroundColor: COLORS.elev,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
   kickoffPillText: {
     fontSize: 9.5,
@@ -1244,8 +1244,8 @@ const styles = StyleSheet.create({
   closedPill: {
     borderRadius: 999,
     backgroundColor: "rgba(225,0,20,0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
   closedPillText: {
     fontSize: 9.5,
@@ -1255,8 +1255,8 @@ const styles = StyleSheet.create({
   suspendedPill: {
     borderRadius: 999,
     backgroundColor: "rgba(245,158,11,0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
   suspendedPillText: {
     fontSize: 9.5,
@@ -1264,9 +1264,9 @@ const styles = StyleSheet.create({
     color: "#b45309",
   },
   removeLegBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
@@ -1274,19 +1274,19 @@ const styles = StyleSheet.create({
   teamRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   teamName: {
     flex: 1,
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.ink,
   },
   scoreBox: {
-    minWidth: 22,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    minWidth: 20,
+    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
     alignItems: "center",
   },
   scoreBoxDefault: {
@@ -1296,23 +1296,23 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(225,0,20,0.10)",
   },
   scoreBoxText: {
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.ink,
     fontVariant: ["tabular-nums"],
   },
   predTitle: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "600",
-    lineHeight: 19,
+    lineHeight: 16,
     color: COLORS.ink,
   },
   selectionBar: {
-    marginTop: 10,
-    borderRadius: 12,
+    marginTop: 8,
+    borderRadius: 10,
     backgroundColor: COLORS.elev,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1320,25 +1320,25 @@ const styles = StyleSheet.create({
   },
   selectionLabelText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.ink,
   },
   legOddsBadge: {
     position: "relative",
-    minWidth: 52,
-    borderRadius: 8,
+    minWidth: 46,
+    borderRadius: 7,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: COLORS.edge,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
   legOddsText: {
-    fontSize: 11.5,
+    fontSize: 10.5,
     fontWeight: "500",
     fontVariant: ["tabular-nums"],
   },

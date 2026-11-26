@@ -65,7 +65,7 @@ function LegLiveOddsBadge({
   return (
     <span
       className={cn(
-        "relative shrink-0 rounded-lg bg-white px-2.5 py-1 font-display text-[11.5px] font-medium tabular-nums shadow-2xs transition-colors duration-200",
+        "relative shrink-0 rounded-md bg-white px-2 py-0.5 font-display text-[10.5px] font-medium tabular-nums shadow-2xs transition-colors duration-200",
         oddsTrendTextClass(trend)
       )}
     >
@@ -734,7 +734,7 @@ export default function BetslipPage() {
                 <div
                   key={leg.uid}
                   className={cn(
-                    "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-2.5 transition-colors hover:bg-elev/20 active:bg-elev/40 lg:p-3",
+                    "glass-card relative cursor-pointer overflow-hidden rounded-xl p-2 transition-colors hover:bg-elev/20 active:bg-elev/40 lg:p-2.5",
                     leg.closed && "border-betclic-red/40 bg-betclic-red/[0.04]"
                   )}
                 >
@@ -745,10 +745,10 @@ export default function BetslipPage() {
 
                   {/* En-tête : ligue + statut + retrait */}
                   <div className="pointer-events-none relative z-[1] flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-mist">
+                    <div className="flex min-w-0 items-center gap-1.5 text-[9.5px] font-medium text-mist">
                       <span className="truncate font-medium">{leg.league}</span>
                       {leg.isLive && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-betclic-red">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-betclic-red/12 px-1.5 py-0 font-display text-[9px] font-medium tabular-nums text-betclic-red">
                           <span className="live-dot h-1.5 w-1.5 rounded-full bg-betclic-red" />
                           <LiveMatchClock
                             match={
@@ -764,17 +764,17 @@ export default function BetslipPage() {
                         </span>
                       )}
                       {!leg.isLive && !leg.closed && leg.startsAt && (
-                        <span className="shrink-0 rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium tabular-nums text-ink">
+                        <span className="shrink-0 rounded-full bg-elev px-1.5 py-0 font-display text-[9px] font-medium tabular-nums text-ink">
                           {formatKickoff(leg.startsAt)}
                         </span>
                       )}
                       {leg.closed && (
-                        <span className="shrink-0 rounded-full bg-betclic-red/15 px-2 py-0.5 font-display text-[9.5px] font-medium text-betclic-red">
+                        <span className="shrink-0 rounded-full bg-betclic-red/15 px-1.5 py-0 font-display text-[9px] font-medium text-betclic-red">
                           Clôturé
                         </span>
                       )}
                       {leg.suspended && !leg.closed && (
-                        <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 font-display text-[9.5px] font-medium text-amber-700">
+                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0 font-display text-[9px] font-medium text-amber-700">
                           Suspendu
                         </span>
                       )}
@@ -784,29 +784,29 @@ export default function BetslipPage() {
                       type="button"
                       onClick={() => removeComboLeg(leg.uid)}
                       aria-label="Retirer cette sélection"
-                      className="pointer-events-auto relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-elev text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
+                      className="pointer-events-auto relative z-10 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elev text-mist hover:bg-edge hover:text-ink active:bg-edge active:text-ink"
                     >
-                      <X className="h-3.5 w-3.5" strokeWidth={2.2} />
+                      <X className="h-3 w-3" strokeWidth={2.2} />
                     </button>
                   </div>
 
                   {/* Corps de la sélection */}
-                  <div className="pointer-events-none relative z-[1] mt-2 block w-full text-left">
+                  <div className="pointer-events-none relative z-[1] mt-1.5 block w-full text-left">
                     {hasSportTeams ? (
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2.5">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
                           <TeamAvatar
                             name={hName}
                             logo={leg.matchObj?.homeLogo ?? leg.homeLogo}
                             size="xs"
                           />
-                          <span className="truncate font-display text-[11.5px] font-medium text-ink">
+                          <span className="truncate font-display text-[10.5px] font-medium text-ink">
                             {hName}
                           </span>
                           {showScores && (
                             <span
                               className={cn(
-                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[12px] font-medium tabular-nums",
+                                "ml-auto min-w-[20px] rounded px-1 py-0.5 text-center font-display text-[10.5px] font-medium tabular-nums",
                                 leg.isLive ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-ink"
                               )}
                             >
@@ -814,19 +814,19 @@ export default function BetslipPage() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2">
                           <TeamAvatar
                             name={aName}
                             logo={leg.matchObj?.awayLogo ?? leg.awayLogo}
                             size="xs"
                           />
-                          <span className="truncate font-display text-[11.5px] font-medium text-ink">
+                          <span className="truncate font-display text-[10.5px] font-medium text-ink">
                             {aName}
                           </span>
                           {showScores && (
                             <span
                               className={cn(
-                                "ml-auto min-w-[22px] rounded-md px-1.5 py-0.5 text-center font-display text-[12px] font-medium tabular-nums",
+                                "ml-auto min-w-[20px] rounded px-1 py-0.5 text-center font-display text-[10.5px] font-medium tabular-nums",
                                 leg.isLive ? "bg-betclic-red/10 text-betclic-red" : "bg-elev text-ink"
                               )}
                             >
@@ -836,13 +836,13 @@ export default function BetslipPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="font-display text-[11.5px] font-medium leading-snug text-ink">
+                      <p className="font-display text-[10.5px] font-medium leading-snug text-ink">
                         {leg.title}
                       </p>
                     )}
 
-                    <div className="mt-2.5 flex items-center justify-between rounded-xl bg-elev px-3 py-2">
-                      <span className="truncate pr-2 text-[11px] font-medium text-ink">
+                    <div className="mt-2 flex items-center justify-between rounded-lg bg-elev px-2.5 py-1.5">
+                      <span className="truncate pr-2 text-[10.5px] font-medium text-ink">
                         {leg.selectionLabel}
                       </span>
                       <LegLiveOddsBadge odds={leg.liveOdds} oddsFormat={oddsFormat} />
