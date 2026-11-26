@@ -370,7 +370,7 @@ export default function ParisScreen() {
       <ScrollView
         style={styles.page}
         contentContainerStyle={styles.content}
-        stickyHeaderIndices={[2]}
+        stickyHeaderIndices={[1]}
         showsVerticalScrollIndicator={false}
         onScroll={onPageScroll}
         scrollEventThrottle={16}
@@ -383,30 +383,7 @@ export default function ParisScreen() {
           />
         }
       >
-        {/* 0 : En-tête identique à src/app/(main)/paris/page.tsx */}
-        <View style={styles.headerRow}>
-          <Text style={styles.pageTitle}>Mes paris</Text>
-          <Pressable
-            onPress={toggleMobileSearch}
-            style={[
-              styles.roundSearchBtn,
-              (mobileSearchOpen || Boolean(query)) &&
-                styles.roundSearchBtnActive,
-            ]}
-          >
-            {mobileSearchOpen ? (
-              <X size={16} color="#ffffff" strokeWidth={2.3} />
-            ) : (
-              <Search
-                size={16}
-                color={query ? "#ffffff" : COLORS.ink}
-                strokeWidth={2.2}
-              />
-            )}
-          </Pressable>
-        </View>
-
-        {/* 1 : Barre de recherche mobile dépliable */}
+        {/* 0 : Barre de recherche dépliable */}
         <View>
           {mobileSearchOpen || query ? (
             <View style={styles.searchBar}>
@@ -432,9 +409,29 @@ export default function ParisScreen() {
           ) : null}
         </View>
 
-        {/* 2 : Onglets et filtres */}
+        {/* 1 : Onglets et filtres + loupe */}
         <View style={styles.stickyFilterWrap}>
           <FilterDropdownRow compact
+            trailing={
+              <Pressable
+                onPress={toggleMobileSearch}
+                style={[
+                  styles.roundSearchBtn,
+                  (mobileSearchOpen || Boolean(query)) &&
+                    styles.roundSearchBtnActive,
+                ]}
+              >
+                {mobileSearchOpen ? (
+                  <X size={16} color="#ffffff" strokeWidth={2.3} />
+                ) : (
+                  <Search
+                    size={16}
+                    color={query ? "#ffffff" : COLORS.ink}
+                    strokeWidth={2.2}
+                  />
+                )}
+              </Pressable>
+            }
             leading={<View style={styles.tabRow} accessibilityRole="tablist">
               {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
                 <Pressable key={value} hitSlop={4} accessibilityRole="tab" accessibilityState={{ selected: tab === value }}
@@ -505,7 +502,7 @@ export default function ParisScreen() {
           />
         </View>
 
-        {/* 3 : Liste des tickets */}
+        {/* 2 : Liste des tickets */}
         {bets === null ? (
           <PulseFlashLoader compact />
         ) : loadError ? (
@@ -603,18 +600,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingTop: 14,
     paddingBottom: 32,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  pageTitle: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    color: COLORS.ink,
   },
   roundSearchBtn: {
     width: 34,

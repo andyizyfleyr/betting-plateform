@@ -32,6 +32,8 @@ interface FilterDropdownRowProps {
   /** Boutons plus petits (hauteur 32/36 px, texte 11 px). */
   dense?: boolean;
   leading?: React.ReactNode;
+  /** Élément fixe à gauche de la rangée (ex. bouton retour). */
+  before?: React.ReactNode;
   /** Élément fixe à droite de la rangée (ex. loupe de recherche). */
   trailing?: React.ReactNode;
 }
@@ -53,6 +55,7 @@ export function FilterDropdownRow({
   compactMobile = false,
   dense = false,
   leading,
+  before,
   trailing,
 }: FilterDropdownRowProps) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -150,6 +153,7 @@ export function FilterDropdownRow({
         )}
       >
         <div className="flex w-full items-center gap-2">
+          {before ? <div className="shrink-0">{before}</div> : null}
           <div className={cn("no-scrollbar flex min-w-0 flex-1 items-center overflow-x-auto", compactMobile ? "gap-1.5" : "gap-2")}>
             {leading}
             {filters.map((filter) => {

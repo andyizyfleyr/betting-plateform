@@ -464,7 +464,7 @@ export default function ResultatsScreen() {
     <ScrollView
       style={styles.page}
       contentContainerStyle={styles.content}
-      stickyHeaderIndices={[4]}
+      stickyHeaderIndices={[3]}
       showsVerticalScrollIndicator={false}
       onScroll={onScrollCheck}
       scrollEventThrottle={16}
@@ -477,43 +477,18 @@ export default function ResultatsScreen() {
         />
       }
     >
-      {/* 0 : En-tête identique à src/app/(main)/resultats/page.tsx */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <Pressable
-            onPress={() => router.back("/matchs")}
-            style={({ pressed }) => [
-              styles.roundBackBtn,
-              pressed && { transform: [{ scale: 0.95 }] },
-            ]}
-          >
-            <ArrowLeft size={16} color={COLORS.ink} strokeWidth={2.2} />
-          </Pressable>
-          <Text style={styles.pageTitle}>Résultats</Text>
-        </View>
-
+      {/* 0 : Retour + sélecteur d'univers + loupe sur une seule ligne */}
+      <View style={styles.topRow}>
         <Pressable
-          onPress={toggleMobileSearch}
-          style={[
-            styles.roundSearchBtn,
-            (mobileSearchOpen || Boolean(query)) &&
-              styles.roundSearchBtnActive,
+          onPress={() => router.back("/matchs")}
+          style={({ pressed }) => [
+            styles.roundBackBtn,
+            pressed && { transform: [{ scale: 0.95 }] },
           ]}
         >
-          {mobileSearchOpen ? (
-            <X size={16} color="#ffffff" strokeWidth={2.3} />
-          ) : (
-            <Search
-              size={16}
-              color={query ? "#ffffff" : COLORS.ink}
-              strokeWidth={2.2}
-            />
-          )}
+          <ArrowLeft size={16} color={COLORS.ink} strokeWidth={2.2} />
         </Pressable>
-      </View>
-
-      {/* 1 : Sélecteur d'univers Matchs réels / Matchs virtuels */}
-      <View style={styles.universeSwitcher}>
+        <View style={styles.universeSwitcher}>
         <Pressable
           onPress={() => {
             setSelectedUniverse("real");
@@ -599,9 +574,28 @@ export default function ResultatsScreen() {
             </View>
           ) : null}
         </Pressable>
+        </View>
+        <Pressable
+          onPress={toggleMobileSearch}
+          style={[
+            styles.roundSearchBtn,
+            (mobileSearchOpen || Boolean(query)) &&
+              styles.roundSearchBtnActive,
+          ]}
+        >
+          {mobileSearchOpen ? (
+            <X size={16} color="#ffffff" strokeWidth={2.3} />
+          ) : (
+            <Search
+              size={16}
+              color={query ? "#ffffff" : COLORS.ink}
+              strokeWidth={2.2}
+            />
+          )}
+        </Pressable>
       </View>
 
-      {/* 2 : Recherche mobile dépliable */}
+      {/* 1 : Recherche mobile dépliable */}
       <View>
         {mobileSearchOpen || query ? (
           <View style={styles.searchBar}>
@@ -627,7 +621,7 @@ export default function ResultatsScreen() {
         ) : null}
       </View>
 
-      {/* 3 : Match ciblé depuis un coupon / pari */}
+      {/* 2 : Match ciblé depuis un coupon / pari */}
       <View>
         {focusedMatch ? (
           <View style={{ marginTop: 16 }}>
@@ -651,9 +645,10 @@ export default function ResultatsScreen() {
         ) : null}
       </View>
 
-      {/* 4 : Rangée unique collante de 3 pastilles dropdown */}
+      {/* 3 : Rangée unique collante de pastilles dropdown */}
       <View style={styles.stickyFilterWrap}>
         <FilterDropdownRow
+          compact
           filters={[
             {
               id: "league",
@@ -801,17 +796,6 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 28,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
   roundBackBtn: {
     width: 36,
     height: 36,
@@ -821,12 +805,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
     alignItems: "center",
     justifyContent: "center",
-  },
-  pageTitle: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    color: COLORS.ink,
   },
   roundSearchBtn: {
     width: 34,
@@ -839,8 +817,13 @@ const styles = StyleSheet.create({
   roundSearchBtnActive: {
     backgroundColor: COLORS.betclicRed,
   },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   universeSwitcher: {
-    marginTop: 12,
+    flex: 1,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.edge,
@@ -851,7 +834,7 @@ const styles = StyleSheet.create({
   },
   universeBtn: {
     flex: 1,
-    height: 40,
+    height: 32,
     borderRadius: 12,
     paddingHorizontal: 10,
     flexDirection: "row",

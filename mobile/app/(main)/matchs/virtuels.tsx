@@ -232,7 +232,7 @@ export default function VirtualMatchesScreen() {
     <ScrollView
       style={styles.page}
       contentContainerStyle={styles.content}
-      stickyHeaderIndices={[2]}
+      stickyHeaderIndices={[1]}
       showsVerticalScrollIndicator={false}
       onScroll={onScrollCheck}
       scrollEventThrottle={16}
@@ -245,52 +245,7 @@ export default function VirtualMatchesScreen() {
         />
       }
     >
-      {/* 0 : En-tête identique à src/app/(main)/matchs/virtuels/page.tsx */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <Pressable
-            onPress={() => router.back("/matchs")}
-            style={({ pressed }) => [
-              styles.roundBackBtn,
-              pressed && { transform: [{ scale: 0.95 }] },
-            ]}
-          >
-            <ArrowLeft size={16} color={COLORS.ink} strokeWidth={2.2} />
-          </Pressable>
-          <Text numberOfLines={1} style={styles.pageTitle}>
-            Matchs virtuels
-          </Text>
-        </View>
-
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => router.push("/resultats?universe=virtual")}
-            style={styles.roundActionBtn}
-          >
-            <History size={16} color={COLORS.ink} strokeWidth={2.2} />
-          </Pressable>
-          <Pressable
-            onPress={toggleMobileSearch}
-            style={[
-              styles.roundActionBtn,
-              (mobileSearchOpen || Boolean(query)) &&
-                styles.roundActionBtnActive,
-            ]}
-          >
-            {mobileSearchOpen ? (
-              <X size={16} color="#ffffff" strokeWidth={2.3} />
-            ) : (
-              <Search
-                size={16}
-                color={query ? "#ffffff" : COLORS.ink}
-                strokeWidth={2.2}
-              />
-            )}
-          </Pressable>
-        </View>
-      </View>
-
-      {/* 1 : Barre de recherche dépliable */}
+      {/* 0 : Barre de recherche dépliable */}
       <View>
         {mobileSearchOpen || query ? (
           <View style={styles.searchBar}>
@@ -316,9 +271,49 @@ export default function VirtualMatchesScreen() {
         ) : null}
       </View>
 
-      {/* 2 : Rangée unique collante de 3 pastilles dropdown 40 px */}
+      {/* 1 : Rangée unique collante : retour + pastilles dropdown + actions */}
       <View style={styles.stickyFilterWrap}>
         <FilterDropdownRow
+          compact
+          before={
+            <Pressable
+              onPress={() => router.back("/matchs")}
+              style={({ pressed }) => [
+                styles.roundBackBtn,
+                pressed && { transform: [{ scale: 0.95 }] },
+              ]}
+            >
+              <ArrowLeft size={16} color={COLORS.ink} strokeWidth={2.2} />
+            </Pressable>
+          }
+          trailing={
+            <>
+              <Pressable
+                onPress={() => router.push("/resultats?universe=virtual")}
+                style={styles.roundActionBtn}
+              >
+                <History size={16} color={COLORS.ink} strokeWidth={2.2} />
+              </Pressable>
+              <Pressable
+                onPress={toggleMobileSearch}
+                style={[
+                  styles.roundActionBtn,
+                  (mobileSearchOpen || Boolean(query)) &&
+                    styles.roundActionBtnActive,
+                ]}
+              >
+                {mobileSearchOpen ? (
+                  <X size={16} color="#ffffff" strokeWidth={2.3} />
+                ) : (
+                  <Search
+                    size={16}
+                    color={query ? "#ffffff" : COLORS.ink}
+                    strokeWidth={2.2}
+                  />
+                )}
+              </Pressable>
+            </>
+          }
           filters={[
             {
               id: "status",
@@ -532,19 +527,6 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 32,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  headerLeft: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
   roundBackBtn: {
     width: 36,
     height: 36,
@@ -554,18 +536,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.edge,
     alignItems: "center",
     justifyContent: "center",
-  },
-  pageTitle: {
-    flex: 1,
-    fontSize: 14.5,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    color: COLORS.ink,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
   },
   roundActionBtn: {
     width: 34,
