@@ -525,11 +525,11 @@ const styles = StyleSheet.create({
   livePill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     borderRadius: 999,
     backgroundColor: "rgba(225, 0, 20, 0.12)",
-    paddingHorizontal: 9,
-    paddingVertical: 2.5,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
   },
   liveDot: {
     width: 6,

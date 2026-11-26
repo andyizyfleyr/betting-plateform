@@ -312,7 +312,7 @@ export default function MatchDetailPage() {
         ) : (
           <div className="space-y-2.5 lg:space-y-4">
             {/* Scoreboard compact sur mobile (écussons sm, noms intégraux) */}
-            <section className="relative overflow-hidden rounded-xl border border-edge bg-[#0b0e14] p-3 min-h-[140px] lg:rounded-2xl lg:p-4 lg:min-h-[160px]">
+            <section className="relative flex flex-col justify-center overflow-hidden rounded-xl border border-edge bg-[#0b0e14] p-3 min-h-[140px] lg:rounded-2xl lg:p-4 lg:min-h-[160px]">
               <img src="/stadium-bg.jpg" alt="" aria-hidden="true"
                    className="absolute inset-0 h-full w-full object-cover" />
               <div className="absolute inset-0 bg-black/45" />
@@ -402,7 +402,7 @@ export default function MatchDetailPage() {
 
               {/* Bascules compactes (Terrain 2D / Stats / Rapport) */}
               {(isLive && !isReal) || realStatsAvailable || isFinished ? (
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-edge/70 pt-2">
+                <div className="relative z-10 mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-edge/70 pt-2">
                   {((isLive && !isReal) || realStatsAvailable) && (
                     <button
                       type="button"

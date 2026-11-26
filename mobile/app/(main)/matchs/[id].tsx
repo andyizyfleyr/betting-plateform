@@ -662,8 +662,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 8,
-    paddingTop: 10,
-    paddingBottom: 28,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
   headerRow: {
     flexDirection: "row",
@@ -717,7 +717,7 @@ const styles = StyleSheet.create({
   datePillText: {
     fontSize: 10,
     fontWeight: "500",
-    color: COLORS.ink,
+    color: COLORS.mist,
     fontVariant: ["tabular-nums"],
   },
   loaderBox: {
@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: COLORS.white,
     textAlign: "center",
-    lineHeight: 15,
+    lineHeight: 13,
   },
   redCardPill: {
     borderRadius: 4,
@@ -861,7 +861,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   vsText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: "500",
     color: COLORS.mist,
   },
