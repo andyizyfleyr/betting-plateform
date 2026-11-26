@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2, LogOut, Plus, ShieldCheck, User } from "lucide-react";
@@ -22,6 +22,49 @@ const ADMIN_TAB_TITLES: Record<AdminTabKey, string> = {
   settings: "Réglages",
 };
 
+function useLongPressToggle(onToggle: () => void, onTap: () => void) {
+  const timerRef = useRef<number | null>(null);
+  const firedRef = useRef(false);
+
+  const clear = () => {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current != null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
+  return {
+    onPointerDown: () => {
+      firedRef.current = false;
+      clear();
+      timerRef.current = window.setTimeout(() => {
+        firedRef.current = true;
+        onToggle();
+      }, 450);
+    },
+    onPointerUp: clear,
+    onPointerLeave: clear,
+    onPointerCancel: clear,
+    onContextMenu: (event: React.MouseEvent) => event.preventDefault(),
+    onClick: () => {
+      if (firedRef.current) {
+        firedRef.current = false;
+        return;
+      }
+      onTap();
+    },
+  };
+}
+
 export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -40,6 +83,10 @@ export function AppHeader() {
     toast,
   } = useApp();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [balanceHidden, setBalanceHidden] = useState(false);
+  const toggleBalanceHidden = () => setBalanceHidden((v) => !v);
+  const mobileBalancePress = useLongPressToggle(toggleBalanceHidden, openRecharge);
+  const desktopBalancePress = useLongPressToggle(toggleBalanceHidden, openRecharge);
 
   const isAdminShell =
     user?.role === "admin" || pathname === "/admin" || pathname.startsWith("/admin/");
@@ -162,15 +209,25 @@ export function AppHeader() {
           {user ? (
             <button
               type="button"
-              onClick={openRecharge}
-              aria-label="Solde et rechargement"
-              className="flex h-[33px] items-center gap-1.5 rounded-full border border-edge bg-elev pl-2.5 pr-1 transition-transform active:scale-[0.98]"
+              {...mobileBalancePress}
+              aria-label={
+                balanceHidden
+                  ? "Solde masqué — appui long pour l'afficher"
+                  : "Solde et rechargement — appui long pour masquer"
+              }
+              className="flex h-[33px] select-none items-center gap-1.5 rounded-full border border-edge bg-elev pl-2.5 pr-1 transition-transform [-webkit-touch-callout:none] active:scale-[0.98]"
             >
-              <AnimatedNumber
-                value={balance}
-                format={eur}
-                className="font-display text-[12px] font-medium tabular-nums text-ink"
-              />
+              {balanceHidden ? (
+                <span className="font-display text-[12px] font-medium tabular-nums text-ink">
+                  ••••••
+                </span>
+              ) : (
+                <AnimatedNumber
+                  value={balance}
+                  format={eur}
+                  className="font-display text-[12px] font-medium tabular-nums text-ink"
+                />
+              )}
               <span className="grid h-[22px] w-[22px] place-items-center rounded-full bg-betclic-red text-white">
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
               </span>
@@ -291,15 +348,25 @@ export function AppHeader() {
             <>
               <button
                 type="button"
-                onClick={openRecharge}
-                aria-label="Solde et dépôt"
-                className="flex h-8.5 items-center gap-2 rounded-full bg-white pl-3 pr-1 text-ink shadow-xs transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                {...desktopBalancePress}
+                aria-label={
+                  balanceHidden
+                    ? "Solde masqué — appui long pour l'afficher"
+                    : "Solde et dépôt — appui long pour masquer"
+                }
+                className="flex h-8.5 select-none items-center gap-2 rounded-full bg-white pl-3 pr-1 text-ink shadow-xs transition-transform [-webkit-touch-callout:none] hover:scale-[1.01] active:scale-[0.99]"
               >
-                <AnimatedNumber
-                  value={balance}
-                  format={eur}
-                  className="font-display text-[12px] font-medium tabular-nums text-ink"
-                />
+                {balanceHidden ? (
+                  <span className="font-display text-[12px] font-medium tabular-nums text-ink">
+                    ••••••
+                  </span>
+                ) : (
+                  <AnimatedNumber
+                    value={balance}
+                    format={eur}
+                    className="font-display text-[12px] font-medium tabular-nums text-ink"
+                  />
+                )}
                 <span className="inline-flex h-6.5 items-center gap-1 rounded-full bg-betclic-red px-2 font-display text-[10.5px] font-medium text-white">
                   <Plus className="h-3 w-3" strokeWidth={2.6} />
                   Dépôt
