@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiRequestError, type ClientMatch } from "@/lib/api";
-import { getAlignedServerNow } from "@/lib/live-clock";
 import { getCachedClientMatch } from "@/lib/client-entity-cache";
 import { sanitizeMatchEvents } from "@/lib/match-events";
 import {
@@ -65,45 +64,6 @@ function defaultOpenMarkets(match: ClientMatch | null | undefined): Record<strin
     for (const g of groups.slice(0, 2)) initial[g.key] = true;
   }
   return initial;
-}
-
-function ScoreboardTimer({ match }: { match: ClientMatch }) {
-  const [now, setNow] = useState<number>(() => getAlignedServerNow());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(getAlignedServerNow()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  if (match.status === "finished") return null;
-  const startsAtMs = Date.parse(match.startsAt);
-  if (!Number.isFinite(startsAtMs)) return null;
-
-  const isLive = match.status === "live";
-  const value = isLive ? Math.max(0, now - startsAtMs) : Math.max(0, startsAtMs - now);
-  if (value > 24 * 60 * 60 * 1000) {
-    const dateLabel = new Date(startsAtMs).toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-    return (
-      <span className="mt-1 inline-flex items-center rounded-md bg-white/10 px-2 py-0.5 font-display text-[10.5px] font-semibold text-white lg:text-[11px]">
-        {dateLabel}
-      </span>
-    );
-  }
-  const total = Math.floor(value / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const sec = total % 60;
-  const label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-
-  return (
-    <span className="mt-1 inline-flex items-center rounded-md bg-white/10 px-2 py-0.5 font-display text-[10.5px] font-semibold tabular-nums text-white lg:text-[11px]">
-      {label}
-    </span>
-  );
 }
 
 export default function MatchDetailPage() {
@@ -352,7 +312,7 @@ export default function MatchDetailPage() {
         ) : (
           <div className="space-y-2.5 lg:space-y-4">
             {/* Scoreboard compact sur mobile (écussons sm, noms intégraux) */}
-            <section className="glass-card relative overflow-hidden rounded-xl p-3 min-h-[140px] lg:rounded-2xl lg:p-4 lg:min-h-[160px]">
+            <section className="relative overflow-hidden rounded-xl border border-edge bg-[#0b0e14] p-3 min-h-[140px] lg:rounded-2xl lg:p-4 lg:min-h-[160px]">
               <img src="/stadium-bg.jpg" alt="" aria-hidden="true"
                    className="absolute inset-0 h-full w-full object-cover" />
               <div className="absolute inset-0 bg-black/45" />
@@ -383,16 +343,8 @@ export default function MatchDetailPage() {
                 <div className="flex flex-col items-center">
                   {isLive ? (
                     <div className="mb-1.5">
-                      <LiveStatusBadge
-                        match={match}
-                        minute={match.minute}
-                        suspended={match.suspended}
-                      />
+                      <LiveStatusBadge match={match} minute={match.minute} />
                     </div>
-                  ) : isFinished ? (
-                    <span className="mb-1.5 rounded-full bg-elev px-2 py-0.5 font-display text-[9.5px] font-medium uppercase tracking-wider text-mist">
-                      Terminé
-                    </span>
                   ) : null}
 
                   {isLive || isFinished ? (
@@ -421,13 +373,6 @@ export default function MatchDetailPage() {
                     <div className="rounded-lg bg-elev px-2.5 py-1 text-center font-display text-[10.5px] font-medium text-mist lg:rounded-xl lg:px-3.5 lg:py-2 lg:text-[11px]">
                       VS
                     </div>
-                  )}
-                  <ScoreboardTimer match={match} />
-
-                  {match.htHomeScore != null && match.htAwayScore != null && (
-                    <span className="mt-0.5 text-[9.5px] font-medium tabular-nums text-dim lg:mt-1 lg:text-[10px]">
-                      MT {match.htHomeScore}-{match.htAwayScore}
-                    </span>
                   )}
                 </div>
 
@@ -523,15 +468,6 @@ export default function MatchDetailPage() {
                     ? "Rencontre terminée — marchés clôturés."
                     : "Aucun marché ouvert pour le moment."}
                 </p>
-                {isFinished && (
-                  <Link
-                    href={`/resultats/${match.id}`}
-                    className="btn-red mt-2.5 inline-flex items-center gap-1 rounded-lg px-3.5 py-1.5 text-[10.5px]"
-                  >
-                    Bilan détaillé
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                )}
               </div>
             ) : (
               <section className="space-y-2 lg:space-y-3">
