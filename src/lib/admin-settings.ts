@@ -231,13 +231,24 @@ export interface MarketsCatalogSettings {
   activeLeagues: string[];
 }
 
+/**
+ * Marchés définitivement retirés de l'offre : ils ne sont plus générés ni
+ * proposés à l'activation, mais leur définition reste disponible pour régler
+ * les paris déjà pris.
+ */
+export const RETIRED_MARKETS: readonly string[] = [
+  "dnb",
+  "handicap_euro",
+  "winning_margin",
+];
+
 export const DEFAULT_MARKETS_CATALOG: MarketsCatalogSettings = {
   activeMarkets: [
-    "result", "dnb", "double_chance", "handicap_euro", "btts",
+    "result", "double_chance", "btts",
     "odd_even", "total_ou", "ht_total_ou", "ht_result",
     "home_total", "away_total", "first_team_to_score",
     "highest_scoring_half", "goal_range", "result_total",
-    "result_btts", "winning_margin", "home_to_nil", "away_to_nil",
+    "result_btts", "home_to_nil", "away_to_nil",
     "home_clean_sheet", "away_clean_sheet", "total_exact", "ht_ft", "score_exact",
   ],
   activeLeagues: [],

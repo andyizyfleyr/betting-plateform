@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/format";
 import {
   ADMIN_SETTINGS_CATALOG,
+  RETIRED_MARKETS,
   type AdminSettingKey,
 } from "@/lib/admin-settings";
 import { AdminInput, AdminToggle } from "@/components/admin/admin-ui";
@@ -1019,7 +1020,7 @@ function MarketsCatalogEditor({
   expanded: boolean;
 }) {
   const active = (draft.activeMarkets as string[]) ?? [];
-  const allMarkets = Object.keys(MARKET_LABELS);
+  const allMarkets = Object.keys(MARKET_LABELS).filter((m) => !RETIRED_MARKETS.includes(m));
   return (
     <div className="flex flex-col gap-3">
       <div>
