@@ -1,3 +1,4 @@
+import { backfillCorruptFinishedOdds } from "@/db/odds-backfill";
 import { eq, sql } from "drizzle-orm";
 import { db, ensureHealthyDbConnection } from "@/db";
 import {
@@ -204,6 +205,7 @@ async function runSeedInternal(): Promise<void> {
     // v21 sans ALTER. Les ALTER sont idempotents (IF NOT EXISTS) ; une seule passe.
     await ensureSchemaColumns();
     await ensureOddsArchiveColumns();
+    await backfillCorruptFinishedOdds();
 
     if (chk.has_marker && chk.has_admin) {
       return;
