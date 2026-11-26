@@ -23,7 +23,6 @@ import {
   SlidersHorizontal,
   Vibrate,
   Volume2,
-  Wallet,
   X,
   Zap,
 } from "lucide-react";
@@ -60,7 +59,6 @@ export default function ParametresPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
-  const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
   const [profilName, setProfilName] = useState("");
   const [profilEmail, setProfilEmail] = useState("");
   const [profilSaving, setProfilSaving] = useState(false);
@@ -297,45 +295,15 @@ export default function ParametresPage() {
           </div>
         )}
         <div className="mt-3 grid grid-cols-3 gap-2">
-          <Link href="/parametres/depot" className="flex min-h-10 items-center justify-center gap-1 rounded-xl bg-betclic-red font-display text-[10.5px] font-medium text-white active:opacity-90"><Plus size={17} />Déposer</Link>
+          <Link href="/parametres/depot" className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-betclic-red active:bg-elev"><Plus size={17} />Déposer</Link>
           <Link href="/parametres/retrait" className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowUpRight size={17} />Retirer</Link>
           <button type="button" onClick={() => setTransferOpen(true)} className="flex min-h-10 items-center justify-center gap-1 rounded-xl border border-edge bg-white font-display text-[10.5px] font-medium text-ink active:bg-elev"><ArrowLeftRight size={17} />Transférer</button>
         </div>
       </section>
 
-      {/* Découpage mobile en 2 onglets nets : Portefeuille | Réglages */}
-      <div className="mt-2 grid grid-cols-2 gap-1 rounded-2xl bg-elev p-1 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileTab("wallet")}
-          className={cn(
-            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[11px] font-medium transition-colors",
-            mobileTab === "wallet"
-              ? "bg-white text-betclic-red shadow-2xs"
-              : "text-mist active:bg-elev"
-          )}
-        >
-          <Wallet className="h-3.5 w-3.5" strokeWidth={2.3} />
-          <span>Portefeuille</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileTab("settings")}
-          className={cn(
-            "flex h-9.5 items-center justify-center gap-1.5 rounded-xl font-display text-[11px] font-medium transition-colors",
-            mobileTab === "settings"
-              ? "bg-white text-betclic-red shadow-2xs"
-              : "text-mist active:bg-elev"
-          )}
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.3} />
-          <span>Réglages</span>
-        </button>
-      </div>
-
       <div className="mt-3 space-y-4 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:space-y-0">
         {/* Colonne gauche : Portefeuille, Solde et accès direct aux mouvements */}
-        <div className={cn("space-y-3", mobileTab !== "wallet" && "hidden lg:block")}>
+        <div className="space-y-3">
           {/* Retraits en attente avec annulation immédiate */}
           {pendingWithdrawalEntries.length > 0 && (
             <section className="glass-card divide-y divide-edge overflow-hidden rounded-2xl">
@@ -427,7 +395,7 @@ export default function ParametresPage() {
         </div>
 
         {/* Colonne droite : Profil éditable + Préférences & Déconnexion */}
-        <div className={cn("space-y-3", mobileTab !== "settings" && "hidden lg:block")}>
+        <div className="space-y-3">
           {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
           <section className="rounded-2xl border border-edge bg-white p-3.5">
             <div className="mb-3 flex items-center gap-3">
@@ -503,6 +471,16 @@ export default function ParametresPage() {
 
           {/* Sur mobile, les mêmes réglages sont regroupés comme dans l'application. */}
           <div className="space-y-3 lg:hidden">
+            <SettingsGroup title="Portefeuille" subtitle="Dépôts, retraits, mises et gains">
+              <Link href="/parametres/transactions" className="flex items-center gap-3 p-3.5 active:bg-elev">
+                <IconBox><History className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+                <div className="min-w-0 flex-1">
+                  <p className="font-display text-[11.5px] font-medium text-ink">Dernières opérations</p>
+                  <p className="truncate text-[10px] text-dim">Voir tous les mouvements du compte</p>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
+              </Link>
+            </SettingsGroup>
             <SettingsGroup title="Compte" subtitle="Pays et devise">
               <div className="flex items-center justify-between gap-3 p-3.5">
                 <div className="flex min-w-0 items-center gap-3">
