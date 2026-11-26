@@ -428,20 +428,74 @@ function ResultatsContent() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-2 pt-2.5 pb-6 lg:px-0 lg:py-0">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            aria-label="Retour"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:hidden"
-          >
-            <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
-          </button>
-          <h1 className="font-display text-[14.5px] font-bold tracking-tight text-ink lg:text-[16px]">
-            Résultats
-          </h1>
+    <div className="mx-auto w-full max-w-[1600px] px-2 pt-1.5 pb-6 lg:px-0 lg:py-0">
+      {/* Retour + sélecteur d'univers + loupe/recherche sur une seule ligne */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          aria-label="Retour"
+          className="grid h-8.5 w-8.5 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95 lg:hidden"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedUniverse("real");
+                setLeagueFilter("all");
+              }}
+              className={cn(
+                "flex h-8 items-center justify-center gap-1.5 rounded-xl px-2 font-display text-[11px] font-medium transition-all",
+                isRealUniverse
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-mist hover:bg-elev/60 active:bg-elev"
+              )}
+            >
+              <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+              <span className="truncate">Matchs réels</span>
+              {history !== null && (
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
+                    isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                  )}
+                >
+                  {realHistory.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedUniverse("virtual");
+                setLeagueFilter("all");
+              }}
+              className={cn(
+                "flex h-8 items-center justify-center gap-1.5 rounded-xl px-2 font-display text-[11px] font-medium transition-all",
+                !isRealUniverse
+                  ? "bg-betclic-red text-white shadow-xs"
+                  : "text-mist hover:bg-elev/60 active:bg-elev"
+              )}
+            >
+              <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
+              <span className="truncate">Matchs virtuels</span>
+              {history !== null && (
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
+                    !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
+                  )}
+                >
+                  {virtualHistory.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         <button
@@ -461,68 +515,9 @@ function ResultatsContent() {
             <Search className="h-4 w-4" strokeWidth={2.2} />
           )}
         </button>
-      </div>
-
-      {/* Sélecteur d'univers + Recherche en ligne sur desktop */}
-      <div className="mt-3 xl:grid xl:grid-cols-[minmax(0,1fr)_270px] xl:items-center xl:gap-3">
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-edge bg-white p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedUniverse("real");
-              setLeagueFilter("all");
-            }}
-            className={cn(
-              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
-              isRealUniverse
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "text-mist hover:bg-elev/60 active:bg-elev"
-            )}
-          >
-            <CalendarClock className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-            <span className="truncate">Matchs réels</span>
-            {history !== null && (
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
-                  isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
-                )}
-              >
-                {realHistory.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedUniverse("virtual");
-              setLeagueFilter("all");
-            }}
-            className={cn(
-              "flex h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 font-display text-[11px] font-medium transition-all",
-              !isRealUniverse
-                ? "bg-betclic-red text-white shadow-xs"
-                : "text-mist hover:bg-elev/60 active:bg-elev"
-            )}
-          >
-            <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={2.3} />
-            <span className="truncate">Matchs virtuels</span>
-            {history !== null && (
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[9.5px] font-medium tabular-nums",
-                  !isRealUniverse ? "bg-white/20 text-white" : "bg-elev text-ink"
-                )}
-              >
-                {virtualHistory.length}
-              </span>
-            )}
-          </button>
-        </div>
 
         {/* Recherche desktop */}
-        <div className="hidden h-12 items-center gap-2 rounded-2xl border border-edge bg-white px-3.5 lg:mt-3 lg:flex xl:mt-0">
+        <div className="hidden h-9 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:flex lg:w-[280px] xl:w-[320px]">
           <Search className="h-4 w-4 shrink-0 text-dim" />
           <input
             type="text"
@@ -592,6 +587,8 @@ function ResultatsContent() {
 
       {/* Rangée unique collante de 3 pastilles dropdown */}
       <FilterDropdownRow
+        dense
+        compactMobile
         filters={[
           {
             id: "league",

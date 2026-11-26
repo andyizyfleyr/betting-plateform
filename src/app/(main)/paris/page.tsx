@@ -326,54 +326,7 @@ export default function ParisPage() {
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
-    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
-          Mes paris
-        </h1>
-
-        <button
-          type="button"
-          onClick={toggleMobileSearch}
-          aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un pari"}
-          className={cn(
-            "grid h-8.5 w-8.5 shrink-0 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
-            mobileSearchOpen || query
-              ? "bg-betclic-red text-white"
-              : "bg-elev text-ink"
-          )}
-        >
-          {mobileSearchOpen ? (
-            <X className="h-4 w-4" strokeWidth={2.3} />
-          ) : (
-            <Search className="h-4 w-4" strokeWidth={2.2} />
-          )}
-        </button>
-
-        {/* Recherche en ligne sur desktop */}
-        <div className="hidden h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:flex lg:w-[340px] xl:w-[380px]">
-          <Search className="h-4 w-4 shrink-0 text-dim" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un match, un coupon, un combiné…"
-            className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              aria-label="Effacer la recherche"
-              className="text-dim hover:text-ink"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-
+    <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-1.5 lg:px-0 lg:py-0">
       {/* Barre de recherche mobile dépliable au clic sur la loupe */}
       {(mobileSearchOpen || query) && (
         <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:hidden">
@@ -401,7 +354,49 @@ export default function ParisPage() {
       )}
 
       <div className="sticky top-[48px] z-30 bg-deep/95 backdrop-blur-md lg:top-[52px]">
-        <FilterDropdownRow sticky={false} compactMobile bleedHorizontal={false}
+        <FilterDropdownRow sticky={false} dense compactMobile bleedHorizontal={false}
+        trailing={
+          <>
+            <button
+              type="button"
+              onClick={toggleMobileSearch}
+              aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un pari"}
+              className={cn(
+                "grid h-8.5 w-8.5 shrink-0 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
+                mobileSearchOpen || query
+                  ? "bg-betclic-red text-white"
+                  : "bg-elev text-ink"
+              )}
+            >
+              {mobileSearchOpen ? (
+                <X className="h-4 w-4" strokeWidth={2.3} />
+              ) : (
+                <Search className="h-4 w-4" strokeWidth={2.2} />
+              )}
+            </button>
+
+            <div className="hidden h-9 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:flex lg:w-[280px] xl:w-[320px]">
+              <Search className="h-4 w-4 shrink-0 text-dim" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Rechercher un match, un coupon, un combiné…"
+                className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Effacer la recherche"
+                  className="text-dim hover:text-ink"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </>
+        }
         leading={<div role="tablist" aria-label="Statut des paris" className="flex shrink-0 items-center gap-1.5">
           {([['ongoing', 'En cours'], ['finished', 'Terminés']] as const).map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={tab === value}

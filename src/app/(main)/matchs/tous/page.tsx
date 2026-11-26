@@ -243,68 +243,6 @@ function AllMatchesContent() {
   return (
     <PullToRefresh onRefresh={handlePullRefresh} haptics={user?.haptics}>
       <div className="mx-auto w-full max-w-[1600px] px-2 pb-6 pt-2.5 lg:px-0 lg:py-0">
-        {/* En-tête compact + icône loupe sur mobile */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                triggerRouteLoader("/matchs");
-                router.push("/matchs");
-              }}
-              aria-label="Retour à l'accueil Matchs"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
-            </button>
-            <h1 className="truncate font-display text-[14.5px] font-bold leading-tight tracking-tight text-ink lg:text-[16px]">
-              {leagueFilter !== "all" ? leagueFilter : "Tous les matchs"}
-            </h1>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={toggleMobileSearch}
-              aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un match"}
-              className={cn(
-                "grid h-8.5 w-8.5 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
-                mobileSearchOpen || query
-                  ? "bg-betclic-red text-white"
-                  : "bg-elev text-ink"
-              )}
-            >
-              {mobileSearchOpen ? (
-                <X className="h-4 w-4" strokeWidth={2.3} />
-              ) : (
-                <Search className="h-4 w-4" strokeWidth={2.2} />
-              )}
-            </button>
-
-            {/* Recherche desktop en ligne */}
-            <div className="hidden h-10 w-[300px] items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:flex xl:w-[340px]">
-              <Search className="h-4 w-4 shrink-0 text-dim" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher un club ou une ligue…"
-                className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  aria-label="Effacer la recherche"
-                  className="text-dim hover:text-ink"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Barre de recherche mobile dépliable à la demande */}
         {(mobileSearchOpen || query) && (
           <div className="mt-2.5 flex h-10 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:hidden">
@@ -331,8 +269,64 @@ function AllMatchesContent() {
           </div>
         )}
 
-        {/* Rangée unique collante de 3 pastilles dropdown 40 px */}
+        {/* Rangée unique collante : retour + pastilles dropdown + loupe */}
         <FilterDropdownRow
+          dense
+          compactMobile
+          before={
+            <button
+              type="button"
+              onClick={() => {
+                triggerRouteLoader("/matchs");
+                router.push("/matchs");
+              }}
+              aria-label="Retour à l'accueil Matchs"
+              className="grid h-8.5 w-8.5 shrink-0 place-items-center rounded-full bg-white text-ink ring-1 ring-edge active:scale-95"
+            >
+              <ArrowLeft className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+          }
+          trailing={
+            <>
+              <button
+                type="button"
+                onClick={toggleMobileSearch}
+                aria-label={mobileSearchOpen ? "Fermer la recherche" : "Rechercher un match"}
+                className={cn(
+                  "grid h-8.5 w-8.5 place-items-center rounded-full transition-colors active:scale-95 lg:hidden",
+                  mobileSearchOpen || query
+                    ? "bg-betclic-red text-white"
+                    : "bg-elev text-ink"
+                )}
+              >
+                {mobileSearchOpen ? (
+                  <X className="h-4 w-4" strokeWidth={2.3} />
+                ) : (
+                  <Search className="h-4 w-4" strokeWidth={2.2} />
+                )}
+              </button>
+              <div className="hidden h-9 items-center gap-2 rounded-xl border border-edge bg-white px-3 lg:flex lg:w-[280px] xl:w-[320px]">
+                <Search className="h-4 w-4 shrink-0 text-dim" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="___PH___"
+                  className="w-full bg-transparent text-[11.5px] text-ink outline-none placeholder:text-dim"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    aria-label="Effacer la recherche"
+                    className="text-dim hover:text-ink"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </>
+          }
           filters={[
             {
               id: "status",

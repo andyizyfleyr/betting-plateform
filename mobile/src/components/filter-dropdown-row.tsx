@@ -34,6 +34,7 @@ export function FilterDropdownRow({
   hasActiveFilters,
   compact = false,
   leading,
+  before,
   trailing,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +44,8 @@ export function FilterDropdownRow({
   hasActiveFilters?: boolean;
   compact?: boolean;
   leading?: React.ReactNode;
+  /** Élément fixe à gauche de la rangée (ex. bouton retour). */
+  before?: React.ReactNode;
   /** Élément fixe à droite de la rangée (ex. loupe de recherche). */
   trailing?: React.ReactNode;
 }) {
@@ -59,6 +62,7 @@ export function FilterDropdownRow({
   return (
     <>
       <View style={[styles.barWrap, compact && styles.barWrapCompact, styles.barRow]}>
+        {before ? <View style={styles.trailingSlot}>{before}</View> : null}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
