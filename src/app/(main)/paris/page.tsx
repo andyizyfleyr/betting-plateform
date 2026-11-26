@@ -527,7 +527,7 @@ export default function ParisPage() {
                 <div className="grid grid-cols-1 items-start gap-3">
                   {group.map((b) => (
                     <SwipeToDelete key={`${b.kind}-${b.id}`} onDelete={() => void handleDeleteBet(b.id)}>
-                      <BetTicket bet={b} onShare={setSharingBet} />
+                      <BetTicket bet={b} />
                     </SwipeToDelete>
                   ))}
                 </div>
