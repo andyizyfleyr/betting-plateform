@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LogOut, Plus, ShieldCheck } from "lucide-react-native";
@@ -24,6 +24,8 @@ export function AppHeader() {
   } = useApp();
   const authPending = !authReady || sessionRestoring;
   const [loggingOut, setLoggingOut] = useState(false);
+  const [balanceHidden, setBalanceHidden] = useState(false);
+  const longPressUntilRef = useRef(0);
 
   if (
     pathname === "/auth" ||
@@ -108,13 +110,29 @@ export function AppHeader() {
         <View style={styles.rightRow}>
           {user ? (
             <Pressable
-              onPress={openRecharge}
+              accessibilityRole="button"
+              accessibilityLabel={
+                balanceHidden
+                  ? "Solde masqué, appui long pour afficher"
+                  : "Solde, appui long pour masquer"
+              }
+              delayLongPress={400}
+              onLongPress={() => {
+                longPressUntilRef.current = Date.now() + 800;
+                setBalanceHidden((v) => !v);
+              }}
+              onPress={() => {
+                if (Date.now() < longPressUntilRef.current) return;
+                openRecharge();
+              }}
               style={({ pressed }) => [
                 styles.balancePill,
                 pressed && { transform: [{ scale: 0.98 }] },
               ]}
             >
-              <Text style={styles.balanceText}>{eur(balance)}</Text>
+              <Text style={styles.balanceText}>
+                {balanceHidden ? "••••••" : eur(balance)}
+              </Text>
               <View style={styles.plusCircle}>
                 <Plus size={14} color="#ffffff" strokeWidth={2.8} />
               </View>
