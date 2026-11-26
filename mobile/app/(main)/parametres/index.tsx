@@ -30,7 +30,6 @@ import {
   Vibrate,
   Volume2,
   X,
-  Zap,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { TransferCodeSheet } from "@/components/transfer-code-sheet";
@@ -75,8 +74,6 @@ export default function ParametresScreen() {
     betsVersion,
     countryConfig,
     currencyConfig,
-    dataSaverEnabled,
-    setDataSaverEnabled,
   } = useApp();
 
   const userId = user?.id ?? null;
@@ -561,20 +558,6 @@ export default function ParametresScreen() {
               label="Retour haptique"
               checked={user.haptics ?? true}
               onChange={(v) => patch({ haptics: v }, "Vibrations mises à jour")}
-            />
-            <SwitchRow
-              icon={<Zap size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Mode économie 3G"
-              checked={dataSaverEnabled}
-              onChange={(v) => {
-                setDataSaverEnabled(v);
-                toast({
-                  kind: "success",
-                  title: v
-                    ? "Mode économie 3G activé"
-                    : "Rafraîchissement rapide restauré",
-                });
-              }}
               last
             />
             </View>
@@ -586,35 +569,20 @@ export default function ParametresScreen() {
               icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
               label="Toutes les notifications"
               checked={user.notifications ?? true}
-              onChange={(v) =>
-                patch({ notifications: v }, "Notifications mises à jour")
-              }
-            />
-            <Pressable onPress={() => void (async () => {
-              try {
-                await registerPushDevice(true);
-                const result = await api.patchSettings({ notifications: true });
-                void writeUserPreferences(result.user.id, { notifications: true });
-                applyUser(result.user);
-                toast({ kind: "success", title: "Notifications système activées" });
-              } catch (e) {
-                toast({ kind: "error", title: "Notifications indisponibles", description: e instanceof Error ? e.message : "Réessayez plus tard." });
-              }
-            })()} style={styles.prefRow}>
-              <Text style={styles.prefLabel}>Activer les notifications système</Text>
-              <ChevronRight size={16} color={COLORS.dim} />
-            </Pressable>
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Début des matchs"
-              checked={user.notifyMatches ?? true}
-              onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")}
-            />
-            <SwitchRow
-              icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Résultats des paris"
-              checked={user.notifyBets ?? true}
-              onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")}
+              onChange={(v) => void (async () => {
+                if (v) {
+                  try {
+                    await registerPushDevice(true);
+                  } catch {
+                    // permission refusée : le réglage reste enregistré côté compte
+                  }
+                }
+                await patch(
+                  { notifications: v, notifyMatches: v, notifyBets: v, notifyPayments: v },
+                  v ? "Toutes les notifications activées" : "Notifications désactivées"
+                );
+              })()}
+              last
             />
             </View>
           </View>

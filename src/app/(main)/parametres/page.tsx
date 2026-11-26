@@ -421,9 +421,7 @@ export default function ParametresPage() {
                 ))}
               </div>
             </div>
-            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v }, "Notifications mises à jour")} />
-            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Début des matchs" checked={user?.notifyMatches ?? true} onChange={(v) => patch({ notifyMatches: v }, "Préférences mises à jour")} />
-            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Résultats des paris" checked={user?.notifyBets ?? true} onChange={(v) => patch({ notifyBets: v }, "Préférences mises à jour")} last />
+            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v, notifyMatches: v, notifyBets: v, notifyPayments: v }, v ? "Toutes les notifications activées" : "Notifications désactivées")} last />
           </SettingsGroup>
         </div>
       </div>
