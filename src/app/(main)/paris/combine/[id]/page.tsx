@@ -430,15 +430,6 @@ export default function ComboDetailPage() {
 
           {bet && (
             <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setSharing(true)}
-                aria-label="Partager ce combiné"
-                className="inline-flex h-8 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10px] font-medium text-ink active:scale-95"
-              >
-                <Share2 className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
-                Flex
-              </button>
               <StatusPill
                 status={bet.status}
                 live={Boolean(anyLive)}
@@ -464,6 +455,15 @@ export default function ComboDetailPage() {
                     : null
                 }
               />
+              <button
+                type="button"
+                onClick={() => setSharing(true)}
+                aria-label="Partager ce combiné"
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-white px-2.5 font-display text-[10px] font-medium text-ink ring-1 ring-edge active:scale-95 lg:text-[10.5px]"
+              >
+                <Share2 className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
+                Partager
+              </button>
             </div>
           )}
         </div>

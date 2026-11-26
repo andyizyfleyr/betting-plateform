@@ -395,15 +395,6 @@ export default function SingleBetDetailPage() {
 
         {bet && (
           <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setSharing(true)}
-              aria-label="Partager ce pari"
-              className="inline-flex h-7 items-center gap-1 rounded-full bg-elev px-2 font-display text-[9.5px] font-medium text-ink active:scale-95 lg:h-8 lg:px-2.5 lg:text-[10px]"
-            >
-              <Share2 className="h-3 w-3 text-betclic-red" strokeWidth={2.2} />
-              Flex
-            </button>
             <StatusPill
               status={bet.status}
               live={live}
@@ -421,6 +412,15 @@ export default function SingleBetDetailPage() {
                   : null
               }
             />
+            <button
+              type="button"
+              onClick={() => setSharing(true)}
+              aria-label="Partager ce pari"
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-white px-2.5 font-display text-[10px] font-medium text-ink ring-1 ring-edge active:scale-95 lg:h-8 lg:text-[10.5px]"
+            >
+              <Share2 className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.2} />
+              Partager
+            </button>
           </div>
         )}
       </div>
