@@ -461,7 +461,6 @@ export default function ParisPage() {
             ],
           }] : []),
         ]}
-        resultCountText={null}
       />
       </div>
 

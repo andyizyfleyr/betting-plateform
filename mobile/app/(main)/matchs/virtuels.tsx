@@ -396,13 +396,6 @@ export default function VirtualMatchesScreen() {
             setLeagueFilter("all");
             setOddsProfile("all");
           }}
-          resultCountText={
-            matches !== null
-              ? `${visible.length} match${visible.length > 1 ? "s" : ""} virtuel${
-                  visible.length > 1 ? "s" : ""
-                }`
-              : null
-          }
         />
       </View>
 

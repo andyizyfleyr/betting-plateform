@@ -200,13 +200,6 @@ export default function TransactionsPage() {
             },
           ]}
           onReset={kindFilter !== "all" ? () => setKindFilter("all") : () => {}}
-          resultCountText={
-            wallet
-              ? `${filteredTx.length} ${
-                  filteredTx.length > 1 ? "mouvements" : "mouvement"
-                }`
-              : null
-          }
         /></div>
 
         {wallet === null ? (

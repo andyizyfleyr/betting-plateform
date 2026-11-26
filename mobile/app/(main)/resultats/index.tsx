@@ -717,11 +717,6 @@ export default function ResultatsScreen() {
             setWinnerFilter("all");
             setGoalsFilter("all");
           }}
-          resultCountText={
-            history !== null
-              ? `${visible.length} résultat${visible.length > 1 ? "s" : ""}`
-              : null
-          }
         />
       </View>
 

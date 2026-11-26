@@ -402,11 +402,6 @@ export default function PredictionsPage() {
           setCategory("Tous");
           setFormatFilter("all");
         }}
-        resultCountText={
-          questions !== null
-            ? `${visibleQuestions.length} prédiction${visibleQuestions.length > 1 ? "s" : ""}`
-            : null
-        }
       />
 
       {/* Liste des questions */}
