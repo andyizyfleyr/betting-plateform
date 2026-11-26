@@ -243,7 +243,7 @@ export function BetModal() {
       bumpBets();
       toast({
         kind: "success",
-        title: "Pari validé !",
+        title: "Pari placé !",
         description: `${target.label} @ ${formatOdds(res.bet.odds, oddsFormat)} · Gain potentiel ${eur(res.bet.potentialWin)}`,
       });
       closeBet();
