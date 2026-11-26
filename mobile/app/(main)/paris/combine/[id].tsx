@@ -439,9 +439,7 @@ export default function ComboDetailScreen() {
                   </Text>
                   <Text style={styles.amountItem}>
                     <Text style={styles.amountMuted}>Cote : </Text>
-                    <Text
-                      style={[styles.amountStrong, { color: COLORS.betclicRed }]}
-                    >
+                    <Text style={styles.amountStrong}>
                       {formatOdds(bet.odds, oddsFormat)}
                     </Text>
                   </Text>
