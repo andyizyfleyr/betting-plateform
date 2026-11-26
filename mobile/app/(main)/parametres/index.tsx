@@ -23,6 +23,7 @@ import {
   Globe,
   Lock,
   LogOut,
+  Pencil,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -113,11 +114,15 @@ export default function ParametresScreen() {
   const [profilName, setProfilName] = useState("");
   const [profilEmail, setProfilEmail] = useState("");
   const [profilSaving, setProfilSaving] = useState(false);
+  const [profilEditing, setProfilEditing] = useState(false);
 
-  useEffect(() => {
-    setProfilName(user?.name ?? "");
-    setProfilEmail(user?.email ?? "");
-  }, [user]);
+  const toggleProfilEditing = () => {
+    if (!profilEditing) {
+      setProfilName(user?.name ?? "");
+      setProfilEmail(user?.email ?? "");
+    }
+    setProfilEditing(v => !v);
+  };
   const otaDiag = useMemo(() => getOtaRuntimeDiagnostics(), []);
 
   const cancelSlotRef = useRef<Map<number, string>>(new Map());
@@ -229,6 +234,7 @@ export default function ParametresScreen() {
       const r = await api.auth.updateProfile({ name, email });
       applyUser(r.user);
       toast({ kind: "success", title: "Profil mis à jour" });
+      setProfilEditing(false);
     } catch {
       toast({ kind: "error", title: "Impossible d'enregistrer le profil" });
     } finally {
@@ -334,15 +340,28 @@ export default function ParametresScreen() {
         />
       }
     >
-      <View style={styles.profileCard}>
-        <LinearGradient colors={[`hsl(${hue}, 60%, 44%)`, `hsl(${(hue + 36) % 360}, 68%, 30%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarBox}>
-          <Text style={styles.avatarInitials}>{initials(user.name)}</Text>
-        </LinearGradient>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={1} style={styles.profileName}>{user.name}</Text>
-          <Text numberOfLines={1} style={styles.profileEmail}>{user.email ?? "Session active"}</Text>
+      {/* Carte Solde disponible — fond blanc, tout en haut */}
+      <View style={styles.topBlock}>
+        <View style={styles.balanceCardWhite}>
+          <View style={styles.walletTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.walletLabelWhite}>Solde disponible</Text>
+              <Text style={styles.walletAmountWhite}>{balanceVisible ? eur(user.balance) : "••••••"}</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} onPress={() => setBalanceVisible(v => !v)} style={styles.eyeButtonWhite}>
+              {balanceVisible ? <Eye size={18} color={COLORS.ink} /> : <EyeOff size={18} color={COLORS.ink} />}
+            </Pressable>
+          </View>
+          {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
+          {wallet && wallet.summary.pendingWithdrawals > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</Text> : null}
+          {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</Text> : null}
+          <View style={styles.walletBtnsGrid}>
+            <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/depot")} style={styles.depositBtn}><Plus size={16} color={COLORS.betclicRed} /><Text style={styles.depositBtnText}>Déposer</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/retrait")} style={styles.withdrawBtnWhite}><ArrowUpRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Retirer</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtnWhite}><ArrowLeftRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Transférer</Text></Pressable>
+          </View>
         </View>
-        {user.role === "admin" ? <Text style={styles.adminBadge}>Admin</Text> : null}
+        {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
       </View>
 
       {/* Sélecteur mobile en 2 onglets nets : Portefeuille | Réglages */}
@@ -394,26 +413,6 @@ export default function ParametresScreen() {
 
       {mobileTab === "wallet" ? (
         <View style={styles.sectionStack}>
-          <View style={styles.balanceCardWhite}>
-            <View style={styles.walletTopRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.walletLabelWhite}>Solde disponible</Text>
-                <Text style={styles.walletAmountWhite}>{balanceVisible ? eur(user.balance) : "••••••"}</Text>
-              </View>
-              <Pressable accessibilityRole="button" accessibilityLabel={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} onPress={() => setBalanceVisible(v => !v)} style={styles.eyeButtonWhite}>
-                {balanceVisible ? <Eye size={18} color={COLORS.ink} /> : <EyeOff size={18} color={COLORS.ink} />}
-              </Pressable>
-            </View>
-            {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < user.balance - 1e-4 ? <Text style={styles.balanceNote}>Retirable : {eur(wallet.summary.withdrawable)} · Bonus {eur(wallet.summary.bonusRemaining ?? 0)}</Text> : null}
-            {wallet && wallet.summary.pendingWithdrawals > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingWithdrawals) : "••••"} en retrait</Text> : null}
-            {wallet && (wallet.summary.pendingDeposits ?? 0) > 0 ? <Text style={styles.balanceNote}>{balanceVisible ? eur(wallet.summary.pendingDeposits ?? 0) : "••••"} en dépôt</Text> : null}
-            <View style={styles.walletBtnsGrid}>
-              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/depot")} style={styles.depositBtn}><Plus size={16} color={COLORS.betclicRed} /><Text style={styles.depositBtnText}>Déposer</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => router.push("/parametres/retrait")} style={styles.withdrawBtnWhite}><ArrowUpRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Retirer</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setTransferOpen(true)} style={styles.withdrawBtnWhite}><ArrowLeftRight size={16} color={COLORS.ink} /><Text style={styles.withdrawBtnTextWhite}>Transférer</Text></Pressable>
-            </View>
-          </View>
-          {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
 
           {/* Retraits en attente avec annulation immédiate */}
           {pendingWithdrawalEntries.length > 0 ? (
@@ -498,7 +497,7 @@ export default function ParametresScreen() {
         </View>
       ) : (
         <View style={styles.sectionStack}>
-          {/* Carte profil : nom + email éditables */}
+          {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
           <View style={styles.profileCard}>
             <LinearGradient colors={[`hsl(${hue}, 60%, 44%)`, `hsl(${(hue + 36) % 360}, 68%, 30%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarBox}>
               <Text style={styles.avatarInitials}>{initials(user?.name ?? "PU")}</Text>
@@ -508,48 +507,58 @@ export default function ParametresScreen() {
               <Text numberOfLines={1} style={styles.profileEmail}>{user?.email ?? "Session active"}</Text>
             </View>
             {user?.role === "admin" ? <Text style={styles.adminBadge}>Admin</Text> : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={profilEditing ? "Fermer la modification" : "Modifier le nom et l'email"}
+              onPress={toggleProfilEditing}
+              style={styles.profileEditBtn}
+            >
+              {profilEditing ? <X size={14} color={COLORS.ink} strokeWidth={2.3} /> : <Pencil size={14} color={COLORS.ink} strokeWidth={2.2} />}
+            </Pressable>
           </View>
-          <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Profil</Text><Text style={styles.settingsSubtitle}>Nom et email de votre compte</Text></View>
-            <View style={styles.listCard}>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Nom</Text>
-                <TextInput
-                  value={profilName}
-                  onChangeText={setProfilName}
-                  placeholder="Votre nom"
-                  placeholderTextColor={COLORS.mist}
-                  maxLength={80}
-                  style={styles.fieldInput}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                />
+          {profilEditing ? (
+            <View style={{ gap: 6 }}>
+              <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Profil</Text><Text style={styles.settingsSubtitle}>Nom et email de votre compte</Text></View>
+              <View style={styles.listCard}>
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Nom</Text>
+                  <TextInput
+                    value={profilName}
+                    onChangeText={setProfilName}
+                    placeholder="Votre nom"
+                    placeholderTextColor={COLORS.mist}
+                    maxLength={80}
+                    style={styles.fieldInput}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                </View>
+                <View style={[styles.fieldGroup, { marginTop: 10 }]}>
+                  <Text style={styles.fieldLabel}>Email</Text>
+                  <TextInput
+                    value={profilEmail}
+                    onChangeText={setProfilEmail}
+                    placeholder="votre.email@exemple.com"
+                    placeholderTextColor={COLORS.mist}
+                    maxLength={160}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.fieldInput}
+                  />
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={saveProfile}
+                  disabled={profilSaving}
+                  style={[styles.profileSaveBtn, profilSaving && { opacity: 0.6 }]}
+                >
+                  {profilSaving ? <ActivityIndicator size="small" color="#ffffff" /> : <SlidersHorizontal size={15} color="#ffffff" strokeWidth={2.4} />}
+                  <Text style={styles.profileSaveBtnText}>Enregistrer le profil</Text>
+                </Pressable>
               </View>
-              <View style={[styles.fieldGroup, { marginTop: 10 }]}>
-                <Text style={styles.fieldLabel}>Email</Text>
-                <TextInput
-                  value={profilEmail}
-                  onChangeText={setProfilEmail}
-                  placeholder="votre.email@exemple.com"
-                  placeholderTextColor={COLORS.mist}
-                  maxLength={160}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={styles.fieldInput}
-                />
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                onPress={saveProfile}
-                disabled={profilSaving}
-                style={[styles.profileSaveBtn, profilSaving && { opacity: 0.6 }]}
-              >
-                {profilSaving ? <ActivityIndicator size="small" color="#ffffff" /> : <SlidersHorizontal size={15} color="#ffffff" strokeWidth={2.4} />}
-                <Text style={styles.profileSaveBtnText}>Enregistrer le profil</Text>
-              </Pressable>
             </View>
-          </View>
+          ) : null}
           <View style={{ gap: 6 }}>
             <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Compte</Text><Text style={styles.settingsSubtitle}>Pays et devise</Text></View>
             <View style={styles.listCard}>
@@ -825,7 +834,8 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 32,
   },
-  profileCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: COLORS.edge, backgroundColor: "#ffffff" },
+  profileCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: COLORS.edge, backgroundColor: "#ffffff" },
+  profileEditBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.elev },
   adminBadge: { color: COLORS.betclicRed, fontSize: 10 },
   headerRow: {
     flexDirection: "row",
@@ -893,6 +903,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: COLORS.mist,
+  },
+  topBlock: {
+    gap: 12,
   },
   sectionStack: {
     marginTop: 12,

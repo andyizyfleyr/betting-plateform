@@ -17,6 +17,7 @@ import {
   Loader2,
   Lock,
   LogOut,
+  Pencil,
   Plus,
   ShieldCheck,
   SlidersHorizontal,
@@ -62,13 +63,15 @@ export default function ParametresPage() {
   const [profilName, setProfilName] = useState("");
   const [profilEmail, setProfilEmail] = useState("");
   const [profilSaving, setProfilSaving] = useState(false);
+  const [profilEditing, setProfilEditing] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      setProfilName(user.name ?? "");
-      setProfilEmail(user.email ?? "");
+  const toggleProfilEditing = () => {
+    if (!profilEditing) {
+      setProfilName(user?.name ?? "");
+      setProfilEmail(user?.email ?? "");
     }
-  }, [user]);
+    setProfilEditing((v) => !v);
+  };
 
   const saveProfile = async () => {
     const name = profilName.trim();
@@ -86,6 +89,7 @@ export default function ParametresPage() {
       const r = await api.auth.updateProfile({ name, email });
       applyUser(r.user);
       toast({ kind: "success", title: "Profil mis à jour" });
+      setProfilEditing(false);
     } catch {
       toast({ kind: "error", title: "Impossible d'enregistrer le profil" });
     } finally {
@@ -421,7 +425,7 @@ export default function ParametresPage() {
 
         {/* Colonne droite : Profil éditable + Préférences & Déconnexion */}
         <div className={cn("space-y-3", mobileTab !== "settings" && "hidden lg:block")}>
-          {/* Carte profil : nom + email éditables */}
+          {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
           <section className="rounded-2xl border border-edge bg-white p-3.5">
             <div className="mb-3 flex items-center gap-3">
               <span
@@ -437,7 +441,7 @@ export default function ParametresPage() {
                   {user?.name ?? "—"}
                 </p>
                 <p className="truncate text-[10.5px] text-dim">
-                  {user?.role === "admin" ? "Espace administrateur" : "Compte joueur"}
+                  {user?.email ?? "Session active"}
                 </p>
               </div>
               {user?.role === "admin" && (
@@ -445,41 +449,53 @@ export default function ParametresPage() {
                   Admin
                 </span>
               )}
-            </div>
-
-            <div className="space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Nom</span>
-                <input
-                  type="text"
-                  value={profilName}
-                  onChange={(e) => setProfilName(e.target.value)}
-                  placeholder="Votre nom"
-                  maxLength={80}
-                  className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Email</span>
-                <input
-                  type="email"
-                  value={profilEmail}
-                  onChange={(e) => setProfilEmail(e.target.value)}
-                  placeholder="votre.email@exemple.com"
-                  maxLength={160}
-                  className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
-                />
-              </label>
               <button
                 type="button"
-                onClick={saveProfile}
-                disabled={profilSaving}
-                className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-medium text-white transition-opacity active:opacity-90 disabled:opacity-60"
+                onClick={toggleProfilEditing}
+                aria-label={profilEditing ? "Fermer la modification du profil" : "Modifier le nom et l'email"}
+                aria-expanded={profilEditing}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10.5px] font-medium text-ink active:bg-edge"
               >
-                {profilSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" strokeWidth={2.4} />}
-                Enregistrer le profil
+                {profilEditing ? <X size={13} strokeWidth={2.4} /> : <Pencil size={13} strokeWidth={2.2} />}
+                {profilEditing ? "Fermer" : "Modifier"}
               </button>
             </div>
+
+            {profilEditing && (
+              <div className="mt-3 space-y-3 border-t border-edge pt-3">
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Nom</span>
+                  <input
+                    type="text"
+                    value={profilName}
+                    onChange={(e) => setProfilName(e.target.value)}
+                    placeholder="Votre nom"
+                    maxLength={80}
+                    className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Email</span>
+                  <input
+                    type="email"
+                    value={profilEmail}
+                    onChange={(e) => setProfilEmail(e.target.value)}
+                    placeholder="votre.email@exemple.com"
+                    maxLength={160}
+                    className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={saveProfile}
+                  disabled={profilSaving}
+                  className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-medium text-white transition-opacity active:opacity-90 disabled:opacity-60"
+                >
+                  {profilSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" strokeWidth={2.4} />}
+                  Enregistrer le profil
+                </button>
+              </div>
+            )}
           </section>
 
           {/* Sur mobile, les mêmes réglages sont regroupés comme dans l'application. */}
