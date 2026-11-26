@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -27,6 +26,7 @@ import {
   RefreshCw,
   ShieldCheck,
   SlidersHorizontal,
+  User,
   X,
 } from "lucide-react-native";
 import { PulseFlashLoader } from "@/components/pulse-flash-loader";
@@ -34,7 +34,7 @@ import { TransferCodeSheet } from "@/components/transfer-code-sheet";
 import { useApp } from "@/context/app-context";
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
-import { eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
+import { eur, formatPlacedAt } from "@/lib/format";
 import { writeUserPreferences } from "@/lib/user-preferences";
 import { createIdempotencyKey, isBiometricLoginEnabled, setBiometricLoginEnabled } from "@/lib/http";
 import { registerPushDevice, unregisterPushDevice } from "@/lib/push-notifications";
@@ -70,8 +70,6 @@ export default function ParametresScreen() {
     setBalance,
     toast,
     betsVersion,
-    countryConfig,
-    currencyConfig,
   } = useApp();
 
   const userId = user?.id ?? null;
@@ -340,7 +338,6 @@ export default function ParametresScreen() {
     );
   }
 
-  const hue = teamHue(user.name ?? "Pulse");
 
   return (
     <ScrollView
@@ -425,50 +422,31 @@ export default function ParametresScreen() {
             </View>
           ) : null}
 
-          <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Portefeuille</Text></View>
-            <View style={styles.listCard}>
+          {/* Section unique : profil, opérations, réglages, espace administrateur */}
+          <View style={styles.listCard}>
+            {/* Mon profil */}
+            <View style={[styles.navRow, styles.rowBottomDivider]}>
+              <View style={styles.grayIconBox}>
+                <User size={16} color={COLORS.ink} strokeWidth={2.1} />
+              </View>
+              <Text style={[styles.navRowTitle, { flex: 1 }]}>Mon profil</Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Ouvrir les dernières opérations"
-                onPress={() => router.push("/parametres/transactions")}
-                style={({ pressed }) => [styles.navRow, pressed && { backgroundColor: COLORS.elev }]}
+                accessibilityLabel={profilEditing ? "Fermer la modification" : "Modifier le nom"}
+                onPress={toggleProfilEditing}
+                style={styles.profileEditPill}
               >
-                <View style={styles.grayIconBox}>
-                  <History size={16} color={COLORS.ink} strokeWidth={2.1} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.navRowTitle}>Dernières opérations</Text>
-                  <Text numberOfLines={1} style={styles.navRowSub}>Voir tous les mouvements du compte</Text>
-                </View>
-                <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+                {profilEditing ? (
+                  <X size={13} color={COLORS.ink} strokeWidth={2.4} />
+                ) : (
+                  <Pencil size={13} color={COLORS.ink} strokeWidth={2.2} />
+                )}
+                <Text style={styles.profileEditText}>{profilEditing ? "Fermer" : "Modifier"}</Text>
               </Pressable>
             </View>
-          </View>
 
-          {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
-          <View style={styles.profileCard}>
-            <LinearGradient colors={[`hsl(${hue}, 60%, 44%)`, `hsl(${(hue + 36) % 360}, 68%, 30%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarBox}>
-              <Text style={styles.avatarInitials}>{initials(user?.name ?? "PU")}</Text>
-            </LinearGradient>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={styles.profileName}>{user?.name ?? "—"}</Text>
-              <Text numberOfLines={1} style={styles.profileEmail}>{user?.email ?? "Session active"}</Text>
-              <Text numberOfLines={1} style={styles.profileMeta}>{countryConfig.flag} {countryConfig.name} · {currencyConfig.code} {currencyConfig.symbol}</Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={profilEditing ? "Fermer la modification" : "Modifier le nom"}
-              onPress={toggleProfilEditing}
-              style={styles.profileEditBtn}
-            >
-              {profilEditing ? <X size={14} color={COLORS.ink} strokeWidth={2.3} /> : <Pencil size={14} color={COLORS.ink} strokeWidth={2.2} />}
-            </Pressable>
-          </View>
-          {profilEditing ? (
-            <View style={{ gap: 6 }}>
-              <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Profil</Text></View>
-              <View style={styles.listCard}>
+            {profilEditing ? (
+              <View style={[styles.profileForm, styles.rowBottomDivider]}>
                 <View style={styles.fieldGroup}>
                   <Text style={styles.fieldLabel}>Nom</Text>
                   <TextInput
@@ -488,24 +466,41 @@ export default function ParametresScreen() {
                   disabled={profilSaving}
                   style={[styles.profileSaveBtn, profilSaving && { opacity: 0.6 }]}
                 >
-                  {profilSaving ? <ActivityIndicator size="small" color="#ffffff" /> : <SlidersHorizontal size={15} color="#ffffff" strokeWidth={2.4} />}
+                  {profilSaving ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <SlidersHorizontal size={15} color="#ffffff" strokeWidth={2.4} />
+                  )}
                   <Text style={styles.profileSaveBtnText}>Enregistrer le profil</Text>
                 </Pressable>
               </View>
-            </View>
-          ) : null}
-          <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Préférences</Text></View>
-            <View style={styles.listCard}>
+            ) : null}
+
+            {/* Dernières opérations */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Ouvrir les dernières opérations"
+              onPress={() => router.push("/parametres/transactions")}
+              style={({ pressed }) => [
+                styles.navRow,
+                styles.rowBottomDivider,
+                pressed && { backgroundColor: COLORS.elev },
+              ]}
+            >
+              <View style={styles.grayIconBox}>
+                <History size={16} color={COLORS.ink} strokeWidth={2.1} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.navRowTitle}>Dernières opérations</Text>
+              </View>
+              <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+            </Pressable>
+
             {/* Format des cotes */}
             <View style={[styles.prefRow, styles.rowBottomDivider]}>
               <View style={styles.prefLeft}>
                 <View style={styles.grayIconBox}>
-                  <SlidersHorizontal
-                    size={16}
-                    color={COLORS.ink}
-                    strokeWidth={2.1}
-                  />
+                  <SlidersHorizontal size={16} color={COLORS.ink} strokeWidth={2.1} />
                 </View>
                 <Text style={styles.prefLabel}>Format des cotes</Text>
               </View>
@@ -515,23 +510,10 @@ export default function ParametresScreen() {
                   return (
                     <Pressable
                       key={fmt}
-                      onPress={() =>
-                        patch(
-                          { oddsFormat: fmt },
-                          "Format des cotes mis à jour"
-                        )
-                      }
-                      style={[
-                        styles.oddsFmtBtn,
-                        active && styles.oddsFmtBtnActive,
-                      ]}
+                      onPress={() => patch({ oddsFormat: fmt }, "Format des cotes mis à jour")}
+                      style={[styles.oddsFmtBtn, active && styles.oddsFmtBtnActive]}
                     >
-                      <Text
-                        style={[
-                          styles.oddsFmtText,
-                          active && { color: COLORS.ink },
-                        ]}
-                      >
+                      <Text style={[styles.oddsFmtText, active && { color: COLORS.ink }]}>
                         {fmt === "decimal" ? "1.85" : "17/20"}
                       </Text>
                     </Pressable>
@@ -540,6 +522,7 @@ export default function ParametresScreen() {
               </View>
             </View>
 
+            {/* Toutes les notifications */}
             <SwitchRow
               icon={<Bell size={16} color={COLORS.ink} strokeWidth={2.1} />}
               label="Toutes les notifications"
@@ -557,89 +540,76 @@ export default function ParametresScreen() {
                   v ? "Toutes les notifications activées" : "Notifications désactivées"
                 );
               })()}
-              last
+              last={user.role !== "admin"}
             />
-            </View>
-          </View>
-          <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Sécurité</Text></View>
-            <View style={styles.listCard}>
-            <SwitchRow
-              icon={<ShieldCheck size={16} color={COLORS.ink} strokeWidth={2.1} />}
-              label="Connexion biométrique"
-              checked={biometricEnabled}
-              onChange={(v) => void changeBiometrics(v)}
-            />
-            </View>
-          </View>
-          {user.role === "admin" ? (
-          <View style={{ gap: 6 }}>
-          <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Application</Text></View>
-          <Pressable
-            disabled={checkingOta}
-            onPress={() => void handleManualOtaCheck()}
-            style={({ pressed }) => [
-              styles.navRowCard,
-              checkingOta && { opacity: 0.65 },
-              pressed && { backgroundColor: COLORS.elev },
-            ]}
-          >
-            <View style={styles.grayIconBox}>
-              {checkingOta ? (
-                <ActivityIndicator size="small" color={COLORS.ink} />
-              ) : (
-                <RefreshCw size={15} color={COLORS.ink} strokeWidth={2.1} />
-              )}
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.navRowTitle}>
-                Mises à jour OTA automatiques
-              </Text>
-              <Text numberOfLines={1} style={styles.navRowSub}>
-                {`v${otaDiag.appVersion} · ${
-                  otaDiag.shortUpdateId
-                    ? `OTA #${otaDiag.shortUpdateId}`
-                    : otaDiag.isSupported
-                      ? "Active au lancement"
-                      : "Serveur OTA configuré"
-                }`}
-              </Text>
-            </View>
-            <Text
-              style={{
-                fontSize: 10.5,
-                fontWeight: "500",
-                color: COLORS.betclicRed,
-              }}
-            >
-              {checkingOta ? "Analyse…" : "Vérifier"}
-            </Text>
-          </Pressable>
-          </View>
-          ) : null}
 
-          {/* Accès Admin (si administrateur) */}
-          {user.role === "admin" ? (
-            <Pressable
-              onPress={() => router.push("/admin")}
-              style={({ pressed }) => [
-                styles.navRowCard,
-                pressed && { backgroundColor: COLORS.elev },
-              ]}
-            >
-              <View style={styles.redIconBox}>
-                <ShieldCheck
-                  size={16}
-                  color={COLORS.betclicRed}
-                  strokeWidth={2.2}
+            {user.role === "admin" ? (
+              <>
+                <SwitchRow
+                  icon={<ShieldCheck size={16} color={COLORS.ink} strokeWidth={2.1} />}
+                  label="Connexion biométrique"
+                  checked={biometricEnabled}
+                  onChange={(v) => void changeBiometrics(v)}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.navRowTitle}>Espace administrateur</Text>
-              </View>
-              <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
-            </Pressable>
-          ) : null}
+                <Pressable
+                  disabled={checkingOta}
+                  onPress={() => void handleManualOtaCheck()}
+                  style={({ pressed }) => [
+                    styles.navRow,
+                    styles.rowBottomDivider,
+                    checkingOta && { opacity: 0.65 },
+                    pressed && { backgroundColor: COLORS.elev },
+                  ]}
+                >
+                  <View style={styles.grayIconBox}>
+                    {checkingOta ? (
+                      <ActivityIndicator size="small" color={COLORS.ink} />
+                    ) : (
+                      <RefreshCw size={15} color={COLORS.ink} strokeWidth={2.1} />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.navRowTitle}>Mises à jour OTA automatiques</Text>
+                    <Text numberOfLines={1} style={styles.navRowSub}>
+                      {`v${otaDiag.appVersion} · ${
+                        otaDiag.shortUpdateId
+                          ? `OTA #${otaDiag.shortUpdateId}`
+                          : otaDiag.isSupported
+                            ? "Active au lancement"
+                            : "Serveur OTA configuré"
+                      }`}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 10.5, fontWeight: "500", color: COLORS.betclicRed }}>
+                    {checkingOta ? "Analyse…" : "Vérifier"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push("/admin")}
+                  style={({ pressed }) => [
+                    styles.navRow,
+                    pressed && { backgroundColor: COLORS.elev },
+                  ]}
+                >
+                  <View style={styles.redIconBox}>
+                    <ShieldCheck size={16} color={COLORS.betclicRed} strokeWidth={2.2} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.navRowTitle}>Espace administrateur</Text>
+                  </View>
+                  <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+                </Pressable>
+              </>
+            ) : (
+              <SwitchRow
+                icon={<ShieldCheck size={16} color={COLORS.ink} strokeWidth={2.1} />}
+                label="Connexion biométrique"
+                checked={biometricEnabled}
+                onChange={(v) => void changeBiometrics(v)}
+                last
+              />
+            )}
+          </View>
 
           <Pressable
             disabled={loggingOut}
@@ -711,30 +681,18 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 32,
   },
-  profileCard: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: COLORS.edge, backgroundColor: "#ffffff" },
-  profileEditBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.elev },
-  profileMeta: { marginTop: 1, fontSize: 9.5, color: COLORS.mist },
-  profileName: {
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: COLORS.ink,
-  },
-  profileEmail: {
-    fontSize: 10,
-    color: COLORS.dim,
-  },
-  avatarBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  profileForm: { padding: 14, gap: 10 },
+  profileEditPill: {
+    height: 32,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: COLORS.elev,
   },
-  avatarInitials: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#ffffff",
-  },
+  profileEditText: { fontSize: 10.5, fontWeight: "500", color: COLORS.ink },
+  profileEditBtn: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.elev },
   topBlock: {
     gap: 12,
   },
@@ -742,8 +700,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     gap: 12,
   },
-  settingsHeading: { paddingHorizontal: 4, gap: 2 },
-  settingsTitle: { color: COLORS.ink, fontSize: 12, fontWeight: "700" },
   balanceCard: { minHeight: 132, borderRadius: 16, padding: 14, justifyContent: "space-between" },
   balanceCardWhite: {
     borderRadius: 16,
