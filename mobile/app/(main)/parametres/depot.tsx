@@ -350,6 +350,13 @@ export default function DepositScreen() {
         </View>
 
         <View style={{ marginTop: 10, gap: 10 }}>
+          {/* Bonus de dépôt : 50 % / 75 % / 100 % sur les trois premiers dépôts */}
+          <View style={styles.bonusNote}>
+            <Text style={styles.bonusNoteText}>
+              Bonus de dépôt : +50 % sur le 1er dépôt, +75 % sur le 2e, +100 % sur le 3e · mises 4×
+              à cote ≥ 1,30 avant retrait du bonus.
+            </Text>
+          </View>
           {/* Montant compact */}
           <View style={styles.card}>
             <Text style={styles.fieldCaps}>
@@ -840,6 +847,15 @@ function validLocalLabel(
 }
 
 const styles = StyleSheet.create({
+  bonusNote: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.25)",
+    backgroundColor: "rgba(245,158,11,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  bonusNoteText: { fontSize: 10, lineHeight: 15, color: "#92400e" },
   page: {
     flex: 1,
     backgroundColor: COLORS.deep,

@@ -377,6 +377,8 @@ export async function GET(req: NextRequest) {
       pendingWithdrawals,
       pendingDeposits,
       withdrawable: eligibility.withdrawable,
+      wagerRequired: eligibility.wagerRequired,
+      wagerRemaining: eligibility.wagerRemaining,
       bonusLocked: eligibility.bonusLocked,
       qualifiedWagered: eligibility.qualifiedWagered,
       bonusRemaining: eligibility.bonusRemaining,

@@ -304,6 +304,8 @@ export interface ClientWalletData {
     pendingWithdrawals: number;
     pendingDeposits?: number;
     withdrawable?: number;
+    wagerRequired?: number;
+    wagerRemaining?: number;
     bonusLocked?: number;
     qualifiedWagered?: number;
     bonusRemaining?: number;
@@ -851,6 +853,8 @@ export const api = {
     destination: string;
     amount: number;
     idempotencyKey: string;
+    /** Accepte d'abandonner le bonus restant pour retirer tout le solde. */
+    forfeitBonus?: boolean;
   }) =>
     request<{ withdrawal: ClientWithdrawal; balance: number; deduplicated?: boolean }>(
       "/api/withdrawals",

@@ -3,7 +3,7 @@
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 
-export interface CouponConfirmDialogProps {
+export interface ConfirmDialogProps {
   open: boolean;
   title: string;
   description: string;
@@ -12,24 +12,26 @@ export interface CouponConfirmDialogProps {
   /** Phrase de conséquence affichée sous la liste. */
   note?: string;
   confirmLabel: string;
+  cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 /**
- * Boîte de confirmation des coupons de pari : remplace les `window.confirm`
- * du navigateur par une carte au style de la plateforme.
+ * Boîte de confirmation au style de la plateforme : remplace les `window.confirm`
+ * du navigateur (coupons de pari, annulation de bonus avant retrait…).
  */
-export function CouponConfirmDialog({
+export function ConfirmDialog({
   open,
   title,
   description,
   items,
   note,
   confirmLabel,
+  cancelLabel = "Annuler",
   onConfirm,
   onCancel,
-}: CouponConfirmDialogProps) {
+}: ConfirmDialogProps) {
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
@@ -65,7 +67,7 @@ export function CouponConfirmDialog({
             onClick={onCancel}
             className="h-11 flex-1 rounded-xl bg-elev font-display text-[11.5px] font-medium text-ink active:bg-edge"
           >
-            Annuler
+            {cancelLabel}
           </button>
           <button
             type="button"

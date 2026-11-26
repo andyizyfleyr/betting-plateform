@@ -34,6 +34,8 @@ const CURRENCY_ALIGN_MARKER_KEY = "currency_align_v1";
 const COLUMNS_ALIGN_MARKER_KEY = "columns_align_v1";
 /** Marqueur de la migration « archive des cotes » (ouverture / clôture). */
 const ODDS_ARCHIVE_MARKER_KEY = "odds_archive_v1";
+/** Marqueur de la migration « bonus par palier de dépôt ». */
+const DEPOSIT_BONUS_MARKER_KEY = "deposit_bonus_v1";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -171,6 +173,51 @@ async function ensureOddsArchiveColumns(): Promise<void> {
   }
 }
 
+/**
+ * Colonnes du bonus par palier de dépôt (50 % / 75 % / 100 %) + purge du bonus
+ * « fantôme » de l'ancien système, qui n'était jamais crédité sur le solde et
+ * bloquait donc les retraits sans contrepartie réelle.
+ */
+async function ensureDepositBonusColumns(): Promise<void> {
+  try {
+    const colsCheck = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM "admin_settings" WHERE "setting_key" = ${DEPOSIT_BONUS_MARKER_KEY}
+      ) AS done
+    `);
+    const done = (colsCheck.rows?.[0] as { done?: boolean } | undefined)?.done;
+    if (done) return;
+    await db.execute(sql`
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_stage" integer DEFAULT 0 NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_granted" double precision DEFAULT 0 NOT NULL;
+      ALTER TABLE "app_user" ADD COLUMN IF NOT EXISTS "bonus_wager_start" timestamp;
+      UPDATE "app_user" SET "bonus_locked" = 0
+        WHERE "bonus_granted" = 0 AND "bonus_locked" > 0;
+    `);
+    // Bascule du réglage « bonus de bienvenue » vers le bonus par palier de dépôt :
+    // wager 4× et aucun plafond par défaut, cotes minimales conservées.
+    await db.execute(sql`
+      UPDATE "admin_settings"
+      SET "value" = jsonb_build_object(
+        'enabled', COALESCE(("value"->>'enabled')::boolean, true),
+        'maxBonus', 0,
+        'wagerMultiplier', 4,
+        'minOddsSingle', COALESCE(("value"->>'minOddsSingle')::float8, 1.3),
+        'minOddsCombo', COALESCE(("value"->>'minOddsCombo')::float8, 1.4)
+      ),
+      "updated_at" = now()
+      WHERE "setting_key" = 'welcome_bonus'
+    `);
+    await db.execute(sql`
+      INSERT INTO "admin_settings" ("setting_key", "value", "updated_at")
+      VALUES (${DEPOSIT_BONUS_MARKER_KEY}, jsonb_build_object('ready', true), now())
+      ON CONFLICT ("setting_key") DO NOTHING
+    `);
+  } catch {
+    // Base sans admin_settings encore créée : la migration complète s'occupe de tout.
+  }
+}
+
 async function runSeedInternal(): Promise<void> {
   // Vérifie la connectivité de la base principale Prisma Postgres.
   // Aucun repli automatique : une URL absente ou injoignable échoue explicitement.
@@ -205,6 +252,7 @@ async function runSeedInternal(): Promise<void> {
     // v21 sans ALTER. Les ALTER sont idempotents (IF NOT EXISTS) ; une seule passe.
     await ensureSchemaColumns();
     await ensureOddsArchiveColumns();
+    await ensureDepositBonusColumns();
     await backfillCorruptFinishedOdds();
 
     if (chk.has_marker && chk.has_admin) {
@@ -349,6 +397,9 @@ async function runSeedInternal(): Promise<void> {
       "live_sim" boolean DEFAULT true NOT NULL,
       "role" text DEFAULT 'user' NOT NULL,
       "bonus_locked" double precision DEFAULT 0 NOT NULL,
+      "bonus_stage" integer DEFAULT 0 NOT NULL,
+      "bonus_granted" double precision DEFAULT 0 NOT NULL,
+      "bonus_wager_start" timestamp,
       "token_version" integer DEFAULT 0 NOT NULL,
       "email" text UNIQUE,
       "password_hash" text,

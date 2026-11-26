@@ -73,12 +73,18 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   maxMinute: { label: "Minute maximale", unit: "min" },
   disabledMarkets: { label: "Marchés exclus du cash out" },
   disabledMatchIds: { label: "Matchs exclus du cash out" },
-  // Welcome bonus
-  amount: { label: "Montant du bonus", unit: "€" },
-  wagerMultiplier: { label: "Wager", hint: "Nombre de mises à effectuer avant retrait" },
+  // Bonus de dépôt
+  maxBonus: {
+    label: "Plafond par bonus",
+    unit: "€",
+    hint: "0 = aucun plafond · sinon bonus maximal versé sur un dépôt",
+  },
+  wagerMultiplier: {
+    label: "Wager",
+    hint: "Mises à réaliser = multiplicateur × bonus (4× par défaut)",
+  },
   minOddsSingle: { label: "Cote minimale · simple" },
   minOddsCombo: { label: "Cote minimale · combiné" },
-  validityDays: { label: "Validité", unit: "jours" },
   // Payments
   enabledMethods: { label: "Méthodes de paiement actives" },
   mobileMoneyAccounts: { label: "Comptes Mobile Money" },
@@ -667,14 +673,18 @@ function WelcomeBonusEditor({
 }) {
   return (
     <>
-      <ToggleRow label="Activer le bonus de bienvenue" value={draft.enabled as boolean} onChange={set} keyName="enabled" />
-      <NumberRow label="Montant du bonus" unit="€" value={draft.amount as number} onChange={set} keyName="amount" />
+      <ToggleRow label="Activer le bonus de dépôt" value={draft.enabled as boolean} onChange={set} keyName="enabled" />
+      <div className="rounded-xl bg-elev px-3 py-2.5 text-[10.5px] leading-relaxed text-mist">
+        1<sup>er</sup> dépôt : <strong className="text-ink">50 %</strong> · 2<sup>e</sup> dépôt :{" "}
+        <strong className="text-ink">75 %</strong> · 3<sup>e</sup> dépôt :{" "}
+        <strong className="text-ink">100 %</strong> — puis plus aucun bonus.
+      </div>
+      <NumberRow label="Plafond par bonus" unit="€" value={draft.maxBonus as number} onChange={set} keyName="maxBonus" />
       <NumberRow label="Wager" value={draft.wagerMultiplier as number} onChange={set} keyName="wagerMultiplier" />
       <div className="grid grid-cols-2 gap-3">
         <NumberRow label="Cote minimale · simple" value={draft.minOddsSingle as number} onChange={set} keyName="minOddsSingle" />
         <NumberRow label="Cote minimale · combiné" value={draft.minOddsCombo as number} onChange={set} keyName="minOddsCombo" />
       </div>
-      <NumberRow label="Validité" unit="jours" value={draft.validityDays as number} onChange={set} keyName="validityDays" />
     </>
   );
 }

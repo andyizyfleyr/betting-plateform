@@ -21,7 +21,8 @@ import {
 } from "@/lib/idempotency";
 import { extractIdempotencyKey } from "@/lib/odds-lock";
 import { requireUserId } from "@/lib/session";
-import { computeWithdrawalEligibility } from "@/lib/wager";
+import { computeWithdrawalEligibility, minWagerOddsSingle } from "@/lib/wager";
+import { forfeitDepositBonusInTx } from "@/lib/deposit-bonus";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,8 @@ export async function POST(req: NextRequest) {
       destination?: string;
       amount?: number;
       idempotencyKey?: string;
+      /** Le joueur accepte d'abandonner son bonus restant pour retirer tout son solde. */
+      forfeitBonus?: boolean;
     };
     try {
       body = await req.json();
@@ -74,6 +77,7 @@ export async function POST(req: NextRequest) {
     const method = String(body.method ?? "").trim().toLowerCase();
     const destination = String(body.destination ?? "").trim();
     const amount = roundEurPivot(Number(body.amount));
+    const forfeitBonus = body.forfeitBonus === true;
     const idempotencyKey = extractIdempotencyKey(
       body.idempotencyKey,
       req.headers.get("idempotency-key")
@@ -122,7 +126,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const requestHash = computeIdempotencyHash({ method, destination, amount });
+    const requestHash = computeIdempotencyHash({ method, destination, amount, forfeitBonus });
 
     const preIdem = await lookupIdempotencyRecord(
       db,
@@ -146,18 +150,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Vérification anti-abus sur le bonus d'inscription (exigence de mise 1× à cote ≥ 1,30)
+    // Vérification du bonus de dépôt : seul le bonus restant est verrouillé,
+    // l'argent du joueur reste retirable. Le joueur peut renoncer au bonus
+    // (`forfeitBonus`) pour retirer l'intégralité de son solde.
     const eligibility = await computeWithdrawalEligibility(uid);
     if (amount > eligibility.balance + 1e-5) {
       return NextResponse.json(
-        { error: "Solde disponible insuffisant" },
+        { error: "Solde disponible insuffisant", code: "insufficient_balance" },
         { status: 400 }
       );
     }
-    if (amount > eligibility.withdrawable + 1e-5) {
+    if (amount > eligibility.withdrawable + 1e-5 && !(forfeitBonus && eligibility.bonusRemaining > 0)) {
       return NextResponse.json(
         {
-          error: `Bonus d'inscription soumis à mise 1× (cote ≥ 1,30). Il vous reste ${formatEurAsCurrency(eligibility.bonusRemaining, userCurrency.code)} à miser. Solde retirable immédiatement : ${formatEurAsCurrency(eligibility.withdrawable, userCurrency.code)}`,
+          error: `Ton bonus restant (${formatEurAsCurrency(eligibility.bonusRemaining, userCurrency.code)}) se débloque après ${formatEurAsCurrency(eligibility.wagerRemaining, userCurrency.code)} de mises à cote ≥ ${minWagerOddsSingle().toFixed(2).replace(".", ",")}. Retirable maintenant : ${formatEurAsCurrency(eligibility.withdrawable, userCurrency.code)}. Tu peux aussi annuler ton bonus pour retirer tout ton solde.`,
+          code: "bonus_locked",
+          withdrawable: eligibility.withdrawable,
+          bonusRemaining: eligibility.bonusRemaining,
+          wagerRemaining: eligibility.wagerRemaining,
+          balance: eligibility.balance,
         },
         { status: 400 }
       );
@@ -177,7 +188,11 @@ export async function POST(req: NextRequest) {
       await tx.execute(sql`SET LOCAL lock_timeout = '2500ms'`);
 
       const [lockedUser] = await tx
-        .select({ id: appUser.id, balance: appUser.balance })
+        .select({
+          id: appUser.id,
+          balance: appUser.balance,
+          bonusLocked: appUser.bonusLocked,
+        })
         .from(appUser)
         .where(eq(appUser.id, uid))
         .for("update");
@@ -248,6 +263,19 @@ export async function POST(req: NextRequest) {
 
       if (lockedUser.balance < amount) {
         return { kind: "error", error: "Solde disponible insuffisant" };
+      }
+
+      let lockedBonus = Math.max(0, Number(lockedUser.bonusLocked ?? 0));
+      if (forfeitBonus && lockedBonus > 0) {
+        await forfeitDepositBonusInTx(tx, uid);
+        lockedBonus = 0;
+      }
+      if (amount > lockedUser.balance - lockedBonus + 1e-5) {
+        return {
+          kind: "error",
+          error:
+            "Ton bonus restant bloque encore ce montant. Annule ton bonus pour retirer tout ton solde.",
+        };
       }
 
       const [debited] = await tx

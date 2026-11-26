@@ -11,7 +11,7 @@ import { triggerHaptic } from "@/lib/feedback";
 import type { ComboSelection } from "./combo-slip";
 import { useApp } from "./providers";
 import { cn } from "@/lib/format";
-import { CouponConfirmDialog } from "./coupon-confirm-dialog";
+import { ConfirmDialog } from "./confirm-dialog";
 
 export function CouponCodeBox({
   variant = "compact",
@@ -202,7 +202,7 @@ export function CouponCodeBox({
   };
 
   const dialogNode = pendingDialog ? (
-    <CouponConfirmDialog
+    <ConfirmDialog
       open
       title={pendingDialog.kind === "unavailable" ? "Sélections indisponibles" : "Remplacer le coupon ?"}
       description={
