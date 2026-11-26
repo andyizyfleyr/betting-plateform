@@ -122,7 +122,7 @@ export const DEFAULT_CASHOUT: CashoutSettings = {
  */
 export interface WelcomeBonusSettings {
   enabled: boolean;
-  /** Plafond du bonus par dépôt en euros (0 = aucun plafond). */
+  /** Plafond du bonus par dépôt en euros (0 = aucun plafond). 152,449 € ≈ 100 000 FCFA. */
   maxBonus: number;
   wagerMultiplier: number;
   minOddsSingle: number;
@@ -137,7 +137,8 @@ export const DEPOSIT_BONUS_PERCENTS = [50, 75, 100] as const;
 
 export const DEFAULT_WELCOME_BONUS: WelcomeBonusSettings = {
   enabled: true,
-  maxBonus: 0,
+  /** 152,449 € = 100 000 FCFA (pivot 655,957). */
+  maxBonus: 152.449,
   wagerMultiplier: 4,
   minOddsSingle: 1.3,
   minOddsCombo: 1.4,

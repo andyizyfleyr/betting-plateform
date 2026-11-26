@@ -509,7 +509,10 @@ export const api = {
     }),
 
   config: () =>
-    requestJson<{ transferCodesEnabled?: boolean }>("/api/config", {
+    requestJson<{
+      transferCodesEnabled?: boolean;
+      depositBonus?: { enabled: boolean; percents: number[]; maxBonusEur: number };
+    }>("/api/config", {
       ignoreUnauthorizedRedirect: true,
     }),
 

@@ -28,6 +28,7 @@ import {
   triggerRouteLoader,
 } from "@/components/pulse-flash-loader";
 import {
+  formatEurAsCurrency,
   formatLocalAmount,
   formatPresetChip,
   localToEur,
@@ -40,6 +41,7 @@ export default function DepositPage() {
   const router = useRouter();
   const { authReady, toast, user, countryConfig, currency, currencyConfig } =
     useApp();
+  const [bonusCapEur, setBonusCapEur] = useState(0);
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
   const [paypalClientId, setPaypalClientId] = useState<string | null>(null);
   const [stripePublishableKey, setStripePublishableKey] = useState<
@@ -101,6 +103,21 @@ export default function DepositPage() {
       .catch(() => {
         if (active) setProviders([]);
       });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Plafond du bonus de dépôt (configuré par l'admin) affiché dans la devise du joueur.
+  useEffect(() => {
+    let active = true;
+    api.config
+      .currency()
+      .then((c) => {
+        if (!active || !c.depositBonus?.enabled) return;
+        setBonusCapEur(Math.max(0, Number(c.depositBonus.maxBonusEur) || 0));
+      })
+      .catch(() => undefined);
     return () => {
       active = false;
     };
@@ -349,7 +366,12 @@ export default function DepositPage() {
             {/* Bonus de dépôt : 50 % / 75 % / 100 % sur les trois premiers dépôts */}
             <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-[10px] leading-relaxed text-amber-900">
               Bonus de dépôt : <strong>+50 %</strong> sur le 1<sup>er</sup> dépôt,{" "}
-              <strong>+75 %</strong> sur le 2<sup>e</sup>, <strong>+100 %</strong> sur le 3<sup>e</sup>{" "}
+              <strong>+75 %</strong> sur le 2<sup>e</sup>, <strong>+100 %</strong> sur le 3<sup>e</sup>
+              {bonusCapEur > 0 && (
+                <>
+                  {" "}· <strong>maximum {formatEurAsCurrency(bonusCapEur, currency)}</strong> par bonus
+                </>
+              )}{" "}
               · mises 4× à cote ≥ 1,30 avant retrait du bonus.
             </div>
             {/* Montant compact */}

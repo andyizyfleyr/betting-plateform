@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  DEFAULT_WELCOME_BONUS,
   DEPOSIT_BONUS_PERCENTS,
   getAdminSettingSync,
   type WelcomeBonusSettings,
@@ -18,8 +19,9 @@ export function depositBonusSettings(): WelcomeBonusSettings {
   const source: Partial<WelcomeBonusSettings> = legacy ? {} : (raw ?? {});
   return {
     enabled: raw?.enabled !== false,
-    maxBonus:
-      Number.isFinite(source.maxBonus) && Number(source.maxBonus) > 0 ? Number(source.maxBonus) : 0,
+    maxBonus: Number.isFinite(source.maxBonus)
+      ? Math.max(0, Number(source.maxBonus))
+      : DEFAULT_WELCOME_BONUS.maxBonus,
     wagerMultiplier:
       Number.isFinite(source.wagerMultiplier) && Number(source.wagerMultiplier) > 0
         ? Number(source.wagerMultiplier)

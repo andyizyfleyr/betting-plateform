@@ -77,7 +77,7 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   maxBonus: {
     label: "Plafond par bonus",
     unit: "€",
-    hint: "0 = aucun plafond · sinon bonus maximal versé sur un dépôt",
+    hint: "0 = aucun plafond · 152,449 € = 100 000 FCFA",
   },
   wagerMultiplier: {
     label: "Wager",

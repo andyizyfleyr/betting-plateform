@@ -36,6 +36,8 @@ const COLUMNS_ALIGN_MARKER_KEY = "columns_align_v1";
 const ODDS_ARCHIVE_MARKER_KEY = "odds_archive_v1";
 /** Marqueur de la migration « bonus par palier de dépôt ». */
 const DEPOSIT_BONUS_MARKER_KEY = "deposit_bonus_v1";
+/** Marqueur du plafond de 100 000 FCFA par bonus (152,449 €). */
+const DEPOSIT_BONUS_CAP_MARKER_KEY = "deposit_bonus_cap_v1";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -200,7 +202,7 @@ async function ensureDepositBonusColumns(): Promise<void> {
       UPDATE "admin_settings"
       SET "value" = jsonb_build_object(
         'enabled', COALESCE(("value"->>'enabled')::boolean, true),
-        'maxBonus', 0,
+        'maxBonus', 152.449,
         'wagerMultiplier', 4,
         'minOddsSingle', COALESCE(("value"->>'minOddsSingle')::float8, 1.3),
         'minOddsCombo', COALESCE(("value"->>'minOddsCombo')::float8, 1.4)
@@ -215,6 +217,34 @@ async function ensureDepositBonusColumns(): Promise<void> {
     `);
   } catch {
     // Base sans admin_settings encore créée : la migration complète s'occupe de tout.
+  }
+}
+
+/**
+ * Plafond du bonus de dépôt : 100 000 FCFA maximum par bonus (152,449 € au pivot
+ * 655,957). Appliqué une seule fois aux bases déjà migrées vers le bonus par palier.
+ */
+async function ensureDepositBonusCap(): Promise<void> {
+  try {
+    const check = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM "admin_settings" WHERE "setting_key" = ${DEPOSIT_BONUS_CAP_MARKER_KEY}
+      ) AS done
+    `);
+    if ((check.rows?.[0] as { done?: boolean } | undefined)?.done) return;
+    await db.execute(sql`
+      UPDATE "admin_settings"
+      SET "value" = "value" || jsonb_build_object('maxBonus', 152.449),
+          "updated_at" = now()
+      WHERE "setting_key" = 'welcome_bonus'
+    `);
+    await db.execute(sql`
+      INSERT INTO "admin_settings" ("setting_key", "value", "updated_at")
+      VALUES (${DEPOSIT_BONUS_CAP_MARKER_KEY}, jsonb_build_object('ready', true), now())
+      ON CONFLICT ("setting_key") DO NOTHING
+    `);
+  } catch {
+    // Base sans admin_settings encore créée : la migration complète s'en charge.
   }
 }
 
@@ -253,6 +283,7 @@ async function runSeedInternal(): Promise<void> {
     await ensureSchemaColumns();
     await ensureOddsArchiveColumns();
     await ensureDepositBonusColumns();
+    await ensureDepositBonusCap();
     await backfillCorruptFinishedOdds();
 
     if (chk.has_marker && chk.has_admin) {

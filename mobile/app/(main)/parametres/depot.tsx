@@ -30,6 +30,7 @@ import { PulseFlashLoader } from "@/components/pulse-flash-loader";
 import { useApp } from "@/context/app-context";
 import { api, ApiHttpError, type PaymentProvider } from "@/lib/api";
 import {
+  formatEurAsCurrency,
   formatLocalAmount,
   formatPresetChip,
   localToEur,
@@ -61,7 +62,21 @@ export default function DepositScreen() {
     currencyConfig,
   } = useApp();
 
+  const [bonusCapEur, setBonusCapEur] = useState(0);
   const [providers, setProviders] = useState<PaymentProvider[]>([]);
+  useEffect(() => {
+    let active = true;
+    api
+      .config()
+      .then((c) => {
+        if (!active || !c.depositBonus?.enabled) return;
+        setBonusCapEur(Math.max(0, Number(c.depositBonus.maxBonusEur) || 0));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
   const [prevCur, setPrevCur] = useState(currency);
   const [amountText, setAmountText] = useState(() =>
     String(currencyConfig.defaultDepositLocal)
@@ -353,8 +368,9 @@ export default function DepositScreen() {
           {/* Bonus de dépôt : 50 % / 75 % / 100 % sur les trois premiers dépôts */}
           <View style={styles.bonusNote}>
             <Text style={styles.bonusNoteText}>
-              Bonus de dépôt : +50 % sur le 1er dépôt, +75 % sur le 2e, +100 % sur le 3e · mises 4×
-              à cote ≥ 1,30 avant retrait du bonus.
+              Bonus de dépôt : +50 % sur le 1er dépôt, +75 % sur le 2e, +100 % sur le 3e
+              {bonusCapEur > 0 ? ` · maximum ${formatEurAsCurrency(bonusCapEur, currency)} par bonus` : ""}
+              {" "}· mises 4× à cote ≥ 1,30 avant retrait du bonus.
             </Text>
           </View>
           {/* Montant compact */}
