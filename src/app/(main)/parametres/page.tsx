@@ -38,6 +38,7 @@ import { AnimatedNumber } from "@/components/animated-number";
 import { Toggle } from "@/components/toggle";
 import { TransferCodeSheet } from "@/components/transfer-code-sheet";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
+import { writeUserPreferences } from "@/lib/user-preferences";
 import { useNetworkQuality } from "@/lib/network-saver";
 import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
 
@@ -238,6 +239,8 @@ export default function ParametresPage() {
   const patch = async (p: Partial<ClientUser>, label: string) => {
     try {
       const r = await api.patchSettings(p);
+      // Miroir local : le choix survit à la fermeture de l'application.
+      writeUserPreferences(r.user.id, p);
       applyUser(r.user);
       toast({ kind: "success", title: label });
     } catch {

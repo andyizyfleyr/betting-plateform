@@ -18,6 +18,7 @@ import {
 } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { ApiRequestError, api, type ClientMatch, type ClientUser } from "@/lib/api";
+import { mergeUserPreferences } from "@/lib/user-preferences";
 import { AUTH_UID_COOKIE, USER_CACHE_STORAGE_KEY } from "@/lib/jwt";
 import {
   MAX_COMBO_LEGS,
@@ -596,7 +597,11 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       try {
         const r = await api.settings();
         if (!active) return;
-        setWebAuthUser(r.user, true);
+        // Réapplique les choix mémorisés localement et re-synchronise le serveur
+        // si ses valeurs ont divergé (réglages conservés entre les sessions).
+        const merged = mergeUserPreferences(r.user);
+        setWebAuthUser(merged.user, true);
+        if (merged.drift) void api.patchSettings(merged.drift).catch(() => undefined);
       } catch (err) {
         if (!active) return;
         if (err instanceof ApiRequestError && err.status === 401) {
