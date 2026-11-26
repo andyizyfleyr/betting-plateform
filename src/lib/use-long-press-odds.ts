@@ -20,22 +20,17 @@ export function useLongPressOdds({
   comboSelection,
   onTap,
 }: UseLongPressOddsOptions) {
-  const { toggleComboLeg, comboLegs, toast, user } = useApp();
+  const { toggleComboLeg, toast, user } = useApp();
   const [pressing, setPressing] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const triggeredRef = useRef(false);
   const latestSelRef = useRef(comboSelection);
-  const latestCountRef = useRef(comboLegs.length);
 
   useEffect(() => {
     latestSelRef.current = comboSelection;
   }, [comboSelection]);
-
-  useEffect(() => {
-    latestCountRef.current = comboLegs.length;
-  }, [comboLegs.length]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -63,40 +58,33 @@ export function useLongPressOdds({
         setPressing(false);
 
         const sel = latestSelRef.current;
-        const prevCount = latestCountRef.current;
         const result = toggleComboLeg(sel);
         triggerHaptic(user?.haptics, [22, 30]);
 
-        if (result === "added") {
-          const nextCount = prevCount + 1;
+        // Mêmes retours que l'app mobile : l'ajout/remplacement/retrait est
+        // silencieux (pas de bottom sheet), seules les erreurs sont signalées.
+        if (result === "full") {
           toast({
-            kind: "success",
-            title: `Ajouté au Betslip (${nextCount})`,
-            description: `${sel.title} · ${sel.selectionLabel}`,
-          });
-        } else if (result === "replaced") {
-          toast({
-            kind: "info",
-            title: "Sélection modifiée dans le Betslip",
-            description: `${sel.title} · ${sel.selectionLabel}`,
-          });
-        } else if (result === "removed") {
-          toast({
-            kind: "info",
-            title: "Retiré du Betslip",
-            description: `${sel.title} · ${sel.selectionLabel}`,
+            kind: "error",
+            title: "Betslip complet (limite atteinte)",
           });
         } else if (result === "source_conflict") {
           toast({
             kind: "error",
             title: "Mélange interdit",
-            description: "Impossible de mélanger un match réel et un match virtuel dans le Betslip.",
+            description: "Impossible de mélanger match réel et match virtuel.",
           });
-        } else if (result === "full") {
+        } else if (result === "added" || result === "replaced") {
           toast({
-            kind: "error",
-            title: "Betslip complet (8 sélections max)",
+            kind: "success",
+            title:
+              result === "replaced"
+                ? "Sélection remplacée dans le coupon"
+                : "Ajouté au coupon de pari",
+            description: `${sel.title} · ${sel.selectionLabel}`,
           });
+        } else if (result === "removed") {
+          toast({ kind: "info", title: "Retiré du coupon" });
         }
       }, LONG_PRESS_MS);
     },
