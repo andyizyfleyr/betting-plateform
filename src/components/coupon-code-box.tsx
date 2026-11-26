@@ -11,6 +11,7 @@ import { triggerHaptic } from "@/lib/feedback";
 import type { ComboSelection } from "./combo-slip";
 import { useApp } from "./providers";
 import { cn } from "@/lib/format";
+import { CouponConfirmDialog } from "./coupon-confirm-dialog";
 
 export function CouponCodeBox({
   variant = "compact",
@@ -30,6 +31,11 @@ export function CouponCodeBox({
   const [loadOpen, setLoadOpen] = useState(variant === "empty");
   const [codeInput, setCodeInput] = useState("");
   const [loadingCode, setLoadingCode] = useState(false);
+  const [pendingDialog, setPendingDialog] = useState<
+    | { kind: "unavailable"; count: number; names: string[]; replace: boolean; legs: ComboSelection[]; finalCode: string }
+    | { kind: "replace"; legs: ComboSelection[]; finalCode: string }
+    | null
+  >(null);
   const autoLoadedRef = useRef<string | null>(null);
 
   const currentSignature = comboLegs
@@ -38,6 +44,25 @@ export function CouponCodeBox({
   const activeCode =
     generatedCode && generatedSignature === currentSignature ? generatedCode : null;
   const hapticsEnabled = user?.haptics;
+
+  const applyLegs = useCallback(
+    (legs: ComboSelection[], finalCode: string, skipped: number) => {
+      loadComboLegs(legs);
+      triggerHaptic(hapticsEnabled, [15, 25]);
+      setCodeInput("");
+      setLoadOpen(false);
+      setPendingDialog(null);
+      toast({
+        kind: "success",
+        title: `Coupon ${finalCode} chargé`,
+        description:
+          skipped > 0
+            ? `${legs.length} sélection${legs.length > 1 ? "s" : ""} ajoutée${legs.length > 1 ? "s" : ""}`
+            : `${legs.length} sélection${legs.length > 1 ? "s" : ""} prête${legs.length > 1 ? "s" : ""} à miser`,
+      });
+    },
+    [hapticsEnabled, loadComboLegs, toast]
+  );
 
   const applyLoadedCode = useCallback(
     async (rawInput: string) => {
@@ -58,26 +83,25 @@ export function CouponCodeBox({
         const loadedLegs = res.legs as ComboSelection[];
         const skipped = res.skippedClosedCount ?? 0;
         const finalCode = res.code;
-        if (skipped > 0) {
-          const names = (res.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
-          if (!window.confirm(`${skipped} sélection${skipped > 1 ? "s" : ""} commencée${skipped > 1 ? "s" : ""} ou indisponible${skipped > 1 ? "s" : ""} :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
-        }
         if (!loadedLegs.length) throw new Error("Aucune sélection disponible dans ce coupon.");
         const problem = validateLoadedCoupon(loadedLegs, bettingLimits.maxComboLegs);
         if (problem) throw new Error(problem);
-        if (comboLegs.length && !window.confirm("Le coupon chargé remplacera les sélections actuelles. Continuer ?")) return;
-        loadComboLegs(loadedLegs);
-        triggerHaptic(hapticsEnabled, [15, 25]);
-        setCodeInput("");
-        setLoadOpen(false);
-        toast({
-          kind: "success",
-          title: `Coupon ${finalCode} chargé`,
-          description:
-            skipped > 0
-              ? `${loadedLegs.length} sélection${loadedLegs.length > 1 ? "s" : ""} ajoutée${loadedLegs.length > 1 ? "s" : ""}`
-              : `${loadedLegs.length} sélection${loadedLegs.length > 1 ? "s" : ""} prête${loadedLegs.length > 1 ? "s" : ""} à miser`,
-        });
+        if (skipped > 0) {
+          setPendingDialog({
+            kind: "unavailable",
+            count: skipped,
+            names: (res.unavailable ?? []).map((x) => x.title),
+            replace: comboLegs.length > 0,
+            legs: loadedLegs,
+            finalCode,
+          });
+          return;
+        }
+        if (comboLegs.length) {
+          setPendingDialog({ kind: "replace", legs: loadedLegs, finalCode });
+          return;
+        }
+        applyLegs(loadedLegs, finalCode, skipped);
       } catch (err) {
         toast({
           kind: "error",
@@ -89,7 +113,7 @@ export function CouponCodeBox({
         setLoadingCode(false);
       }
     },
-    [loadComboLegs, toast, hapticsEnabled, bettingLimits, bettingLimitsReady, comboLegs.length]
+    [applyLegs, bettingLimits, bettingLimitsReady, comboLegs.length, toast]
   );
 
   // Chargement automatique si l'utilisateur ouvre un lien partagé `/betslip?code=BX-84K2`
@@ -177,6 +201,37 @@ export function CouponCodeBox({
     });
   };
 
+  const dialogNode = pendingDialog ? (
+    <CouponConfirmDialog
+      open
+      title={pendingDialog.kind === "unavailable" ? "Sélections indisponibles" : "Remplacer le coupon ?"}
+      description={
+        pendingDialog.kind === "unavailable"
+          ? pendingDialog.count > 1
+            ? `${pendingDialog.count} sélections ont déjà commencé ou ne sont plus disponibles.`
+            : "1 sélection a déjà commencé ou n'est plus disponible."
+          : "Le coupon chargé remplacera les sélections déjà présentes dans le Betslip."
+      }
+      items={pendingDialog.kind === "unavailable" ? pendingDialog.names : undefined}
+      note={
+        pendingDialog.kind === "unavailable"
+          ? pendingDialog.replace
+            ? "Les retirer du coupon chargé ? Vos sélections actuelles seront aussi remplacées."
+            : "Les retirer du coupon chargé ?"
+          : undefined
+      }
+      confirmLabel={pendingDialog.kind === "unavailable" ? "Retirer" : "Remplacer"}
+      onCancel={() => setPendingDialog(null)}
+      onConfirm={() =>
+        applyLegs(
+          pendingDialog.legs,
+          pendingDialog.finalCode,
+          pendingDialog.kind === "unavailable" ? pendingDialog.count : 0
+        )
+      }
+    />
+  ) : null;
+
   if (variant === "empty") {
     return (
       <div className="mt-5 rounded-2xl border border-edge bg-elev/55 p-3.5 text-left">
@@ -215,6 +270,7 @@ export function CouponCodeBox({
             Charger
           </button>
         </form>
+        {dialogNode}
       </div>
     );
   }
@@ -318,6 +374,7 @@ export function CouponCodeBox({
           </button>
         </form>
       )}
+      {dialogNode}
     </div>
   );
 }
