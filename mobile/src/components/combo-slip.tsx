@@ -210,6 +210,19 @@ export function ComboSheet() {
     };
   }, [applyComboOddsUpdates, comboLegs.length, comboOpen]);
 
+  // Confirmation sans boutons : la feuille se referme d'elle-même.
+  useEffect(() => {
+    if (!comboOpen || phase !== "success") return;
+    const t = setTimeout(() => {
+      setPhase("input");
+      setPlacedInfo(null);
+      setError(null);
+      setOddsChanged(null);
+      closeCombo();
+    }, 2400);
+    return () => clearTimeout(t);
+  }, [comboOpen, phase, closeCombo]);
+
   if (!comboOpen) return null;
 
   const parsed = Number(stakeText.replace(",", "."));
@@ -362,20 +375,6 @@ export function ComboSheet() {
                 </Text>
               </View>
 
-              <View style={styles.successActions}>
-                <Pressable
-                  onPress={() => finishAndClose(true)}
-                  style={styles.successPrimaryBtn}
-                >
-                  <Text style={styles.successPrimaryText}>Voir mes paris</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => finishAndClose(false)}
-                  style={styles.successSecondaryBtn}
-                >
-                  <Text style={styles.successSecondaryText}>Continuer</Text>
-                </Pressable>
-              </View>
             </View>
           ) : (
             <>

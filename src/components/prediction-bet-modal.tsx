@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
-import { ArrowRight, Check, Layers, Loader2, Plus, Ticket, X } from "lucide-react";
+import { ArrowRight, Check, Layers, Loader2, Plus, X } from "lucide-react";
 import { ApiRequestError, api, type ClientPrediction } from "@/lib/api";
 import { playUiSound, triggerHaptic } from "@/lib/feedback";
 import {
@@ -537,6 +537,16 @@ function SuccessView({
   onContinue: () => void;
 }) {
   const { oddsFormat } = useApp();
+  const closeRef = useRef(onContinue);
+
+  // Confirmation sans boutons : referme automatiquement la feuille.
+  useEffect(() => {
+    closeRef.current = onContinue;
+  }, [onContinue]);
+  useEffect(() => {
+    const t = window.setTimeout(() => closeRef.current(), 2400);
+    return () => window.clearTimeout(t);
+  }, []);
 
   return (
     <div className="no-scrollbar overflow-y-auto px-4 pb-5 pb-safe pt-6">
@@ -576,23 +586,6 @@ function SuccessView({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={onGoToBets}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-betclic-red font-display text-[11.5px] font-medium text-white active:opacity-95"
-        >
-          <Ticket className="h-4 w-4" strokeWidth={2.3} />
-          Voir mes paris
-        </button>
-        <button
-          type="button"
-          onClick={onContinue}
-          className="flex h-11 w-full items-center justify-center rounded-2xl border border-edge bg-white font-display text-[11px] font-medium text-ink active:bg-elev"
-        >
-          Continuer
-        </button>
-      </div>
     </div>
   );
 }
