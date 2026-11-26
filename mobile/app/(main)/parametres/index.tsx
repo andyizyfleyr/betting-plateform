@@ -21,6 +21,7 @@ import {
   Bell,
   ChevronRight,
   Globe,
+  History,
   Lock,
   LogOut,
   Pencil,
@@ -30,7 +31,6 @@ import {
   SlidersHorizontal,
   Vibrate,
   Volume2,
-  Wallet,
   X,
   Zap,
 } from "lucide-react-native";
@@ -110,7 +110,6 @@ export default function ParametresScreen() {
       toast({ kind: "error", title: "Biométrie indisponible", description: error instanceof Error ? error.message : "Réessayez avec votre mot de passe." });
     } finally { setBiometricBusy(false); }
   };
-  const [mobileTab, setMobileTab] = useState<"wallet" | "settings">("wallet");
   const [refreshing, setRefreshing] = useState(false);
   const [profilName, setProfilName] = useState("");
   const [profilEmail, setProfilEmail] = useState("");
@@ -367,55 +366,7 @@ export default function ParametresScreen() {
         {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
       </View>
 
-      {/* Sélecteur mobile en 2 onglets nets : Portefeuille | Réglages */}
-      <View style={styles.tabSwitch}>
-        <Pressable
-          onPress={() => setMobileTab("wallet")}
-          style={[
-            styles.tabBtn,
-            mobileTab === "wallet" && styles.tabBtnActive,
-          ]}
-        >
-          <Wallet
-            size={14}
-            color={mobileTab === "wallet" ? COLORS.betclicRed : COLORS.mist}
-            strokeWidth={2.3}
-          />
-          <Text
-            style={[
-              styles.tabBtnText,
-              mobileTab === "wallet" && { color: COLORS.betclicRed },
-            ]}
-          >
-            Portefeuille
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setMobileTab("settings")}
-          style={[
-            styles.tabBtn,
-            mobileTab === "settings" && styles.tabBtnActive,
-          ]}
-        >
-          <SlidersHorizontal
-            size={14}
-            color={mobileTab === "settings" ? COLORS.betclicRed : COLORS.mist}
-            strokeWidth={2.3}
-          />
-          <Text
-            style={[
-              styles.tabBtnText,
-              mobileTab === "settings" && { color: COLORS.betclicRed },
-            ]}
-          >
-            Réglages
-          </Text>
-        </Pressable>
-      </View>
-
-      {mobileTab === "wallet" ? (
-        <View style={styles.sectionStack}>
+      <View style={styles.sectionStack}>
 
           {/* Retraits en attente avec annulation immédiate */}
           {pendingWithdrawalEntries.length > 0 ? (
@@ -497,10 +448,7 @@ export default function ParametresScreen() {
               <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
             </Pressable>
           ) : null}
-        </View>
-      ) : (
-        <View style={styles.sectionStack}>
-          {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
+        {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
           <View style={styles.profileCard}>
             <LinearGradient colors={[`hsl(${hue}, 60%, 44%)`, `hsl(${(hue + 36) % 360}, 68%, 30%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarBox}>
               <Text style={styles.avatarInitials}>{initials(user?.name ?? "PU")}</Text>
@@ -562,6 +510,26 @@ export default function ParametresScreen() {
               </View>
             </View>
           ) : null}
+          <View style={{ gap: 6 }}>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Portefeuille</Text><Text style={styles.settingsSubtitle}>Dépôts, retraits, mises et gains</Text></View>
+            <View style={styles.listCard}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Ouvrir les dernières opérations"
+                onPress={() => router.push("/parametres/transactions")}
+                style={({ pressed }) => [styles.navRow, pressed && { backgroundColor: COLORS.elev }]}
+              >
+                <View style={styles.grayIconBox}>
+                  <History size={16} color={COLORS.ink} strokeWidth={2.1} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.navRowTitle}>Dernières opérations</Text>
+                  <Text numberOfLines={1} style={styles.navRowSub}>Voir tous les mouvements du compte</Text>
+                </View>
+                <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+              </Pressable>
+            </View>
+          </View>
           <View style={{ gap: 6 }}>
             <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Compte</Text><Text style={styles.settingsSubtitle}>Pays et devise</Text></View>
             <View style={styles.listCard}>
@@ -788,9 +756,8 @@ export default function ParametresScreen() {
               )}
             </View>
             <Text style={styles.logoutText}>Se déconnecter</Text>
-          </Pressable>
-        </View>
-      )}
+        </Pressable>
+      </View>
 
       <Text style={styles.footerDisclaimer}>
         18+ · Jouer comporte des risques : endettement, isolement, dépendance.
@@ -882,31 +849,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: "#ffffff",
-  },
-  tabSwitch: {
-    marginTop: 12,
-    borderRadius: 16,
-    backgroundColor: COLORS.elev,
-    padding: 4,
-    flexDirection: "row",
-    gap: 4,
-  },
-  tabBtn: {
-    flex: 1,
-    height: 38,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  tabBtnActive: {
-    backgroundColor: "#ffffff",
-  },
-  tabBtnText: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: COLORS.mist,
   },
   topBlock: {
     gap: 12,
@@ -1045,6 +987,8 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.edge,
     backgroundColor: "#ffffff",
     flexDirection: "row",
     alignItems: "center",
@@ -1163,6 +1107,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.elev,
     alignItems: "center",
     justifyContent: "center",
+  },
+  navRow: {
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   navRowTitle: {
     fontSize: 11.5,
