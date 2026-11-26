@@ -319,10 +319,9 @@ export default function ParametresPage() {
               onClick={toggleProfilEditing}
               aria-label={profilEditing ? "Fermer la modification du profil" : "Modifier le nom"}
               aria-expanded={profilEditing}
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10.5px] font-medium text-ink active:bg-edge"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-ink active:bg-edge"
             >
-              {profilEditing ? <X size={13} strokeWidth={2.4} /> : <Pencil size={13} strokeWidth={2.2} />}
-              {profilEditing ? "Fermer" : "Modifier"}
+              {profilEditing ? <X size={14} strokeWidth={2.4} /> : <Pencil size={14} strokeWidth={2.2} />}
             </button>
           </div>
 
