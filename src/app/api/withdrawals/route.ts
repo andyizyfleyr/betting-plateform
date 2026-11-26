@@ -160,10 +160,25 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (amount > eligibility.withdrawable + 1e-5 && !(forfeitBonus && eligibility.bonusRemaining > 0)) {
+    // Un retrait avant la fin des mises annule le bonus restant : impossible de
+    // récupérer son dépôt en gardant le bonus « gratuit ».
+    if (eligibility.bonusRemaining > 1e-5 && !forfeitBonus) {
       return NextResponse.json(
         {
-          error: `Ton bonus restant (${formatEurAsCurrency(eligibility.bonusRemaining, userCurrency.code)}) se débloque après ${formatEurAsCurrency(eligibility.wagerRemaining, userCurrency.code)} de mises à cote ≥ ${minWagerOddsSingle().toFixed(2).replace(".", ",")}. Retirable maintenant : ${formatEurAsCurrency(eligibility.withdrawable, userCurrency.code)}. Tu peux aussi annuler ton bonus pour retirer tout ton solde.`,
+          error: `Retirer maintenant annule ton bonus restant de ${formatEurAsCurrency(eligibility.bonusRemaining, userCurrency.code)}. Misez encore ${formatEurAsCurrency(eligibility.wagerRemaining, userCurrency.code)} à cote ≥ ${minWagerOddsSingle().toFixed(2).replace(".", ",")} pour le garder, ou confirme le retrait pour l'annuler.`,
+          code: "bonus_forfeit_required",
+          withdrawable: eligibility.withdrawable,
+          bonusRemaining: eligibility.bonusRemaining,
+          wagerRemaining: eligibility.wagerRemaining,
+          balance: eligibility.balance,
+        },
+        { status: 400 }
+      );
+    }
+    if (amount > eligibility.withdrawable + 1e-5) {
+      return NextResponse.json(
+        {
+          error: `Montant supérieur au solde retirable (${formatEurAsCurrency(eligibility.withdrawable, userCurrency.code)}).`,
           code: "bonus_locked",
           withdrawable: eligibility.withdrawable,
           bonusRemaining: eligibility.bonusRemaining,
@@ -261,21 +276,28 @@ export async function POST(req: NextRequest) {
         };
       }
 
-      if (lockedUser.balance < amount) {
-        return { kind: "error", error: "Solde disponible insuffisant" };
+      let currentBalance = lockedUser.balance;
+      const lockedBonus = Math.max(0, Number(lockedUser.bonusLocked ?? 0));
+
+      // Le bonus non débloqué est supprimé du solde avant tout retrait anticipé.
+      if (lockedBonus > 1e-5) {
+        if (!forfeitBonus) {
+          return {
+            kind: "error",
+            error: "Un retrait annule ton bonus restant : confirme l'annulation pour continuer.",
+          };
+        }
+        await forfeitDepositBonusInTx(tx, uid);
+        const [afterForfeit] = await tx
+          .select({ balance: appUser.balance })
+          .from(appUser)
+          .where(eq(appUser.id, uid))
+          .for("update");
+        currentBalance = afterForfeit?.balance ?? Math.max(0, currentBalance - lockedBonus);
       }
 
-      let lockedBonus = Math.max(0, Number(lockedUser.bonusLocked ?? 0));
-      if (forfeitBonus && lockedBonus > 0) {
-        await forfeitDepositBonusInTx(tx, uid);
-        lockedBonus = 0;
-      }
-      if (amount > lockedUser.balance - lockedBonus + 1e-5) {
-        return {
-          kind: "error",
-          error:
-            "Ton bonus restant bloque encore ce montant. Annule ton bonus pour retirer tout ton solde.",
-        };
+      if (currentBalance < amount) {
+        return { kind: "error", error: "Solde disponible insuffisant" };
       }
 
       const [debited] = await tx

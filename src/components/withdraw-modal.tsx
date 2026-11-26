@@ -143,16 +143,15 @@ export function WithdrawModal({
   const amount = localToEur(localAmount, currency, withdrawable);
   const overWithdrawable = amount > withdrawable + 1e-5;
   const overBalance = amount > balance + 1e-5;
-  /** Le montant dépasse le retirable uniquement à cause du bonus : on propose de l'annuler. */
-  const forfeitNeeded = overWithdrawable && !overBalance && bonusRemaining > 0;
+  /** Tout retrait avant la fin des mises annule le bonus restant (confirmation obligatoire). */
+  const forfeitNeeded = bonusRemaining > 0;
   const belowMin = localAmount > 0 && localAmount < currencyConfig.minWithdrawalLocal;
   const quickWithdrawPresets = currencyConfig.withdrawalPresetsLocal;
 
   const canSubmit =
     !loading &&
     localAmount >= currencyConfig.minWithdrawalLocal &&
-    !overBalance &&
-    (!overWithdrawable || forfeitNeeded) &&
+    !overWithdrawable &&
     destination.trim().length >= 4;
 
   const submit = async (e: React.FormEvent) => {
@@ -205,7 +204,11 @@ export function WithdrawModal({
       if (err instanceof ApiRequestError && err.status >= 400 && err.status < 500) {
         idempotencySlotRef.current = null;
       }
-      if (err instanceof ApiRequestError && err.code === "bonus_locked" && bonusRemaining > 0) {
+      if (
+        err instanceof ApiRequestError &&
+        (err.code === "bonus_locked" || err.code === "bonus_forfeit_required") &&
+        bonusRemaining > 0
+      ) {
         // Le solde retirable n'était plus à jour : on propose directement l'annulation.
         setConfirmForfeit(true);
         setError(null);
@@ -404,7 +407,7 @@ export function WithdrawModal({
                 {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}
               </p>
             )}
-            {overWithdrawable && !overBalance && !forfeitNeeded && (
+            {overWithdrawable && !overBalance && (
               <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
                 {balanceHidden
                   ? "Montant supérieur à votre solde retirable."
@@ -413,10 +416,10 @@ export function WithdrawModal({
             )}
             {forfeitNeeded && (
               <p className="mt-2 rounded-xl bg-amber-500/8 px-3 py-2 text-[10.5px] leading-relaxed text-amber-900">
-                {balanceHidden
-                  ? "Ce montant inclut ton bonus restant."
-                  : `Ce montant inclut ton bonus restant (${eur(bonusRemaining)}).`}{" "}
-                Tu peux retirer ton propre argent maintenant, ou annuler le bonus pour tout retirer.
+                Un retrait maintenant annule ton bonus restant
+                {balanceHidden ? "" : ` (${eur(bonusRemaining)})`} : il sera retiré de ton solde.
+                Misez encore {balanceHidden ? BALANCE_MASK : eur(wagerRemaining)} à cote ≥ 1,30 pour
+                le garder.
               </p>
             )}
             {overBalance && (
@@ -455,13 +458,17 @@ export function WithdrawModal({
       </div>
       <ConfirmDialog
         open={confirmForfeit}
-        title="Annuler ton bonus ?"
+        title="Retirer annule ton bonus"
         description={
           balanceHidden
-            ? "Tu vas retirer tout ton solde : le bonus restant sera définitivement annulé."
-            : `Tu vas retirer ${eur(amount)} : le bonus restant de ${eur(bonusRemaining)} sera définitivement annulé.`
+            ? "Le bonus restant sera annulé et retiré de ton solde."
+            : `Le bonus restant de ${eur(bonusRemaining)} sera annulé et retiré de ton solde.`
         }
-        note="Ton propre argent, lui, reste intact et sera versé. Ce bonus ne reviendra pas."
+        note={
+          balanceHidden
+            ? "Ton propre argent reste retirable. Pour garder le bonus, mise encore et annule ce retrait."
+            : `Ton propre argent reste retirable (${eur(withdrawable)}). Pour garder le bonus, mise encore ${eur(wagerRemaining)} à cote ≥ 1,30 et annule ce retrait.`
+        }
         confirmLabel="Annuler le bonus et retirer"
         cancelLabel="Garder le bonus"
         onCancel={() => setConfirmForfeit(false)}
