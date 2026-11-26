@@ -883,7 +883,7 @@ export default function BetslipPage() {
               </div>
               {quote.boostAmount > 0 && (
                 <div className="flex items-center justify-between text-win">
-                  <span>Bonus Combiné </span>
+                  <span>Bonus Combiné +{quote.boostPct}%</span>
                   <span className="font-display font-medium tabular-nums">
                     +{eur(quote.boostAmount)}
                   </span>
@@ -892,11 +892,17 @@ export default function BetslipPage() {
               <div className="flex items-center justify-between pt-0.5">
                 <span className="font-display text-[11.5px] font-medium text-ink">
                   Gain potentiel
-                                    </span>
+                </span>
                 <span className="font-display text-[13.5px] font-medium tabular-nums text-win">
                   <AnimatedNumber value={quote.potentialWin} format={eur} />
                 </span>
               </div>
+              {maxPayoutEur > 0 && (
+                <div className="flex items-center justify-between text-[10px] text-dim">
+                  <span>Plafond de gain</span>
+                  <span className="font-display tabular-nums">{eur(maxPayoutEur)}</span>
+                </div>
+              )}
             </div>
 
             {/* Alertes éventuelles */}

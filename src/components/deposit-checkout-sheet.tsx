@@ -479,7 +479,7 @@ function DepositCheckoutSheetBody({
 
     const cleanRef = reference.trim();
     if (cleanRef.length < 4) {
-      setError("Saisissez la référence ou le numéro.");
+      setError("Saisissez la référence ou le numéro. Minimum 4 caractères.");
       return;
     }
     inFlightRef.current = true;

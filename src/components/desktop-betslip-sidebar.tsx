@@ -1059,7 +1059,7 @@ export function DesktopBetslipSidebar() {
                 </div>
                 {quote.boostAmount > 0 && (
                   <div className="flex items-center justify-between text-[10.5px] font-medium text-win">
-                    <span>Bonus Combiné </span>
+                    <span>Bonus Combiné +{quote.boostPct}%</span>
                     <span className="font-display font-medium tabular-nums">
                       +{eur(quote.boostAmount)}
                     </span>
@@ -1068,13 +1068,19 @@ export function DesktopBetslipSidebar() {
                 <div className="flex items-baseline justify-between pt-0.5">
                   <span className="text-[11px] font-medium text-ink">
                     Gains possibles
-                                      </span>
+                  </span>
                   <AnimatedNumber
                     value={quote.potentialWin}
                     format={eur}
                     className="font-display text-[13.5px] font-medium tabular-nums text-win"
                   />
                 </div>
+                {maxPayoutEur > 0 && (
+                  <div className="flex items-center justify-between text-[10px] text-dim">
+                    <span>Plafond de gain</span>
+                    <span className="font-display tabular-nums">{eur(maxPayoutEur)}</span>
+                  </div>
+                )}
               </div>
 
               {insufficient && (

@@ -260,7 +260,7 @@ export default function DepositScreen() {
 
     const cleanRef = reference.trim();
     if (cleanRef.length < 4) {
-      setSheetError("Saisissez la référence ou le numéro .");
+      setSheetError("Saisissez la référence ou le numéro. Minimum 4 caractères.");
       return;
     }
 

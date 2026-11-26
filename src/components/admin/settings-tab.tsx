@@ -75,8 +75,8 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   // Welcome bonus
   amount: { label: "Montant du bonus", unit: "€" },
   wagerMultiplier: { label: "Wager", hint: "Nombre de mises à effectuer avant retrait" },
-  minOddsSingle: { label: "Cote minimale (simple)" },
-  minOddsCombo: { label: "Cote minimale (combiné)" },
+  minOddsSingle: { label: "Cote minimale · simple" },
+  minOddsCombo: { label: "Cote minimale · combiné" },
   validityDays: { label: "Validité", unit: "jours" },
   // Payments
   enabledMethods: { label: "Méthodes de paiement actives" },
@@ -88,7 +88,7 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   presets: { label: "Paliers par devise", hint: "Paliers rapides et bornes dépôt/retrait" },
   // Markets catalog
   activeMarkets: { label: "Marchés actifs" },
-  activeLeagues: { label: "Ligues actives" },
+  activeLeagues: { label: "Ligues actives · codes" },
   // Virtual simulator
   maxLive: { label: "Matchs live simultanés", unit: "matchs" },
   kickoffGapMs: { label: "Écart entre coups d'envoi", unit: "ms" },
@@ -99,7 +99,7 @@ const FIELD_LABELS: Record<string, { label: string; unit?: string; hint?: string
   heroTitle: { label: "Titre de la bannière d'accueil" },
   heroSubtitle: { label: "Sous-titre de la bannière d'accueil" },
   primaryColor: { label: "Couleur principale", hint: "Code hexadécimal" },
-  banners: { label: "Bannières promotionnelles" },
+  banners: { label: "Bannières promotionnelles · URLs" },
   // Notifications
   categories: { label: "Catégories de notifications actives" },
   pushSubjectPrefix: { label: "Préfixe des notifications push" },
@@ -471,8 +471,7 @@ function GenericField({
     return (
       <div className="flex flex-col gap-1">
         <label className="text-[11px] text-ink">
-          {meta.label}
-          
+          {meta.label}{meta.unit ? ` · ${meta.unit}` : ""}
         </label>
         <AdminInput
           type="text"
@@ -671,8 +670,8 @@ function WelcomeBonusEditor({
       <NumberRow label="Montant du bonus" unit="€" value={draft.amount as number} onChange={set} keyName="amount" />
       <NumberRow label="Wager" value={draft.wagerMultiplier as number} onChange={set} keyName="wagerMultiplier" />
       <div className="grid grid-cols-2 gap-3">
-        <NumberRow label="Cote minimale" value={draft.minOddsSingle as number} onChange={set} keyName="minOddsSingle" />
-        <NumberRow label="Cote minimale" value={draft.minOddsCombo as number} onChange={set} keyName="minOddsCombo" />
+        <NumberRow label="Cote minimale · simple" value={draft.minOddsSingle as number} onChange={set} keyName="minOddsSingle" />
+        <NumberRow label="Cote minimale · combiné" value={draft.minOddsCombo as number} onChange={set} keyName="minOddsCombo" />
       </div>
       <NumberRow label="Validité" unit="jours" value={draft.validityDays as number} onChange={set} keyName="validityDays" />
     </>
@@ -1048,7 +1047,7 @@ function MarketsCatalogEditor({
         </div>
       </div>
       {expanded && (
-        <ArrayFieldEditor label="Ligues actives" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
+        <ArrayFieldEditor label="Ligues actives · codes" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
       )}
     </div>
   );
@@ -1109,7 +1108,7 @@ function BrandingEditor({
           <AdminInput type="text" value={String(draft.primaryColor ?? "")} onChange={(s) => set("primaryColor", s)} />
         </div>
       </div>
-      <ArrayFieldEditor label="Bannières promotionnelles" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
+      <ArrayFieldEditor label="Bannières promotionnelles · URLs" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
     </>
   );
 }
@@ -1259,7 +1258,7 @@ function NumberRow({
   return (
     <div className="flex flex-col gap-1">
       <label className="text-[11px] text-ink">
-        {label}
+        {label}{unit ? ` · ${unit}` : ""}
       </label>
       <AdminInput
         type="text"

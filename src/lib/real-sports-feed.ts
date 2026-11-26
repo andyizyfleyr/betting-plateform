@@ -1293,10 +1293,18 @@ function parseDetailsEvents(
     const athleteId = asStr(firstAth?.id || firstPartAth?.id);
     const secBucket = secVal != null && secVal >= 0 ? Math.round(secVal) : null;
 
-    const player =
+    let player =
       asStr(firstAth?.shortName || firstAth?.displayName) ||
       asStr(firstPartAth?.shortName || firstPartAth?.displayName) ||
       undefined;
+
+    if (isGoal && player) {
+      if (d.ownGoal === true || typeText.includes("own goal")) {
+        player = `${player} · csc`;
+      } else if (d.penaltyKick === true || typeText.includes("penalty")) {
+        player = `${player} · pen`;
+      }
+    }
 
     const evType: "goal" | "red" = isGoal ? "goal" : "red";
 

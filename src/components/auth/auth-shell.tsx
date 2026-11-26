@@ -403,8 +403,8 @@ function AuthShellInner({
       setResendCooldown(60);
       setInfoMessage(
         isResend
-          ? `Un nouveau code de sécurité a été généré.`
-          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres a été envoyé.`
+          ? `Un nouveau code de sécurité a été généré. Valable ${r.expiresInMinutes} min.`
+          : `Si un compte est associé à ${cleanEmail}, un code à 6 chiffres a été envoyé. Valable ${r.expiresInMinutes} min.`
       );
       setTimeout(() => otpInputRef.current?.focus(), 60);
     } catch (err) {
@@ -554,8 +554,8 @@ function AuthShellInner({
           <p className="text-[10.5px] leading-relaxed text-slate-400">
             Jouer comporte des risques: endettement, isolement, dépendance. Pour
             être aidé, appelez le{" "}
-            <span className="font-medium text-white">09 74 75 13 13</span>{" "}
-            .
+            <span className="font-medium text-white">09 74 75 13 13</span>.
+            Appel non surtaxé.
           </p>
         </div>
       </aside>
@@ -966,7 +966,7 @@ function AuthShellInner({
                     <span>
                       Votre solde, vos mises et vos retraits seront affichés en{" "}
                       <span className="text-ink">
-                        {selectedCurrencyCfg.name} 
+                        {selectedCurrencyCfg.name}
                       </span>
                       .
                     </span>
@@ -1509,8 +1509,7 @@ function AuthShellInner({
           </div>
           <p className="text-[10px] leading-relaxed text-dim lg:hidden">
             <strong className="font-display font-medium text-mist">18+</strong> ·
-            Jouer comporte des risques: endettement, isolement, dépendance. Aide
-            : 09 74 75 13 13.
+            Jouer comporte des risques: endettement, isolement, dépendance. Aide : 09 74 75 13 13. Appel non surtaxé.
           </p>
         </footer>
       </main>
