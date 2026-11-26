@@ -521,7 +521,7 @@ export default function ParisPage() {
                 <p className="mb-2 px-0.5 text-[10.5px] font-medium capitalize text-mist">
                   {dayLabel(settledOrPlacedIso(group[0]))}
                   {!finishedQuery.hasNextPage && <span className="ml-1.5 text-dim">
-                    ({dayTotalCounts.get(key) ?? group.length})
+                    
                   </span>}
                 </p>
                 <div className="grid grid-cols-1 items-start gap-3">

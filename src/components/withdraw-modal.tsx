@@ -210,10 +210,7 @@ export function WithdrawModal({
             <div>
               <h2 className="font-display text-[13.5px] font-bold text-ink">Retirer mes gains</h2>
               <p className="text-[10.5px] text-dim">
-                Solde retirable : <strong className="text-win">{eur(withdrawable)}</strong>
-                {withdrawable < balance && (
-                  <span className="text-dim"> (total {eur(balance)})</span>
-                )}
+                Solde retirable: <strong className="text-win">{eur(withdrawable)}</strong>
               </p>
             </div>
             <button
@@ -304,8 +301,7 @@ export function WithdrawModal({
 
             <div className="mt-3.5">
               <label className="text-[10.5px] font-medium text-mist">
-                Montant à retirer (min.{" "}
-                {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)})
+                Montant à retirer 
               </label>
               <div
                 className={cn(
@@ -370,7 +366,7 @@ export function WithdrawModal({
 
             {belowMin && (
               <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                Montant minimum de retrait :{" "}
+                Montant minimum de retrait:{" "}
                 {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}
               </p>
             )}

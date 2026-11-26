@@ -209,7 +209,7 @@ export default function PredictionDetailScreen() {
         if (res === "full") {
           toast({
             kind: "error",
-            title: "Betslip complet (limite atteinte)",
+            title: "Betslip complet",
           });
         }
         return;
@@ -328,7 +328,7 @@ export default function PredictionDetailScreen() {
                 {mergedQuestion.myBet && myBetLabel ? (
                   <View style={styles.myBetRow}>
                     <Text style={styles.myBetLeft}>
-                      Votre mise : {myBetLabel}
+                      Votre mise: {myBetLabel}
                     </Text>
                     <Text style={styles.myBetRight}>
                       {eur(mergedQuestion.myBet.stake)}
@@ -340,7 +340,7 @@ export default function PredictionDetailScreen() {
               {/* Issues / options compactes */}
               <View style={styles.card}>
                 <Text style={styles.optionsHeading}>
-                  ISSUES ({options.length})
+                  ISSUES 
                 </Text>
 
                 <View style={styles.optionsList}>
@@ -399,7 +399,7 @@ export default function PredictionDetailScreen() {
                           } else if (res === "full") {
                             toast({
                               kind: "error",
-                              title: "Betslip complet (limite atteinte)",
+                              title: "Betslip complet",
                             });
                           }
                         }}

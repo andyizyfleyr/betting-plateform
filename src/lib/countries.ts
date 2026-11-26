@@ -101,7 +101,7 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   },
   XOF: {
     code: "XOF",
-    name: "Franc CFA (BCEAO)",
+    name: "Franc CFA",
     symbol: "₣",
     decimals: 0,
     rateFromEur: 655.957,
@@ -123,7 +123,7 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   },
   XAF: {
     code: "XAF",
-    name: "Franc CFA (BEAC)",
+    name: "Franc CFA",
     symbol: "₣",
     decimals: 0,
     rateFromEur: 655.957,

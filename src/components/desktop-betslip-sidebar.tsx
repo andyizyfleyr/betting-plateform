@@ -712,12 +712,12 @@ export function DesktopBetslipSidebar() {
               <CheckCircle2 className="h-6 w-6" strokeWidth={2.3} />
             </div>
             <h2 className="mt-3 font-display text-[13.5px] font-bold text-ink">
-              Coupon enregistré !
+              Coupon enregistré!
             </h2>
             <p className="mt-0.5 text-[10.5px] text-mist">
               {placedReceipt.mode === "single"
                 ? "Votre pari simple est en cours."
-                : `Votre combiné (${placedReceipt.legsCount} sélections) est en cours.`}
+                : `Votre combiné est en cours.`}
             </p>
 
             <div className="mt-4 grid grid-cols-3 divide-x divide-edge rounded-xl bg-elev py-2.5 text-center">
@@ -768,7 +768,7 @@ export function DesktopBetslipSidebar() {
                 Place un nouveau pari
               </h2>
               <p className="mt-1 text-[11px] text-mist">
-                On croise les doigts pour toi !
+                On croise les doigts pour toi!
               </p>
             </div>
 
@@ -809,7 +809,7 @@ export function DesktopBetslipSidebar() {
                     />
                     {quote.boostPct > 0
                       ? `Bonus Combiné +${quote.boostPct}% actif`
-                      : "Bonus Combiné dès 3 sél. (cote ≥ 1,35)"}
+                      : "Bonus Combiné dès 3 sél."}
                   </span>
                   {nextBoost && (
                     <span className="shrink-0 font-display text-[10px] font-medium text-win">
@@ -1045,7 +1045,7 @@ export function DesktopBetslipSidebar() {
               </div>
               {belowMin && !insufficient && (
                 <p className="mt-1.5 text-[10px] font-medium text-betclic-red">
-                  Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
+                  Mise minimale: {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
                 </p>
               )}
 
@@ -1059,7 +1059,7 @@ export function DesktopBetslipSidebar() {
                 </div>
                 {quote.boostAmount > 0 && (
                   <div className="flex items-center justify-between text-[10.5px] font-medium text-win">
-                    <span>Bonus Combiné (+{quote.boostPct}%)</span>
+                    <span>Bonus Combiné </span>
                     <span className="font-display font-medium tabular-nums">
                       +{eur(quote.boostAmount)}
                     </span>
@@ -1068,8 +1068,7 @@ export function DesktopBetslipSidebar() {
                 <div className="flex items-baseline justify-between pt-0.5">
                   <span className="text-[11px] font-medium text-ink">
                     Gains possibles
-                    <span className="ml-1 text-[10px] text-mist">(plafond {eur(maxPayoutEur)})</span>
-                  </span>
+                                      </span>
                   <AnimatedNumber
                     value={quote.potentialWin}
                     format={eur}
@@ -1080,7 +1079,7 @@ export function DesktopBetslipSidebar() {
 
               {insufficient && (
                 <div className="mt-2 flex items-center justify-between rounded-lg bg-betclic-red/8 px-2.5 py-1.5 text-[10px] font-medium text-betclic-red">
-                  <span>Solde insuffisant ({eur(balance)})</span>
+                  <span>Solde insuffisant </span>
                   <button
                     type="button"
                     onClick={openRecharge}

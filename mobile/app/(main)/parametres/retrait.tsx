@@ -258,7 +258,7 @@ export default function WithdrawScreen() {
               Retirer mes gains
             </Text>
             <Text numberOfLines={1} style={styles.headerSub}>
-              Retirable : {eur(withdrawable)}
+              Retirable: {eur(withdrawable)}
             </Text>
           </View>
         </View>
@@ -311,7 +311,7 @@ export default function WithdrawScreen() {
               <View style={styles.card}>
                 <View style={styles.bonusRow}>
                   <Text style={styles.bonusLeft}>
-                    Déblocage bonus ({progressPct}%)
+                    Déblocage bonus 
                   </Text>
                   <Text style={styles.bonusRight}>
                     Reste {eur(bonusRemaining)}
@@ -392,13 +392,13 @@ export default function WithdrawScreen() {
 
                 {belowMin ? (
                   <Text style={styles.inlineWarn}>
-                    Minimum de retrait :{" "}
+                    Minimum de retrait:{" "}
                     {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}.
                   </Text>
                 ) : null}
                 {overWithdrawable ? (
                   <Text style={styles.inlineWarn}>
-                    Dépasse le solde retirable ({eur(withdrawable)}).
+                    Dépasse le solde retirable.
                   </Text>
                 ) : null}
               </View>

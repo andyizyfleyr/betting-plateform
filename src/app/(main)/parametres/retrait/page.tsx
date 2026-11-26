@@ -264,7 +264,7 @@ export default function WithdrawPage() {
               Retirer mes gains
             </h1>
             <p className="truncate text-[10px] leading-tight text-dim lg:text-[10.5px]">
-              Retirable : {eur(withdrawable)}
+              Retirable: {eur(withdrawable)}
             </p>
           </div>
         </div>
@@ -313,7 +313,7 @@ export default function WithdrawPage() {
             {bonusRemaining > 0 && (
               <section className="glass-card rounded-xl px-3 py-2.5 text-[10px] text-mist lg:rounded-2xl lg:p-4">
                 <div className="flex justify-between">
-                  <span>Déblocage bonus ({progressPct}%)</span>
+                  <span>Déblocage bonus </span>
                   <span className="font-medium tabular-nums text-ink">
                     Reste {eur(bonusRemaining)}
                   </span>
@@ -382,13 +382,13 @@ export default function WithdrawPage() {
 
                 {belowMin && (
                   <p className="mt-1 text-[10px] font-medium text-betclic-red">
-                    Minimum de retrait :{" "}
+                    Minimum de retrait:{" "}
                     {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}.
                   </p>
                 )}
                 {overWithdrawable && (
                   <p className="mt-1 text-[10px] font-medium text-betclic-red">
-                    Dépasse le solde retirable ({eur(withdrawable)}).
+                    Dépasse le solde retirable.
                   </p>
                 )}
               </div>

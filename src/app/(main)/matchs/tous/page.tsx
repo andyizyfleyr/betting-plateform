@@ -456,7 +456,7 @@ function AllMatchesContent() {
                   onClick={() => setFilter("upcoming")}
                   className="h-9.5 rounded-full border border-edge bg-white px-3.5 font-display text-[10.5px] font-medium text-ink active:scale-95"
                 >
-                  Avant-match ({upcomingAllCount})
+                  Avant-match 
                 </button>
               )}
               <Link

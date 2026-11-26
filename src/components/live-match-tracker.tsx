@@ -551,11 +551,9 @@ function PitchRadarView({
             style={{ backgroundColor: colors.homePrimary }}
           />
           <span>{initials(match.homeTeam)} →</span>
-          {redHome > 0 && <span className="text-red-300">({11 - redHome}j)</span>}
-        </div>
+                  </div>
         <div className="pointer-events-none absolute bottom-1 right-2 flex items-center gap-1 rounded bg-black/40 px-1.5 py-0.5 text-[8.5px] font-medium text-white/90">
-          {redAway > 0 && <span className="text-red-300">({11 - redAway}j)</span>}
-          <span>← {initials(match.awayTeam)}</span>
+                    <span>← {initials(match.awayTeam)}</span>
           <span
             className="h-1.5 w-1.5 rounded-full"
             style={{ backgroundColor: colors.awayPrimary }}
@@ -765,7 +763,7 @@ function MomentumHistogramView({
           {initials(match.homeTeam)}
         </span>
         <span className="rounded-full bg-white/10 px-2 py-0.2 text-[9px] font-medium text-emerald-100">
-          10 dern. min :{" "}
+          10 dern. min:{" "}
           <strong className="text-white">{telemetry.recentHomePressure}%</strong> –{" "}
           <strong className="text-white">{100 - telemetry.recentHomePressure}%</strong>
         </span>
@@ -977,8 +975,7 @@ function MatchTimelineStrip({
           <span className="truncate rounded-full bg-white/14 px-2 py-0.2 font-display text-[9.5px] font-medium text-amber-200">
             {activePinnedEvent.minute}’ ·{" "}
             {activePinnedEvent.type === "red_card" ? "🟥 Rouge" : "⚽ But"}{" "}
-            {activePinnedEvent.player ? `${activePinnedEvent.player} ` : ""}(
-            {activePinnedEvent.team === "home" ? match.homeTeam : match.awayTeam})
+            {activePinnedEvent.player ? `${activePinnedEvent.player} ` : ""}
           </span>
         </div>
       )}

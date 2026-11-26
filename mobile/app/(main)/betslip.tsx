@@ -592,7 +592,7 @@ export default function BetslipScreen() {
           <Text style={styles.receiptTitle}>Pari placé</Text>
           <Text style={styles.receiptSub}>
             {receipt.kind === "combo"
-              ? `Pari combiné (${receipt.count} sélections)`
+              ? `Pari combiné`
               : "Pari simple enregistré"}
           </Text>
 
@@ -694,7 +694,7 @@ export default function BetslipScreen() {
                   {nextBoost ? (
                     <Text style={styles.boostHintText}>
                       +{nextBoost.needed} cote{nextBoost.needed > 1 ? "s" : ""}{" "}
-                      (≥{MIN_ELIGIBLE_BOOST_ODDS}) → +{nextBoost.pct}%
+                       → +{nextBoost.pct}%
                     </Text>
                   ) : (
                     <Text style={styles.boostMaxText}>Palier max atteint</Text>
@@ -936,7 +936,7 @@ export default function BetslipScreen() {
             {quote.boostAmount > 0 ? (
               <View style={styles.summaryLine}>
                 <Text style={{ fontSize: 11, color: COLORS.win }}>
-                  Bonus Combiné (+{quote.boostPct}%)
+                  Bonus Combiné 
                 </Text>
                 <Text
                   style={{
@@ -990,8 +990,7 @@ export default function BetslipScreen() {
             <View style={styles.amberAlertBox}>
               <AlertTriangle size={15} color="#92400e" strokeWidth={2.2} />
               <Text style={styles.amberAlertText}>
-                Une sélection est temporairement suspendue (coup d&apos;envoi ou
-                action live).
+                Une sélection est temporairement suspendue.
               </Text>
             </View>
           ) : null}

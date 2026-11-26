@@ -347,7 +347,7 @@ export const ADMIN_SETTINGS_CATALOG: Record<
   },
   market_margins: {
     label: "Marges bookmaker",
-    description: "Marge (%) par type de marché et par défaut",
+    description: "Marge par type de marché et par défaut",
     default: DEFAULT_MARKET_MARGINS as unknown as Record<string, unknown>,
     validate: (v) => !!v && typeof v === "object" && typeof (v as MarketMarginSettings).default === "number",
   },
@@ -377,7 +377,7 @@ export const ADMIN_SETTINGS_CATALOG: Record<
   },
   currency_rates: {
     label: "Taux de change",
-    description: "1 EUR = rate pour chaque devise (mises à jour manuellement)",
+    description: "1 EUR = rate pour chaque devise",
     default: DEFAULT_CURRENCY_RATES as unknown as Record<string, unknown>,
     validate: (v) => !!v && typeof v === "object" && !!(v as CurrencyRatesSettings).rates,
   },

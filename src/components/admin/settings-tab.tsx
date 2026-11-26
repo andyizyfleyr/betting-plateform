@@ -259,8 +259,7 @@ export function SettingsTab() {
           <div className="glass-card rounded-2xl p-4">
             <h2 className="font-display text-[14px] font-semibold text-ink">Réglages de la plateforme</h2>
             <p className="mt-1.5 text-[11.5px] leading-relaxed text-dim">
-              Configurez tous les paramètres fonctionnels (bonus, marges, paiements, devises,
-              branding…) sans redéploiement. Les modifications s&apos;appliquent instantanément
+              Configurez tous les paramètres fonctionnels sans redéploiement. Les modifications s&apos;appliquent instantanément
               côté serveur. Chaque réglage s&apos;enregistre indépendamment.
             </p>
             <button
@@ -473,7 +472,7 @@ function GenericField({
       <div className="flex flex-col gap-1">
         <label className="text-[11px] text-ink">
           {meta.label}
-          {meta.unit && <span className="ml-1 text-[10px] text-dim">({meta.unit})</span>}
+          
         </label>
         <AdminInput
           type="text"
@@ -672,8 +671,8 @@ function WelcomeBonusEditor({
       <NumberRow label="Montant du bonus" unit="€" value={draft.amount as number} onChange={set} keyName="amount" />
       <NumberRow label="Wager" value={draft.wagerMultiplier as number} onChange={set} keyName="wagerMultiplier" />
       <div className="grid grid-cols-2 gap-3">
-        <NumberRow label="Cote minimale (simple)" value={draft.minOddsSingle as number} onChange={set} keyName="minOddsSingle" />
-        <NumberRow label="Cote minimale (combiné)" value={draft.minOddsCombo as number} onChange={set} keyName="minOddsCombo" />
+        <NumberRow label="Cote minimale" value={draft.minOddsSingle as number} onChange={set} keyName="minOddsSingle" />
+        <NumberRow label="Cote minimale" value={draft.minOddsCombo as number} onChange={set} keyName="minOddsCombo" />
       </div>
       <NumberRow label="Validité" unit="jours" value={draft.validityDays as number} onChange={set} keyName="validityDays" />
     </>
@@ -851,7 +850,7 @@ function CurrencyRatesEditor({
   const entries = Object.entries(rates);
   return (
     <div>
-      <p className="mb-2 text-[10.5px] text-dim">1 EUR = … pour chaque devise. Mise à jour manuelle.</p>
+      <p className="mb-2 text-[10.5px] text-dim">1 EUR =… pour chaque devise. Mise à jour manuelle.</p>
       <div className={cn("grid grid-cols-2 gap-2 lg:grid-cols-3", !expanded && "max-h-56 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]")}>
         {entries.map(([code, rate]) => (
           <div key={code} className="flex flex-col gap-1 rounded-lg border border-edge bg-elev/40 p-2">
@@ -995,7 +994,7 @@ function CurrencyPresetsEditor({
         <button
           type="button"
           onClick={() => {
-            const code = prompt("Code devise à ajouter (ex. XOF) :");
+            const code = prompt("Code devise à ajouter :");
             if (code) set("presets", { ...presets, [code.trim().toUpperCase()]: {} });
           }}
           className="mt-2 h-8 rounded-lg bg-slate-700/80 px-3 font-display text-[10.5px] font-medium text-white active:scale-95"
@@ -1049,7 +1048,7 @@ function MarketsCatalogEditor({
         </div>
       </div>
       {expanded && (
-        <ArrayFieldEditor label="Ligues actives (codes)" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
+        <ArrayFieldEditor label="Ligues actives" array={(draft.activeLeagues as unknown[]) ?? []} onChange={(v) => set("activeLeagues", v)} />
       )}
     </div>
   );
@@ -1098,7 +1097,7 @@ function BrandingEditor({
       <div className="flex flex-col gap-1.5">
         <label className="text-[11px] text-ink">
           Couleur principale
-          <span className="ml-1 text-[10px] text-dim">(code hexadécimal)</span>
+          
         </label>
         <div className="flex items-center gap-2">
           <input
@@ -1110,7 +1109,7 @@ function BrandingEditor({
           <AdminInput type="text" value={String(draft.primaryColor ?? "")} onChange={(s) => set("primaryColor", s)} />
         </div>
       </div>
-      <ArrayFieldEditor label="Bannières promotionnelles (URLs)" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
+      <ArrayFieldEditor label="Bannières promotionnelles" array={(draft.banners as unknown[]) ?? []} onChange={(v) => set("banners", v)} />
     </>
   );
 }
@@ -1261,7 +1260,6 @@ function NumberRow({
     <div className="flex flex-col gap-1">
       <label className="text-[11px] text-ink">
         {label}
-        {unit && <span className="ml-1 text-[10px] text-dim">({unit})</span>}
       </label>
       <AdminInput
         type="text"

@@ -575,14 +575,14 @@ export default function ComboDetailPage() {
               {/* Montants en ligne (Nom en petit + valeur en grand) */}
               <div className="mt-3.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge pt-3">
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[10px] font-medium text-dim">Mise :</span>
+                  <span className="text-[10px] font-medium text-dim">Mise:</span>
                   <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                     {eur(bet.stake)}
                   </span>
                 </div>
 
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[10px] font-medium text-dim">Cote :</span>
+                  <span className="text-[10px] font-medium text-dim">Cote:</span>
                   {bet.boostPct != null &&
                     bet.boostPct > 0 &&
                     bet.baseOdds != null &&
@@ -599,35 +599,35 @@ export default function ComboDetailPage() {
                 <div className="inline-flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
                   {bet.status === "won" ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">Gain reçu :</span>
+                      <span className="text-[10px] font-medium text-dim">Gain reçu:</span>
                       <span className="font-display text-[11.5px] font-medium tabular-nums text-win">
                         +{eur(bet.potentialWin)}
                       </span>
                     </>
                   ) : bet.status === "lost" ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">Résultat :</span>
+                      <span className="text-[10px] font-medium text-dim">Résultat:</span>
                       <span className="font-display text-[11.5px] font-medium tabular-nums text-betclic-red">
                         -{eur(bet.stake)}
                       </span>
                     </>
                   ) : bet.status === "cashed" ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">Vendu pour :</span>
+                      <span className="text-[10px] font-medium text-dim">Vendu pour:</span>
                       <span className="font-display text-[11.5px] font-medium tabular-nums text-sky-700">
                         +{eur(bet.cashOutAmount ?? 0)}
                       </span>
                     </>
                   ) : bet.status === "void" ? (
                     <>
-                      <span className="text-[10px] font-medium text-dim">Remboursé :</span>
+                      <span className="text-[10px] font-medium text-dim">Remboursé:</span>
                       <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                         +{eur(bet.stake)}
                       </span>
                     </>
                   ) : (
                     <>
-                      <span className="text-[10px] font-medium text-dim">Gain max :</span>
+                      <span className="text-[10px] font-medium text-dim">Gain max:</span>
                       <span className="font-display text-[11.5px] font-medium tabular-nums text-ink">
                         {eur(bet.potentialWin)}
                       </span>
@@ -648,7 +648,7 @@ export default function ComboDetailPage() {
                         strokeWidth={2.3}
                       />
                       <span>
-                        Montant mis à jour :{" "}
+                        Montant mis à jour:{" "}
                         <strong className="line-through opacity-75">
                           {eur(cashoutChanged.previousCashout)}
                         </strong>{" "}
@@ -672,7 +672,7 @@ export default function ComboDetailPage() {
             <section>
               <div className="mb-2 flex items-center justify-between px-0.5">
                 <h2 className="font-display text-[11px] font-bold uppercase tracking-wider text-mist">
-                  Sélections du combiné ({totalLegs})
+                  Sélections du combiné 
                 </h2>
               </div>
 
@@ -820,7 +820,7 @@ export default function ComboDetailPage() {
                                   : "text-ink"
                               )}
                             >
-                              Choix : {leg.selectionLabel}
+                              Choix: {leg.selectionLabel}
                             </span>
                           </div>
 

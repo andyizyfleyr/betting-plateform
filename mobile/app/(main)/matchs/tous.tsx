@@ -456,7 +456,7 @@ export default function AllMatchesScreen() {
                 style={styles.emptySecondaryBtn}
               >
                 <Text style={styles.emptySecondaryText}>
-                  Avant-match ({upcomingAllCount})
+                  Avant-match 
                 </Text>
               </Pressable>
             ) : null}

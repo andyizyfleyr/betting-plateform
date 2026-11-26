@@ -66,7 +66,7 @@ export function useLongPressOdds({
         if (result === "full") {
           toast({
             kind: "error",
-            title: "Betslip complet (limite atteinte)",
+            title: "Betslip complet",
           });
         } else if (result === "source_conflict") {
           toast({

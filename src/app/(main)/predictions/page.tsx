@@ -245,7 +245,7 @@ export default function PredictionsPage() {
         startsAt: q.resolvesAt,
       });
       if (res === "full") {
-        toast({ kind: "error", title: "Combiné complet (limite atteinte)" });
+        toast({ kind: "error", title: "Combiné complet" });
       }
       return;
     }
@@ -540,7 +540,7 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
       <div className="pointer-events-none relative z-[1] mt-2.5 flex items-center justify-between rounded-xl border border-win/25 bg-win/10 px-3 py-2">
         <span className="inline-flex items-center gap-1.5 font-display text-[11px] font-medium text-win">
           <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2.4} />
-          Issue gagnante : {winner.label}
+          Issue gagnante: {winner.label}
         </span>
         {winner.odds != null && (
           <span className="font-display text-[11px] font-medium tabular-nums text-win">
@@ -621,7 +621,7 @@ function MultiChoiceQuestionCard({
 
       {q.myBet && myBetLabel && (
         <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[10px] font-medium text-betclic-red">
-          Votre mise : {myBetLabel} · {eur(q.myBet.stake)}
+          Votre mise: {myBetLabel} · {eur(q.myBet.stake)}
         </p>
       )}
 
@@ -667,7 +667,7 @@ function MultiChoiceQuestionCard({
           <span>
             {expanded
               ? "Voir moins"
-              : `Voir tout (${sortedOptions.length} choix)`}
+              : `Voir tout`}
           </span>
           <ChevronDown
             className={cn("h-4 w-4 text-mist transition-transform duration-150", expanded && "rotate-180")}
@@ -721,7 +721,7 @@ function BinaryQuestionCard({
 
       {q.myBet && (
         <p className="pointer-events-none relative z-[1] mt-2 rounded-lg bg-betclic-red/8 px-2.5 py-1 text-[10px] font-medium text-betclic-red">
-          Votre mise : {q.myBet.selection === "yes" ? "Oui" : "Non"} · {eur(q.myBet.stake)}
+          Votre mise: {q.myBet.selection === "yes" ? "Oui" : "Non"} · {eur(q.myBet.stake)}
         </p>
       )}
 

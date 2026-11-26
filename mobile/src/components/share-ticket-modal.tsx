@@ -32,7 +32,7 @@ export function ShareTicketModal({
   const bet = activeBet;
   const title =
     bet.kind === "combo"
-      ? `Combiné PULSE (${bet.legs?.length ?? 2} sélections)`
+      ? `Combiné PULSE`
       : bet.kind === "prediction"
         ? bet.question || bet.homeTeam
         : `${bet.homeTeam} – ${bet.awayTeam}`;
@@ -81,7 +81,7 @@ export function ShareTicketModal({
   };
 
   const couponMessage = couponCode
-    ? `\nCode coupon : ${couponCode} (chargez-le dans l'app pour jouer les mêmes matchs)`
+    ? `\nCode coupon : ${couponCode}`
     : "";
 
   const generateCouponCode = async () => {

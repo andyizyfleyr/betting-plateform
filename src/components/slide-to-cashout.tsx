@@ -404,7 +404,7 @@ export function SlideToCashOut({
               </p>
               {inProfit && (
                 <p className="text-[10px] font-medium text-[#047857]">
-                  Gain net sécurisé : +{eur(profit)}
+                  Gain net sécurisé: +{eur(profit)}
                 </p>
               )}
             </div>

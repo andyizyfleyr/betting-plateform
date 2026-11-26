@@ -486,14 +486,14 @@ export default function SingleBetDetailPage() {
               {/* Montants financiers alignés sur une seule ligne compacte */}
               <div className="mt-2.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-edge/80 pt-2">
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[9.5px] font-medium text-dim">Mise :</span>
+                  <span className="text-[9.5px] font-medium text-dim">Mise:</span>
                   <span className="font-display text-[11px] font-medium tabular-nums text-ink lg:text-[11.5px]">
                     {eur(bet.stake)}
                   </span>
                 </div>
 
                 <div className="inline-flex items-baseline gap-1 whitespace-nowrap">
-                  <span className="text-[9.5px] font-medium text-dim">Cote :</span>
+                  <span className="text-[9.5px] font-medium text-dim">Cote:</span>
                   <span className="font-display text-[11px] font-medium tabular-nums text-ink lg:text-[11.5px]">
                     ×{formatOdds(bet.odds, oddsFormat)}
                   </span>
@@ -503,7 +503,7 @@ export default function SingleBetDetailPage() {
                   {won ? (
                     <>
                       <span className="text-[9.5px] font-medium text-dim">
-                        Gain reçu :
+                        Gain reçu:
                       </span>
                       <span className="font-display text-[11px] font-medium tabular-nums text-win lg:text-[11.5px]">
                         +{eur(bet.potentialWin)}
@@ -512,7 +512,7 @@ export default function SingleBetDetailPage() {
                   ) : cashed ? (
                     <>
                       <span className="text-[9.5px] font-medium text-dim">
-                        Vendu pour :
+                        Vendu pour:
                       </span>
                       <span className="font-display text-[11px] font-medium tabular-nums text-sky-700 lg:text-[11.5px]">
                         {eur(bet.cashOutAmount ?? 0)}
@@ -521,7 +521,7 @@ export default function SingleBetDetailPage() {
                   ) : voided ? (
                     <>
                       <span className="text-[9.5px] font-medium text-dim">
-                        Remboursé :
+                        Remboursé:
                       </span>
                       <span className="font-display text-[11px] font-medium tabular-nums text-ink">
                         {eur(bet.stake)}
@@ -530,7 +530,7 @@ export default function SingleBetDetailPage() {
                   ) : lost ? (
                     <>
                       <span className="text-[9.5px] font-medium text-dim">
-                        Résultat :
+                        Résultat:
                       </span>
                       <span className="font-display text-[11px] font-medium tabular-nums text-betclic-red lg:text-[11.5px]">
                         -{eur(bet.stake)}
@@ -539,7 +539,7 @@ export default function SingleBetDetailPage() {
                   ) : (
                     <>
                       <span className="text-[9.5px] font-medium text-dim">
-                        Gain max :
+                        Gain max:
                       </span>
                       <span className="font-display text-[11px] font-medium tabular-nums text-ink lg:text-[11.5px]">
                         {eur(bet.potentialWin)}
@@ -564,7 +564,7 @@ export default function SingleBetDetailPage() {
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
                       <div className="min-w-0 flex-1">
                         <div className="font-medium">
-                          Offre réévaluée : {eur(cashoutChanged.previousCashout)} →{" "}
+                          Offre réévaluée: {eur(cashoutChanged.previousCashout)} →{" "}
                           <span className="font-medium">
                             {eur(cashoutChanged.currentCashout)}
                           </span>
@@ -883,7 +883,7 @@ export default function SingleBetDetailPage() {
                 {cleanEvents.length > 0 && (
                   <div className="glass-card overflow-hidden rounded-xl p-3 lg:rounded-2xl lg:p-4">
                     <h3 className="font-display text-[10px] font-bold uppercase tracking-wider text-mist">
-                      Faits de match ({cleanEvents.length})
+                      Faits de match 
                     </h3>
                     <div className="mt-1.5 divide-y divide-edge/60">
                       {cleanEvents.map((ev, i) => (

@@ -56,8 +56,8 @@ export function BetslipMobileActions({ onClear }: { onClear: () => void }) {
     try {
       const result = await api.loadCoupon(normalized);
       if (result.skippedClosedCount) {
-        const names = (result.unavailable ?? []).map(x => `• ${x.title} (${x.reason})`).join("\n");
-        if (!window.confirm(`${result.skippedClosedCount} sélection(s) commencée(s) ou indisponible(s) :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
+        const names = (result.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
+        if (!window.confirm(`${result.skippedClosedCount} sélections commencées ou indisponibles :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
       }
       if (!result.legs.length) throw new Error("Aucune sélection disponible dans ce coupon.");
       const problem = validateLoadedCoupon(result.legs, bettingLimits.maxComboLegs);

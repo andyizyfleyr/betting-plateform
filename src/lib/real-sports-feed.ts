@@ -1293,18 +1293,10 @@ function parseDetailsEvents(
     const athleteId = asStr(firstAth?.id || firstPartAth?.id);
     const secBucket = secVal != null && secVal >= 0 ? Math.round(secVal) : null;
 
-    let player =
+    const player =
       asStr(firstAth?.shortName || firstAth?.displayName) ||
       asStr(firstPartAth?.shortName || firstPartAth?.displayName) ||
       undefined;
-
-    if (isGoal && player) {
-      if (d.ownGoal === true || typeText.includes("own goal")) {
-        player = `${player} (CSC)`;
-      } else if (d.penaltyKick === true || typeText.includes("penalty")) {
-        player = `${player} (P)`;
-      }
-    }
 
     const evType: "goal" | "red" = isGoal ? "goal" : "red";
 
@@ -2403,7 +2395,7 @@ export async function applyFeedUpdateToRealMatch(
         externalLeague: m.externalLeague ?? feed.externalLeague,
         status: "live",
         suspended: true,
-        minute: "Fin (à valider)",
+        minute: "Fin à valider",
         homeScore: nextHome,
         awayScore: nextAway,
         htHomeScore: nextHtHome,
@@ -2994,7 +2986,7 @@ export async function verifyLiveRealMatchesBeforeBet(
     ) {
       return {
         ok: false,
-        error: "Action décisive détectée en direct (score ou carton modifié) — cotes actualisées",
+        error: "Action décisive détectée en direct — cotes actualisées",
       };
     }
   }

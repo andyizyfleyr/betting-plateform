@@ -217,7 +217,7 @@ function MatchHistoryCard({
           {match.btts != null ? (
             <View style={styles.summaryPill}>
               <Text style={styles.summaryPillText}>
-                BTTS : {match.btts ? "Oui" : "Non"}
+                BTTS: {match.btts ? "Oui" : "Non"}
               </Text>
             </View>
           ) : null}

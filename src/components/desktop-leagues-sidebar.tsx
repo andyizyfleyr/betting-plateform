@@ -173,7 +173,7 @@ function CountryFlagCircle({
         </span>
       );
     case "UEFA":
-    case "Europe (UEFA)":
+    case "Europe":
       return (
         <span className={cn(base, "bg-[#0b2a6e] text-white")} aria-hidden>
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
@@ -268,7 +268,7 @@ export function DesktopLeaguesSidebar() {
         topDisplayLabel: formatTopLabel(lg.country, lg.label),
         country:
           lg.country === "UEFA"
-            ? "Europe (UEFA)"
+            ? "Europe"
             : lg.country === "FIFA"
               ? "International"
               : lg.country,
@@ -314,7 +314,7 @@ export function DesktopLeaguesSidebar() {
     for (const entry of allEntries) {
       const existing = groupedMap.get(entry.country);
       const flagCountry =
-        entry.country === "Europe (UEFA)"
+        entry.country === "Europe"
           ? "UEFA"
           : entry.country === "International"
             ? "FIFA"
@@ -477,7 +477,7 @@ export function DesktopLeaguesSidebar() {
                 {topCompetitions.map((entry) => {
                   const selected = isLeagueSelected(entry);
                   const flagCountry =
-                    entry.country === "Europe (UEFA)"
+                    entry.country === "Europe"
                       ? "UEFA"
                       : entry.country === "International"
                         ? "FIFA"
@@ -533,7 +533,7 @@ export function DesktopLeaguesSidebar() {
             {/* Pays (A-Z) */}
             <div className="mt-2 border-t border-edge/70 pt-2.5">
               <p className="px-4 pb-1.5 text-[10px] font-medium text-dim">
-                Pays (A-Z)
+                Pays 
               </p>
 
               <div className="space-y-0.5">

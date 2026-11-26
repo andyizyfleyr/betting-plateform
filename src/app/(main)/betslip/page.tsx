@@ -579,7 +579,7 @@ export default function BetslipPage() {
           </h1>
           <p className="mt-1 text-[11px] text-mist">
             {receipt.kind === "combo"
-              ? `Pari combiné (${receipt.count} sélections)`
+              ? `Pari combiné`
               : "Pari simple enregistré"}
           </p>
           <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-elev p-3">
@@ -687,7 +687,7 @@ export default function BetslipPage() {
                 </span>
                 {nextBoost ? (
                   <span className="text-[10px] font-medium text-mist">
-                    +{nextBoost.needed} cote{nextBoost.needed > 1 ? "s" : ""} (≥{MIN_ELIGIBLE_BOOST_ODDS}) → +{nextBoost.pct}%
+                    +{nextBoost.needed} cote{nextBoost.needed > 1 ? "s" : ""}  → +{nextBoost.pct}%
                   </span>
                 ) : (
                   <span className="text-[10px] font-medium text-win">Palier max atteint</span>
@@ -883,7 +883,7 @@ export default function BetslipPage() {
               </div>
               {quote.boostAmount > 0 && (
                 <div className="flex items-center justify-between text-win">
-                  <span>Bonus Combiné (+{quote.boostPct}%)</span>
+                  <span>Bonus Combiné </span>
                   <span className="font-display font-medium tabular-nums">
                     +{eur(quote.boostAmount)}
                   </span>
@@ -892,8 +892,7 @@ export default function BetslipPage() {
               <div className="flex items-center justify-between pt-0.5">
                 <span className="font-display text-[11.5px] font-medium text-ink">
                   Gain potentiel
-                    <span className="ml-1 text-[10px] text-mist">(plafond {eur(maxPayoutEur)})</span>
-                </span>
+                                    </span>
                 <span className="font-display text-[13.5px] font-medium tabular-nums text-win">
                   <AnimatedNumber value={quote.potentialWin} format={eur} />
                 </span>
@@ -920,7 +919,7 @@ export default function BetslipPage() {
             {hasSuspendedLeg && !hasClosedLeg && (
               <div className="flex items-center gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[10.5px] font-medium text-amber-800">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span>Une sélection est temporairement suspendue (coup d&apos;envoi ou action live).</span>
+                <span>Une sélection est temporairement suspendue.</span>
               </div>
             )}
 
@@ -969,7 +968,7 @@ export default function BetslipPage() {
                 <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
               ) : oddsChanged ? (
                 <>
-                  Accepter la nouvelle cote ({formatOdds(quote.totalOdds, oddsFormat)})
+                  Accepter la nouvelle cote 
                 </>
               ) : (
                 <>

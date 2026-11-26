@@ -272,7 +272,7 @@ export function FilterDropdownRow({
                           selected ? "font-medium text-betclic-red/85" : "font-normal text-dim"
                         )}
                       >
-                        ({opt.count})
+                        
                       </span>
                     )}
                   </span>

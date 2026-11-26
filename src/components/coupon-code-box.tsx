@@ -59,8 +59,8 @@ export function CouponCodeBox({
         const skipped = res.skippedClosedCount ?? 0;
         const finalCode = res.code;
         if (skipped > 0) {
-          const names = (res.unavailable ?? []).map(x => `• ${x.title} (${x.reason})`).join("\n");
-          if (!window.confirm(`${skipped} sélection(s) commencée(s) ou indisponible(s) :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
+          const names = (res.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
+          if (!window.confirm(`${skipped} sélections commencées ou indisponibles :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
         }
         if (!loadedLegs.length) throw new Error("Aucune sélection disponible dans ce coupon.");
         const problem = validateLoadedCoupon(loadedLegs, bettingLimits.maxComboLegs);
@@ -75,7 +75,7 @@ export function CouponCodeBox({
           title: `Coupon ${finalCode} chargé`,
           description:
             skipped > 0
-              ? `${loadedLegs.length} sélection${loadedLegs.length > 1 ? "s" : ""} ajoutée${loadedLegs.length > 1 ? "s" : ""} (${skipped} expirée${skipped > 1 ? "s" : ""} ignorée${skipped > 1 ? "s" : ""})`
+              ? `${loadedLegs.length} sélection${loadedLegs.length > 1 ? "s" : ""} ajoutée${loadedLegs.length > 1 ? "s" : ""}`
               : `${loadedLegs.length} sélection${loadedLegs.length > 1 ? "s" : ""} prête${loadedLegs.length > 1 ? "s" : ""} à miser`,
         });
       } catch (err) {
@@ -150,7 +150,7 @@ export function CouponCodeBox({
       typeof window !== "undefined"
         ? `${window.location.origin}/betslip?code=${encodeURIComponent(activeCode)}`
         : "";
-    const shareText = `Voici mon code coupon (${comboLegs.length} sélection${comboLegs.length > 1 ? "s" : ""}) : ${activeCode}`;
+    const shareText = `Voici mon code coupon : ${activeCode}`;
 
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
@@ -185,7 +185,7 @@ export function CouponCodeBox({
           <span className="font-display">Charger un code du coupon</span>
         </div>
         <p className="mt-0.5 text-[10px] text-mist">
-          Entrez le code partagé par un ami (ex. <strong className="text-ink">BX-84K2</strong>) pour importer ses sélections.
+          Entrez le code partagé par un ami pour importer ses sélections.
         </p>
         <form
           onSubmit={(e) => {
@@ -301,7 +301,7 @@ export function CouponCodeBox({
             type="text"
             value={codeInput}
             onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-            placeholder="Code coupon (ex. BX-84K2)"
+            placeholder="Code coupon"
             maxLength={48}
             className="h-9.5 min-w-0 flex-1 rounded-xl border border-edge bg-elev/50 px-3 font-display text-[11px] font-medium tracking-wider text-ink uppercase outline-none placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-dim focus:border-ink focus:bg-white"
           />

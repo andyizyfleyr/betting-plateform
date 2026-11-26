@@ -580,7 +580,7 @@ export default function MatchDetailScreen() {
                             if (res === "full") {
                               toast({
                                 kind: "error",
-                                title: "Betslip complet (limite atteinte)",
+                                title: "Betslip complet",
                               });
                             } else if (res === "source_conflict") {
                               toast({
@@ -612,7 +612,7 @@ export default function MatchDetailScreen() {
             {cleanEvents.length > 0 ? (
               <View style={styles.timelineCard}>
                 <Text style={styles.timelineHeading}>
-                  CHRONOLOGIE ({cleanEvents.length})
+                  CHRONOLOGIE 
                 </Text>
                 <View style={{ marginTop: 6 }}>
                   {cleanEvents.map((ev, idx) => (

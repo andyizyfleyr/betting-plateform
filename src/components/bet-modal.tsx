@@ -287,7 +287,7 @@ function BetModalSheet({
       isLive: target.match.status === "live",
     });
     if (outcome === "full") {
-      toast({ kind: "error", title: "Coupon complet (limite atteinte)" });
+      toast({ kind: "error", title: "Coupon complet" });
       return;
     }
     if (outcome === "removed") {
@@ -516,7 +516,7 @@ function BetModalSheet({
                   <span>
                     {marketClosed
                       ? "Cette sélection est désormais décidée ou clôturée."
-                      : "Marché momentanément suspendu (action de jeu en cours)…"}
+                      : "Marché momentanément suspendu…"}
                   </span>
                 </div>
               )}
@@ -556,7 +556,7 @@ function BetModalSheet({
 
               {belowMin && !overBalance && (
                 <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                  Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
+                  Mise minimale: {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
                 </p>
               )}
 
@@ -593,7 +593,7 @@ function BetModalSheet({
                 />
               </div>
 
-              <p className="mb-1 text-[10px] text-mist">Plafond de gain : {eur(maxPayoutEur)}</p>
+              <p className="mb-1 text-[10px] text-mist">Plafond de gain: {eur(maxPayoutEur)}</p>
               <div className="flex items-center gap-2">
                 {!marketClosed && !marketSuspended && (
                   <button
@@ -645,7 +645,7 @@ function BetModalSheet({
                   ) : oddsChanged ? (
                     <>
                       <span className="truncate">
-                        Accepter ({formatOdds(displayOdds, oddsFormat)})
+                        Accepter 
                       </span>
                       <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2.5} />
                     </>

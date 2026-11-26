@@ -205,7 +205,7 @@ function MatchHistoryCard({
           )}
           {match.btts != null && (
             <span className="rounded-md bg-elev px-2 py-0.5">
-              BTTS : {match.btts ? "Oui" : "Non"}
+              BTTS: {match.btts ? "Oui" : "Non"}
             </span>
           )}
         </div>

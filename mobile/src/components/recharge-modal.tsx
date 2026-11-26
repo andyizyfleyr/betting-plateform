@@ -209,7 +209,7 @@ export function RechargeModal() {
           <View style={styles.topRow}>
             <View>
               <Text style={styles.title}>Recharger mon compte</Text>
-              <Text style={styles.sub}>Solde actuel : {eur(balance)}</Text>
+              <Text style={styles.sub}>Solde actuel: {eur(balance)}</Text>
             </View>
             <Pressable onPress={closeRecharge} style={styles.closeBtn}>
               <X size={17} color={COLORS.mist} strokeWidth={2.2} />
@@ -390,7 +390,7 @@ export function RechargeModal() {
                     textTransform: "uppercase",
                   }}
                 >
-                  TYPE DE CARTE ({GIFT_CARDS.length})
+                  TYPE DE CARTE 
                 </Text>
                 <ScrollView
                   horizontal

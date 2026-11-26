@@ -43,7 +43,7 @@ export function validateProductionPassword(pw: string): string | null {
     return "Le mot de passe ne peut pas dépasser 128 caractères.";
   }
   if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(pw) || !/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pw)) {
-    return "Le mot de passe doit inclure au moins une lettre et un chiffre (ou symbole).";
+    return "Le mot de passe doit inclure au moins une lettre et un chiffre.";
   }
   return null;
 }

@@ -75,7 +75,7 @@ export function Dashboard({ stats }: { stats: PanelData["stats"] }) {
   return (
     <div className="flex flex-col gap-3">
       <section className="glass-card rounded-2xl p-4">
-        <p className="text-[10px] font-medium text-dim">Marge brute globale (mises − gains)</p>
+        <p className="text-[10px] font-medium text-dim">Marge brute globale </p>
         <div className="mt-1 flex items-baseline justify-between gap-2">
           <p className="font-display text-[17.5px] font-medium leading-none tabular-nums text-ink">
             {eur(revenue)}
@@ -173,7 +173,7 @@ export function MatchesTab({
       { action: "setRealSettlementMode", mode },
       "real-settle-mode",
       mode === "auto"
-        ? "Règlement automatique activé (confirmation anti-VAR 90s)"
+        ? "Règlement automatique activé"
         : "Mode Confirmation Admin activé avant règlement final"
     );
     if (ok) {
@@ -181,7 +181,7 @@ export function MatchesTab({
         kind: "ok",
         msg:
           mode === "auto"
-            ? "Mode Auto (Anti-VAR 90s) enregistré : les paris réels sont réglés automatiquement 90s après le coup de sifflet final."
+            ? "Mode Auto enregistré : les paris réels sont réglés automatiquement 90s après le coup de sifflet final."
             : "Mode Confirmation Admin enregistré : le score final verrouille les marchés et attend votre validation en 1 clic.",
       });
     }
@@ -217,10 +217,10 @@ export function MatchesTab({
           msg: "Aucun match réel actif à synchroniser — importez d'abord une affiche officielle ci-dessous.",
         });
       } else {
-        const details: string[] = [`${s.syncedCount}/${s.activeCount} match(s) synchronisé(s)`];
+        const details: string[] = [`${s.syncedCount}/${s.activeCount} matchs synchronisés`];
         if (s.liveCount > 0) details.push(`${s.liveCount} en direct`);
-        if (s.linkedCount > 0) details.push(`${s.linkedCount} relié(s) auto`);
-        if (s.settledCount > 0) details.push(`${s.settledCount} clôturé(s) et réglé(s)`);
+        if (s.linkedCount > 0) details.push(`${s.linkedCount} reliés auto`);
+        if (s.settledCount > 0) details.push(`${s.settledCount} clôturés et réglés`);
         if (s.pendingConfirmCount > 0) details.push(`${s.pendingConfirmCount} en attente FT`);
         setRealBanner({
           kind: "ok",
@@ -348,11 +348,11 @@ export function MatchesTab({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="font-display text-[11px] font-medium text-ink">
-                Flux officiel automatique (Scores, MT et Stats)
+                Flux officiel automatique 
               </p>
               <p className="text-[10px] text-mist">
                 {realMatches.filter((m) => Boolean(m.externalId) && m.autoSync !== false).length}{" "}
-                match(s) lié(s) en Auto-Sync · sans clé API payante
+                match lié en Auto-Sync · sans clé API payante
               </p>
             </div>
             <button
@@ -372,7 +372,7 @@ export function MatchesTab({
 
           <div className="flex flex-col gap-1 border-t border-edge/70 pt-2">
             <span className="text-[10px] font-medium text-dim">
-              Règlement de fin de match (protection anti-VAR) :
+              Règlement de fin de match:
             </span>
             <div className="grid grid-cols-2 gap-1 rounded-xl border border-edge bg-elev p-1">
               <button
@@ -386,7 +386,7 @@ export function MatchesTab({
                     : "font-medium text-mist"
                 )}
               >
-                Auto (Anti-VAR 90s)
+                Auto 
               </button>
               <button
                 type="button"
@@ -435,8 +435,8 @@ export function MatchesTab({
       ) : (
         <div className="flex items-center justify-between gap-2 rounded-xl border border-edge bg-elev/70 px-3 py-2 text-[10.5px] text-mist">
           <span>
-            <strong className="font-display font-medium text-ink">Simulateur 10 min :</strong> 4
-            matchs en direct simultanés (canaux décalés), 100 % séparés des matchs réels.
+            <strong className="font-display font-medium text-ink">Simulateur 10 min:</strong> 4
+            matchs en direct simultanés, 100 % séparés des matchs réels.
           </span>
           <button
             type="button"
@@ -606,7 +606,7 @@ export function MatchesTab({
                 onClick={() => setOpenLogos((s) => !s)}
                 className="flex w-full items-center justify-between px-3 py-2 text-left text-[10.5px] font-medium text-mist"
               >
-                <span>Logos personnalisés (optionnel)</span>
+                <span>Logos personnalisés </span>
                 <ChevronDown
                   className={cn("h-3.5 w-3.5 transition-transform", openLogos && "rotate-180")}
                 />
@@ -638,7 +638,7 @@ export function MatchesTab({
               >
                 <span>
                   Marchés libres{" "}
-                  {activeMarkets.length > 0 && `(${activeMarkets.length} actifs)`}
+                  {activeMarkets.length > 0 && `${activeMarkets.length} actifs`}
                 </span>
                 <ChevronDown
                   className={cn("h-3.5 w-3.5 transition-transform", openMarkets && "rotate-180")}
@@ -911,7 +911,7 @@ export function OfficialFixtureImporter({
       );
       setFeedback({
         kind: "ok",
-        msg: `${data.importedCount ?? items.length} match(s) officiel(s) importé(s) avec Auto-Sync actif`,
+        msg: `${data.importedCount ?? items.length} matchs officiels importés avec Auto-Sync actif`,
       });
       await onReload();
     } catch (e) {
@@ -943,7 +943,7 @@ export function OfficialFixtureImporter({
           <CalendarPlus className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.4} />
           <div className="min-w-0">
             <p className="truncate font-display text-[11.5px] font-medium text-ink">
-              Importer du calendrier officiel (1 clic)
+              Importer du calendrier officiel 
             </p>
             <p className="truncate text-[10px] text-mist">
               Liaison ID officielle · Scores live, MT, buteurs et stats automatiques
@@ -971,7 +971,7 @@ export function OfficialFixtureImporter({
               <option value="all">Toutes les grandes compétitions</option>
               {OFFERED_SOCCER_LEAGUES.map((lg) => (
                 <option key={lg.slug} value={lg.slug}>
-                  {lg.label} ({lg.country})
+                  {lg.label} 
                 </option>
               ))}
             </select>
@@ -1040,14 +1040,14 @@ export function OfficialFixtureImporter({
             <div className="rounded-xl bg-elev/70 p-4 text-center text-[10.5px] text-mist">
               {!reachable
                 ? "Le flux sportif officiel est momentanément indisponible. Appuyez sur Actualiser pour réessayer."
-                : "Aucune affiche programmée actuellement pour cette compétition (hors saison ou trêve). Choisissez « Toutes les grandes compétitions » ou un horizon de 14 jours."}
+                : "Aucune affiche programmée actuellement pour cette compétition. Choisissez « Toutes les grandes compétitions » ou un horizon de 14 jours."}
             </div>
           ) : fixtures ? (
             <div className="space-y-2">
               {availableToImport.length > 1 && (
                 <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-600/8 px-3 py-2">
                   <span className="text-[10.5px] font-medium text-emerald-900">
-                    {availableToImport.length} affiche(s) disponible(s)
+                    {availableToImport.length} affiche disponible
                   </span>
                   <button
                     type="button"
@@ -1195,7 +1195,7 @@ export function AdminMatchCard({
   const isPendingAdminFt =
     isManual &&
     m.status !== "finished" &&
-    (m.minute === "Fin (à valider)" ||
+    (m.minute === "Fin à valider" ||
       m.feedStatusNote === "PENDING_ADMIN_FT" ||
       Boolean(m.feedStatusNote?.startsWith("PENDING_FT_CONFIRM:")));
 
@@ -1250,7 +1250,7 @@ export function AdminMatchCard({
                       `as-${m.id}`,
                       !autoSyncActive
                         ? "Auto-Sync officiel réactivé"
-                        : "Auto-Sync mis en pause (pilotage manuel)"
+                        : "Auto-Sync mis en pause"
                     )
                   }
                   className={cn(
@@ -1283,7 +1283,7 @@ export function AdminMatchCard({
                   : "Terminé"
                 : formatKickoff(new Date(m.startsAt))}
             {m.homeScore != null && ` · ${m.homeScore}-${m.awayScore}`}
-            {effHtH != null && effHtA != null && ` (MT ${effHtH}-${effHtA})`}
+            {effHtH != null && effHtA != null && ""}
           </p>
           {cleanFeedNote && (
             <p className="truncate text-[10px] font-medium text-emerald-700">
@@ -1370,7 +1370,7 @@ export function AdminMatchCard({
       {isPendingAdminFt && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-[10px] text-emerald-950">
           <span>
-            <strong>Fin du match détectée ({m.homeScore ?? 0}–{m.awayScore ?? 0})</strong>
+            <strong>Fin du match détectée </strong>
             {effHtH != null && effHtA != null ? ` · MT ${effHtH}-${effHtA}` : ""} — marchés verrouillés.
           </span>
           <button
@@ -1411,7 +1411,7 @@ export function AdminMatchCard({
               act(
                 { action: "voidMatch", matchId: m.id },
                 `void-${m.id}`,
-                "Match annulé — mises simples remboursées et sélections combinées annulées (cote 1.00)"
+                "Match annulé — mises simples remboursées et sélections combinées annulées"
               )
             }
             className="rounded-lg bg-amber-700 px-2.5 py-1 font-display text-[10px] font-medium text-white disabled:opacity-50"
@@ -1441,12 +1441,12 @@ export function AdminMatchCard({
               <Eye className="h-3.5 w-3.5 shrink-0 text-betclic-red" strokeWidth={2.3} />
             )}
             <span className="truncate font-medium text-mist">
-              Score final prévu :{" "}
+              Score final prévu:{" "}
               <strong className="font-display font-medium tabular-nums text-ink">
                 {forecast.finalHomeScore} – {forecast.finalAwayScore}
               </strong>{" "}
               <span className="text-[10px] text-dim">
-                (MT {forecast.htHomeScore}-{forecast.htAwayScore})
+                
               </span>
             </span>
           </div>
@@ -1576,7 +1576,7 @@ export function MatchControls({
             {isAutoSynced
               ? "Démarrage & stats live automatiques au coup d'envoi"
               : isManual
-                ? "Pilotage opérateur (aucun démarrage simulé)"
+                ? "Pilotage opérateur"
                 : "Démarrage séquentiel automatique"}
           </span>
           <div className="flex items-center gap-1.5">
@@ -1606,7 +1606,7 @@ export function MatchControls({
                   { action: "startMatch", matchId: m.id },
                   `start-${m.id}`,
                   isManual
-                    ? "Match réel passé en direct (sans affecter les autres matchs)"
+                    ? "Match réel passé en direct"
                     : "Match virtuel lancé en direct"
                 )
               }
@@ -1628,7 +1628,7 @@ export function MatchControls({
 
         {isManual && confirmVoid && (
           <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-500/12 px-3 py-2 text-[10px] text-amber-900">
-            <span>Rembourser les paris simples et annuler (1.00) dans les combinés ?</span>
+            <span>Rembourser les paris simples et annuler dans les combinés?</span>
             <button
               type="button"
               disabled={busy[`void-${m.id}`]}
@@ -1651,7 +1651,7 @@ export function MatchControls({
         {isManual && directSettleOpen && (
           <div className="rounded-xl bg-elev/70 p-2.5 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-medium text-ink">Score final officiel :</span>
+              <span className="text-[10px] font-medium text-ink">Score final officiel:</span>
               <div className="flex items-center gap-1">
                 <input
                   inputMode="numeric"
@@ -1671,7 +1671,7 @@ export function MatchControls({
               </div>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-mist">Mi-temps (optionnel) :</span>
+              <span className="text-[10px] text-mist">Mi-temps:</span>
               <div className="flex items-center gap-1">
                 <input
                   inputMode="numeric"
@@ -1729,7 +1729,7 @@ export function MatchControls({
     return (
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-edge pt-2.5">
         <span className="text-[10.5px] text-mist">
-          Score final : <strong>{m.homeScore}–{m.awayScore}</strong>
+          Score final: <strong>{m.homeScore}–{m.awayScore}</strong>
         </span>
         <button
           type="button"
@@ -1909,8 +1909,8 @@ export function MatchControls({
             <span>
               Score MT officiel{" "}
               {m.htHomeScore != null && m.htAwayScore != null
-                ? `(capté : ${m.htHomeScore}-${m.htAwayScore})`
-                : "(optionnel)"} :
+                ? `Capté`
+                : ""} :
             </span>
             <div className="flex items-center gap-1">
               <input
@@ -1932,7 +1932,7 @@ export function MatchControls({
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <span>Match interrompu ou annulé ?</span>
+            <span>Match interrompu ou annulé?</span>
             {confirmVoid ? (
               <div className="flex items-center gap-1">
                 <button
@@ -2096,7 +2096,7 @@ export function QuestionsTab({
         >
           <span className="flex items-center gap-2 font-display text-[11.5px] font-medium text-ink">
             <Plus className="h-4 w-4 text-betclic-red" strokeWidth={2.5} />
-            Nouvelle question (Oui / Non ou Choix multiples)
+            Nouvelle question 
           </span>
           <ChevronDown
             className={cn("h-4 w-4 text-dim transition-transform", formOpen && "rotate-180")}
@@ -2193,7 +2193,7 @@ export function QuestionsTab({
                     </select>
                   </label>
                   <AdminInput
-                    label="Échéance (heures)"
+                    label="Échéance"
                     value={form.hours}
                     onChange={(v) => setForm({ ...form, hours: v })}
                   />
@@ -2202,7 +2202,7 @@ export function QuestionsTab({
                 <div className="mt-3">
                   <div className="mb-1.5 flex items-center justify-between">
                     <span className="text-[10px] font-medium text-mist">
-                      Choix & cotes fixes ({form.options.length})
+                      Choix & cotes fixes 
                     </span>
                     <button
                       type="button"
@@ -2268,7 +2268,7 @@ export function QuestionsTab({
 
             {form.mode === "binary" && (
               <AdminInput
-                label="Échéance (heures)"
+                label="Échéance"
                 value={form.hours}
                 className="mt-2.5"
                 onChange={(v) => setForm({ ...form, hours: v })}
@@ -2805,7 +2805,7 @@ export function UsersTab({
           </div>
           <div className="mt-2.5 flex gap-2">
             <AdminInput
-              placeholder="Nouveau solde pivot (€)"
+              placeholder="Nouveau solde pivot"
               type="text"
               inputMode="decimal"
               className="flex-1"
@@ -2855,7 +2855,7 @@ export function UsersTab({
             </button>
 
             <AdminInput
-              placeholder="Plafond de mise (€, 0=∞)"
+              placeholder="Plafond de mise"
               type="text"
               inputMode="decimal"
               className="w-36"
@@ -2957,7 +2957,7 @@ export function BetsTab({
     ...comboBets.map((c) => ({
       id: c.id,
       kind: "Combiné" as const,
-      label: `Combiné ${(c.legs ?? []).length} sél. (${(c.totalOdds ?? 0).toFixed(2)})`,
+      label: `Combiné ${(c.legs ?? []).length} sél.`,
       homeTeam: null as string | null,
       awayTeam: null as string | null,
       homeLogo: null as string | null,
@@ -3320,7 +3320,7 @@ export function DepositsTab({
                   type="text"
                   value={noteVal}
                   onChange={(e) => setWdNotes({ ...wdNotes, [w.id]: e.target.value })}
-                  placeholder="Motif ou réf. transfert (optionnel, visible par le joueur)"
+                  placeholder="Motif ou réf. transfert"
                   className="mt-2.5 h-9 w-full rounded-xl border border-edge bg-elev/60 px-3 text-[10.5px] text-ink outline-none placeholder:text-dim focus:border-ink focus:bg-white"
                 />
 
@@ -3383,7 +3383,7 @@ export function DepositsTab({
                 <div key={w.id} className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-display text-[11px] font-medium text-ink">
-                      {wCountry.flag} {w.userName} · {localLabel} ({w.method.toUpperCase()})
+                      {wCountry.flag} {w.userName} · {localLabel} 
                     </p>
                     <p className="truncate text-[10px] text-dim">
                       {w.destination}
@@ -3474,7 +3474,7 @@ export function MlAdminTab({
             <div className="flex items-center gap-1.5">
               <Brain className="h-4 w-4 text-betclic-red" />
               <h2 className="font-display text-[12px] font-bold text-ink">
-                Moteur IA & Machine Learning (4 modèles actifs)
+                Moteur IA & Machine Learning 
               </h2>
             </div>
             <p className="mt-0.5 text-[10.5px] text-dim">
@@ -3519,13 +3519,13 @@ export function MlAdminTab({
               <p className="mt-0.5 text-[10px] font-medium text-mist">{m.algorithm}</p>
               <div className="mt-2 flex items-center justify-between border-t border-edge/70 pt-2 text-[10px] tabular-nums">
                 <span className="text-dim">
-                  Échantillons : <strong className="text-ink">{m.samplesCount}</strong>
+                  Échantillons: <strong className="text-ink">{m.samplesCount}</strong>
                 </span>
                 <span className="text-dim">
-                  Brier : <strong className="text-win">{m.brierScore.toFixed(3)}</strong>
+                  Brier: <strong className="text-win">{m.brierScore.toFixed(3)}</strong>
                 </span>
                 <span className="text-dim">
-                  LogLoss : <strong className="text-ink">{m.logLoss.toFixed(3)}</strong>
+                  LogLoss: <strong className="text-ink">{m.logLoss.toFixed(3)}</strong>
                 </span>
               </div>
             </div>
@@ -3537,7 +3537,7 @@ export function MlAdminTab({
       <section className="glass-card rounded-2xl p-4">
         <div className="flex items-center justify-between">
           <h3 className="font-display text-[11.5px] font-bold text-ink">
-            1. Poids appris · Détecteur Sharp (Logistic SGD)
+            1. Poids appris · Détecteur Sharp 
           </h3>
           <span className="text-[10px] tabular-nums text-dim">
             Biais b₀ = {ml.sharpBias.toFixed(2)}
@@ -3554,8 +3554,7 @@ export function MlAdminTab({
                   <span className="shrink-0 font-display font-medium tabular-nums text-ink">
                     {w.weight.toFixed(3)}{" "}
                     <span className="text-[9.5px] font-normal text-dim">
-                      ({delta >= 0 ? "+" : ""}
-                      {delta.toFixed(2)} vs prior)
+                      
                     </span>
                   </span>
                 </div>
@@ -3571,7 +3570,7 @@ export function MlAdminTab({
         </div>
 
         <h4 className="mt-4 font-display text-[11px] font-bold text-ink">
-          Radar IA des profils joueurs ({ml.playerProfiles.length})
+          Radar IA des profils joueurs 
         </h4>
         {ml.playerProfiles.length === 0 ? (
           <p className="mt-1.5 text-[10.5px] text-dim">
@@ -3587,7 +3586,7 @@ export function MlAdminTab({
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium text-ink">
                     {p.name}{" "}
-                    <span className="font-normal text-dim">({p.betsCount} paris)</span>
+                    <span className="font-normal text-dim"></span>
                   </span>
                   <span
                     className={cn(
@@ -3599,17 +3598,17 @@ export function MlAdminTab({
                           : "bg-win/12 text-win"
                     )}
                   >
-                    P(Sharp) {p.pSharpPct.toFixed(0)} %
+                    P {p.pSharpPct.toFixed(0)} %
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[10px] text-dim">
-                  <span>Z-Score : <strong className="text-ink">{p.zScore}</strong></span>
-                  <span>ROI : <strong className="text-ink">{p.roiPct}%</strong></span>
-                  <span>Bouclier : <strong className="text-ink">×{p.riskWeight}</strong></span>
-                  <span>Plafond IA : <strong className="text-ink">{p.maxStake} €</strong></span>
+                  <span>Z-Score: <strong className="text-ink">{p.zScore}</strong></span>
+                  <span>ROI: <strong className="text-ink">{p.roiPct}%</strong></span>
+                  <span>Bouclier: <strong className="text-ink">×{p.riskWeight}</strong></span>
+                  <span>Plafond IA: <strong className="text-ink">{p.maxStake} €</strong></span>
                 </div>
                 <p className="truncate text-[10px] text-mist">
-                  Signal dominant : {p.topReason}
+                  Signal dominant: {p.topReason}
                 </p>
               </div>
             ))}
@@ -3666,7 +3665,7 @@ export function MlAdminTab({
       {/* Modèle 3 : Classement Dynamique Glicko-2 des Clubs */}
       <section className="glass-card rounded-2xl p-4">
         <h3 className="font-display text-[11.5px] font-bold text-ink">
-          3. Forces Dynamiques des Clubs (Glicko-2 Attaque / Défense)
+          3. Forces Dynamiques des Clubs 
         </h3>
         <p className="mt-0.5 text-[10.5px] text-dim">
           Mis à jour automatiquement après chaque coup de sifflet final.
@@ -3685,7 +3684,7 @@ export function MlAdminTab({
                 <div className="min-w-0">
                   <p className="truncate font-medium capitalize text-ink">{c.clubKey}</p>
                   <p className="text-[10px] tabular-nums text-dim">
-                    {c.matches} m · Att ×{c.attack.toFixed(2)} · Déf ×{c.defense.toFixed(2)} ({c.goalsFor}:{c.goalsAgainst})
+                    {c.matches} m · Att ×{c.attack.toFixed(2)} · Déf ×{c.defense.toFixed(2)} 
                   </p>
                 </div>
                 <span className="shrink-0 rounded-lg bg-ink px-2 py-0.5 font-display text-[10px] font-medium tabular-nums text-white">
@@ -3801,7 +3800,7 @@ export function ScoresPrevusTab({
         <div className="flex items-center gap-2">
           <Eye className="h-4 w-4 text-betclic-red" strokeWidth={2.3} />
           <h2 className="font-display text-[12px] font-bold text-ink">
-            Mode des scores anticipés (Avant-match & Direct)
+            Mode des scores anticipés 
           </h2>
         </div>
         <p className="mt-1 text-[10.5px] leading-relaxed text-dim">
@@ -3883,7 +3882,7 @@ export function ScoresPrevusTab({
               </span>
             </div>
             <p className="mt-1 text-[10px] leading-snug text-mist">
-              Verrouille automatiquement tous les scénarios dès l&apos;avant-match : le score final et les minutes des buts sont garantis à 100 % sans bouger.
+              Verrouille automatiquement tous les scénarios dès l&apos;avant-match: le score final et les minutes des buts sont garantis à 100 % sans bouger.
             </p>
           </button>
         </div>
@@ -4052,7 +4051,7 @@ export function ScoresPrevusTab({
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
                   {fc.events.length === 0 ? (
                     <span className="rounded-lg bg-elev/60 px-2.5 py-1 text-[10px] font-medium text-dim">
-                      Aucun but ni carton prévu (0 – 0)
+                      Aucun but ni carton prévu 
                     </span>
                   ) : (
                     fc.events.map((ev, idx) => {
@@ -4076,7 +4075,7 @@ export function ScoresPrevusTab({
                             {ev.player ?? (isHome ? m.homeTeam : m.awayTeam)}
                           </span>
                           <span className="text-[9.5px] opacity-70">
-                            ({isHome ? "Dom." : "Ext."})
+                            
                           </span>
                         </span>
                       );
@@ -4088,7 +4087,7 @@ export function ScoresPrevusTab({
                 {isEditingScore && (
                   <div className="mt-3 rounded-xl border border-edge bg-white p-3">
                     <p className="text-[10.5px] font-medium text-ink">
-                      Imposer le score final exact (génère automatiquement minutes & buteurs)
+                      Imposer le score final exact 
                     </p>
                     <div className="mt-2.5 flex items-center justify-center gap-3">
                       <div className="flex items-center gap-1.5">

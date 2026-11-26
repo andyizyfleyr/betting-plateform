@@ -613,7 +613,7 @@ export default function AdminScreen() {
               Mode de pilotage des scénarios virtuels
             </Text>
             <Text style={styles.cardSub}>
-              Mode 1 : aperçu dynamique avec verrouillage manuel. Mode 2 : 100 %
+              Mode 1: aperçu dynamique avec verrouillage manuel. Mode 2: 100 %
               des scores pré-verrouillés d&apos;avance.
             </Text>
             <View style={styles.modeGrid}>
@@ -705,11 +705,11 @@ export default function AdminScreen() {
 
                 <View style={styles.forecastSummaryRow}>
                   <Text style={styles.forecastSummaryLabel}>
-                    Score final prévu :{" "}
+                    Score final prévu:{" "}
                     <Text style={styles.forecastSummaryStrong}>
                       {fc ? `${fc.finalHomeScore} - ${fc.finalAwayScore}` : "—"}
                     </Text>
-                    {fc ? ` (MT ${fc.htHomeScore}-${fc.htAwayScore})` : ""}
+                    {fc ? "" : ""}
                   </Text>
                 </View>
 
@@ -1172,7 +1172,7 @@ export default function AdminScreen() {
                       style={styles.winActionChip}
                     >
                       <Text style={styles.winActionText}>
-                        Résoudre OUI ({formatOdds(q.oddsYes, "decimal")})
+                        Résoudre OUI 
                       </Text>
                     </Pressable>
                     <Pressable
@@ -1190,7 +1190,7 @@ export default function AdminScreen() {
                       style={styles.smallRedBtn}
                     >
                       <Text style={styles.smallRedBtnText}>
-                        Résoudre NON ({formatOdds(q.oddsNo, "decimal")})
+                        Résoudre NON 
                       </Text>
                     </Pressable>
                   </View>

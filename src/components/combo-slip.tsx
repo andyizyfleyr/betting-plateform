@@ -104,7 +104,7 @@ export function ComboFloatingBar() {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-display text-[11px] font-medium">
-                {comboLegs.length === 1 ? "Coupon (1 sélection)" : "Coupon de pari · Combiné"}
+                {comboLegs.length === 1 ? "Coupon" : "Coupon de pari · Combiné"}
               </span>
               {quote.boostPct > 0 && (
                 <span className="rounded-md bg-emerald-500/25 px-1.5 py-0.5 font-display text-[9.5px] font-medium text-emerald-300">
@@ -476,17 +476,17 @@ export function ComboSheet() {
                 <Check className="h-7 w-7" strokeWidth={2.6} />
               </div>
               <h3 className="mt-3 font-display text-[14.5px] font-bold text-ink">
-                Pari combiné accepté !
+                Pari combiné accepté!
               </h3>
               <p className="mt-1 text-[11px] text-mist">
                 Cote totale{" "}
                 <strong className="text-ink">{formatOdds(placedInfo.totalOdds, oddsFormat)}</strong>
-                {placedInfo.boostPct > 0 && ` (+${placedInfo.boostPct}% Bonus inclus)`}
+                {placedInfo.boostPct > 0 && ` · Bonus ${placedInfo.boostPct}%`}
               </p>
 
               <div className="mt-4 flex items-center justify-between rounded-2xl bg-elev px-4 py-3 text-left">
                 <div>
-                  <p className="text-[10px] text-dim">Mise : {eur(placedInfo.stake)}</p>
+                  <p className="text-[10px] text-dim">Mise: {eur(placedInfo.stake)}</p>
                   <p className="font-display text-[11px] font-medium text-ink">
                     Gain potentiel
                   </p>
@@ -512,7 +512,7 @@ export function ComboSheet() {
                     </span>
                     <div>
                       <h2 className="font-display text-[12.5px] font-bold text-ink">
-                        Coupon de pari ({comboLegs.length}/{bettingLimits.maxComboLegs})
+                        Coupon de pari 
                       </h2>
                       <p className="text-[10px] text-dim">
                         Pari combiné · 2 à 8 événements
@@ -555,7 +555,7 @@ export function ComboSheet() {
                     </span>
                     {nextBoost && (
                       <span className="text-[10px] font-medium text-emerald-700">
-                        +{nextBoost.needed} sél. (≥1,25) → +{nextBoost.pct}%
+                        +{nextBoost.needed} sél. → +{nextBoost.pct}%
                       </span>
                     )}
                   </div>
@@ -703,7 +703,7 @@ export function ComboSheet() {
 
                 {belowMin && !overBalance && (
                   <p className="mt-2 text-[10.5px] font-medium text-betclic-red">
-                    Mise minimale : {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
+                    Mise minimale: {formatLocalAmount(currencyConfig.minStakeLocal, currency)}
                   </p>
                 )}
 
@@ -723,7 +723,7 @@ export function ComboSheet() {
                   </div>
                   {quote.boostAmount > 0 && (
                     <div className="mt-1 flex items-center justify-between text-[10.5px] text-win">
-                      <span>Bonus Combiné (+{quote.boostPct}%)</span>
+                      <span>Bonus Combiné </span>
                       <span className="font-display font-medium tabular-nums">
                         +{eur(quote.boostAmount)}
                       </span>
@@ -732,8 +732,7 @@ export function ComboSheet() {
                   <div className="mt-2 flex items-center justify-between border-t border-edge pt-2">
                     <span className="font-display text-[11px] font-medium text-ink">
                       Gain potentiel
-                    <span className="ml-1 text-[10px] text-mist">(plafond {eur(maxPayoutEur)})</span>
-                    </span>
+                                        </span>
                     <AnimatedNumber
                       value={enoughLegs ? quote.potentialWin : 0}
                       format={eur}
@@ -770,7 +769,7 @@ export function ComboSheet() {
                     </>
                   ) : oddsChanged ? (
                     <>
-                      Accepter la nouvelle cote ({formatOdds(quote.totalOdds, oddsFormat)})
+                      Accepter la nouvelle cote 
                       <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
                     </>
                   ) : (
