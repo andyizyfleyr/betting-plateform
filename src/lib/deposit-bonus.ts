@@ -105,16 +105,23 @@ export async function grantDepositBonusInTx(
 }
 
 /**
- * Le joueur renonce à son bonus restant pour retirer l'intégralité de son solde.
- * Le palier n'est pas remboursé : un bonus annulé ne sera pas réattribué.
+ * Le joueur renonce à son bonus restant en retirant avant la fin des mises.
+ * Le montant du bonus non débloqué est **retiré du solde** (jamais laissé jouable
+ * gratuitement), et le palier reste consommé : un bonus annulé n'est pas réattribué.
  */
 export async function forfeitDepositBonusInTx(tx: DbTx, uid: number): Promise<number> {
   const rows = await tx.execute(sql`
     WITH before AS (
-      SELECT "bonus_locked" AS locked FROM "app_user" WHERE "id" = ${uid} FOR UPDATE
+      SELECT "bonus_locked" AS locked, "balance" AS bal
+      FROM "app_user" WHERE "id" = ${uid} FOR UPDATE
     )
     UPDATE "app_user"
-    SET "bonus_locked" = 0, "bonus_granted" = 0
+    SET
+      "bonus_locked" = 0,
+      "bonus_granted" = 0,
+      "balance" = ROUND(
+        ("balance" - LEAST(before.locked, before.bal))::numeric, 6
+      )::float8
     FROM before
     WHERE "app_user"."id" = ${uid} AND before.locked > 0
     RETURNING before.locked AS forfeited

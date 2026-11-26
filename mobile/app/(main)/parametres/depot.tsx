@@ -370,7 +370,8 @@ export default function DepositScreen() {
             <Text style={styles.bonusNoteText}>
               Bonus de dépôt : +50 % sur le 1er dépôt, +75 % sur le 2e, +100 % sur le 3e
               {bonusCapEur > 0 ? ` · maximum ${formatEurAsCurrency(bonusCapEur, currency)} par bonus` : ""}
-              {" "}· mises 4× à cote ≥ 1,30 avant retrait du bonus.
+              {" "}· mises 4× à cote ≥ 1,30 avant retrait du bonus · un retrait avant la fin des
+              mises annule le bonus restant.
             </Text>
           </View>
           {/* Montant compact */}

@@ -372,7 +372,8 @@ export default function DepositPage() {
                   {" "}· <strong>maximum {formatEurAsCurrency(bonusCapEur, currency)}</strong> par bonus
                 </>
               )}{" "}
-              · mises 4× à cote ≥ 1,30 avant retrait du bonus.
+              · mises 4× à cote ≥ 1,30 avant retrait du bonus · un retrait avant la fin des mises
+              annule le bonus restant.
             </div>
             {/* Montant compact */}
             <section className="glass-card rounded-xl p-3 lg:rounded-2xl lg:p-4">

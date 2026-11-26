@@ -191,15 +191,15 @@ export default function WithdrawPage() {
   const amount = localToEur(localAmount, currency, withdrawable);
   const overWithdrawable = amount > withdrawable + 1e-5;
   const overBalance = amount > balance + 1e-5;
-  const forfeitNeeded = overWithdrawable && !overBalance && bonusRemaining > 0;
+  /** Tout retrait avant la fin des mises annule le bonus restant (confirmation obligatoire). */
+  const forfeitNeeded = bonusRemaining > 0;
   const belowMin = localAmount > 0 && localAmount < currencyConfig.minWithdrawalLocal;
   const quickWithdrawPresets = currencyConfig.withdrawalPresetsLocal;
 
   const canSubmit =
     !loading &&
     localAmount >= currencyConfig.minWithdrawalLocal &&
-    !overBalance &&
-    (!overWithdrawable || forfeitNeeded) &&
+    !overWithdrawable &&
     destination.trim().length >= 4;
 
   const submit = async (e: React.FormEvent) => {
@@ -255,7 +255,11 @@ export default function WithdrawPage() {
       ) {
         idempotencySlotRef.current = null;
       }
-      if (err instanceof ApiRequestError && err.code === "bonus_locked" && bonusRemaining > 0) {
+      if (
+        err instanceof ApiRequestError &&
+        (err.code === "bonus_locked" || err.code === "bonus_forfeit_required") &&
+        bonusRemaining > 0
+      ) {
         setConfirmForfeit(true);
         setError(null);
         return;
@@ -414,15 +418,15 @@ export default function WithdrawPage() {
                     {formatLocalAmount(currencyConfig.minWithdrawalLocal, currency)}.
                   </p>
                 )}
-                {overWithdrawable && !overBalance && !forfeitNeeded && (
+                {overWithdrawable && !overBalance && (
                   <p className="mt-1 text-[10px] font-medium text-betclic-red">
                     Dépasse le solde retirable.
                   </p>
                 )}
                 {forfeitNeeded && (
                   <p className="mt-1 text-[10px] leading-relaxed text-amber-800">
-                    Inclut ton bonus restant{balanceHidden ? "" : ` (${eur(bonusRemaining)})`} · tu
-                    pourras l&apos;annuler pour tout retirer.
+                    Un retrait annule ton bonus restant{balanceHidden ? "" : ` (${eur(bonusRemaining)})`} ·
+                    mise encore {balanceHidden ? BALANCE_MASK : eur(wagerRemaining)} à cote ≥ 1,30 pour le garder.
                   </p>
                 )}
                 {overBalance && (
@@ -521,13 +525,17 @@ export default function WithdrawPage() {
 
         <ConfirmDialog
           open={confirmForfeit}
-          title="Annuler ton bonus ?"
+          title="Retirer annule ton bonus"
           description={
             balanceHidden
-              ? "Tu vas retirer tout ton solde : le bonus restant sera définitivement annulé."
-              : `Tu vas retirer ${eur(amount)} : le bonus restant de ${eur(bonusRemaining)} sera définitivement annulé.`
+              ? "Le bonus restant sera annulé et retiré de ton solde."
+              : `Le bonus restant de ${eur(bonusRemaining)} sera annulé et retiré de ton solde.`
           }
-          note="Ton propre argent, lui, reste intact et sera versé. Ce bonus ne reviendra pas."
+          note={
+            balanceHidden
+              ? "Ton propre argent reste retirable. Pour garder le bonus, mise encore et annule ce retrait."
+              : `Ton propre argent reste retirable (${eur(withdrawable)}). Pour garder le bonus, mise encore ${eur(wagerRemaining)} à cote ≥ 1,30 et annule ce retrait.`
+          }
           confirmLabel="Annuler le bonus et retirer"
           cancelLabel="Garder le bonus"
           onCancel={() => setConfirmForfeit(false)}
