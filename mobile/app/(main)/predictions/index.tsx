@@ -290,7 +290,7 @@ export default function PredictionsScreen() {
       <ScrollView
         style={styles.page}
         contentContainerStyle={styles.content}
-        stickyHeaderIndices={[2]}
+        stickyHeaderIndices={[1]}
         showsVerticalScrollIndicator={false}
         onScroll={onScrollCheck}
         scrollEventThrottle={16}
@@ -303,30 +303,7 @@ export default function PredictionsScreen() {
           />
         }
       >
-        {/* 0 : En-tête identique à src/app/(main)/predictions/page.tsx */}
-        <View style={styles.headerRow}>
-          <Text style={styles.pageTitle}>Prédictions</Text>
-          <Pressable
-            onPress={toggleMobileSearch}
-            style={[
-              styles.roundSearchBtn,
-              (mobileSearchOpen || Boolean(query)) &&
-                styles.roundSearchBtnActive,
-            ]}
-          >
-            {mobileSearchOpen ? (
-              <X size={16} color="#ffffff" strokeWidth={2.3} />
-            ) : (
-              <Search
-                size={16}
-                color={query ? "#ffffff" : COLORS.ink}
-                strokeWidth={2.2}
-              />
-            )}
-          </Pressable>
-        </View>
-
-        {/* 1 : Barre de recherche mobile dépliable */}
+        {/* 0 : Barre de recherche mobile dépliable (loupe sur la rangée de filtres) */}
         <View>
           {mobileSearchOpen || query ? (
             <View style={styles.searchBar}>
@@ -352,9 +329,30 @@ export default function PredictionsScreen() {
           ) : null}
         </View>
 
-        {/* 2 : Rangée unique collante de 3 pastilles dropdown */}
+        {/* 1 : Rangée unique collante de 3 pastilles dropdown + loupe */}
         <View style={styles.stickyFilterWrap}>
           <FilterDropdownRow
+            compact
+            trailing={
+              <Pressable
+                onPress={toggleMobileSearch}
+                style={[
+                  styles.roundSearchBtn,
+                  (mobileSearchOpen || Boolean(query)) &&
+                    styles.roundSearchBtnActive,
+                ]}
+              >
+                {mobileSearchOpen ? (
+                  <X size={16} color="#ffffff" strokeWidth={2.3} />
+                ) : (
+                  <Search
+                    size={16}
+                    color={query ? "#ffffff" : COLORS.ink}
+                    strokeWidth={2.2}
+                  />
+                )}
+              </Pressable>
+            }
             filters={[
               {
                 id: "status",
@@ -428,7 +426,7 @@ export default function PredictionsScreen() {
           />
         </View>
 
-        {/* 3 : Liste des questions */}
+        {/* 2 : Liste des questions */}
         {questions === null ? (
           <PulseFlashLoader compact />
         ) : loadError && questions.length === 0 ? (
@@ -985,20 +983,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 8,
-    paddingTop: 14,
+    paddingTop: 8,
     paddingBottom: 32,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  pageTitle: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-    color: COLORS.ink,
   },
   roundSearchBtn: {
     width: 34,
