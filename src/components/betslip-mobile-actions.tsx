@@ -8,6 +8,7 @@ import { normalizeCouponCode } from "@/lib/coupon-code";
 import { validateLoadedCoupon } from "@/lib/coupon-load-validation";
 import { useApp } from "@/components/providers";
 import type { ComboSelection } from "@/components/combo-slip";
+import { CouponConfirmDialog } from "@/components/coupon-confirm-dialog";
 
 type Mode = "menu" | "load" | "saving" | "saved" | null;
 
@@ -19,6 +20,11 @@ export function BetslipMobileActions({ onClear }: { onClear: () => void }) {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pendingDialog, setPendingDialog] = useState<
+    | { kind: "unavailable"; count: number; names: string[]; replace: boolean; legs: ComboSelection[]; finalCode: string }
+    | { kind: "replace"; legs: ComboSelection[]; finalCode: string }
+    | null
+  >(null);
 
   useEffect(() => {
     if (!mode) return;
@@ -47,6 +53,14 @@ export function BetslipMobileActions({ onClear }: { onClear: () => void }) {
       toast({ kind: "error", title: "Enregistrement impossible", description: err instanceof Error ? err.message : "Veuillez réessayer." });
     }
   };
+  const applyLegs = (legs: ComboSelection[], finalCode: string) => {
+    loadComboLegs(legs);
+    setPendingDialog(null);
+    setCode("");
+    setMode(null);
+    toast({ kind: "success", title: `Coupon ${finalCode} chargé`, description: `${legs.length} sélection(s) prête(s) à miser.` });
+  };
+
   const load = async () => {
     const normalized = normalizeCouponCode(code);
     if (loading || !bettingLimitsReady) return;
@@ -55,18 +69,23 @@ export function BetslipMobileActions({ onClear }: { onClear: () => void }) {
     setError("");
     try {
       const result = await api.loadCoupon(normalized);
-      if (result.skippedClosedCount) {
-        const names = (result.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
-        if (!window.confirm(`${result.skippedClosedCount} sélection${result.skippedClosedCount > 1 ? "s" : ""} commencée${result.skippedClosedCount > 1 ? "s" : ""} ou indisponible${result.skippedClosedCount > 1 ? "s" : ""} :\n${names}\n\nRetirer ces sélections du coupon chargé ?`)) return;
-      }
       if (!result.legs.length) throw new Error("Aucune sélection disponible dans ce coupon.");
       const problem = validateLoadedCoupon(result.legs, bettingLimits.maxComboLegs);
       if (problem) throw new Error(problem);
-      if (comboLegs.length && !window.confirm("Le coupon chargé remplacera les sélections actuelles. Continuer ?")) return;
-      loadComboLegs(result.legs as ComboSelection[]);
-      setCode("");
-      setMode(null);
-      toast({ kind: "success", title: `Coupon ${result.code} chargé`, description: `${result.legs.length} sélection(s) prête(s) à miser.` });
+      const legs = result.legs as ComboSelection[];
+      if (result.skippedClosedCount) {
+        setPendingDialog({
+          kind: "unavailable",
+          count: result.skippedClosedCount,
+          names: (result.unavailable ?? []).map((x) => x.title),
+          replace: comboLegs.length > 0,
+          legs,
+          finalCode: result.code,
+        });
+        return;
+      }
+      if (comboLegs.length) { setPendingDialog({ kind: "replace", legs, finalCode: result.code }); return; }
+      applyLegs(legs, result.code);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossible de charger le coupon. Réessayez.");
     } finally { setLoading(false); }
@@ -110,5 +129,31 @@ export function BetslipMobileActions({ onClear }: { onClear: () => void }) {
           {mode === "saved" && <div className="mt-2 space-y-3"><p className="text-[11px] text-mist">Copiez ce code pour retrouver votre coupon de pari.</p><p className="select-all rounded-xl bg-elev p-3 text-center text-[18px] tracking-widest text-ink">{savedCode}</p><button type="button" onClick={() => void copy()} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-betclic-red text-[11px] text-white"><Copy size={14} />{copied ? "Code copié" : "Copier le code"}</button></div>}
         </section>
       </div>, document.body)}
+
+    <CouponConfirmDialog
+      open={pendingDialog !== null}
+      title={pendingDialog?.kind === "unavailable" ? "Sélections indisponibles" : "Remplacer le coupon ?"}
+      description={
+        pendingDialog?.kind === "unavailable"
+          ? pendingDialog.count > 1
+            ? `${pendingDialog.count} sélections ont déjà commencé ou ne sont plus disponibles.`
+            : "1 sélection a déjà commencé ou n'est plus disponible."
+          : "Le coupon chargé remplacera les sélections déjà présentes dans le Betslip."
+      }
+      items={pendingDialog?.kind === "unavailable" ? pendingDialog.names : undefined}
+      note={
+        pendingDialog?.kind === "unavailable"
+          ? pendingDialog.replace
+            ? "Les retirer du coupon chargé ? Vos sélections actuelles seront aussi remplacées."
+            : "Les retirer du coupon chargé ?"
+          : undefined
+      }
+      confirmLabel={pendingDialog?.kind === "unavailable" ? "Retirer" : "Remplacer"}
+      onCancel={() => setPendingDialog(null)}
+      onConfirm={() => {
+        if (!pendingDialog) return;
+        applyLegs(pendingDialog.legs, pendingDialog.finalCode);
+      }}
+    />
   </>;
 }

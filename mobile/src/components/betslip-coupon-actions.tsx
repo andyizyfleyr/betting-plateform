@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable,
   StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Bookmark, Copy, Download, MoreVertical, Trash2, X } from "lucide-react-native";
+import { AlertTriangle, Bookmark, Copy, Download, MoreVertical, Trash2, X } from "lucide-react-native";
 import { useApp, type ComboSelection } from "@/context/app-context";
 import { api, ApiHttpError } from "@/lib/api";
 import { normalizeCouponCode } from "@/lib/coupon-code";
@@ -23,6 +23,11 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [dialog, setDialog] = useState<
+    | { kind: "unavailable"; count: number; names: string[]; replace: boolean; legs: ComboSelection[] }
+    | { kind: "replace"; legs: ComboSelection[] }
+    | null
+  >(null);
 
   const closeModal = () => {
     if (loading || mode === "saving") return;
@@ -46,6 +51,18 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
     }
   };
 
+  const applyLegs = (legs: ComboSelection[]) => {
+    setDialog(null);
+    loadComboLegs(legs);
+    setCode("");
+    setMode(null);
+    toast({
+      kind: "success",
+      title: "Coupon chargé",
+      description: `${legs.length} sélection${legs.length > 1 ? "s" : ""} chargée${legs.length > 1 ? "s" : ""} dans le Betslip.`,
+    });
+  };
+
   const load = async () => {
     const normalized = normalizeCouponCode(code);
     if (loading || !bettingLimitsReady) return;
@@ -55,26 +72,22 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
     try {
       // Toujours vérifier auprès du serveur : une copie locale peut contenir des marchés clôturés.
       const result = await api.loadCoupon(normalized);
-      const apply = () => {
-        const problem = validateLoadedCoupon(result.legs, bettingLimits.maxComboLegs);
-        if (problem) { setError(problem); return; }
-        loadComboLegs(result.legs as ComboSelection[]);
-        setCode(""); setMode(null);
-        toast({ kind: "success", title: "Coupon chargé", description: `${result.legs.length} sélections chargées dans le Betslip.` });
-      };
+      const problem = validateLoadedCoupon(result.legs, bettingLimits.maxComboLegs);
+      if (problem) { setError(problem); return; }
+      const legs = result.legs as ComboSelection[];
       if (result.skippedClosedCount) {
-        const names = (result.unavailable ?? []).map(x => `• ${x.title}`).join("\n");
-        const replace = comboLegs.length && result.legs.length ? "\nLe coupon chargé remplacera aussi vos sélections actuelles." : "";
-        Alert.alert("Sélections indisponibles", `${result.skippedClosedCount} sélection${result.skippedClosedCount > 1 ? "s" : ""} commencée${result.skippedClosedCount > 1 ? "s" : ""} ou indisponible${result.skippedClosedCount > 1 ? "s" : ""}.\n${names}\n\nLes retirer du coupon chargé ?${replace}`, [
-          { text: "Annuler", style: "cancel" },
-          { text: "Retirer", onPress: apply },
-        ]);
-      } else if (comboLegs.length) {
-        Alert.alert("Remplacer le coupon ?", "Le coupon chargé remplacera les sélections actuelles.", [
-          { text: "Annuler", style: "cancel" },
-          { text: "Remplacer", onPress: apply },
-        ]);
-      } else apply();
+        setMode(null);
+        setDialog({
+          kind: "unavailable",
+          count: result.skippedClosedCount,
+          names: (result.unavailable ?? []).map((x) => x.title),
+          replace: comboLegs.length > 0,
+          legs,
+        });
+        return;
+      }
+      if (comboLegs.length) { setMode(null); setDialog({ kind: "replace", legs }); return; }
+      applyLegs(legs);
     } catch (err) {
       setError(err instanceof ApiHttpError ? err.message : "Impossible de charger le coupon. Vérifiez votre connexion et réessayez.");
     } finally {
@@ -135,6 +148,61 @@ export function BetslipCouponActions({ onClear }: { onClear: () => void }) {
         </View>}
       </KeyboardAvoidingView>
     </Modal>
+
+    <Modal visible={dialog !== null} transparent animationType="fade" onRequestClose={() => setDialog(null)} statusBarTranslucent>
+      <View style={[styles.overlay, styles.centerOverlay]}>
+        <Pressable accessibilityLabel="Fermer" style={StyleSheet.absoluteFill} onPress={() => setDialog(null)} />
+        {dialog ? (
+          <View style={styles.dialog} accessibilityViewIsModal>
+            <View style={styles.dialogBadge}>
+              <AlertTriangle size={19} color="#b45309" strokeWidth={2.3} />
+            </View>
+            <Text style={styles.dialogTitle}>
+              {dialog.kind === "unavailable" ? "Sélections indisponibles" : "Remplacer le coupon ?"}
+            </Text>
+            <Text style={styles.dialogText}>
+              {dialog.kind === "unavailable"
+                ? dialog.count > 1
+                  ? `${dialog.count} sélections ont déjà commencé ou ne sont plus disponibles.`
+                  : "1 sélection a déjà commencé ou n'est plus disponible."
+                : "Le coupon chargé remplacera les sélections déjà présentes dans le Betslip."}
+            </Text>
+            {dialog.kind === "unavailable" && dialog.names.length > 0 ? (
+              <View style={styles.dialogList}>
+                {dialog.names.map((name) => (
+                  <Text key={name} numberOfLines={1} style={styles.dialogListText}>· {name}</Text>
+                ))}
+              </View>
+            ) : null}
+            {dialog.kind === "unavailable" ? (
+              <Text style={styles.dialogText}>
+                {dialog.replace
+                  ? "Les retirer du coupon chargé ? Vos sélections actuelles seront aussi remplacées."
+                  : "Les retirer du coupon chargé ?"}
+              </Text>
+            ) : null}
+            <View style={styles.dialogActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => { setDialog(null); setMode("load"); }}
+                style={({ pressed }) => [styles.dialogCancel, pressed && styles.pressed]}
+              >
+                <Text style={styles.dialogCancelText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => applyLegs(dialog.legs)}
+                style={({ pressed }) => [styles.dialogConfirm, pressed && styles.disabled]}
+              >
+                <Text style={styles.dialogConfirmText}>
+                  {dialog.kind === "unavailable" ? "Retirer" : "Remplacer"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+      </View>
+    </Modal>
   </>;
 }
 
@@ -162,7 +230,17 @@ const styles = StyleSheet.create({
   error: { color: COLORS.betclicRed, fontSize: 11 },
   primary: { minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: COLORS.betclicRed },
   primaryText: { color: "white", fontSize: 11 },
-  dialog: { backgroundColor: "white", borderRadius: 18, padding: 16, gap: 8 },
+  dialog: { backgroundColor: "white", borderRadius: 18, padding: 18, gap: 8 },
+  dialogBadge: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "#fef3c7" },
+  dialogTitle: { color: COLORS.ink, fontSize: 15, fontWeight: "700" },
+  dialogText: { color: COLORS.mist, fontSize: 11.5, lineHeight: 17 },
+  dialogList: { borderRadius: 12, backgroundColor: COLORS.elev, paddingVertical: 10, paddingHorizontal: 12, gap: 4 },
+  dialogListText: { color: COLORS.ink, fontSize: 11 },
+  dialogActions: { flexDirection: "row", gap: 8, marginTop: 6 },
+  dialogCancel: { flex: 1, minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.elev },
+  dialogCancelText: { color: COLORS.ink, fontSize: 11.5, fontWeight: "500" },
+  dialogConfirm: { flex: 1, minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.betclicRed },
+  dialogConfirmText: { color: "white", fontSize: 11.5, fontWeight: "600" },
   savedHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   savedTitle: { flex: 1 },
   savedClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.elev, alignItems: "center", justifyContent: "center" },
