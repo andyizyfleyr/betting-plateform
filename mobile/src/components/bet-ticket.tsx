@@ -470,7 +470,7 @@ function ComboBetTicket({
                         numberOfLines={1}
                         style={[
                           styles.previewLegTitle,
-                          leg.status === "lost" && styles.lineThroughMist,
+                          leg.status === "lost" && { color: COLORS.mist },
                         ]}
                       >
                         {titleText}
@@ -903,10 +903,6 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: "600",
     color: COLORS.ink,
-  },
-  lineThroughMist: {
-    color: COLORS.mist,
-    textDecorationLine: "line-through",
   },
   previewLegOdds: {
     fontSize: 11,

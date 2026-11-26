@@ -237,7 +237,7 @@ function ComboBetTicket({
                     <span
                       className={cn(
                         "truncate font-display text-[11.5px] font-medium leading-snug",
-                        leg.status === "lost" ? "text-mist line-through" : "text-ink"
+                        leg.status === "lost" ? "text-mist" : "text-ink"
                       )}
                     >
                       {titleText}
