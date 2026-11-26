@@ -411,29 +411,28 @@ export default function ParametresScreen() {
             </View>
           ) : null}
 
-          {/* Accès Admin (si administrateur) */}
-          {user.role === "admin" ? (
-            <Pressable
-              onPress={() => router.push("/admin")}
-              style={({ pressed }) => [
-                styles.navRowCard,
-                pressed && { backgroundColor: COLORS.elev },
-              ]}
-            >
-              <View style={styles.redIconBox}>
-                <ShieldCheck
-                  size={16}
-                  color={COLORS.betclicRed}
-                  strokeWidth={2.2}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.navRowTitle}>Espace administrateur</Text>
-              </View>
-              <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
-            </Pressable>
-          ) : null}
-        {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
+          <View style={{ gap: 6 }}>
+            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Portefeuille</Text></View>
+            <View style={styles.listCard}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Ouvrir les dernières opérations"
+                onPress={() => router.push("/parametres/transactions")}
+                style={({ pressed }) => [styles.navRow, pressed && { backgroundColor: COLORS.elev }]}
+              >
+                <View style={styles.grayIconBox}>
+                  <History size={16} color={COLORS.ink} strokeWidth={2.1} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.navRowTitle}>Dernières opérations</Text>
+                  <Text numberOfLines={1} style={styles.navRowSub}>Voir tous les mouvements du compte</Text>
+                </View>
+                <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
           <View style={styles.profileCard}>
             <LinearGradient colors={[`hsl(${hue}, 60%, 44%)`, `hsl(${(hue + 36) % 360}, 68%, 30%)`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarBox}>
               <Text style={styles.avatarInitials}>{initials(user?.name ?? "PU")}</Text>
@@ -481,26 +480,6 @@ export default function ParametresScreen() {
               </View>
             </View>
           ) : null}
-          <View style={{ gap: 6 }}>
-            <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Portefeuille</Text></View>
-            <View style={styles.listCard}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Ouvrir les dernières opérations"
-                onPress={() => router.push("/parametres/transactions")}
-                style={({ pressed }) => [styles.navRow, pressed && { backgroundColor: COLORS.elev }]}
-              >
-                <View style={styles.grayIconBox}>
-                  <History size={16} color={COLORS.ink} strokeWidth={2.1} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.navRowTitle}>Dernières opérations</Text>
-                  <Text numberOfLines={1} style={styles.navRowSub}>Voir tous les mouvements du compte</Text>
-                </View>
-                <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
-              </Pressable>
-            </View>
-          </View>
           <View style={{ gap: 6 }}>
             <View style={styles.settingsHeading}><Text style={styles.settingsTitle}>Préférences de jeu</Text></View>
             <View style={styles.listCard}>
@@ -641,6 +620,29 @@ export default function ParametresScreen() {
             </Text>
           </Pressable>
           </View>
+          ) : null}
+
+          {/* Accès Admin (si administrateur) */}
+          {user.role === "admin" ? (
+            <Pressable
+              onPress={() => router.push("/admin")}
+              style={({ pressed }) => [
+                styles.navRowCard,
+                pressed && { backgroundColor: COLORS.elev },
+              ]}
+            >
+              <View style={styles.redIconBox}>
+                <ShieldCheck
+                  size={16}
+                  color={COLORS.betclicRed}
+                  strokeWidth={2.2}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.navRowTitle}>Espace administrateur</Text>
+              </View>
+              <ChevronRight size={16} color={COLORS.dim} strokeWidth={2.2} />
+            </Pressable>
           ) : null}
 
           <Pressable

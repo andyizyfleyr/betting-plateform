@@ -274,7 +274,7 @@ export default function ParametresPage() {
       </section>
 
       <div className="mt-3 space-y-4 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:space-y-0">
-        {/* Colonne gauche : Portefeuille, Solde et accès direct aux mouvements */}
+        {/* Colonne gauche : solde, retraits en attente, dernières opérations */}
         <div className="space-y-3">
           {/* Retraits en attente avec annulation immédiate */}
           {pendingWithdrawalEntries.length > 0 && (
@@ -312,30 +312,16 @@ export default function ParametresPage() {
             </section>
           )}
 
-          {/* Accès Admin (si administrateur) */}
-          {user?.role === "admin" && (
-            <button
-              type="button"
-              onClick={() => {
-                triggerRouteLoader("/admin");
-                router.push("/admin");
-              }}
-              className="glass-card flex w-full items-center gap-3 rounded-2xl p-3.5 text-left transition-colors active:bg-elev"
-            >
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
-                <ShieldCheck className="h-4 w-4" strokeWidth={2.2} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-display text-[11.5px] font-medium text-ink">
-                  Espace administrateur
-                </p>
-              </div>
+          <SettingsGroup title="Portefeuille">
+            <Link href="/parametres/transactions" className="flex items-center gap-3 p-3.5 active:bg-elev">
+              <IconBox><History className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+              <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">Dernières opérations</p>
               <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
-            </button>
-          )}
+            </Link>
+          </SettingsGroup>
         </div>
 
-        {/* Colonne droite : Profil éditable + Préférences & Déconnexion */}
+        {/* Colonne droite : profil, préférences, espace administrateur */}
         <div className="space-y-3">
           {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
           <section className="rounded-2xl border border-edge bg-white p-3.5">
@@ -397,14 +383,6 @@ export default function ParametresPage() {
             )}
           </section>
 
-          <SettingsGroup title="Portefeuille">
-            <Link href="/parametres/transactions" className="flex items-center gap-3 p-3.5 active:bg-elev">
-              <IconBox><History className="h-4 w-4" strokeWidth={2.1} /></IconBox>
-              <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">Dernières opérations</p>
-              <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
-            </Link>
-          </SettingsGroup>
-
           <SettingsGroup title="Préférences">
             <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
               <div className="flex min-w-0 items-center gap-3">
@@ -423,6 +401,28 @@ export default function ParametresPage() {
             </div>
             <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v, notifyMatches: v, notifyBets: v, notifyPayments: v }, v ? "Toutes les notifications activées" : "Notifications désactivées")} last />
           </SettingsGroup>
+
+          {/* Accès Admin (si administrateur) */}
+          {user?.role === "admin" && (
+            <button
+              type="button"
+              onClick={() => {
+                triggerRouteLoader("/admin");
+                router.push("/admin");
+              }}
+              className="glass-card flex w-full items-center gap-3 rounded-2xl p-3.5 text-left transition-colors active:bg-elev"
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
+                <ShieldCheck className="h-4 w-4" strokeWidth={2.2} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[11.5px] font-medium text-ink">
+                  Espace administrateur
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
+            </button>
+          )}
         </div>
       </div>
 
