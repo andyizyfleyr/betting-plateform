@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2, LogOut, Plus, ShieldCheck, User } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, eur, initials } from "@/lib/format";
+import { toggleBalanceHidden, useBalanceHidden } from "@/lib/balance-visibility";
 import { AnimatedNumber } from "./animated-number";
 import { PulseLogo } from "./pulse-logo";
 import { useApp, useFeedMatches, type AdminTabKey } from "./providers";
@@ -21,49 +22,6 @@ const ADMIN_TAB_TITLES: Record<AdminTabKey, string> = {
   ml: "Intelligence artificielle & Modèles",
   settings: "Réglages",
 };
-
-function useLongPressToggle(onToggle: () => void, onTap: () => void) {
-  const timerRef = useRef<number | null>(null);
-  const firedRef = useRef(false);
-
-  const clear = () => {
-    if (timerRef.current != null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current != null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, []);
-
-  return {
-    onPointerDown: () => {
-      firedRef.current = false;
-      clear();
-      timerRef.current = window.setTimeout(() => {
-        firedRef.current = true;
-        onToggle();
-      }, 450);
-    },
-    onPointerUp: clear,
-    onPointerLeave: clear,
-    onPointerCancel: clear,
-    onContextMenu: (event: React.MouseEvent) => event.preventDefault(),
-    onClick: () => {
-      if (firedRef.current) {
-        firedRef.current = false;
-        return;
-      }
-      onTap();
-    },
-  };
-}
 
 export function AppHeader() {
   const pathname = usePathname();
@@ -83,10 +41,34 @@ export function AppHeader() {
     toast,
   } = useApp();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [balanceHidden, setBalanceHidden] = useState(false);
-  const toggleBalanceHidden = () => setBalanceHidden((v) => !v);
-  const mobileBalancePress = useLongPressToggle(toggleBalanceHidden, openRecharge);
-  const desktopBalancePress = useLongPressToggle(toggleBalanceHidden, openRecharge);
+  const balanceHidden = useBalanceHidden();
+  const balanceLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const balanceLongPressFired = useRef(false);
+
+  // Appui long sur la pastille solde (icône +) : masque / démasque le solde.
+  const clearBalanceLongPress = () => {
+    if (balanceLongPressTimer.current) {
+      clearTimeout(balanceLongPressTimer.current);
+      balanceLongPressTimer.current = null;
+    }
+  };
+  const startBalanceLongPress = () => {
+    balanceLongPressFired.current = false;
+    clearBalanceLongPress();
+    balanceLongPressTimer.current = setTimeout(() => {
+      balanceLongPressTimer.current = null;
+      balanceLongPressFired.current = true;
+      toggleBalanceHidden();
+    }, 450);
+  };
+  const handleBalanceClick = () => {
+    clearBalanceLongPress();
+    if (balanceLongPressFired.current) {
+      balanceLongPressFired.current = false;
+      return;
+    }
+    openRecharge();
+  };
 
   const isAdminShell =
     user?.role === "admin" || pathname === "/admin" || pathname.startsWith("/admin/");
@@ -209,18 +191,17 @@ export function AppHeader() {
           {user ? (
             <button
               type="button"
-              {...mobileBalancePress}
-              aria-label={
-                balanceHidden
-                  ? "Solde masqué — appui long pour l'afficher"
-                  : "Solde et rechargement — appui long pour masquer"
-              }
-              className="flex h-[33px] select-none items-center gap-1.5 rounded-full border border-edge bg-elev pl-2.5 pr-1 transition-transform [-webkit-touch-callout:none] active:scale-[0.98]"
+              onClick={handleBalanceClick}
+              onPointerDown={startBalanceLongPress}
+              onPointerUp={clearBalanceLongPress}
+              onPointerLeave={clearBalanceLongPress}
+              onPointerCancel={clearBalanceLongPress}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label="Solde et rechargement · appui long pour masquer le solde"
+              className="flex h-[33px] items-center gap-1.5 rounded-full border border-edge bg-elev pl-2.5 pr-1 transition-transform active:scale-[0.98] select-none"
             >
               {balanceHidden ? (
-                <span className="font-display text-[12px] font-medium tabular-nums text-ink">
-                  ••••••
-                </span>
+                <span className="font-display text-[12px] font-medium tabular-nums text-ink">••••••</span>
               ) : (
                 <AnimatedNumber
                   value={balance}
@@ -348,18 +329,17 @@ export function AppHeader() {
             <>
               <button
                 type="button"
-                {...desktopBalancePress}
-                aria-label={
-                  balanceHidden
-                    ? "Solde masqué — appui long pour l'afficher"
-                    : "Solde et dépôt — appui long pour masquer"
-                }
-                className="flex h-8.5 select-none items-center gap-2 rounded-full bg-white pl-3 pr-1 text-ink shadow-xs transition-transform [-webkit-touch-callout:none] hover:scale-[1.01] active:scale-[0.99]"
+                onClick={handleBalanceClick}
+                onPointerDown={startBalanceLongPress}
+                onPointerUp={clearBalanceLongPress}
+                onPointerLeave={clearBalanceLongPress}
+                onPointerCancel={clearBalanceLongPress}
+                onContextMenu={(e) => e.preventDefault()}
+                aria-label="Solde et dépôt · appui long pour masquer le solde"
+                className="flex h-8.5 select-none items-center gap-2 rounded-full bg-white pl-3 pr-1 text-ink shadow-xs transition-transform hover:scale-[1.01] active:scale-[0.99]"
               >
                 {balanceHidden ? (
-                  <span className="font-display text-[12px] font-medium tabular-nums text-ink">
-                    ••••••
-                  </span>
+                  <span className="font-display text-[12px] font-medium tabular-nums text-ink">••••••</span>
                 ) : (
                   <AnimatedNumber
                     value={balance}
