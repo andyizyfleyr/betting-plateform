@@ -401,11 +401,6 @@ export default function VirtualMatchesPage() {
             setLeagueFilter("all");
             setOddsProfile("all");
           }}
-          resultCountText={
-            matches !== null
-              ? `${visible.length} match${visible.length > 1 ? "s" : ""} virtuel${visible.length > 1 ? "s" : ""}`
-              : null
-          }
         />
 
         {/* Liste verticale fluide au pouce */}

@@ -407,11 +407,6 @@ function AllMatchesContent() {
             setLeagueFilter("all");
             setOddsProfile("all");
           }}
-          resultCountText={
-            matches !== null
-              ? `${visible.length} match${visible.length > 1 ? "s" : ""} officiel${visible.length > 1 ? "s" : ""}`
-              : null
-          }
         />
 
         {/* Liste verticale fluide au pouce */}

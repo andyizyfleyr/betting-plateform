@@ -498,8 +498,7 @@ export default function ParisScreen() {
                 ],
               }] : []),
             ]}
-            resultCountText={null}
-          />
+              />
         </View>
 
         {/* 2 : Liste des tickets */}

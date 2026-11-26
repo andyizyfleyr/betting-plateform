@@ -649,11 +649,6 @@ function ResultatsContent() {
           setWinnerFilter("all");
           setGoalsFilter("all");
         }}
-        resultCountText={
-          history !== null
-            ? `${visible.length} résultat${visible.length > 1 ? "s" : ""}`
-            : null
-        }
       />
 
       {/* Liste groupée par journée */}

@@ -763,9 +763,6 @@ export function MatchesTab({
           setStatusFilter("all");
           setLeagueFilter("all");
         }}
-        resultCountText={`${filteredMatches.length} match${filteredMatches.length > 1 ? "s" : ""} ${
-          isReal ? "réel" : "virtuel"
-        }${filteredMatches.length > 1 ? "s" : ""}`}
       />
 
       {filteredMatches.length === 0 ? (
@@ -2350,7 +2347,6 @@ export function QuestionsTab({
           setQCategory("Tous");
           setQFormat("all");
         }}
-        resultCountText={`${visibleQuestions.length} prédiction${visibleQuestions.length > 1 ? "s" : ""}`}
       />
 
       <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
@@ -2767,7 +2763,6 @@ export function UsersTab({
           setRoleFilter("all");
           setBalFilter("all");
         }}
-        resultCountText={`${filteredUsers.length} joueur${filteredUsers.length > 1 ? "s" : ""}`}
       />
       <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
       {pagedUsers.map((u) => {
@@ -3099,7 +3094,6 @@ export function BetsTab({
           setBetStatusFilter("all");
           setBetKindFilter("all");
         }}
-        resultCountText={`${filteredRows.length} pari${filteredRows.length > 1 ? "s" : ""}`}
       />
 
       <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-2 xl:gap-3.5">
@@ -3965,7 +3959,6 @@ export function ScoresPrevusTab({
           setLeagueFilter("all");
           setLockFilter("all");
         }}
-        resultCountText={`${visible.length} match${visible.length > 1 ? "s" : ""} programmé${visible.length > 1 ? "s" : ""}`}
       />
 
       {visible.length === 0 ? (
