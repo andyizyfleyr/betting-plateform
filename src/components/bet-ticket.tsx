@@ -142,9 +142,7 @@ function ComboBetTicket({
   return (
     <article
       className={cn(
-        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/20 active:bg-elev/35",
-        won && "ticket-won",
-        lost && "border-betclic-red/25"
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/20 active:bg-elev/35"
       )}
     >
       <CardOverlayLink
@@ -381,9 +379,7 @@ function SingleBetTicket({
   return (
     <article
       className={cn(
-        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/20 active:bg-elev/35",
-        won && "ticket-won",
-        lost && "border-betclic-red/25"
+        "glass-card relative cursor-pointer overflow-hidden rounded-2xl p-3.5 transition-all hover:bg-elev/20 active:bg-elev/35"
       )}
     >
       <CardOverlayLink
