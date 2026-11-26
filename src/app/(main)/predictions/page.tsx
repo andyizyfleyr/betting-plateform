@@ -543,7 +543,7 @@ function ResolvedQuestionCard({ q }: { q: ClientPrediction }) {
           {q.resolvedAt ? `Résolu · ${formatPlacedAt(q.resolvedAt)}` : "Résolu"}
         </span>
       </div>
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[11.5px] font-medium leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-1.5 block font-display text-[10.5px] font-medium leading-snug text-ink">
         {q.question}
       </p>
       <div className="pointer-events-none relative z-[1] mt-2.5 flex items-center justify-between rounded-xl border border-win/25 bg-win/10 px-3 py-2">
@@ -624,7 +624,7 @@ function MultiChoiceQuestionCard({
         </span>
       </div>
 
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[11.5px] font-medium leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-1.5 block font-display text-[10.5px] font-medium leading-snug text-ink">
         {q.question}
       </p>
 
@@ -634,7 +634,7 @@ function MultiChoiceQuestionCard({
         </p>
       )}
 
-      <div className="pointer-events-auto relative z-10 mt-2.5 flex flex-col gap-1.5">
+      <div className="pointer-events-auto relative z-10 mt-2 flex flex-col gap-1">
         {displayed.map((opt) => {
           const pct = probs.get(opt.key) ?? 0;
           const selected = q.myBet?.selection === opt.key;
@@ -671,7 +671,7 @@ function MultiChoiceQuestionCard({
         <button
           type="button"
           onClick={() => setExpanded((s) => !s)}
-          className="pointer-events-auto relative z-10 mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-xl bg-elev/80 font-display text-[11px] font-medium text-ink transition-colors hover:bg-elev active:scale-[0.99]"
+          className="pointer-events-auto relative z-10 mt-1.5 flex h-7 w-full items-center justify-center gap-1.5 rounded-lg bg-elev/80 font-display text-[10px] font-medium text-ink transition-colors hover:bg-elev active:scale-[0.99]"
         >
           <span>
             {expanded
@@ -724,7 +724,7 @@ function BinaryQuestionCard({
         </span>
       </div>
 
-      <p className="pointer-events-none relative z-[1] mt-2 block font-display text-[11.5px] font-medium leading-snug text-ink">
+      <p className="pointer-events-none relative z-[1] mt-1.5 block font-display text-[10.5px] font-medium leading-snug text-ink">
         {q.question}
       </p>
 
@@ -734,7 +734,7 @@ function BinaryQuestionCard({
         </p>
       )}
 
-      <div className="pointer-events-auto relative z-10 mt-2.5 grid grid-cols-2 gap-2">
+      <div className="pointer-events-auto relative z-10 mt-2 grid grid-cols-2 gap-1.5">
         <SideButton
           label="Oui"
           odds={q.oddsYes}
@@ -815,7 +815,7 @@ function MultiOptionButton({
       {...handlers}
       style={style}
       className={cn(
-        "relative flex min-h-[40px] w-full items-center justify-between gap-2 overflow-hidden rounded-xl border px-3 py-1.5 text-left transition-colors",
+        "relative flex min-h-[34px] w-full items-center justify-between gap-2 overflow-hidden rounded-lg border px-2.5 py-1 text-left transition-colors",
         inCombo
           ? "border-ink bg-ink text-white ring-2 ring-betclic-red/35"
           : selected
@@ -844,7 +844,7 @@ function MultiOptionButton({
         )}
         <span
           className={cn(
-            "truncate font-display text-[11.5px] font-medium",
+            "truncate font-display text-[10.5px] font-medium",
             inCombo ? "text-white" : "text-ink"
           )}
         >
@@ -855,7 +855,7 @@ function MultiOptionButton({
       <span className="relative z-10 flex shrink-0 items-center gap-2">
         <span
           className={cn(
-            "text-[10px] font-medium tabular-nums",
+            "text-[9.5px] font-medium tabular-nums",
             inCombo ? "text-white/75" : "text-dim"
           )}
         >
@@ -863,7 +863,7 @@ function MultiOptionButton({
         </span>
         <span
           className={cn(
-            "relative min-w-[52px] rounded-lg px-2.5 py-1 text-center font-display text-[11px] font-medium tabular-nums transition-colors duration-200",
+            "relative min-w-[46px] rounded-md px-2 py-0.5 text-center font-display text-[10px] font-medium tabular-nums transition-colors duration-200",
             selected || inCombo
               ? cn("bg-betclic-red", oddsTrendTextClass(trend, true))
               : cn(
@@ -914,7 +914,7 @@ function SideButton({
       {...handlers}
       style={style}
       className={cn(
-        "relative flex h-11 items-center justify-between rounded-xl border px-3 transition-colors",
+        "relative flex h-9 items-center justify-between rounded-lg border px-2.5 transition-colors",
         selected
           ? "border-betclic-red bg-betclic-red text-white"
           : inCombo
@@ -927,7 +927,7 @@ function SideButton({
       {!disabled && <OddsTrendCorner trend={trend} inverted={active} />}
       <span
         className={cn(
-          "text-[11px] font-medium",
+          "text-[10.5px] font-medium",
           active ? "text-white" : "text-mist"
         )}
       >
@@ -935,7 +935,7 @@ function SideButton({
       </span>
       <span
         className={cn(
-          "font-display text-[11.5px] font-medium tabular-nums transition-colors duration-200",
+          "font-display text-[10.5px] font-medium tabular-nums transition-colors duration-200",
           oddsTrendTextClass(trend, active)
         )}
       >
