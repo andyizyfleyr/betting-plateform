@@ -32,6 +32,7 @@ import { Toggle } from "@/components/toggle";
 import { TransferCodeSheet } from "@/components/transfer-code-sheet";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { writeUserPreferences } from "@/lib/user-preferences";
+import { toggleBalanceHidden, useBalanceHidden } from "@/lib/balance-visibility";
 import { cn, eur, formatPlacedAt } from "@/lib/format";
 
 export default function ParametresPage() {
@@ -48,7 +49,7 @@ export default function ParametresPage() {
   const [wallet, setWallet] = useState<ClientWalletData | null>(() => getCachedWallet());
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [balanceVisible, setBalanceVisible] = useState(true);
+  const balanceVisible = !useBalanceHidden();
   const [profilName, setProfilName] = useState("");
   const [profilEmail, setProfilEmail] = useState("");
   const [profilSaving, setProfilSaving] = useState(false);
@@ -254,7 +255,7 @@ export default function ParametresPage() {
               <span className="mt-1 block text-[23px] font-bold leading-tight tabular-nums" aria-label="Solde masqué">••••••</span>
             )}
           </div>
-          <button type="button" onClick={() => setBalanceVisible(v => !v)} aria-label={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} aria-pressed={!balanceVisible} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge">{balanceVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button>
+          <button type="button" onClick={toggleBalanceHidden} aria-label={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} aria-pressed={!balanceVisible} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-elev text-mist active:bg-edge">{balanceVisible ? <Eye size={18} /> : <EyeOff size={18} />}</button>
         </div>
         {balanceVisible && wallet && wallet.summary.withdrawable != null && (wallet.summary.bonusRemaining ?? 0) > 1e-4 && wallet.summary.withdrawable < (user?.balance ?? 0) - 1e-4 && (
           <p className="mt-1 text-[10px] font-medium text-mist">

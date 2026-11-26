@@ -36,6 +36,7 @@ import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
 import { getCachedWallet } from "@/lib/entity-cache";
 import { eur, formatPlacedAt } from "@/lib/format";
 import { writeUserPreferences } from "@/lib/user-preferences";
+import { toggleBalanceHidden, useBalanceHidden } from "@/lib/balance-visibility";
 import { createIdempotencyKey, isBiometricLoginEnabled, setBiometricLoginEnabled } from "@/lib/http";
 import { registerPushDevice, unregisterPushDevice } from "@/lib/push-notifications";
 import {
@@ -86,7 +87,7 @@ export default function ParametresScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferCodesEnabled, setTransferCodesEnabled] = useState(false);
-  const [balanceVisible, setBalanceVisible] = useState(true);
+  const balanceVisible = !useBalanceHidden();
   const [checkingOta, setCheckingOta] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
@@ -362,7 +363,7 @@ export default function ParametresScreen() {
               <Text style={styles.walletLabelWhite}>Solde disponible</Text>
               <Text style={styles.walletAmountWhite}>{balanceVisible ? eur(user.balance) : "••••••"}</Text>
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} onPress={() => setBalanceVisible(v => !v)} style={styles.eyeButtonWhite}>
+            <Pressable accessibilityRole="button" accessibilityLabel={balanceVisible ? "Masquer le solde du portefeuille" : "Afficher le solde du portefeuille"} onPress={toggleBalanceHidden} style={styles.eyeButtonWhite}>
               {balanceVisible ? <Eye size={18} color={COLORS.ink} /> : <EyeOff size={18} color={COLORS.ink} />}
             </Pressable>
           </View>
