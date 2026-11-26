@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { ensureSeeded } from "@/db/seed";
+import { DEPOSIT_BONUS_PERCENTS } from "@/lib/admin-settings";
 import {
   getCurrencyRatesSettings,
   getAdminSetting,
   getBrandingSettings,
+  getWelcomeBonusSettings,
   type CurrencyPresetsSettings,
 } from "@/lib/admin-settings-server";
 import {
@@ -33,10 +35,11 @@ function transferCodesFlag(): boolean {
 export async function GET() {
   try {
     await ensureSeeded();
-    const [rates, presetsRaw, branding] = await Promise.all([
+    const [rates, presetsRaw, branding, welcome] = await Promise.all([
       getCurrencyRatesSettings(),
       getAdminSetting("currency_presets"),
       getBrandingSettings(),
+      getWelcomeBonusSettings(),
     ]);
     const presets =
       (presetsRaw as unknown as CurrencyPresetsSettings).presets ?? {};
@@ -50,6 +53,11 @@ export async function GET() {
         currencyRates: rates.rates,
         currencyPresets: presets,
         branding,
+        depositBonus: {
+          enabled: welcome.enabled,
+          percents: [...DEPOSIT_BONUS_PERCENTS],
+          maxBonusEur: welcome.maxBonus ?? 0,
+        },
         transferCodesEnabled: transferCodesFlag(),
       },
       { headers: { "Cache-Control": "public, max-age=60, s-maxage=60" } }

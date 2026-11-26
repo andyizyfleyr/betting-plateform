@@ -940,6 +940,11 @@ export const api = {
             href: string;
           }>;
         };
+        depositBonus?: {
+          enabled: boolean;
+          percents: number[];
+          maxBonusEur: number;
+        };
       }>("/api/config"),
   },
   payments: {
