@@ -73,13 +73,14 @@ function MatchHistoryCard({
   const h = match.homeScore ?? 0;
   const a = match.awayScore ?? 0;
 
+  // Cote affichée = cote de clôture archivée (standard bookmaker), jamais la cote live finale.
   const winningOdds =
     match.winnerCode === "V1"
-      ? match.oddsHome
+      ? (match.closeOddsHome ?? null)
       : match.winnerCode === "X"
-        ? (match.oddsDraw ?? null)
+        ? (match.closeOddsDraw ?? null)
         : match.winnerCode === "V2"
-          ? match.oddsAway
+          ? (match.closeOddsAway ?? null)
           : null;
 
   const targetHref = isFinished ? `/resultats/${match.id}` : `/matchs/${match.id}`;
