@@ -14,6 +14,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** Codes de transfert activés côté serveur (même condition que l'API dédiée). */
+function transferCodesFlag(): boolean {
+  return (
+    process.env.TRANSFER_CODES_ENABLED === "true" &&
+    /^[a-fA-F0-9]{64}$/.test(process.env.TRANSFER_CODE_SECRET ?? "")
+  );
+}
+
 /**
  * GET /api/config — Configuration publique côté client (taux de change + paliers devises).
  *
@@ -42,6 +50,7 @@ export async function GET() {
         currencyRates: rates.rates,
         currencyPresets: presets,
         branding,
+        transferCodesEnabled: transferCodesFlag(),
       },
       { headers: { "Cache-Control": "public, max-age=60, s-maxage=60" } }
     );

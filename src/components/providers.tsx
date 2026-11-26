@@ -104,6 +104,8 @@ interface AppContextValue {
   currencyConfig: CurrencyConfig;
   bettingLimits: BettingLimits;
   bettingLimitsReady: boolean;
+  /** Codes de transfert disponibles côté serveur (bouton « Transférer »). */
+  transferCodesEnabled: boolean;
   maxPayoutEur: number;
   setGuestCountryCode: (code: string) => void;
   oddsFormat: "decimal" | "fractional";
@@ -286,6 +288,7 @@ function updateWebAuthBalance(cleanBalance: number): void {
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => getBrowserQueryClient());
+  const [transferCodesEnabled, setTransferCodesEnabled] = useState(false);
   useEffect(() => {
     if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw-static.js").catch(() => {});
@@ -300,6 +303,7 @@ export function Providers({ children }: { children: ReactNode }) {
         setCurrencyPresetOverrides(
           (r.currencyPresets ?? {}) as Record<string, never>
         );
+        setTransferCodesEnabled(r.transferCodesEnabled === true);
       })
       .catch(() => {});
     return () => {
@@ -308,7 +312,9 @@ export function Providers({ children }: { children: ReactNode }) {
   }, []);
   return (
     <QueryClientProvider client={queryClient}>
-      <ProvidersInner>{children}</ProvidersInner>
+      <ProvidersInner transferCodesEnabled={transferCodesEnabled}>
+        {children}
+      </ProvidersInner>
     </QueryClientProvider>
   );
 }
@@ -411,7 +417,13 @@ function ProvidersRealtimeQueries({
   return null;
 }
 
-function ProvidersInner({ children }: { children: ReactNode }) {
+function ProvidersInner({
+  children,
+  transferCodesEnabled,
+}: {
+  children: ReactNode;
+  transferCodesEnabled: boolean;
+}) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const isAuthRoute = pathname === "/auth" || pathname.startsWith("/auth/");
@@ -906,6 +918,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       currencyConfig,
       bettingLimits,
       bettingLimitsReady,
+      transferCodesEnabled,
       maxPayoutEur,
       setGuestCountryCode,
       oddsFormat: user?.oddsFormat ?? "decimal",
@@ -959,6 +972,7 @@ function ProvidersInner({ children }: { children: ReactNode }) {
       currencyConfig,
       bettingLimits,
       bettingLimitsReady,
+      transferCodesEnabled,
       maxPayoutEur,
       setGuestCountryCode,
       setBalance,
