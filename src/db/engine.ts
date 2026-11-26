@@ -1119,6 +1119,19 @@ function stepLiveMatchInMemory(
   if (!changed) return { changed: false, finished: isOver, row: m };
 
   const naturalEndMs = effectiveStartsAt.getTime() + matchDurationMs(m.id, m.source);
+
+  // Archive « bookmaker » des cotes joueur :
+  // - ouverture = prix au coup d'envoi (première projection live), figée ensuite ;
+  // - clôture  = dernier prix tant que les marchés sont ouverts (< 85'), jamais mise à jour
+  //   après le verrou de fin de match (sinon on tombait sur les bornes 1,01 / 100,00).
+  const marketOpen = !isOver && targetSimMin < 85;
+  const openOddsHome = m.openOddsHome ?? m.oddsHome;
+  const openOddsDraw = m.openOddsDraw ?? m.oddsDraw;
+  const openOddsAway = m.openOddsAway ?? m.oddsAway;
+  const closeOddsHome = marketOpen ? dynamicOdds.oddsHome : (m.closeOddsHome ?? openOddsHome);
+  const closeOddsDraw = marketOpen ? dynamicOdds.oddsDraw : (m.closeOddsDraw ?? openOddsDraw);
+  const closeOddsAway = marketOpen ? dynamicOdds.oddsAway : (m.closeOddsAway ?? openOddsAway);
+
   const nextRow: MatchRow = {
     ...m,
     startsAt: effectiveStartsAt,
@@ -1132,6 +1145,12 @@ function stepLiveMatchInMemory(
     oddsHome: dynamicOdds.oddsHome,
     oddsDraw: dynamicOdds.oddsDraw,
     oddsAway: dynamicOdds.oddsAway,
+    openOddsHome,
+    openOddsDraw,
+    openOddsAway,
+    closeOddsHome,
+    closeOddsDraw,
+    closeOddsAway,
     lastGoalAt: lastGoalDate ?? null,
     suspended,
     tickHistory: finalHistory,
@@ -1190,6 +1209,12 @@ async function flushMatchUpdatesBatch(
           ${r.oddsHome}::float8,
           ${r.oddsDraw}::float8,
           ${r.oddsAway}::float8,
+          ${r.openOddsHome ?? null}::float8,
+          ${r.openOddsDraw ?? null}::float8,
+          ${r.openOddsAway ?? null}::float8,
+          ${r.closeOddsHome ?? null}::float8,
+          ${r.closeOddsDraw ?? null}::float8,
+          ${r.closeOddsAway ?? null}::float8,
           ${lastGoalIso}::timestamptz::timestamp,
           ${Boolean(r.suspended)}::boolean,
           ${historyJson}::jsonb,
@@ -1217,6 +1242,12 @@ async function flushMatchUpdatesBatch(
         "odds_home" = v.odds_home,
         "odds_draw" = v.odds_draw,
         "odds_away" = v.odds_away,
+        "open_odds_home" = COALESCE(v.open_odds_home, m."open_odds_home"),
+        "open_odds_draw" = COALESCE(v.open_odds_draw, m."open_odds_draw"),
+        "open_odds_away" = COALESCE(v.open_odds_away, m."open_odds_away"),
+        "close_odds_home" = COALESCE(v.close_odds_home, m."close_odds_home"),
+        "close_odds_draw" = COALESCE(v.close_odds_draw, m."close_odds_draw"),
+        "close_odds_away" = COALESCE(v.close_odds_away, m."close_odds_away"),
         "last_goal_at" = v.last_goal_at,
         "suspended" = v.suspended,
         "tick_history" = v.tick_history,
@@ -1228,7 +1259,9 @@ async function flushMatchUpdatesBatch(
         "scripted_events" = CASE WHEN v.clear_scripted THEN NULL ELSE m."scripted_events" END
       FROM (VALUES ${tuples}) AS v(
         id, home_score, away_score, red_home, red_away, events, minute, status,
-        odds_home, odds_draw, odds_away, last_goal_at, suspended, tick_history,
+        odds_home, odds_draw, odds_away, open_odds_home, open_odds_draw, open_odds_away,
+        close_odds_home, close_odds_draw, close_odds_away,
+        last_goal_at, suspended, tick_history,
         markets, home_logo, away_logo, starts_at, finished_at, clear_scripted
       )
       WHERE m."id" = v.id

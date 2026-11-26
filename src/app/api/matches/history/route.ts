@@ -4,7 +4,11 @@ import { and, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { hydrateLiveMatchRow } from "@/db/engine";
 import { matches, type MatchRow } from "@/db/schema";
-import { extractMatchTimelineStats, hasVerifiedGoalTimeline } from "@/db/fixtures";
+import {
+  extractMatchTimelineStats,
+  hasVerifiedGoalTimeline,
+  oddsFor,
+} from "@/db/fixtures";
 import { ensureSeeded } from "@/db/seed";
 import {
   ensureMatchStoreHydrated,
@@ -126,6 +130,40 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
       ? computeMatchTelemetry(m)
       : undefined;
 
+  // Cotes « joueur » de l'historique : ouverture figée au coup d'envoi et clôture
+  // au dernier prix marché ouvert. Jamais les cotes live finales (bornes 1,01 / 100).
+  const plausibleOdds = (v: number | null | undefined): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v >= 1.05 && v <= 60
+      ? Math.round(v * 100) / 100
+      : null;
+  // Repli pour les lignes terminées avant l'archivage : cote pré-match du modèle
+  // (déterministe pour le virtuel) ou cote pré-match stockée pour le réel.
+  const preMatchFallback = isReal
+    ? {
+        home: plausibleOdds(m.oddsHome),
+        draw: plausibleOdds(m.oddsDraw),
+        away: plausibleOdds(m.oddsAway),
+      }
+    : (() => {
+        const p = oddsFor(m.homeTeam, m.awayTeam, {
+          homeForm: m.homeForm ?? 1,
+          awayForm: m.awayForm ?? 1,
+          regime: m.regime ?? null,
+          league: m.league ?? null,
+        });
+        return {
+          home: plausibleOdds(p.oddsHome),
+          draw: plausibleOdds(p.oddsDraw),
+          away: plausibleOdds(p.oddsAway),
+        };
+      })();
+  const openOddsHome = plausibleOdds(m.openOddsHome) ?? preMatchFallback.home;
+  const openOddsDraw = plausibleOdds(m.openOddsDraw) ?? preMatchFallback.draw;
+  const openOddsAway = plausibleOdds(m.openOddsAway) ?? preMatchFallback.away;
+  const closeOddsHome = plausibleOdds(m.closeOddsHome) ?? preMatchFallback.home;
+  const closeOddsDraw = plausibleOdds(m.closeOddsDraw) ?? preMatchFallback.draw;
+  const closeOddsAway = plausibleOdds(m.closeOddsAway) ?? preMatchFallback.away;
+
   return {
     id: m.id,
     sport: m.sport,
@@ -149,6 +187,12 @@ function mapHistoryItem(rawMatch: MatchRow): ClientMatchHistoryItem {
     oddsHome: m.oddsHome,
     oddsDraw: m.oddsDraw,
     oddsAway: m.oddsAway,
+    openOddsHome,
+    openOddsDraw,
+    openOddsAway,
+    closeOddsHome,
+    closeOddsDraw,
+    closeOddsAway,
     redHome: m.redHome ?? 0,
     redAway: m.redAway ?? 0,
     events: m.events ?? [],

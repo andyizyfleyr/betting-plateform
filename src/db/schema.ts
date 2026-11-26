@@ -85,6 +85,20 @@ export const matches = pgTable("matches", {
   oddsHome: doublePrecision("odds_home").notNull(),
   oddsDraw: doublePrecision("odds_draw"),
   oddsAway: doublePrecision("odds_away").notNull(),
+  /**
+   * Cote d'ouverture archivée (prix avant-match au coup d'envoi).
+   * N'est jamais modifiée par le moteur live : sert à l'historique / Résultats.
+   */
+  openOddsHome: doublePrecision("open_odds_home"),
+  openOddsDraw: doublePrecision("open_odds_draw"),
+  openOddsAway: doublePrecision("open_odds_away"),
+  /**
+   * Cote de clôture archivée (dernier prix tant que les marchés sont ouverts).
+   * Figée définitivement à la fermeture des marchés (~85'), jamais écrasée au coup de sifflet.
+   */
+  closeOddsHome: doublePrecision("close_odds_home"),
+  closeOddsDraw: doublePrecision("close_odds_draw"),
+  closeOddsAway: doublePrecision("close_odds_away"),
   suspended: boolean("suspended").notNull().default(false),
   /** Horodatage réel du dernier but : blocage du marché 3 s après un but. */
   lastGoalAt: timestamp("last_goal_at", { mode: "date" }),

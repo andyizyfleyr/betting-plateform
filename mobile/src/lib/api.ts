@@ -192,6 +192,14 @@ export interface ClientMatchHistoryItem {
   oddsHome: number;
   oddsDraw: number | null;
   oddsAway: number;
+  /** Cote d'ouverture archivée (prix au coup d'envoi). */
+  openOddsHome?: number | null;
+  openOddsDraw?: number | null;
+  openOddsAway?: number | null;
+  /** Cote de clôture archivée (dernier prix marché ouvert) — cote « bookmaker » affichée. */
+  closeOddsHome?: number | null;
+  closeOddsDraw?: number | null;
+  closeOddsAway?: number | null;
   redHome: number;
   redAway: number;
   events: ClientMatchEvent[];

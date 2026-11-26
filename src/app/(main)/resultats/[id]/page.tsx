@@ -279,12 +279,12 @@ export default function ResultDetailPage() {
                 </div>
               </div>
 
-              {/* Cotes 1X2 de clôture compactes */}
+              {/* Cotes 1X2 de clôture (dernier prix marché ouvert, jamais la cote live finale) */}
               <div className="mt-2.5 grid grid-cols-3 gap-1.5 border-t border-edge/70 pt-2">
                 {[
-                  { code: "V1", label: "1", odds: item.oddsHome },
-                  { code: "X", label: "N", odds: item.oddsDraw },
-                  { code: "V2", label: "2", odds: item.oddsAway },
+                  { code: "V1", label: "1", odds: item.closeOddsHome ?? null },
+                  { code: "X", label: "N", odds: item.closeOddsDraw ?? null },
+                  { code: "V2", label: "2", odds: item.closeOddsAway ?? null },
                 ].map((c) => {
                   const won = item.winnerCode === c.code;
                   return (

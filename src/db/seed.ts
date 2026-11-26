@@ -31,6 +31,8 @@ const CURRENCY_ALIGN_MARKER_KEY = "currency_align_v1";
 // currency...) -> erreur 42703 « column does not exist ». Ce bloc s'exécute donc
 // indépendamment du marqueur v21, une fois pour toutes.
 const COLUMNS_ALIGN_MARKER_KEY = "columns_align_v1";
+/** Marqueur de la migration « archive des cotes » (ouverture / clôture). */
+const ODDS_ARCHIVE_MARKER_KEY = "odds_archive_v1";
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
@@ -135,6 +137,39 @@ async function ensureSchemaColumns(): Promise<void> {
   }
 }
 
+/**
+ * Archive des cotes joueur (standard bookmaker) : `open_odds_*` (prix au coup d'envoi)
+ * et `close_odds_*` (dernier prix tant que les marchés sont ouverts). Idempotent,
+ * joué une seule fois (marqueur dédié) : les colonnes restent NULL pour les matchs
+ * déjà terminés, l'API retombe alors sur la cote pré-match du modèle.
+ */
+async function ensureOddsArchiveColumns(): Promise<void> {
+  try {
+    const colsCheck = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM "admin_settings" WHERE "setting_key" = ${ODDS_ARCHIVE_MARKER_KEY}
+      ) AS done
+    `);
+    const done = (colsCheck.rows?.[0] as { done?: boolean } | undefined)?.done;
+    if (done) return;
+    await db.execute(sql`
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "open_odds_home" double precision;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "open_odds_draw" double precision;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "open_odds_away" double precision;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "close_odds_home" double precision;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "close_odds_draw" double precision;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "close_odds_away" double precision;
+    `);
+    await db.execute(sql`
+      INSERT INTO "admin_settings" ("setting_key", "value", "updated_at")
+      VALUES (${ODDS_ARCHIVE_MARKER_KEY}, jsonb_build_object('ready', true), now())
+      ON CONFLICT ("setting_key") DO NOTHING
+    `);
+  } catch {
+    // Base sans admin_settings encore créée : la migration complète s'occupe de tout.
+  }
+}
+
 async function runSeedInternal(): Promise<void> {
   // Vérifie la connectivité de la base principale Prisma Postgres.
   // Aucun repli automatique : une URL absente ou injoignable échoue explicitement.
@@ -168,6 +203,7 @@ async function runSeedInternal(): Promise<void> {
     // de toutes les colonnes ajoutées depuis v19, même sur une base déjà marquée
     // v21 sans ALTER. Les ALTER sont idempotents (IF NOT EXISTS) ; une seule passe.
     await ensureSchemaColumns();
+    await ensureOddsArchiveColumns();
 
     if (chk.has_marker && chk.has_admin) {
       return;

@@ -2343,6 +2343,21 @@ export async function applyFeedUpdateToRealMatch(
         oddsHome: baseOddsHome,
         oddsDraw: baseOddsDraw,
         oddsAway: baseOddsAway,
+        // Archive joueur (standard bookmaker) : figée au coup d'envoi, jamais écrasée ensuite.
+        ...(m.openOddsHome == null
+          ? {
+              openOddsHome: m.oddsHome,
+              openOddsDraw: m.oddsDraw,
+              openOddsAway: m.oddsAway,
+            }
+          : {}),
+        ...(m.closeOddsHome == null
+          ? {
+              closeOddsHome: baseOddsHome,
+              closeOddsDraw: baseOddsDraw,
+              closeOddsAway: baseOddsAway,
+            }
+          : {}),
         events: mergedEvents,
         tickHistory: nextTickHistory.slice(-14),
         realStats: mergedStats,
@@ -2460,6 +2475,20 @@ export async function applyFeedUpdateToRealMatch(
       finishedAt: now,
       feedSyncedAt: now,
       feedFinishedAt: effectiveFtStart,
+      ...(m.openOddsHome == null
+        ? {
+            openOddsHome: m.oddsHome,
+            openOddsDraw: m.oddsDraw,
+            openOddsAway: m.oddsAway,
+          }
+        : {}),
+      ...(m.closeOddsHome == null
+        ? {
+            closeOddsHome: m.oddsHome,
+            closeOddsDraw: m.oddsDraw,
+            closeOddsAway: m.oddsAway,
+          }
+        : {}),
       feedStatusNote: `Clôturé et réglé automatiquement (${nextHome}-${nextAway})`,
     })
     .where(and(eq(matches.id, m.id), eq(matches.source, "manual")));

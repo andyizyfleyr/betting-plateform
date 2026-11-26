@@ -268,12 +268,12 @@ export default function ResultDetailScreen() {
                 </View>
               </View>
 
-              {/* Cotes 1X2 de clôture compactes */}
+              {/* Cotes 1X2 de clôture (dernier prix marché ouvert) */}
               <View style={styles.closingOddsGrid}>
                 {[
-                  { code: "V1", label: "1", odds: item.oddsHome },
-                  { code: "X", label: "N", odds: item.oddsDraw },
-                  { code: "V2", label: "2", odds: item.oddsAway },
+                  { code: "V1", label: "1", odds: item.closeOddsHome ?? null },
+                  { code: "X", label: "N", odds: item.closeOddsDraw ?? null },
+                  { code: "V2", label: "2", odds: item.closeOddsAway ?? null },
                 ].map((c) => {
                   const won = item.winnerCode === c.code;
                   return (
