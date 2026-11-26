@@ -17,6 +17,7 @@ import {
   Plus,
   ShieldCheck,
   SlidersHorizontal,
+  User,
   X,
 } from "lucide-react";
 import { api, type ClientUser, type ClientWalletData } from "@/lib/api";
@@ -31,7 +32,7 @@ import { Toggle } from "@/components/toggle";
 import { TransferCodeSheet } from "@/components/transfer-code-sheet";
 import { generateIdempotencyKey } from "@/lib/odds-lock";
 import { writeUserPreferences } from "@/lib/user-preferences";
-import { cn, eur, formatPlacedAt, initials, teamHue } from "@/lib/format";
+import { cn, eur, formatPlacedAt } from "@/lib/format";
 
 export default function ParametresPage() {
   const {
@@ -41,8 +42,6 @@ export default function ParametresPage() {
     setBalance,
     toast,
     betsVersion,
-    countryConfig,
-    currencyConfig,
     transferCodesEnabled,
   } = useApp();
   const router = useRouter();
@@ -237,7 +236,6 @@ export default function ParametresPage() {
     }
   };
 
-  const hue = teamHue(user?.name ?? "Pulse");
 
   if (!authReady && !user) {
     return <PulseFlashLoader />;
@@ -273,136 +271,110 @@ export default function ParametresPage() {
         </div>
       </section>
 
-      <div className="mt-3 space-y-4 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-6 lg:space-y-0">
-        {/* Colonne gauche : solde, retraits en attente, dernières opérations */}
-        <div className="space-y-3">
-          {/* Retraits en attente avec annulation immédiate */}
-          {pendingWithdrawalEntries.length > 0 && (
-            <section className="glass-card divide-y divide-edge overflow-hidden rounded-2xl">
-              {pendingWithdrawalEntries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between gap-2.5 p-3.5"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-display text-[11px] font-medium text-ink">
-                      Retrait en attente · {eur(Math.abs(entry.amount))}
-                    </p>
-                    <p className="truncate text-[10px] text-dim">
-                      {entry.subtitle} · {formatPlacedAt(entry.createdAt)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={cancellingId === entry.rawId}
-                    onClick={() =>
-                      entry.rawId != null && cancelWithdrawal(entry.rawId)
-                    }
-                    className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-edge bg-elev px-2.5 font-display text-[10px] font-medium text-ink active:scale-95 disabled:opacity-50"
-                  >
-                    {cancellingId === entry.rawId ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <X className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
-                    )}
-                    Annuler
-                  </button>
+      <div className="mt-3 space-y-3 lg:mt-4">
+        {/* Retraits en attente avec annulation immédiate */}
+        {pendingWithdrawalEntries.length > 0 && (
+          <section className="glass-card divide-y divide-edge overflow-hidden rounded-2xl">
+            {pendingWithdrawalEntries.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between gap-2.5 p-3.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-display text-[11px] font-medium text-ink">
+                    Retrait en attente · {eur(Math.abs(entry.amount))}
+                  </p>
+                  <p className="truncate text-[10px] text-dim">
+                    {entry.subtitle} · {formatPlacedAt(entry.createdAt)}
+                  </p>
                 </div>
-              ))}
-            </section>
-          )}
-
-          <SettingsGroup title="Portefeuille">
-            <Link href="/parametres/transactions" className="flex items-center gap-3 p-3.5 active:bg-elev">
-              <IconBox><History className="h-4 w-4" strokeWidth={2.1} /></IconBox>
-              <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">Dernières opérations</p>
-              <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
-            </Link>
-          </SettingsGroup>
-        </div>
-
-        {/* Colonne droite : profil, préférences, espace administrateur */}
-        <div className="space-y-3">
-          {/* Carte profil : nom + email, édition repliée derrière l'icône Modifier */}
-          <section className="rounded-2xl border border-edge bg-white p-3.5">
-            <div className="mb-3 flex items-center gap-3">
-              <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl font-display text-[12px] font-medium text-white"
-                style={{
-                  background: `linear-gradient(140deg, hsl(${hue} 60% 44%), hsl(${(hue + 36) % 360} 68% 30%))`,
-                }}
-              >
-                {initials(user?.name ?? "PU")}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-display text-[12.5px] font-medium text-ink">
-                  {user?.name ?? "—"}
-                </p>
-                <p className="truncate text-[10.5px] text-dim">
-                  {user?.email ?? "Session active"}
-                </p>
-                <p className="truncate text-[10px] text-mist">
-                  {countryConfig.flag} {countryConfig.name} · {currencyConfig.code} {currencyConfig.symbol}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={toggleProfilEditing}
-                aria-label={profilEditing ? "Fermer la modification du profil" : "Modifier le nom et l'email"}
-                aria-expanded={profilEditing}
-                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10.5px] font-medium text-ink active:bg-edge"
-              >
-                {profilEditing ? <X size={13} strokeWidth={2.4} /> : <Pencil size={13} strokeWidth={2.2} />}
-                {profilEditing ? "Fermer" : "Modifier"}
-              </button>
-            </div>
-
-            {profilEditing && (
-              <div className="mt-3 space-y-3 border-t border-edge pt-3">
-                <label className="block">
-                  <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Nom</span>
-                  <input
-                    type="text"
-                    value={profilName}
-                    onChange={(e) => setProfilName(e.target.value)}
-                    placeholder="Votre nom"
-                    maxLength={80}
-                    className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
-                  />
-                </label>
                 <button
                   type="button"
-                  onClick={saveProfile}
-                  disabled={profilSaving}
-                  className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-medium text-white transition-opacity active:opacity-90 disabled:opacity-60"
+                  disabled={cancellingId === entry.rawId}
+                  onClick={() =>
+                    entry.rawId != null && cancelWithdrawal(entry.rawId)
+                  }
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-edge bg-elev px-2.5 font-display text-[10px] font-medium text-ink active:scale-95 disabled:opacity-50"
                 >
-                  {profilSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" strokeWidth={2.4} />}
-                  Enregistrer le profil
+                  {cancellingId === entry.rawId ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <X className="h-3.5 w-3.5 text-betclic-red" strokeWidth={2.4} />
+                  )}
+                  Annuler
                 </button>
               </div>
-            )}
+            ))}
           </section>
+        )}
 
-          <SettingsGroup title="Préférences">
-            <div className="flex items-center justify-between gap-3 border-b border-edge p-3.5">
-              <div className="flex min-w-0 items-center gap-3">
-                <IconBox><SlidersHorizontal className="h-4 w-4" strokeWidth={2.1} /></IconBox>
-                <p className="font-display text-[11.5px] font-medium text-ink">Format des cotes</p>
-              </div>
-              <div className="flex shrink-0 rounded-xl bg-elev p-0.5">
-                {(["decimal", "fractional"] as const).map((fmt) => (
-                  <button key={fmt} type="button" onClick={() => patch({ oddsFormat: fmt }, "Format des cotes mis à jour")}
-                    aria-pressed={(user?.oddsFormat ?? "decimal") === fmt}
-                    className={cn("rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors", (user?.oddsFormat ?? "decimal") === fmt ? "bg-white text-ink shadow-2xs" : "text-mist")}>
-                    {fmt === "decimal" ? "1.85" : "17/20"}
-                  </button>
-                ))}
-              </div>
+        {/* Section unique : profil, opérations, réglages, espace administrateur */}
+        <section className="glass-card divide-y divide-edge overflow-hidden rounded-2xl">
+          {/* Mon profil — nom modifiable, édition repliée derrière le bouton Modifier */}
+          <div className="flex items-center gap-3 p-3.5">
+            <IconBox><User className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+            <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">Mon profil</p>
+            <button
+              type="button"
+              onClick={toggleProfilEditing}
+              aria-label={profilEditing ? "Fermer la modification du profil" : "Modifier le nom"}
+              aria-expanded={profilEditing}
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-elev px-2.5 font-display text-[10.5px] font-medium text-ink active:bg-edge"
+            >
+              {profilEditing ? <X size={13} strokeWidth={2.4} /> : <Pencil size={13} strokeWidth={2.2} />}
+              {profilEditing ? "Fermer" : "Modifier"}
+            </button>
+          </div>
+
+          {profilEditing && (
+            <div className="space-y-3 p-3.5">
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-dim">Nom</span>
+                <input
+                  type="text"
+                  value={profilName}
+                  onChange={(e) => setProfilName(e.target.value)}
+                  placeholder="Votre nom"
+                  maxLength={80}
+                  className="w-full rounded-xl border border-edge bg-white px-3 py-2.5 font-display text-[12px] font-medium text-ink outline-none transition-colors placeholder:text-mist focus:border-betclic-red/60 focus:ring-2 focus:ring-betclic-red/15"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={saveProfile}
+                disabled={profilSaving}
+                className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-betclic-red font-display text-[12px] font-medium text-white transition-opacity active:opacity-90 disabled:opacity-60"
+              >
+                {profilSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" strokeWidth={2.4} />}
+                Enregistrer le profil
+              </button>
             </div>
-            <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v, notifyMatches: v, notifyBets: v, notifyPayments: v }, v ? "Toutes les notifications activées" : "Notifications désactivées")} last />
-          </SettingsGroup>
+          )}
 
-          {/* Accès Admin (si administrateur) */}
+          <Link href="/parametres/transactions" className="flex items-center gap-3 p-3.5 active:bg-elev">
+            <IconBox><History className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+            <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">Dernières opérations</p>
+            <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
+          </Link>
+
+          <div className="flex items-center justify-between gap-3 p-3.5">
+            <div className="flex min-w-0 items-center gap-3">
+              <IconBox><SlidersHorizontal className="h-4 w-4" strokeWidth={2.1} /></IconBox>
+              <p className="font-display text-[11.5px] font-medium text-ink">Format des cotes</p>
+            </div>
+            <div className="flex shrink-0 rounded-xl bg-elev p-0.5">
+              {(["decimal", "fractional"] as const).map((fmt) => (
+                <button key={fmt} type="button" onClick={() => patch({ oddsFormat: fmt }, "Format des cotes mis à jour")}
+                  aria-pressed={(user?.oddsFormat ?? "decimal") === fmt}
+                  className={cn("rounded-lg px-2.5 py-1 text-[10px] font-medium transition-colors", (user?.oddsFormat ?? "decimal") === fmt ? "bg-white text-ink shadow-2xs" : "text-mist")}>
+                  {fmt === "decimal" ? "1.85" : "17/20"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <SwitchRow Icon={<Bell className="h-4 w-4" />} label="Toutes les notifications" checked={user?.notifications ?? true} onChange={(v) => patch({ notifications: v, notifyMatches: v, notifyBets: v, notifyPayments: v }, v ? "Toutes les notifications activées" : "Notifications désactivées")} last={user?.role !== "admin"} />
+
           {user?.role === "admin" && (
             <button
               type="button"
@@ -410,20 +382,16 @@ export default function ParametresPage() {
                 triggerRouteLoader("/admin");
                 router.push("/admin");
               }}
-              className="glass-card flex w-full items-center gap-3 rounded-2xl p-3.5 text-left transition-colors active:bg-elev"
+              className="flex w-full items-center gap-3 p-3.5 text-left active:bg-elev"
             >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-betclic-red/10 text-betclic-red">
                 <ShieldCheck className="h-4 w-4" strokeWidth={2.2} />
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-display text-[11.5px] font-medium text-ink">
-                  Espace administrateur
-                </p>
-              </div>
+              <p className="min-w-0 flex-1 font-display text-[11.5px] font-medium text-ink">Espace administrateur</p>
               <ChevronRight className="h-4 w-4 shrink-0 text-dim" strokeWidth={2.2} />
             </button>
           )}
-        </div>
+        </section>
       </div>
 
       {transferOpen && <TransferCodeSheet open onClose={() => setTransferOpen(false)} withdrawable={wallet?.summary.withdrawable == null ? "indisponible" : eur(wallet.summary.withdrawable)} withdrawableEur={wallet?.summary.withdrawable} />}
@@ -431,17 +399,6 @@ export default function ParametresPage() {
         <Info className="h-4 w-4 shrink-0 lg:hidden" /> <span>18+ · Jouer comporte des risques: endettement, isolement, dépendance.</span>
       </p>
     </div>
-  );
-}
-
-function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="space-y-1.5">
-      <div className="px-1">
-        <h2 className="text-[12px] font-bold text-ink">{title}</h2>
-      </div>
-      <div className="glass-card overflow-hidden rounded-2xl">{children}</div>
-    </section>
   );
 }
 
